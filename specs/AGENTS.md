@@ -72,7 +72,7 @@ Code already says what it does. A comment that merely restates the code adds noi
 
 ## Language
 
-Write specs in the affirmative. Describe what the system does. When a constraint is necessary, pair it with the positive form — "prefer X over Y" rather than "avoid Y." See [PHILOSOPHY.md](../PHILOSOPHY.md) for rationale.
+Write specs in the affirmative. Describe what the system does. When a constraint is necessary, pair it with the positive form — "prefer X over Y" rather than "avoid Y."
 
 ## Reminders
 

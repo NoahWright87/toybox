@@ -32,4 +32,4 @@ While writing or reviewing specs, notice repeated corrections from the user. Whe
 
 ## Language
 
-Write specs in the affirmative. Describe what the system does. When a constraint is necessary, pair it with the positive form — "prefer X over Y" rather than "avoid Y." See [PHILOSOPHY.md](PHILOSOPHY.md) for rationale.
+Write specs in the affirmative. Describe what the system does. When a constraint is necessary, pair it with the positive form — "prefer X over Y" rather than "avoid Y."
