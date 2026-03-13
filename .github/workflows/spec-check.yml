@@ -1,0 +1,183 @@
+name: Spec Coverage Check
+
+# Warns (without blocking) when source files change in a PR without a
+# corresponding update somewhere in specs/. The warning comment is
+# formatted for an LLM to read and act on (e.g. run /spec-backfill).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Edit SOURCE_ROOTS to match your repo's layout.
+# Space-separated list of source root directories to check against specs/.
+env:
+  SOURCE_ROOTS: "src app lib"
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  spec-coverage:
+    name: Check spec coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for git diff against base branch
+
+      - name: Detect uncovered source changes
+        id: check
+        run: |
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+
+          spec_changes=()
+          src_changes=()
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            if [[ "$file" == specs/* ]]; then
+              spec_changes+=("$file")
+            else
+              for root in $SOURCE_ROOTS; do
+                if [[ "$file" == "$root/"* ]]; then
+                  src_changes+=("$file")
+                  break
+                fi
+              done
+            fi
+          done <<< "$changed"
+
+          # No source changes in this PR — nothing to check
+          if [[ ${#src_changes[@]} -eq 0 ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          # For each changed source file, look for a spec file that shares
+          # a path prefix. Matching is intentionally loose: specs/auth/ covers
+          # src/auth/login.js, src/auth/register.js, etc.
+          uncovered=()
+          for src_file in "${src_changes[@]}"; do
+            # Strip source root to get relative path
+            # e.g. src/auth/login.js -> auth/login.js
+            relative=""
+            for root in $SOURCE_ROOTS; do
+              if [[ "$src_file" == "$root/"* ]]; then
+                relative="${src_file#"$root/"}"
+                break
+              fi
+            done
+
+            dir=$(dirname "$relative")  # auth for auth/login.js, . for login.js
+            covered=false
+
+            if [[ "$dir" == "." ]]; then
+              # Root-level source file: any spec change is considered coverage
+              [[ ${#spec_changes[@]} -gt 0 ]] && covered=true
+            else
+              # Walk up the ancestor chain looking for a matching spec change
+              # e.g. auth/services -> auth -> (root)
+              check_dir="$dir"
+              while [[ -n "$check_dir" && "$check_dir" != "." ]]; do
+                for spec_file in "${spec_changes[@]}"; do
+                  spec_rel="${spec_file#specs/}"
+                  # Match if the spec file lives under this directory component
+                  if [[ "$spec_rel" == "$check_dir/"* || "$spec_rel" == "$check_dir."* ]]; then
+                    covered=true
+                    break
+                  fi
+                done
+                [[ "$covered" == "true" ]] && break
+                parent=$(dirname "$check_dir")
+                [[ "$parent" == "$check_dir" ]] && break
+                check_dir="$parent"
+              done
+            fi
+
+            [[ "$covered" == "false" ]] && uncovered+=("$src_file")
+          done
+
+          echo "has_uncovered=$([ ${#uncovered[@]} -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+          # Write uncovered list (newline-delimited heredoc — safe for any path)
+          {
+            echo "uncovered_list<<UNCOVERED_EOF"
+            printf '%s\n' "${uncovered[@]}"
+            echo "UNCOVERED_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post or update PR comment
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/github-script@v7
+        env:
+          HAS_UNCOVERED: ${{ steps.check.outputs.has_uncovered }}
+          UNCOVERED_LIST: ${{ steps.check.outputs.uncovered_list }}
+        with:
+          script: |
+            const marker = '<!-- spec-coverage-check -->';
+            const hasUncovered = process.env.HAS_UNCOVERED === 'true';
+            const raw = process.env.UNCOVERED_LIST || '';
+            const uncovered = raw.trim() ? raw.trim().split('\n') : [];
+            // P avoids a bare '|' at the start of a YAML line, which trips GitHub's parser
+            const P = '|';
+
+            let body;
+            if (!hasUncovered) {
+              body = `${marker}\n✅ All changed source files have corresponding spec updates in this PR.`;
+            } else {
+              const rows = uncovered.map(f => {
+                // Build suggested spec paths from most-specific to least-specific
+                // e.g. src/auth/services/login.js -> specs/auth/services/, specs/auth/
+                const parts = f.replace(/^[^/]+\//, '').split('/');
+                parts.pop(); // remove filename
+                const suggestions = [];
+                let path = '';
+                for (const part of parts) {
+                  path = path ? `${path}/${part}` : part;
+                  suggestions.unshift(`\`specs/${path}/\``);
+                }
+                return `${P} \`${f}\` ${P} ${suggestions.join(', ') || '`specs/`'} ${P}`;
+              }).join('\n');
+
+              body = `${marker}
+## ⚠️ Spec coverage warning
+
+These source files changed in this PR without a corresponding update in \`specs/\`:
+
+${P} Source file ${P} Suggested spec locations ${P}
+${P}-------------|--------------------------|
+${rows}
+
+**To fix:** update the relevant specs and push, or run \`/spec-backfill\` to generate them.
+
+*This warning is informational — it does not block merging.*`;
+            }
+
+            // Find the existing bot comment (if any) and update or create
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else if (hasUncovered) {
+              // Only create a new comment when there are warnings;
+              // don't clutter PRs that never had uncovered files
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
