@@ -2,12 +2,6 @@
 
 ## Sooner
 
-- [#2](https://github.com/NoahWright87/toybox/issues/2) Implement Starfield screensaver — MVP first experience *(effort: S)*
-  - Implementation: React component wrapping a full-viewport `<canvas>`; `requestAnimationFrame` loop; star particles as `{ x, y, z }` array where z simulates depth (smaller z = closer/faster); each frame decrement z, project to screen coords, reset particle to far depth when it passes the viewer; no external deps beyond React
-  - Interaction: speed boost on click/tap (temporarily lower z delta floor); optional subtle speed slider
-  - Routed at `/starfield` in the React app; card on homepage links here
-  - Depends on: homepage scaffold existing (Vite + React project initialized)
-
 ## Backlog
 
 ### Stealth learning / educational
@@ -25,8 +19,7 @@
 
 ### Screensavers / visual toys
 
-- Fireworks toy (if not chosen for MVP)
-- Starfield screensaver (if not chosen for MVP)
+- Fireworks toy
 - Maze maker / maze walker
 - Fish tank screensaver
 - Bouncing shapes / retro screensaver toys
