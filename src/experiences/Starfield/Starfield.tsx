@@ -11,6 +11,8 @@ interface Star {
 
 const NUM_STARS = 500;
 const MAX_Z = 1000;
+const TARGET_FPS = 60;
+const FRAME_MS = 1000 / TARGET_FPS;
 
 function randomStar(w: number, h: number): Star {
   const z = Math.random() * MAX_Z + 1;
@@ -36,6 +38,7 @@ export default function Starfield() {
     let W = 0, H = 0, CX = 0, CY = 0;
     let stars: Star[] = [];
     let rafId = 0;
+    let lastTime = 0;
 
     function resize() {
       W = canvas.width = window.innerWidth;
@@ -52,7 +55,10 @@ export default function Starfield() {
       };
     }
 
-    function frame() {
+    function frame(ts: number) {
+      if (ts - lastTime < FRAME_MS) { rafId = requestAnimationFrame(frame); return; }
+      lastTime = ts;
+
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.fillRect(0, 0, W, H);
 

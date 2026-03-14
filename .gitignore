@@ -2,3 +2,5 @@ node_modules/
 dist/
 .claude/worktrees/
 .claude/launch.json
+playwright-report/
+test-results/
