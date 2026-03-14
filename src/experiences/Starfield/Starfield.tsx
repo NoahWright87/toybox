@@ -90,7 +90,7 @@ export default function Starfield() {
         const brightness = Math.floor((1 - s.z / MAX_Z) * 255);
         const alpha = 0.4 + (1 - s.z / MAX_Z) * 0.6;
         ctx.beginPath();
-        ctx.strokeStyle = `rgba(${brightness},${brightness + 10},255,${alpha.toFixed(2)})`;
+        ctx.strokeStyle = `rgba(${brightness},${Math.min(255, brightness + 10)},255,${alpha.toFixed(2)})`;
         ctx.lineWidth = cur.r;
         ctx.moveTo(s.px, s.py);
         ctx.lineTo(cur.sx, cur.sy);
@@ -110,7 +110,7 @@ export default function Starfield() {
 
     resize();
     stars = Array.from({ length: NUM_STARS }, () => randomStar(W, H));
-    frame();
+    rafId = requestAnimationFrame(frame);
 
     canvas.addEventListener("click", triggerBoost);
     canvas.addEventListener("touchstart", triggerBoost, { passive: true });
