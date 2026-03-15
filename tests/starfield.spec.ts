@@ -5,29 +5,11 @@ test.describe("Starfield", () => {
     await page.goto("/starfield");
   });
 
-  test("matches screenshot", async ({ page }) => {
-    // Inject before navigation so RAF is stubbed before React mounts.
-    // The stub fires the callback exactly once (one rendered frame), then stops —
-    // giving the canvas a deterministic, frozen first frame to snapshot.
-    await page.addInitScript(() => {
-      let fired = false;
-      const real = window.requestAnimationFrame.bind(window);
-      window.requestAnimationFrame = (cb: FrameRequestCallback) => {
-        if (fired) return 0;
-        fired = true;
-        return real(cb);
-      };
-    });
-    await page.reload();
-    await page.waitForTimeout(200); // let the single frame paint
-
-    await expect(page).toHaveScreenshot("starfield.png", {
-      fullPage: true,
-      // Mask the canvas content — star positions are random per load.
-      // We still get a full-page snapshot that catches regressions in the
-      // surrounding chrome (back button, background, layout).
-      mask: [page.locator("canvas")],
-    });
+  test("back button matches screenshot", async ({ page }) => {
+    // Snapshot just the back button — it's pure CSS/text so it's deterministic.
+    // The canvas fills the whole viewport, so a full-page mask would be 100% magenta.
+    const backBtn = page.getByRole("button", { name: /toy box/i });
+    await expect(backBtn).toHaveScreenshot("starfield-back-button.png");
   });
 
   test("shows the back button", async ({ page }) => {
