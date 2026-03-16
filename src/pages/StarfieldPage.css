@@ -1,0 +1,12 @@
+.starfield-page {
+  position: fixed;
+  inset: 0;
+  background: #000;
+}
+
+.starfield-page__back {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: 10;
+}

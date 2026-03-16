@@ -1,0 +1,17 @@
+.help-overlay__trigger {
+  position: fixed;
+  bottom: var(--spacing-md);
+  right: var(--spacing-md);
+  z-index: 10;
+  transition: opacity var(--duration-normal) var(--ease-in-out);
+}
+
+.help-overlay__trigger--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.help-overlay__trigger--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
