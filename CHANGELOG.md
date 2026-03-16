@@ -4,12 +4,15 @@ This file tracks changes to this repository by version.
 
 # Versions
 
-## WIP
+## v0.2.0
 
-- Refine homepage TODO: Vite + React + TS scaffold, `@noahwright/design` + `react-router-dom`, `Layout`/`Card`/`CardGrid` components, static card data model *(effort: M)*
-- Refine Starfield screensaver TODO: canvas + `requestAnimationFrame`, `{x,y,z}` particle system, click-to-boost interaction, routed at `/starfield` *(effort: S)*
-- Document stack in `specs/spec.md`: React 18 + Vite + TS, `@noahwright/design`, `react-router-dom`
+- Add Toy Box MVP: homepage with design system card grid, Starfield screensaver experience, React Router navigation
+- Add Playwright screenshot + functional tests
+- Add reusable `HelpOverlay` component (floating ❓ button, inactivity fade, `?` key toggle)
+- Refactor homepage to use design system `Heading`, `Text`, `Pill`, `Container` components — no raw HTML or custom CSS
+- Update footer with left/right/bottom slots, rotating AI credit, copyright
+- Fix Starfield canvas loop: use `requestAnimationFrame(frame)` for initial tick; clamp green channel to 255
 
-## 0.1.0
+## v0.1.0
 
 - Install spec-template scaffold via `/respec`
