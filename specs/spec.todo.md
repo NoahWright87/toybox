@@ -6,8 +6,6 @@ Future work for this repo. Add projects and features here as they are planned.
 
 ## Sooner
 
-- [#2](https://github.com/NoahWright87/toybox/issues/2) Toy Box MVP — see `homepage.todo.md` and `experiences.todo.md` for full breakdown
-
 ## Later
 
 ## Backlog
