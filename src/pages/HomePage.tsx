@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Layout, Header, Footer,
@@ -32,6 +32,16 @@ function RotatingAiCredit() {
 export default function HomePage() {
   const navigate = useNavigate();
   const year = new Date().getFullYear();
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  const categories = useMemo(
+    () => Array.from(new Set(experiences.map((e) => e.category))).sort(),
+    []
+  );
+
+  const filtered = activeCategory
+    ? experiences.filter((e) => e.category === activeCategory)
+    : experiences;
 
   return (
     <Layout
@@ -59,9 +69,27 @@ export default function HomePage() {
           </Text>
         </Container>
 
+        <div className="homepage__filters">
+          <button
+            className={`homepage__filter-btn${activeCategory === null ? " homepage__filter-btn--active" : ""}`}
+            onClick={() => setActiveCategory(null)}
+          >
+            All
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              className={`homepage__filter-btn${activeCategory === cat ? " homepage__filter-btn--active" : ""}`}
+              onClick={() => setActiveCategory(cat === activeCategory ? null : cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
         <Container padding="none" margin="none">
           <CardGrid minCardWidth="260px" gap="lg">
-            {experiences.map((exp) => (
+            {filtered.map((exp) => (
               <Card
                 key={exp.id}
                 title={exp.title}

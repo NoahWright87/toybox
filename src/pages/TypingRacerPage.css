@@ -1,0 +1,13 @@
+.typing-racer-page {
+  position: fixed;
+  inset: 0;
+  background: #111;
+  overflow-y: auto;
+}
+
+.typing-racer-page__back {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: 10;
+}
