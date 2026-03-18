@@ -1,0 +1,125 @@
+.number-muncher {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--spacing-lg);
+  gap: var(--spacing-md);
+  position: relative;
+}
+
+.number-muncher__hud {
+  display: flex;
+  gap: var(--spacing-xl);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1rem;
+  align-items: center;
+}
+
+.number-muncher__hud strong {
+  color: #fff;
+}
+
+.number-muncher__grid {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.number-muncher--correct .number-muncher__grid {
+  background: rgba(68, 238, 136, 0.08);
+}
+
+.number-muncher--wrong .number-muncher__grid {
+  background: rgba(255, 68, 102, 0.1);
+}
+
+.number-muncher__cell {
+  width: 58px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.03);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.1s, opacity 0.2s;
+}
+
+.number-muncher__cell--match {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.number-muncher__cell--player {
+  background: #3355ee;
+  border-color: #6688ff;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(100, 136, 255, 0.4);
+}
+
+.number-muncher__cell--player.number-muncher__cell--match {
+  background: #4466ff;
+}
+
+.number-muncher__cell--eaten {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.number-muncher__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 6px;
+}
+
+.number-muncher__gameover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  text-align: center;
+}
+
+.number-muncher__gameover-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #ff4466;
+}
+
+.number-muncher__gameover-score {
+  font-size: 1.4rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.number-muncher__restart {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: #3355ee;
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.number-muncher__restart:hover {
+  background: #4466ff;
+}
+
+.number-muncher__hint {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.8rem;
+}

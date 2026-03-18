@@ -1,0 +1,111 @@
+.typing-racer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--spacing-xl);
+  gap: var(--spacing-lg);
+}
+
+.typing-racer__stats {
+  display: flex;
+  gap: var(--spacing-lg);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  min-height: 1.5rem;
+}
+
+.typing-racer__timer {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.typing-racer__phrase {
+  max-width: 640px;
+  font-size: 1.6rem;
+  line-height: 1.9;
+  text-align: center;
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+
+.typing-racer__char {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.typing-racer__char--correct {
+  color: #44ee88;
+}
+
+.typing-racer__char--wrong {
+  color: #ff4466;
+  background: rgba(255, 68, 102, 0.18);
+  border-radius: 2px;
+}
+
+.typing-racer__char--cursor {
+  color: rgba(255, 255, 255, 0.9);
+  border-bottom: 2px solid #fff;
+}
+
+.typing-racer__input {
+  width: 100%;
+  max-width: 640px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  outline: none;
+  caret-color: transparent;
+}
+
+.typing-racer__input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.typing-racer__result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.typing-racer__result-stats {
+  display: flex;
+  gap: var(--spacing-xl);
+  text-align: center;
+}
+
+.typing-racer__result-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.typing-racer__result-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.typing-racer__reset {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.typing-racer__reset:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
