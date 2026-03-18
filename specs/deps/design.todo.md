@@ -10,6 +10,7 @@ Tracked items that require changes in the `@noahwright/design` package before th
   - Needed by: `homepage.todo.md` BTS item
   - The overlay should be renderable inside an experience page without disrupting the experience layout
   - Likely a semi-transparent panel or drawer; exact design TBD when BTS content is first authored?
+  - [design#3](https://github.com/NoahWright87/design/issues/3) Downstream issue opened
 
 ## Backlog
 
