@@ -1,0 +1,98 @@
+name: Notify Discord on PR
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Discord thread ID
+        id: extract
+        run: |
+          THREAD_ID=$(echo "${{ github.event.pull_request.body }}" \
+            | grep -oP '(?<=<!-- discord-thread-id: )[^>]+(?= -->)' || true)
+          if [ -z "$THREAD_ID" ]; then
+            echo "No discord-thread-id found in PR body — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "thread_id=$THREAD_ID" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Poll for Netlify preview deployment
+        if: steps.extract.outputs.skip == 'false'
+        id: preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          PREVIEW_URL=""
+          for attempt in $(seq 1 8); do
+            echo "Attempt $attempt/8 — polling deployments for SHA $SHA..."
+            DEPLOYMENTS=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/deployments?sha=$SHA&per_page=10")
+
+            DEPLOYMENT_IDS=$(echo "$DEPLOYMENTS" | jq -r '.[].id // empty')
+
+            for DEP_ID in $DEPLOYMENT_IDS; do
+              STATUSES=$(curl -s \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$REPO/deployments/$DEP_ID/statuses")
+
+              TARGET_URL=$(echo "$STATUSES" | jq -r \
+                'map(select(.state == "success" and (.target_url // "") != "")) | first | .target_url // empty')
+
+              if [ -n "$TARGET_URL" ]; then
+                PREVIEW_URL="$TARGET_URL"
+                break 2
+              fi
+            done
+
+            if [ $attempt -lt 8 ]; then
+              sleep 15
+            fi
+          done
+
+          if [ -n "$PREVIEW_URL" ]; then
+            echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No successful Netlify deployment found within 2 minutes."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post to Discord thread
+        if: steps.extract.outputs.skip == 'false' && steps.preview.outputs.found == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          THREAD_ID: ${{ steps.extract.outputs.thread_id }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg pr_url "$PR_URL" \
+            --arg preview_url "$PREVIEW_URL" \
+            '{
+              embeds: [{
+                title: ("PR: " + $title),
+                url: $pr_url,
+                color: 5814783,
+                fields: [
+                  { name: "Pull Request", value: $pr_url, inline: false },
+                  { name: "Netlify Preview", value: $preview_url, inline: false }
+                ]
+              }]
+            }')
+
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "${DISCORD_WEBHOOK_URL}?thread_id=${THREAD_ID}&wait=true"

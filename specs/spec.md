@@ -54,6 +54,24 @@ src/
 - Cards are interactive and navigate to the experience route on click.
 - Category filter bar above the grid: pill-style toggle buttons (`All` + one per category); filters the card grid by `experience.category`. Categories are derived dynamically from the registry.
 
+## Agent Pipeline Integration
+
+The repo is wired into a home-lab automation pipeline where Discord bot PRs get notified with Netlify preview URLs.
+
+### GitHub Label
+
+A `agent-task` label (color `#0075ca`) exists on the repo. The Discord bot applies it to issues and PRs it creates.
+
+### Notification Workflow — `.github/workflows/notify-discord.yml`
+
+- **Trigger:** `pull_request` → types `[opened]`
+- **Steps:**
+  1. Extracts the Discord thread ID from the PR body via HTML comment `<!-- discord-thread-id: {threadId} -->`; skips silently if absent.
+  2. Polls the GitHub Deployments API (by head SHA) every 15 seconds for up to 2 minutes until a deployment status of `success` is found.
+  3. Posts an embed to `DISCORD_WEBHOOK_URL?thread_id={threadId}` containing the PR URL and Netlify preview URL.
+  4. Exits cleanly (non-failing) if no successful deployment is found within the timeout.
+- **Secrets required:** `DISCORD_WEBHOOK_URL` (GitHub Actions secret), `GITHUB_TOKEN` (automatic).
+
 ## Experiences
 
 Each experience lives in `src/experiences/{Name}/` and is routed at `/{name}` in `App.tsx`. Currently shipped:
