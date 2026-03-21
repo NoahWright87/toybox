@@ -3,3 +3,40 @@
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+
+.homepage__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  justify-content: center;
+  padding: var(--spacing-md) 0;
+}
+
+.homepage__filter-btn {
+  padding: 4px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.15));
+  background: transparent;
+  color: var(--color-text-muted, #666);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-transform: capitalize;
+}
+
+.homepage__filter-btn:hover {
+  background: var(--color-surface-raised, rgba(0, 0, 0, 0.05));
+  color: var(--color-text, #111);
+}
+
+.homepage__filter-btn--active {
+  background: var(--color-primary, #3355ee);
+  border-color: var(--color-primary, #3355ee);
+  color: #fff;
+}
+
+.homepage__filter-btn--active:hover {
+  background: var(--color-primary, #3355ee);
+  color: #fff;
+}

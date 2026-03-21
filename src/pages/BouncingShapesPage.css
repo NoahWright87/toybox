@@ -1,0 +1,12 @@
+.bouncing-shapes-page {
+  position: fixed;
+  inset: 0;
+  background: #111;
+}
+
+.bouncing-shapes-page__back {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: 10;
+}
