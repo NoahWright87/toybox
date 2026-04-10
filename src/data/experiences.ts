@@ -42,4 +42,11 @@ export const experiences: Experience[] = [
     category: "educational",
     path: "/number-muncher",
   },
+  {
+    id: "tic-tac-toe",
+    title: "Tic-Tac-Toe",
+    description: "Classic Tic-Tac-Toe on 3×3, 5×5, or 7×7 grids. Play a friend or the computer.",
+    category: "game",
+    path: "/tic-tac-toe",
+  },
 ];
