@@ -5,7 +5,7 @@ type Player = "X" | "O";
 type Cell = Player | null;
 type BoardSize = 3 | 5 | 7;
 type GameMode = "human" | "ai";
-type AIDifficulty = "easy" | "normal";
+type AIDifficulty = "easy" | "normal" | "hard";
 
 interface GameConfig {
   size: BoardSize;
@@ -184,6 +184,35 @@ function getNormalMove(
   return scored[0].pos;
 }
 
+function getHardMove(
+  board: Cell[][],
+  size: number,
+  winLength: number
+): [number, number] {
+  const ai: Player = "O";
+  const human: Player = "X";
+
+  const win = findWinningMove(board, size, winLength, ai);
+  if (win) return win;
+
+  const block = findWinningMove(board, size, winLength, human);
+  if (block) return block;
+
+  const empty = getEmptyCells(board, size);
+  if (empty.length === 0) return [0, 0];
+
+  const mid = Math.floor(size / 2);
+  if (board[mid][mid] === null) return [mid, mid];
+
+  const scored = empty.map(([r, c]) => ({
+    pos: [r, c] as [number, number],
+    score: scorePosition(board, size, winLength, r, c, ai),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored[0].pos;
+}
+
 // --- Setup Screen ---
 
 function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
@@ -252,11 +281,19 @@ function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
             >
               Normal
             </button>
+            <button
+              className={`ttt-setup__option${difficulty === "hard" ? " ttt-setup__option--active" : ""}`}
+              onClick={() => setDifficulty("hard")}
+            >
+              Hard
+            </button>
           </div>
           <div className="ttt-setup__hint">
             {difficulty === "easy"
               ? "Picks random squares"
-              : "Tries to win and block you"}
+              : difficulty === "normal"
+              ? "Tries to win and block you"
+              : "Always picks the best move it can see"}
           </div>
         </div>
       )}
@@ -340,6 +377,8 @@ export default function TicTacToe() {
       const [r, c] =
         config.difficulty === "easy"
           ? getEasyMove(board, config.size)
+          : config.difficulty === "hard"
+          ? getHardMove(board, config.size, winLength)
           : getNormalMove(board, config.size, winLength);
 
       const newBoard = board.map((row) => [...row]);
