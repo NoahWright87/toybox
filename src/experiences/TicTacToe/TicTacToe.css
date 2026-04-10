@@ -129,6 +129,7 @@
 }
 
 .ttt__cell {
+  position: relative;
   width: var(--cell-size, 80px);
   height: var(--cell-size, 80px);
   background: #111827;
@@ -144,6 +145,22 @@
   user-select: none;
   line-height: 1;
 }
+
+.ttt__weight {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(0.55rem, 2vw, 0.85rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.ttt__weight--x { color: #60a5fa; }
+.ttt__weight--o { color: #f87171; }
 
 .ttt__cell--x { color: #60a5fa; }
 .ttt__cell--o { color: #f87171; }

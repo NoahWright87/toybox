@@ -322,6 +322,7 @@ export default function TicTacToe() {
   } | null>(null);
   const [isDraw, setIsDraw] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
+  const [debugWeights, setDebugWeights] = useState(false);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startGame = useCallback((cfg: GameConfig) => {
@@ -405,6 +406,17 @@ export default function TicTacToe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, currentPlayer, winResult, isDraw, board]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey && e.key === ".") {
+        e.preventDefault();
+        setDebugWeights((v) => !v);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   if (!config) {
     return <SetupScreen onStart={startGame} />;
   }
@@ -453,6 +465,22 @@ export default function TicTacToe() {
     ? " ttt__status--draw"
     : "";
 
+  // Precompute debug weight map for current player
+  const winLength = getWinLength(config.size);
+  const weightMap: Map<string, number> = new Map();
+  if (debugWeights && !gameOver) {
+    for (let r = 0; r < config.size; r++) {
+      for (let c = 0; c < config.size; c++) {
+        if (!board[r][c]) {
+          weightMap.set(
+            `${r}-${c}`,
+            scorePosition(board, config.size, winLength, r, c, currentPlayer)
+          );
+        }
+      }
+    }
+  }
+
   return (
     <div className="ttt">
       <div className={`ttt__status${statusMod}`}>{statusText}</div>
@@ -488,6 +516,13 @@ export default function TicTacToe() {
                 aria-label={cell ?? `row ${r + 1} column ${c + 1}`}
               >
                 {cell}
+                {debugWeights && !cell && weightMap.has(key) && (
+                  <span
+                    className={`ttt__weight ttt__weight--${currentPlayer.toLowerCase()}`}
+                  >
+                    {weightMap.get(key)}
+                  </span>
+                )}
               </button>
             );
           })
