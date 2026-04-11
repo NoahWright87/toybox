@@ -119,7 +119,7 @@ function scorePosition(
     // Check every window of length winLength that includes (r, c)
     for (let offset = -(winLength - 1); offset <= 0; offset++) {
       let myCount = 0;
-      let blocked = false;
+      let oppCount = 0;
       let inBounds = true;
 
       for (let k = 0; k < winLength; k++) {
@@ -130,15 +130,19 @@ function scorePosition(
           break;
         }
         if (board[nr][nc] === player) myCount++;
-        else if (board[nr][nc] === opponent) {
-          blocked = true;
-          break;
-        }
+        else if (board[nr][nc] === opponent) oppCount++;
       }
 
-      if (inBounds && !blocked && myCount > 0) {
+      if (!inBounds) continue;
+
+      if (myCount > 0 && oppCount === 0) {
+        // Offensive: extend own line
         score += Math.pow(4, myCount);
+      } else if (oppCount > 0 && myCount === 0) {
+        // Defensive: block opponent's line
+        score += Math.pow(3, oppCount);
       }
+      // Mixed window (both players present) = dead, no value
     }
   }
 
