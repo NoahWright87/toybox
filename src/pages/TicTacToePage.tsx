@@ -24,9 +24,15 @@ export default function TicTacToePage() {
           <li>Play against a <strong>friend</strong> or the <strong>computer</strong></li>
           <li>Easy AI picks random squares</li>
           <li>Normal AI will try to win and block you</li>
+          <li>Hard AI always picks its best available move</li>
           <li><strong>Click</strong> any empty square to place your mark</li>
           <li><strong>X always goes first</strong></li>
-          <li><strong>Press ?</strong> to toggle these instructions</li>
+        </ul>
+        <hr />
+        <ul>
+          <li><strong>Debug:</strong> toggle AI weight overlay — shows the score the AI assigns to each empty square for the current player</li>
+          <li>Triple-tap the status text <em>(mobile)</em></li>
+          <li><strong>Ctrl + .</strong> <em>(keyboard)</em></li>
         </ul>
       </HelpOverlay>
     </div>

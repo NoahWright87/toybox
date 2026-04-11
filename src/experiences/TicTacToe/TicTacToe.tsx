@@ -324,6 +324,21 @@ export default function TicTacToe() {
   const [aiThinking, setAiThinking] = useState(false);
   const [debugWeights, setDebugWeights] = useState(false);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleStatusTap = useCallback(() => {
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = setTimeout(() => {
+      tapCountRef.current = 0;
+    }, 500);
+    if (tapCountRef.current >= 3) {
+      tapCountRef.current = 0;
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      setDebugWeights((v) => !v);
+    }
+  }, []);
 
   const startGame = useCallback((cfg: GameConfig) => {
     if (aiTimerRef.current) {
@@ -483,7 +498,13 @@ export default function TicTacToe() {
 
   return (
     <div className="ttt">
-      <div className={`ttt__status${statusMod}`}>{statusText}</div>
+      <div
+        className={`ttt__status${statusMod}`}
+        onClick={handleStatusTap}
+        style={{ cursor: "default" }}
+      >
+        {statusText}
+      </div>
 
       <div
         className="ttt__board"
