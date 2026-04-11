@@ -1,0 +1,230 @@
+/* ── Setup Screen ─────────────────────────────────────────── */
+
+.ttt-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem 1.5rem;
+  gap: 2.5rem;
+  color: #fff;
+}
+
+.ttt-setup__title {
+  font-size: clamp(2rem, 7vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin: 0;
+  color: #a78bfa;
+  text-shadow: 0 0 48px #7c3aed66;
+}
+
+.ttt-setup__section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ttt-setup__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #9ca3af;
+}
+
+.ttt-setup__options {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ttt-setup__option {
+  padding: 0.6rem 1.4rem;
+  border: 2px solid #374151;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.ttt-setup__option:hover {
+  border-color: #6d28d9;
+  color: #e9d5ff;
+}
+
+.ttt-setup__option--active {
+  border-color: #7c3aed;
+  background: rgba(124, 58, 237, 0.15);
+  color: #e9d5ff;
+}
+
+.ttt-setup__hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  min-height: 1.2em;
+  text-align: center;
+}
+
+.ttt-setup__start {
+  margin-top: 0.5rem;
+  padding: 0.85rem 3rem;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.ttt-setup__start:hover {
+  background: #6d28d9;
+  transform: translateY(-1px);
+}
+
+.ttt-setup__start:active {
+  transform: translateY(0);
+}
+
+/* ── Game Board ───────────────────────────────────────────── */
+
+.ttt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+  gap: 1.5rem;
+  color: #fff;
+}
+
+.ttt__status {
+  font-size: 1.25rem;
+  font-weight: 600;
+  min-height: 2rem;
+  text-align: center;
+  color: #d1d5db;
+  transition: color 0.2s;
+}
+
+.ttt__status--x-win { color: #60a5fa; }
+.ttt__status--o-win { color: #f87171; }
+.ttt__status--draw  { color: #fbbf24; }
+
+.ttt__board {
+  display: grid;
+  gap: 4px;
+  background: #2d3748;
+  border: 4px solid #2d3748;
+  border-radius: 8px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
+.ttt__cell {
+  position: relative;
+  width: var(--cell-size, 80px);
+  height: var(--cell-size, 80px);
+  background: #111827;
+  border: none;
+  color: inherit;
+  font-size: var(--cell-font, 2rem);
+  font-weight: 800;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s;
+  user-select: none;
+  line-height: 1;
+}
+
+.ttt__weight {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(0.55rem, 2vw, 0.85rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.ttt__weight--x { color: #60a5fa; }
+.ttt__weight--o { color: #f87171; }
+
+.ttt__cell--x { color: #60a5fa; }
+.ttt__cell--o { color: #f87171; }
+
+.ttt__cell--clickable {
+  cursor: pointer;
+}
+
+.ttt__cell--clickable:hover {
+  background: #1f2937;
+}
+
+.ttt__cell--win {
+  background: #1e1b4b;
+  animation: ttt-win-pop 0.3s ease-out;
+}
+
+.ttt__cell--win.ttt__cell--x {
+  color: #93c5fd;
+  text-shadow: 0 0 20px #3b82f688;
+}
+
+.ttt__cell--win.ttt__cell--o {
+  color: #fca5a5;
+  text-shadow: 0 0 20px #ef444488;
+}
+
+@keyframes ttt-win-pop {
+  0%   { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.ttt__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ttt__btn {
+  padding: 0.7rem 1.8rem;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ttt__btn:hover { background: #6d28d9; }
+
+.ttt__btn--secondary {
+  background: #374151;
+}
+
+.ttt__btn--secondary:hover { background: #4b5563; }
+
+.ttt__legend {
+  font-size: 0.85rem;
+  color: #6b7280;
+  text-align: center;
+}
+
+.ttt__legend-x { color: #60a5fa; font-weight: 600; }
+.ttt__legend-o { color: #f87171; font-weight: 600; }
