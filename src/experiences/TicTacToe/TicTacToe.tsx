@@ -6,11 +6,13 @@ type Cell = Player | null;
 type BoardSize = 3 | 5 | 7;
 type GameMode = "human" | "ai";
 type AIDifficulty = "easy" | "normal" | "hard";
+type GameVariant = "classic" | "dropIn";
 
 interface GameConfig {
   size: BoardSize;
   mode: GameMode;
   difficulty: AIDifficulty;
+  variant: GameVariant;
 }
 
 function getWinLength(size: BoardSize): number {
@@ -63,30 +65,45 @@ function isBoardFull(board: Cell[][]): boolean {
   return board.every((row) => row.every((c) => c !== null));
 }
 
-function getEmptyCells(board: Cell[][], size: number): [number, number][] {
-  const cells: [number, number][] = [];
-  for (let r = 0; r < size; r++)
-    for (let c = 0; c < size; c++)
-      if (!board[r][c]) cells.push([r, c]);
-  return cells;
+// Returns the row a piece would land in for a given column (-1 if full)
+function getDropRow(board: Cell[][], size: number, col: number): number {
+  for (let r = size - 1; r >= 0; r--) {
+    if (!board[r][col]) return r;
+  }
+  return -1;
 }
 
-// --- Easy AI: random ---
-
-function getEasyMove(board: Cell[][], size: number): [number, number] {
-  const empty = getEmptyCells(board, size);
-  return empty[Math.floor(Math.random() * empty.length)];
+// Returns valid moves for the current variant
+function getAvailableMoves(
+  board: Cell[][],
+  size: number,
+  variant: GameVariant
+): [number, number][] {
+  if (variant === "classic") {
+    const cells: [number, number][] = [];
+    for (let r = 0; r < size; r++)
+      for (let c = 0; c < size; c++)
+        if (!board[r][c]) cells.push([r, c]);
+    return cells;
+  }
+  const moves: [number, number][] = [];
+  for (let c = 0; c < size; c++) {
+    const row = getDropRow(board, size, c);
+    if (row !== -1) moves.push([row, c]);
+  }
+  return moves;
 }
 
-// --- Normal AI: semi-intelligent ---
+// --- AI helpers ---
 
 function findWinningMove(
   board: Cell[][],
   size: number,
   winLength: number,
-  player: Player
+  player: Player,
+  moves: [number, number][]
 ): [number, number] | null {
-  for (const [r, c] of getEmptyCells(board, size)) {
+  for (const [r, c] of moves) {
     const test = board.map((row) => [...row]);
     test[r][c] = player;
     if (checkWinner(test, size, winLength)) return [r, c];
@@ -116,7 +133,6 @@ function scorePosition(
   score += Math.max(0, size - Math.abs(r - mid) - Math.abs(c - mid));
 
   for (const [dr, dc] of directions) {
-    // Check every window of length winLength that includes (r, c)
     for (let offset = -(winLength - 1); offset <= 0; offset++) {
       let myCount = 0;
       let oppCount = 0;
@@ -134,92 +150,102 @@ function scorePosition(
       }
 
       if (!inBounds) continue;
-
-      if (myCount > 0 && oppCount === 0) {
-        // Offensive: extend own line
-        score += Math.pow(4, myCount);
-      } else if (oppCount > 0 && myCount === 0) {
-        // Defensive: block opponent's line
-        score += Math.pow(3, oppCount);
-      }
-      // Mixed window (both players present) = dead, no value
+      if (myCount > 0 && oppCount === 0) score += Math.pow(4, myCount);
+      else if (oppCount > 0 && myCount === 0) score += Math.pow(3, oppCount);
     }
   }
 
   return score;
 }
 
+function getCenterPreference(
+  board: Cell[][],
+  size: number,
+  variant: GameVariant,
+  moves: [number, number][]
+): [number, number] | null {
+  const mid = Math.floor(size / 2);
+  if (variant === "classic") {
+    if (board[mid][mid] === null) return [mid, mid];
+  } else {
+    const centerDrop = moves.find(([, c]) => c === mid);
+    if (centerDrop) return centerDrop;
+  }
+  return null;
+}
+
+function getEasyMove(
+  board: Cell[][],
+  size: number,
+  variant: GameVariant
+): [number, number] {
+  const moves = getAvailableMoves(board, size, variant);
+  return moves[Math.floor(Math.random() * moves.length)];
+}
+
 function getNormalMove(
   board: Cell[][],
   size: number,
-  winLength: number
+  winLength: number,
+  variant: GameVariant
 ): [number, number] {
   const ai: Player = "O";
   const human: Player = "X";
+  const moves = getAvailableMoves(board, size, variant);
+  if (moves.length === 0) return [0, 0];
 
-  // Win immediately if possible
-  const win = findWinningMove(board, size, winLength, ai);
+  const win = findWinningMove(board, size, winLength, ai, moves);
   if (win) return win;
-
-  // Block opponent's immediate win
-  const block = findWinningMove(board, size, winLength, human);
+  const block = findWinningMove(board, size, winLength, human, moves);
   if (block) return block;
 
-  const empty = getEmptyCells(board, size);
-  if (empty.length === 0) return [0, 0];
+  const center = getCenterPreference(board, size, variant, moves);
+  if (center) return center;
 
-  // Take center if available
-  const mid = Math.floor(size / 2);
-  if (board[mid][mid] === null) return [mid, mid];
-
-  // Score remaining cells
-  const scored = empty.map(([r, c]) => ({
+  const scored = moves.map(([r, c]) => ({
     pos: [r, c] as [number, number],
     score: scorePosition(board, size, winLength, r, c, ai),
   }));
   scored.sort((a, b) => b.score - a.score);
 
-  // 20% chance to pick randomly from top 3 (adds imperfection)
   if (Math.random() < 0.2 && scored.length > 1) {
     const topK = Math.min(3, scored.length);
     return scored[Math.floor(Math.random() * topK)].pos;
   }
-
   return scored[0].pos;
 }
 
 function getHardMove(
   board: Cell[][],
   size: number,
-  winLength: number
+  winLength: number,
+  variant: GameVariant
 ): [number, number] {
   const ai: Player = "O";
   const human: Player = "X";
+  const moves = getAvailableMoves(board, size, variant);
+  if (moves.length === 0) return [0, 0];
 
-  const win = findWinningMove(board, size, winLength, ai);
+  const win = findWinningMove(board, size, winLength, ai, moves);
   if (win) return win;
-
-  const block = findWinningMove(board, size, winLength, human);
+  const block = findWinningMove(board, size, winLength, human, moves);
   if (block) return block;
 
-  const empty = getEmptyCells(board, size);
-  if (empty.length === 0) return [0, 0];
+  const center = getCenterPreference(board, size, variant, moves);
+  if (center) return center;
 
-  const mid = Math.floor(size / 2);
-  if (board[mid][mid] === null) return [mid, mid];
-
-  const scored = empty.map(([r, c]) => ({
+  const scored = moves.map(([r, c]) => ({
     pos: [r, c] as [number, number],
     score: scorePosition(board, size, winLength, r, c, ai),
   }));
   scored.sort((a, b) => b.score - a.score);
-
   return scored[0].pos;
 }
 
 // --- Setup Screen ---
 
 function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
+  const [variant, setVariant] = useState<GameVariant>("classic");
   const [size, setSize] = useState<BoardSize>(3);
   const [mode, setMode] = useState<GameMode>("ai");
   const [difficulty, setDifficulty] = useState<AIDifficulty>("normal");
@@ -234,6 +260,29 @@ function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
   return (
     <div className="ttt-setup">
       <h1 className="ttt-setup__title">Tic-Tac-Toe</h1>
+
+      <div className="ttt-setup__section">
+        <div className="ttt-setup__label">Style</div>
+        <div className="ttt-setup__options">
+          <button
+            className={`ttt-setup__option${variant === "classic" ? " ttt-setup__option--active" : ""}`}
+            onClick={() => setVariant("classic")}
+          >
+            Classic
+          </button>
+          <button
+            className={`ttt-setup__option${variant === "dropIn" ? " ttt-setup__option--active" : ""}`}
+            onClick={() => setVariant("dropIn")}
+          >
+            Drop In
+          </button>
+        </div>
+        <div className="ttt-setup__hint">
+          {variant === "classic"
+            ? "Click any empty square"
+            : "Pieces fall to the bottom of the column"}
+        </div>
+      </div>
 
       <div className="ttt-setup__section">
         <div className="ttt-setup__label">Board Size</div>
@@ -305,7 +354,12 @@ function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
       <button
         className="ttt-setup__start"
         onClick={() =>
-          onStart({ size, mode, difficulty: mode === "ai" ? difficulty : "easy" })
+          onStart({
+            variant,
+            size,
+            mode,
+            difficulty: mode === "ai" ? difficulty : "easy",
+          })
         }
       >
         Start Game
@@ -327,6 +381,7 @@ export default function TicTacToe() {
   const [isDraw, setIsDraw] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
   const [debugWeights, setDebugWeights] = useState(false);
+  const [hoverCol, setHoverCol] = useState<number | null>(null);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -355,13 +410,24 @@ export default function TicTacToe() {
     setWinResult(null);
     setIsDraw(false);
     setAiThinking(false);
+    setHoverCol(null);
   }, []);
 
   const makeMove = useCallback(
     (r: number, c: number) => {
-      if (!config || board[r][c] || winResult || isDraw || aiThinking) return;
+      if (!config || winResult || isDraw || aiThinking) return;
+
+      let targetR = r;
+      if (config.variant === "dropIn") {
+        const dropR = getDropRow(board, config.size, c);
+        if (dropR === -1) return;
+        targetR = dropR;
+      } else {
+        if (board[r][c]) return;
+      }
+
       const newBoard = board.map((row) => [...row]);
-      newBoard[r][c] = currentPlayer;
+      newBoard[targetR][c] = currentPlayer;
       const winLength = getWinLength(config.size);
       const result = checkWinner(newBoard, config.size, winLength);
       setBoard(newBoard);
@@ -396,10 +462,10 @@ export default function TicTacToe() {
 
       const [r, c] =
         config.difficulty === "easy"
-          ? getEasyMove(board, config.size)
+          ? getEasyMove(board, config.size, config.variant)
           : config.difficulty === "hard"
-          ? getHardMove(board, config.size, winLength)
-          : getNormalMove(board, config.size, winLength);
+          ? getHardMove(board, config.size, winLength, config.variant)
+          : getNormalMove(board, config.size, winLength, config.variant);
 
       const newBoard = board.map((row) => [...row]);
       newBoard[r][c] = "O";
@@ -446,8 +512,16 @@ export default function TicTacToe() {
   const gameOver = !!(winResult || isDraw);
   const isAITurn =
     config.mode === "ai" && currentPlayer === "O" && !gameOver;
+  const isDropIn = config.variant === "dropIn";
 
-  // Responsive cell sizing via clamp
+  // For drop-in: compute which row would receive a piece per column
+  const dropTargetRow: number[] = [];
+  if (isDropIn) {
+    for (let c = 0; c < config.size; c++) {
+      dropTargetRow[c] = getDropRow(board, config.size, c);
+    }
+  }
+
   const cellSize =
     config.size === 3
       ? "clamp(72px, 28vw, 110px)"
@@ -484,19 +558,17 @@ export default function TicTacToe() {
     ? " ttt__status--draw"
     : "";
 
-  // Precompute debug weight map for current player
+  // Precompute debug weight map
+  // Classic: score every empty cell. Drop-in: score only the landing cell per column.
   const winLength = getWinLength(config.size);
   const weightMap: Map<string, number> = new Map();
   if (debugWeights && !gameOver) {
-    for (let r = 0; r < config.size; r++) {
-      for (let c = 0; c < config.size; c++) {
-        if (!board[r][c]) {
-          weightMap.set(
-            `${r}-${c}`,
-            scorePosition(board, config.size, winLength, r, c, currentPlayer)
-          );
-        }
-      }
+    const moves = getAvailableMoves(board, config.size, config.variant);
+    for (const [r, c] of moves) {
+      weightMap.set(
+        `${r}-${c}`,
+        scorePosition(board, config.size, winLength, r, c, currentPlayer)
+      );
     }
   }
 
@@ -511,7 +583,7 @@ export default function TicTacToe() {
       </div>
 
       <div
-        className="ttt__board"
+        className={`ttt__board${isDropIn ? " ttt__board--drop-in" : ""}`}
         style={
           {
             gridTemplateColumns: `repeat(${config.size}, 1fr)`,
@@ -519,12 +591,23 @@ export default function TicTacToe() {
             "--cell-font": cellFont,
           } as React.CSSProperties
         }
+        onMouseLeave={() => setHoverCol(null)}
       >
         {board.map((row, r) =>
           row.map((cell, c) => {
             const key = `${r}-${c}`;
             const isWin = winCells.has(key);
-            const canClick = !cell && !gameOver && !isAITurn;
+            const isLandingCell = isDropIn && dropTargetRow[c] === r;
+            const isColHovered = isDropIn && hoverCol === c;
+            const colAvailable = isDropIn && dropTargetRow[c] !== -1;
+
+            const canClick = !gameOver && !isAITurn && (
+              isDropIn ? colAvailable : !cell
+            );
+
+            const isDropTarget =
+              isDropIn && isLandingCell && isColHovered && canClick;
+
             return (
               <button
                 key={key}
@@ -533,15 +616,22 @@ export default function TicTacToe() {
                   cell === "X" ? "ttt__cell--x" : cell === "O" ? "ttt__cell--o" : "",
                   isWin ? "ttt__cell--win" : "",
                   canClick ? "ttt__cell--clickable" : "",
+                  isDropIn && isColHovered && !cell && !isLandingCell
+                    ? "ttt__cell--col-hover"
+                    : "",
+                  isDropTarget
+                    ? `ttt__cell--drop-target ttt__cell--drop-target-${currentPlayer.toLowerCase()}`
+                    : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 onClick={() => makeMove(r, c)}
+                onMouseEnter={() => isDropIn && setHoverCol(c)}
                 disabled={!canClick}
                 aria-label={cell ?? `row ${r + 1} column ${c + 1}`}
               >
                 {cell}
-                {debugWeights && !cell && weightMap.has(key) && (
+                {debugWeights && weightMap.has(key) && (
                   <span
                     className={`ttt__weight ttt__weight--${currentPlayer.toLowerCase()}`}
                   >
