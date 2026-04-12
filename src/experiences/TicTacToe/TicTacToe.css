@@ -228,3 +228,29 @@
 
 .ttt__legend-x { color: #60a5fa; font-weight: 600; }
 .ttt__legend-o { color: #f87171; font-weight: 600; }
+
+/* ── Drop-In variant ──────────────────────────────────────── */
+
+/* In drop-in mode, override the generic hover so only the landing
+   cell gets the strong highlight — not every cell in the column. */
+.ttt__board--drop-in .ttt__cell--clickable:hover {
+  background: #111827;
+}
+
+/* Subtle column wash when hovering */
+.ttt__cell--col-hover {
+  background: #161f2e;
+}
+
+/* Landing-cell highlight, colored to match the current player */
+.ttt__cell--drop-target {
+  background: #1a2235;
+}
+
+.ttt__cell--drop-target-x {
+  box-shadow: inset 0 0 0 2px #3b82f655;
+}
+
+.ttt__cell--drop-target-o {
+  box-shadow: inset 0 0 0 2px #ef444455;
+}

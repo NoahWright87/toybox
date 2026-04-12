@@ -19,18 +19,15 @@ export default function TicTacToePage() {
 
       <HelpOverlay title="Tic-Tac-Toe">
         <ul>
-          <li>Choose a board: <strong>3×3</strong>, <strong>5×5</strong>, or <strong>7×7</strong></li>
+          <li><strong>Classic</strong> — click any empty square · <strong>Drop In</strong> — pieces fall to the bottom of the column</li>
           <li>3×3 → 3 in a row · 5×5 → 4 in a row · 7×7 → 5 in a row</li>
           <li>Play against a <strong>friend</strong> or the <strong>computer</strong></li>
-          <li>Easy AI picks random squares</li>
-          <li>Normal AI will try to win and block you</li>
-          <li>Hard AI always picks its best available move</li>
-          <li><strong>Click</strong> any empty square to place your mark</li>
+          <li>Easy AI picks randomly · Normal AI blocks and attacks · Hard AI always picks its best move</li>
           <li><strong>X always goes first</strong></li>
         </ul>
         <hr />
         <ul>
-          <li><strong>Debug:</strong> toggle AI weight overlay — shows the score the AI assigns to each empty square for the current player</li>
+          <li><strong>Debug overlay</strong> — shows the score assigned to each valid move for the current player</li>
           <li>Triple-tap the status text <em>(mobile)</em></li>
           <li><strong>Ctrl + .</strong> <em>(keyboard)</em></li>
         </ul>
