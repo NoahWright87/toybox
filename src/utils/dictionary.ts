@@ -2,58 +2,30 @@
  * Shared word game dictionary utility.
  *
  * Source: ENABLE word list (public domain, designed for word games),
- * filtered to 3–8 letter alphabetic words. Offensive words are separated
- * into a secondary list and excluded by default.
+ * filtered to 3–8 letter alphabetic words with slurs and hard profanity
+ * removed.
  *
  * All lookups are O(1) after the first call, which parses and caches the
- * word sets lazily.
+ * word set lazily.
  */
 
-import rawClean from "../data/words/wordlist-clean.txt?raw";
-import rawOffensive from "../data/words/wordlist-offensive.txt?raw";
-
-export interface DictionaryOptions {
-  /** Include offensive/profane words in results. Defaults to false. */
-  includeOffensive?: boolean;
-}
+import rawWords from "../data/words/wordlist-clean.txt?raw";
 
 // ---------------------------------------------------------------------------
 // Internal cache
 // ---------------------------------------------------------------------------
 
-let _cleanSet: Set<string> | null = null;
-let _offensiveSet: Set<string> | null = null;
-let _combinedSet: Set<string> | null = null;
+let _wordSet: Set<string> | null = null;
 
-function parseList(raw: string): Set<string> {
-  const set = new Set<string>();
-  for (const word of raw.split("\n")) {
-    const w = word.trim();
-    if (w) set.add(w);
+function getWordSet(): Set<string> {
+  if (!_wordSet) {
+    _wordSet = new Set<string>();
+    for (const word of rawWords.split("\n")) {
+      const w = word.trim();
+      if (w) _wordSet.add(w);
+    }
   }
-  return set;
-}
-
-function getCleanSet(): Set<string> {
-  if (!_cleanSet) _cleanSet = parseList(rawClean);
-  return _cleanSet;
-}
-
-function getOffensiveSet(): Set<string> {
-  if (!_offensiveSet) _offensiveSet = parseList(rawOffensive);
-  return _offensiveSet;
-}
-
-function getCombinedSet(): Set<string> {
-  if (!_combinedSet) {
-    _combinedSet = new Set(getCleanSet());
-    for (const w of getOffensiveSet()) _combinedSet.add(w);
-  }
-  return _combinedSet;
-}
-
-function getWordSet(options?: DictionaryOptions): Set<string> {
-  return options?.includeOffensive ? getCombinedSet() : getCleanSet();
+  return _wordSet;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,24 +58,19 @@ function canFormFrom(need: LetterCounts, have: LetterCounts): boolean {
  * Returns true if `word` appears in the dictionary.
  *
  * @param word - The word to look up (case-insensitive).
- * @param options - Set `includeOffensive: true` to allow offensive words.
  */
-export function isValidWord(word: string, options?: DictionaryOptions): boolean {
-  return getWordSet(options).has(word.toLowerCase());
+export function isValidWord(word: string): boolean {
+  return getWordSet().has(word.toLowerCase());
 }
 
 /**
  * Returns all dictionary words of exactly `length` letters.
  *
  * @param length - Desired word length (3–8).
- * @param options - Set `includeOffensive: true` to include offensive words.
  */
-export function getWordsOfLength(
-  length: number,
-  options?: DictionaryOptions
-): string[] {
+export function getWordsOfLength(length: number): string[] {
   const result: string[] = [];
-  for (const word of getWordSet(options)) {
+  for (const word of getWordSet()) {
     if (word.length === length) result.push(word);
   }
   return result;
@@ -119,23 +86,18 @@ export function getWordsOfLength(
  *
  * @param letters - The available letters (order doesn't matter, case-insensitive).
  * @param minLength - Minimum word length to include. Defaults to 3.
- * @param options - Set `includeOffensive: true` to include offensive words.
  *
  * @example
  * // With tiles for "PLATES", find all valid sub-words:
- * getAnagramsOf("plates", { includeOffensive: false });
+ * getAnagramsOf("plates");
  * // → ["ale", "ales", "ape", "apes", "apt", ..., "staple", "plates", ...]
  */
-export function getAnagramsOf(
-  letters: string,
-  minLength = 3,
-  options?: DictionaryOptions
-): string[] {
+export function getAnagramsOf(letters: string, minLength = 3): string[] {
   const available = letterCounts(letters.toLowerCase());
   const maxLen = letters.length;
   const result: string[] = [];
 
-  for (const word of getWordSet(options)) {
+  for (const word of getWordSet()) {
     if (word.length < minLength || word.length > maxLen) continue;
     if (canFormFrom(letterCounts(word), available)) result.push(word);
   }
@@ -148,20 +110,16 @@ export function getAnagramsOf(
  * (i.e., use every letter exactly once).
  *
  * @param letters - The letters to rearrange (case-insensitive).
- * @param options - Set `includeOffensive: true` to include offensive words.
  *
  * @example
  * getExactAnagramsOf("listen"); // → ["enlist", "inlets", "listen", "silent", "tinsel"]
  */
-export function getExactAnagramsOf(
-  letters: string,
-  options?: DictionaryOptions
-): string[] {
+export function getExactAnagramsOf(letters: string): string[] {
   const lower = letters.toLowerCase();
   const sorted = lower.split("").sort().join("");
 
   const result: string[] = [];
-  for (const word of getWordSet(options)) {
+  for (const word of getWordSet()) {
     if (word.length !== lower.length) continue;
     if (word.split("").sort().join("") === sorted) result.push(word);
   }
@@ -173,14 +131,10 @@ export function getExactAnagramsOf(
  * Useful for generating puzzle seeds.
  *
  * @param length - Desired word length.
- * @param options - Set `includeOffensive: true` to include offensive words.
  * @returns A random word, or `null` if no word of that length exists.
  */
-export function getRandomWord(
-  length: number,
-  options?: DictionaryOptions
-): string | null {
-  const pool = getWordsOfLength(length, options);
+export function getRandomWord(length: number): string | null {
+  const pool = getWordsOfLength(length);
   if (pool.length === 0) return null;
   return pool[Math.floor(Math.random() * pool.length)];
 }

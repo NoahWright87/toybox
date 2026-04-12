@@ -11,7 +11,6 @@ type WordLength = 5 | 6 | 7 | 8;
 
 interface Settings {
   wordLength: WordLength;
-  includeOffensive: boolean;
   timeLimit: TimeLimit;
   mode: GameMode;
 }
@@ -50,7 +49,6 @@ const FULL_CLEAR_BONUS = 500;
 const SPEED_BONUS_PER_SEC = 3;
 const DEFAULT_SETTINGS: Settings = {
   wordLength: 6,
-  includeOffensive: false,
   timeLimit: 120,
   mode: "standard",
 };
@@ -74,15 +72,14 @@ function formatTime(s: number): string {
 function generatePuzzle(
   settings: Settings
 ): { word: string; solutions: string[] } | null {
-  const opts = { includeOffensive: settings.includeOffensive };
   const minWords = Math.max(settings.wordLength * 2, 8);
 
   for (let pass = 0; pass < 2; pass++) {
     const limit = pass === 0 ? 60 : 30;
     for (let i = 0; i < limit; i++) {
-      const word = getRandomWord(settings.wordLength, opts);
+      const word = getRandomWord(settings.wordLength);
       if (!word) return null;
-      const solutions = getAnagramsOf(word, 3, opts);
+      const solutions = getAnagramsOf(word, 3);
       if (solutions.length >= (pass === 0 ? minWords : 1)) {
         return { word, solutions: [...solutions].sort() };
       }
@@ -101,7 +98,6 @@ const MODE_HINTS: Record<GameMode, string> = {
 
 function SetupScreen({ onStart }: { onStart: (s: Settings) => void }) {
   const [wordLength, setWordLength] = useState<WordLength>(6);
-  const [includeOffensive, setIncludeOffensive] = useState(false);
   const [timeLimit, setTimeLimit] = useState<TimeLimit>(120);
   const [mode, setMode] = useState<GameMode>("standard");
 
@@ -164,29 +160,9 @@ function SetupScreen({ onStart }: { onStart: (s: Settings) => void }) {
         <div className="ww-setup__hint">{MODE_HINTS[mode]}</div>
       </div>
 
-      <div className="ww-setup__section">
-        <div className="ww-setup__label">Word List</div>
-        <div className="ww-setup__options">
-          <button
-            className={`ww-setup__option${!includeOffensive ? " ww-setup__option--active" : ""}`}
-            onClick={() => setIncludeOffensive(false)}
-          >
-            Clean
-          </button>
-          <button
-            className={`ww-setup__option${includeOffensive ? " ww-setup__option--active" : ""}`}
-            onClick={() => setIncludeOffensive(true)}
-          >
-            All words
-          </button>
-        </div>
-      </div>
-
       <button
         className="ww-setup__start"
-        onClick={() =>
-          onStart({ wordLength, includeOffensive, timeLimit, mode })
-        }
+        onClick={() => onStart({ wordLength, timeLimit, mode })}
       >
         Play!
       </button>
