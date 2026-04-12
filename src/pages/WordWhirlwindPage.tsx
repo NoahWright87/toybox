@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom";
-import { Button } from "@noahwright/design";
 import WordWhirlwind from "../experiences/WordWhirlwind/WordWhirlwind";
 import HelpOverlay from "../components/HelpOverlay/HelpOverlay";
 import "./WordWhirlwindPage.css";
@@ -9,13 +8,7 @@ export default function WordWhirlwindPage() {
 
   return (
     <div className="word-whirlwind-page">
-      <WordWhirlwind />
-
-      <div className="word-whirlwind-page__back">
-        <Button variant="ghost" color="#ffffff" onClick={() => navigate("/")}>
-          ← Toy Box
-        </Button>
-      </div>
+      <WordWhirlwind onHome={() => navigate("/")} />
 
       <HelpOverlay title="Word Whirlwind">
         <ul>

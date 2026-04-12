@@ -96,7 +96,13 @@ const MODE_HINTS: Record<GameMode, string> = {
   strict: "Find every valid word — good luck, you'll need it",
 };
 
-function SetupScreen({ onStart }: { onStart: (s: Settings) => void }) {
+function SetupScreen({
+  onStart,
+  onHome,
+}: {
+  onStart: (s: Settings) => void;
+  onHome?: () => void;
+}) {
   const [wordLength, setWordLength] = useState<WordLength>(6);
   const [timeLimit, setTimeLimit] = useState<TimeLimit>(120);
   const [mode, setMode] = useState<GameMode>("standard");
@@ -166,6 +172,12 @@ function SetupScreen({ onStart }: { onStart: (s: Settings) => void }) {
       >
         Play!
       </button>
+
+      {onHome && (
+        <button className="ww-setup__home" onClick={onHome}>
+          ← Toy Box
+        </button>
+      )}
     </div>
   );
 }
@@ -347,11 +359,13 @@ function GameOverScreen({
   rounds,
   onPlayAgain,
   onSettings,
+  onHome,
 }: {
   score: number;
   rounds: number;
   onPlayAgain: () => void;
   onSettings: () => void;
+  onHome?: () => void;
 }) {
   return (
     <div className="ww-gameover">
@@ -370,6 +384,11 @@ function GameOverScreen({
         >
           Change Settings
         </button>
+        {onHome && (
+          <button className="ww-setup__home" onClick={onHome}>
+            ← Toy Box
+          </button>
+        )}
       </div>
     </div>
   );
@@ -377,7 +396,7 @@ function GameOverScreen({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function WordWhirlwind() {
+export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) {
   const [phase, setPhase] = useState<GamePhase>("setup");
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
@@ -397,9 +416,11 @@ export default function WordWhirlwind() {
   const [flash, setFlash] = useState<Flash | null>(null);
   const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
   const [canAdvance, setCanAdvance] = useState(false);
+  const [lastFoundWord, setLastFoundWord] = useState("");
 
   // Refs for keyboard handler (avoids stale closures)
   const tilesRef = useRef<Tile[]>([]);
+  const lastFoundWordRef = useRef("");
   const poolOrderRef = useRef<number[]>([]);
   const boardTileIdsRef = useRef<number[]>([]);
   const allWordsSetRef = useRef<Set<string>>(new Set());
@@ -414,6 +435,7 @@ export default function WordWhirlwind() {
   const roundRef = useRef(1);
 
   // Keep refs in sync
+  lastFoundWordRef.current = lastFoundWord;
   tilesRef.current = tiles;
   poolOrderRef.current = poolOrder;
   boardTileIdsRef.current = boardTileIds;
@@ -517,6 +539,7 @@ export default function WordWhirlwind() {
       setTiles(newTiles);
       setPoolOrder(shuffle(ids));
       setBoardTileIds([]);
+      setLastFoundWord("");
       setScore(currentScore);
       setRound(roundNum);
       setRoundSummary(null);
@@ -568,8 +591,34 @@ export default function WordWhirlwind() {
 
   // ── Submit word ───────────────────────────────────────────────────────────
 
+  // Reload the letters of `word` from the tile pool onto the board.
+  const replayWord = useCallback((word: string) => {
+    const allTiles = tilesRef.current;
+    const newBoardIds: number[] = [];
+    const usedIds = new Set<number>();
+    for (const letter of word) {
+      const tile = allTiles.find(
+        (t) => t.letter === letter && !usedIds.has(t.id)
+      );
+      if (tile) {
+        newBoardIds.push(tile.id);
+        usedIds.add(tile.id);
+      }
+    }
+    setBoardTileIds(newBoardIds);
+  }, []);
+
   const submitWord = useCallback(() => {
     const ids = boardTileIdsRef.current;
+
+    // Empty board → replay last found word so player can try variations
+    if (ids.length === 0) {
+      if (lastFoundWordRef.current) {
+        replayWord(lastFoundWordRef.current);
+      }
+      return;
+    }
+
     if (ids.length < 3) {
       showFlash("Need at least 3 letters", "bad");
       return;
@@ -613,8 +662,10 @@ export default function WordWhirlwind() {
     });
 
     showFlash(`+${pts}  ${word.toUpperCase()}`, "good");
+    lastFoundWordRef.current = word;
+    setLastFoundWord(word);
     setBoardTileIds([]);
-  }, [showFlash, endRound]);
+  }, [showFlash, endRound, replayWord]);
 
   // ── Letter pool interactions ──────────────────────────────────────────────
 
@@ -725,7 +776,11 @@ export default function WordWhirlwind() {
   }
 
   function handleQuit() {
-    endRound(false, foundWordsRef.current);
+    if (timerIdRef.current) {
+      clearInterval(timerIdRef.current);
+      timerIdRef.current = null;
+    }
+    setPhase("setup");
   }
 
   // ── Derived display values ────────────────────────────────────────────────
@@ -740,7 +795,7 @@ export default function WordWhirlwind() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (phase === "setup") {
-    return <SetupScreen onStart={handleStart} />;
+    return <SetupScreen onStart={handleStart} onHome={onHome} />;
   }
 
   if (phase === "gameOver") {
@@ -750,6 +805,7 @@ export default function WordWhirlwind() {
         rounds={round - 1}
         onPlayAgain={() => startRound(settings, 1, 0)}
         onSettings={() => setPhase("setup")}
+        onHome={onHome}
       />
     );
   }
@@ -786,9 +842,6 @@ export default function WordWhirlwind() {
           </button>
         </div>
       </div>
-
-      {/* ── Word groups ── */}
-      <WordGroupsPanel allWords={allWords} foundWords={foundWords} />
 
       {/* ── Input area ── */}
       <div className="ww-input">
@@ -873,6 +926,9 @@ export default function WordWhirlwind() {
           ))}
         </div>
       </div>
+
+      {/* ── Word groups ── */}
+      <WordGroupsPanel allWords={allWords} foundWords={foundWords} />
 
       {/* ── Round summary overlay ── */}
       {roundSummary && (

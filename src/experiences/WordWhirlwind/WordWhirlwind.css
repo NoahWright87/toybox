@@ -128,6 +128,20 @@
   transform: translateY(0);
 }
 
+.ww-setup__home {
+  background: transparent;
+  border: none;
+  color: var(--ww-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  transition: color 0.15s;
+}
+
+.ww-setup__home:hover {
+  color: var(--ww-text);
+}
+
 /* ── Game layout ──────────────────────────────────────────────────────────── */
 
 .ww-game {
