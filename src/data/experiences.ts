@@ -49,4 +49,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/tic-tac-toe",
   },
+  {
+    id: "word-whirlwind",
+    title: "Word Whirlwind",
+    description: "Unscramble the letters and find every hidden word. Freeplay, Standard, or Strict — how many can you get?",
+    category: "game",
+    path: "/word-whirlwind",
+  },
 ];

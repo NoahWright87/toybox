@@ -1,0 +1,13 @@
+.word-whirlwind-page {
+  position: fixed;
+  inset: 0;
+  background: #0a0f1a;
+  overflow-y: auto;
+}
+
+.word-whirlwind-page__back {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: 10;
+}
