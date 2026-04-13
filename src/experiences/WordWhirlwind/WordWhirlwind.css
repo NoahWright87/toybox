@@ -248,7 +248,7 @@
 .ww-word-groups {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -356,12 +356,40 @@
   background: var(--ww-found-bg);
   border-color: var(--ww-found);
   color: #6ee7b7;
-  animation: ww-found-pop 0.25s ease-out;
+  animation: ww-found-pop 0.3s ease-out both;
 }
 
+/* Staggered letter reveal */
+.ww-word--found .ww-word__letter:nth-child(1) { animation-delay:   0ms; }
+.ww-word--found .ww-word__letter:nth-child(2) { animation-delay:  35ms; }
+.ww-word--found .ww-word__letter:nth-child(3) { animation-delay:  70ms; }
+.ww-word--found .ww-word__letter:nth-child(4) { animation-delay: 105ms; }
+.ww-word--found .ww-word__letter:nth-child(5) { animation-delay: 140ms; }
+.ww-word--found .ww-word__letter:nth-child(6) { animation-delay: 175ms; }
+.ww-word--found .ww-word__letter:nth-child(7) { animation-delay: 210ms; }
+.ww-word--found .ww-word__letter:nth-child(8) { animation-delay: 245ms; }
+
 @keyframes ww-found-pop {
-  0%   { transform: scale(1.25); }
-  100% { transform: scale(1); }
+  0%   { transform: scale(0.7) translateY(-4px); opacity: 0; }
+  60%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1) translateY(0); }
+}
+
+/* Hint letters (deducible from found neighbors) */
+.ww-word__letter--hint {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+/* Collapsed run placeholder */
+.ww-word-ellipsis {
+  font-size: 0.68rem;
+  color: var(--ww-muted);
+  font-style: italic;
+  padding: 0 0.2rem;
+  align-self: center;
+  letter-spacing: 0.04em;
 }
 
 /* ── Input area ───────────────────────────────────────────────────────────── */
@@ -442,6 +470,13 @@
   background: rgba(6, 182, 212, 0.1);
   color: #a5f3fc;
   cursor: pointer;
+  animation: ww-tile-enter 0.18s ease-out;
+}
+
+@keyframes ww-tile-enter {
+  0%   { transform: scale(0.65) translateY(-6px); opacity: 0.4; }
+  65%  { transform: scale(1.1); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 
 .ww-board__slot--filled:hover {
@@ -495,6 +530,12 @@
 .ww-btn--advance {
   background: var(--ww-found);
   color: #022c22;
+  animation: ww-advance-appear 0.35s ease-out;
+}
+
+@keyframes ww-advance-appear {
+  from { opacity: 0; transform: scale(0.75); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .ww-btn--advance:hover { background: #34d399; }
@@ -631,6 +672,11 @@
 .ww-overlay__btn:hover { background: #22d3ee; }
 
 /* ── Game over screen ─────────────────────────────────────────────────────── */
+
+.ww-word-groups__spacer {
+  height: 1.25rem;
+  flex-shrink: 0;
+}
 
 .ww-gameover {
   display: flex;
