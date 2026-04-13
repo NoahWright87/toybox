@@ -6,6 +6,7 @@ import BouncingShapesPage from "./pages/BouncingShapesPage";
 import TypingRacerPage from "./pages/TypingRacerPage";
 import NumberMuncherPage from "./pages/NumberMuncherPage";
 import TicTacToePage from "./pages/TicTacToePage";
+import WordWhirlwindPage from "./pages/WordWhirlwindPage";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/typing-racer" element={<TypingRacerPage />} />
         <Route path="/number-muncher" element={<NumberMuncherPage />} />
         <Route path="/tic-tac-toe" element={<TicTacToePage />} />
+        <Route path="/word-whirlwind" element={<WordWhirlwindPage />} />
       </Routes>
     </BrowserRouter>
   );
