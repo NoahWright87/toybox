@@ -1,0 +1,32 @@
+.ns-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 440px;
+  background: #242424;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 107, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 52px); /* don't bleed under taskbar */
+}
+
+.ns-window__content {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Portrait / mobile: maximized, fills viewport above taskbar */
+.ns-window--maximized {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100vh - 42px);
+  max-height: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}

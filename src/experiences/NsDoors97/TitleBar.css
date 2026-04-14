@@ -1,0 +1,76 @@
+.ns-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background: linear-gradient(90deg, #cc4400 0%, #ff6b00 50%, #cc4400 100%);
+  cursor: move;
+  user-select: none;
+  min-height: 28px;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.ns-titlebar__left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ns-titlebar__icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ns-titlebar__title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.03em;
+}
+
+.ns-titlebar__controls {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.ns-titlebar__btn {
+  width: 20px;
+  height: 18px;
+  font-size: 10px;
+  font-family: monospace;
+  color: #000000;
+  background: #c8964a;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.ns-titlebar__btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #a07030;
+}
+
+.ns-titlebar__btn--close {
+  color: #fff;
+  background: #c84020;
+  border-color: #ff8060 #660000 #660000 #ff8060;
+}
+
+.ns-titlebar__btn--close:active {
+  border-color: #660000 #ff8060 #ff8060 #660000;
+  background: #a02010;
+}

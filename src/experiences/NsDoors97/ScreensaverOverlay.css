@@ -1,0 +1,43 @@
+.ns-screensaver {
+  position: fixed;
+  inset: 0;
+  z-index: 9500; /* above taskbar (9000) but below screensaver-on-top-of-screensaver */
+  background: #000;
+  outline: none;
+}
+
+/* The actual screensaver component — fills the overlay, no pointer events
+   so the transparent dismiss layer above it captures all interaction */
+.ns-screensaver__content {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Transparent click/touch capture layer */
+.ns-screensaver__dismiss {
+  position: absolute;
+  inset: 0;
+  cursor: none;
+}
+
+/* "Click to exit" hint fades in after a moment */
+.ns-screensaver__hint {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: rgba(255, 154, 68, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: ns-saver-hint-fade 6s ease forwards;
+}
+
+@keyframes ns-saver-hint-fade {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}

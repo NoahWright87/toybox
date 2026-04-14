@@ -244,11 +244,22 @@ function getHardMove(
 
 // --- Setup Screen ---
 
-function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
+function SetupScreen({
+  onStart,
+  onBoardSizeChange,
+}: {
+  onStart: (cfg: GameConfig) => void;
+  onBoardSizeChange?: (size: BoardSize) => void;
+}) {
   const [variant, setVariant] = useState<GameVariant>("classic");
   const [size, setSize] = useState<BoardSize>(3);
   const [mode, setMode] = useState<GameMode>("ai");
   const [difficulty, setDifficulty] = useState<AIDifficulty>("normal");
+
+  function handleSizeChange(s: BoardSize) {
+    setSize(s);
+    onBoardSizeChange?.(s);
+  }
 
   const winHint =
     size === 3
@@ -291,7 +302,7 @@ function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
             <button
               key={s}
               className={`ttt-setup__option${size === s ? " ttt-setup__option--active" : ""}`}
-              onClick={() => setSize(s)}
+              onClick={() => handleSizeChange(s)}
             >
               {s}×{s}
             </button>
@@ -370,7 +381,11 @@ function SetupScreen({ onStart }: { onStart: (cfg: GameConfig) => void }) {
 
 // --- Main Game ---
 
-export default function TicTacToe() {
+interface TicTacToeProps {
+  onBoardSizeChange?: (size: BoardSize) => void;
+}
+
+export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
   const [config, setConfig] = useState<GameConfig | null>(null);
   const [board, setBoard] = useState<Cell[][]>([]);
   const [currentPlayer, setCurrentPlayer] = useState<Player>("X");
@@ -411,7 +426,8 @@ export default function TicTacToe() {
     setIsDraw(false);
     setAiThinking(false);
     setHoverCol(null);
-  }, []);
+    onBoardSizeChange?.(cfg.size);
+  }, [onBoardSizeChange]);
 
   const makeMove = useCallback(
     (r: number, c: number) => {
@@ -503,7 +519,12 @@ export default function TicTacToe() {
   }, []);
 
   if (!config) {
-    return <SetupScreen onStart={startGame} />;
+    return (
+      <SetupScreen
+        onStart={startGame}
+        onBoardSizeChange={onBoardSizeChange}
+      />
+    );
   }
 
   const winCells = new Set(
