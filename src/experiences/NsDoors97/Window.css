@@ -1,0 +1,26 @@
+.ns-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 440px;
+  background: #242424;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 107, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+
+.ns-window__content {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Mobile: full-screen windows */
+@media (pointer: coarse), (max-width: 600px) {
+  .ns-window {
+    width: 96vw !important;
+    max-height: 80vh;
+  }
+}

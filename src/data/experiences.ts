@@ -56,4 +56,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/word-whirlwind",
   },
+  {
+    id: "ns-doors-97",
+    title: "NS Doors 97",
+    description: "A fake 90s desktop OS. Double-click icons to open apps. It's not Windows. It's a Door.™",
+    category: "toy",
+    path: "/doors97",
+  },
 ];
