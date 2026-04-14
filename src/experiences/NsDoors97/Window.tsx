@@ -28,6 +28,16 @@ function useIsPortrait() {
   return isPortrait;
 }
 
+function useViewportWidth() {
+  const [vw, setVw] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const handler = () => setVw(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return vw;
+}
+
 export default function Window({
   id,
   title,
@@ -41,10 +51,16 @@ export default function Window({
 }: WindowProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const isPortrait = useIsPortrait();
+  const viewportWidth = useViewportWidth();
+
+  const windowWidth = width ?? 440;
+  // Scale the whole window down if it would exceed the viewport
+  const scale = Math.min(1, (viewportWidth - 8) / windowWidth);
 
   const inlineStyle: React.CSSProperties = {
     zIndex,
-    ...(width !== undefined ? { width: `${width}px` } : {}),
+    width: `${windowWidth}px`,
+    ...(scale < 1 ? { zoom: scale } : {}),
   };
 
   const titleBar = (
@@ -70,6 +86,7 @@ export default function Window({
   return (
     <Draggable
       handle=".ns-titlebar"
+      cancel=".ns-titlebar__controls"
       defaultPosition={defaultPosition}
       bounds="parent"
       nodeRef={nodeRef}
