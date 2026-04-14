@@ -13,7 +13,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<NsDoors97Page />} />
+        <Route path="/toybox" element={<HomePage />} />
         <Route path="/starfield" element={<StarfieldPage />} />
         <Route path="/fireworks" element={<FireworksPage />} />
         <Route path="/bouncing-shapes" element={<BouncingShapesPage />} />

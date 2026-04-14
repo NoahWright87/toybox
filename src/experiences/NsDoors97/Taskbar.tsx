@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
+import { useOsDialog } from "./OsDialog";
 import "./Taskbar.css";
 
 interface TaskbarWindowEntry {
@@ -94,8 +95,10 @@ function FullscreenButton() {
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
 export default function Taskbar({ windows, activeWindowId, onWindowFocus }: TaskbarProps) {
+  const { showDialog } = useOsDialog();
+
   function handleStartClick() {
-    alert(missingFeatureMessage());
+    showDialog(missingFeatureMessage());
   }
 
   return (

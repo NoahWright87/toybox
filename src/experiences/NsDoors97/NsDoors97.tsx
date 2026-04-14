@@ -2,27 +2,39 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { experiences, type Experience } from "../../data/experiences";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
+import { useOsDialog } from "./OsDialog";
 import DesktopIcon from "./DesktopIcon";
 import Window from "./Window";
 import Taskbar from "./Taskbar";
 import ScreensaverApp from "./ScreensaverApp";
 import ScreensaverOverlay, { type ScreensaverId } from "./ScreensaverOverlay";
+import AboutApp from "./AboutApp";
+import FolderApp from "./FolderApp";
+import InternetApp from "./InternetApp";
+import TicTacToe from "../TicTacToe/TicTacToe";
 import "./NsDoors97.css";
 
-// ── Icon config ───────────────────────────────────────────────────────────────
+// ── Icon / experience config ───────────────────────────────────────────────
 
 const EXPERIENCE_ICONS: Record<string, string> = {
-  starfield: "⭐",
-  fireworks: "🎆",
-  "bouncing-shapes": "🔷",
-  "typing-racer": "⌨️",
-  "number-muncher": "🔢",
-  "tic-tac-toe": "✖️",
-  "word-whirlwind": "🌪️",
-  "ns-doors-97": "🚪",
+  starfield:          "⭐",
+  fireworks:          "🎆",
+  "bouncing-shapes":  "🔷",
+  "typing-racer":     "⌨️",
+  "number-muncher":   "🔢",
+  "tic-tac-toe":      "✖️",
+  "word-whirlwind":   "🌪️",
+  "ns-doors-97":      "🚪",
 };
 
-type DesktopIconAction = "placeholder" | "experience" | "screensavers";
+type DesktopIconAction =
+  | "placeholder"
+  | "experience"
+  | "screensavers"
+  | "tictactoe"
+  | "about"
+  | "my-doors"
+  | "internet";
 
 interface DesktopIconDef {
   id: string;
@@ -32,28 +44,33 @@ interface DesktopIconDef {
 }
 
 const STATIC_ICONS: DesktopIconDef[] = [
-  { id: "my-doors",     title: "My Doors",    icon: "🖥️", action: "placeholder"  },
-  { id: "recycle-bin",  title: "Recycle Bin", icon: "🗑️", action: "placeholder"  },
+  { id: "my-doors",     title: "My Doors",     icon: "🖥️", action: "my-doors"     },
+  { id: "recycle-bin",  title: "Recycle Bin",  icon: "🗑️", action: "placeholder"  },
+  { id: "about",        title: "About NS Doors 97", icon: "ℹ️", action: "about"   },
+  { id: "internet",     title: "Internet",     icon: "🌐", action: "internet"     },
   { id: "screensavers", title: "Screensavers", icon: "💤", action: "screensavers" },
 ];
 
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
-  // Don't show the NS Doors 97 card inside itself
   .filter((e) => e.id !== "ns-doors-97")
   .map((e) => ({
     id: e.id,
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
-    action: "experience" as const,
+    action: (e.id === "tic-tac-toe" ? "tictactoe" : "experience") as DesktopIconAction,
   }));
 
 const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...EXPERIENCE_ICON_DEFS];
 
-// ── Window content types ──────────────────────────────────────────────────────
+// ── Window content union ───────────────────────────────────────────────────
 
 type WindowContent =
   | { type: "app-launcher"; experience: Experience }
-  | { type: "screensaver-settings" };
+  | { type: "screensaver-settings" }
+  | { type: "tictactoe" }
+  | { type: "about" }
+  | { type: "my-doors" }
+  | { type: "internet" };
 
 interface OpenWindow {
   id: string;
@@ -62,12 +79,15 @@ interface OpenWindow {
   content: WindowContent;
   zIndex: number;
   defaultPosition: { x: number; y: number };
+  width?: number;
 }
 
 let windowSeq = 0;
 let maxZ = 100;
 
-// ── App Launcher card (inside experience windows) ─────────────────────────────
+const TTT_WINDOW_WIDTHS: Record<3 | 5 | 7, number> = { 3: 380, 5: 480, 7: 580 };
+
+// ── App Launcher card ──────────────────────────────────────────────────────
 
 function AppLauncher({
   experience,
@@ -92,28 +112,26 @@ function AppLauncher({
   );
 }
 
-// ── Main Desktop ──────────────────────────────────────────────────────────────
+// ── Main Desktop ───────────────────────────────────────────────────────────
 
 export default function NsDoors97() {
   const navigate = useNavigate();
+  const { showDialog } = useOsDialog();
+
   const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
 
-  // Screensaver state
+  // ── Screensaver ──────────────────────────────────────────────────────────
   const [screensaverConfig, setScreensaverConfig] = useState<{
     screensaver: ScreensaverId | null;
     waitMinutes: number;
   }>({ screensaver: null, waitMinutes: 1 });
   const [activeScreensaver, setActiveScreensaver] = useState<ScreensaverId | null>(null);
 
-  // ── Idle detection ──────────────────────────────────────────────────────────
   const screensaverConfigRef = useRef(screensaverConfig);
-  useEffect(() => {
-    screensaverConfigRef.current = screensaverConfig;
-  }, [screensaverConfig]);
+  useEffect(() => { screensaverConfigRef.current = screensaverConfig; }, [screensaverConfig]);
 
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     const { screensaver, waitMinutes } = screensaverConfigRef.current;
@@ -134,19 +152,18 @@ export default function NsDoors97() {
     };
   }, [resetIdleTimer]);
 
-  // ── Window management ───────────────────────────────────────────────────────
+  // ── Window management ────────────────────────────────────────────────────
 
   const openWindow = useCallback((id: string) => {
     const iconDef = ALL_DESKTOP_ICONS.find((d) => d.id === id);
     if (!iconDef) return;
 
     if (iconDef.action === "placeholder") {
-      alert(missingFeatureMessage());
+      showDialog(missingFeatureMessage());
       return;
     }
 
     setOpenWindows((prev) => {
-      // Already open → bring to front
       if (prev.some((w) => w.id === id)) {
         maxZ++;
         const z = maxZ;
@@ -159,26 +176,37 @@ export default function NsDoors97() {
       maxZ++;
 
       let content: WindowContent;
-      if (iconDef.action === "screensavers") {
-        content = { type: "screensaver-settings" };
-      } else {
-        const experience = experiences.find((e) => e.id === id)!;
-        content = { type: "app-launcher", experience };
+      let width: number | undefined;
+
+      switch (iconDef.action) {
+        case "screensavers": content = { type: "screensaver-settings" }; width = 440; break;
+        case "about":        content = { type: "about" };                width = 340; break;
+        case "my-doors":     content = { type: "my-doors" };             width = 440; break;
+        case "internet":     content = { type: "internet" };             width = 640; break;
+        case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
+        case "experience": {
+          const experience = experiences.find((e) => e.id === id)!;
+          content = { type: "app-launcher", experience };
+          break;
+        }
+        default: return prev;
       }
 
-      const newWin: OpenWindow = {
-        id,
-        title: iconDef.title,
-        icon: iconDef.icon,
-        content,
-        zIndex: maxZ,
-        defaultPosition: { x: 80 + offset, y: 48 + offset },
-      };
-
       setActiveWindowId(id);
-      return [...prev, newWin];
+      return [
+        ...prev,
+        {
+          id,
+          title: iconDef.title,
+          icon: iconDef.icon,
+          content,
+          zIndex: maxZ,
+          defaultPosition: { x: 80 + offset, y: 48 + offset },
+          width,
+        },
+      ];
     });
-  }, []);
+  }, [showDialog]);
 
   const closeWindow = useCallback((id: string) => {
     setOpenWindows((prev) => prev.filter((w) => w.id !== id));
@@ -193,6 +221,18 @@ export default function NsDoors97() {
     );
     setActiveWindowId(id);
   }, []);
+
+  // Called by TicTacToe when board size changes — resize the window
+  const handleTttBoardSizeChange = useCallback(
+    (winId: string, boardSize: 3 | 5 | 7) => {
+      setOpenWindows((prev) =>
+        prev.map((w) =>
+          w.id === winId ? { ...w, width: TTT_WINDOW_WIDTHS[boardSize] } : w
+        )
+      );
+    },
+    []
+  );
 
   return (
     <div className="ns-desktop">
@@ -233,13 +273,26 @@ export default function NsDoors97() {
           icon={win.icon}
           zIndex={win.zIndex}
           defaultPosition={win.defaultPosition}
+          width={win.width}
           onClose={closeWindow}
           onFocus={focusWindow}
         >
           {win.content.type === "app-launcher" && (
             <AppLauncher
               experience={win.content.experience}
-              onPlay={() => navigate((win.content as { type: "app-launcher"; experience: Experience }).experience.path)}
+              onPlay={() =>
+                navigate(
+                  (win.content as Extract<WindowContent, { type: "app-launcher" }>)
+                    .experience.path
+                )
+              }
+            />
+          )}
+          {win.content.type === "tictactoe" && (
+            <TicTacToe
+              onBoardSizeChange={(size) =>
+                handleTttBoardSizeChange(win.id, size)
+              }
             />
           )}
           {win.content.type === "screensaver-settings" && (
@@ -252,6 +305,15 @@ export default function NsDoors97() {
               }}
               onPreview={(screensaver) => setActiveScreensaver(screensaver)}
             />
+          )}
+          {win.content.type === "about" && (
+            <AboutApp onClose={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "my-doors" && (
+            <FolderApp onOpenExperience={openWindow} />
+          )}
+          {win.content.type === "internet" && (
+            <InternetApp onOpenExperience={openWindow} />
           )}
         </Window>
       ))}

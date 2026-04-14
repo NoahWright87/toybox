@@ -1,0 +1,135 @@
+.ns-folder {
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  min-width: 380px;
+  height: 320px;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+
+.ns-folder__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #2a1000;
+  border-bottom: 2px solid #330000;
+  flex-shrink: 0;
+}
+
+.ns-folder__back-btn {
+  padding: 3px 10px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #ffffff;
+  background: #4a2000;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ns-folder__back-btn:hover {
+  background: #5a2800;
+}
+
+.ns-folder__back-btn:active {
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #3a1800;
+}
+
+.ns-folder__address {
+  flex: 1;
+  padding: 3px 8px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #ffcc88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Content area ────────────────────────────────────────────────────────── */
+
+.ns-folder__content {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+/* ── Folder item (icon + label) ──────────────────────────────────────────── */
+
+.ns-folder-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 4px;
+  width: 80px;
+  height: 88px;
+  background: transparent;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.ns-folder-item:hover .ns-folder-item__icon {
+  filter: brightness(1.15) drop-shadow(0 0 6px rgba(255, 150, 50, 0.4));
+}
+
+.ns-folder-item:hover .ns-folder-item__label {
+  background: rgba(255, 107, 0, 0.2);
+}
+
+.ns-folder-item--selected {
+  background: rgba(255, 107, 0, 0.15);
+  border-color: rgba(255, 200, 100, 0.4);
+}
+
+.ns-folder-item--selected .ns-folder-item__label {
+  background: #ff6b00;
+  color: #fff;
+}
+
+.ns-folder-item__icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.ns-folder-item__label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #ffffff;
+  text-shadow:
+    1px 1px 0 #000, -1px 1px 0 #000,
+    1px -1px 0 #000, -1px -1px 0 #000;
+  word-break: break-word;
+  line-height: 1.6;
+  padding: 1px 3px;
+  border-radius: 1px;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+.ns-folder__statusbar {
+  padding: 3px 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #aaaaaa;
+  flex-shrink: 0;
+}
+
+/* Sunken inset utility (shared with taskbar) */
+.ns-sunken {
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #150800;
+}

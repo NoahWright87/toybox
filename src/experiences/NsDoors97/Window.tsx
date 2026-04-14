@@ -9,6 +9,7 @@ interface WindowProps {
   icon?: string;
   zIndex: number;
   defaultPosition: { x: number; y: number };
+  width?: number;        // optional override — defaults to CSS 440px
   onClose: (id: string) => void;
   onFocus: (id: string) => void;
   children: React.ReactNode;
@@ -33,12 +34,18 @@ export default function Window({
   icon,
   zIndex,
   defaultPosition,
+  width,
   onClose,
   onFocus,
   children,
 }: WindowProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const isPortrait = useIsPortrait();
+
+  const inlineStyle: React.CSSProperties = {
+    zIndex,
+    ...(width !== undefined ? { width: `${width}px` } : {}),
+  };
 
   const titleBar = (
     <TitleBar title={title} icon={icon} onClose={() => onClose(id)} />
@@ -71,7 +78,7 @@ export default function Window({
       <div
         ref={nodeRef}
         className="ns-window"
-        style={{ zIndex }}
+        style={inlineStyle}
         onMouseDown={() => onFocus(id)}
       >
         {titleBar}

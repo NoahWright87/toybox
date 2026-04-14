@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
+import { useOsDialog } from "./OsDialog";
 import { type ScreensaverId } from "./ScreensaverOverlay";
 import "./ScreensaverApp.css";
 
@@ -31,6 +32,7 @@ export default function ScreensaverApp({
   onSave,
   onPreview,
 }: ScreensaverAppProps) {
+  const { showDialog } = useOsDialog();
   const [localSaver, setLocalSaver] = useState<ScreensaverId | "none">(
     currentScreensaver ?? "none"
   );
@@ -40,7 +42,7 @@ export default function ScreensaverApp({
 
   function handlePreview() {
     if (localSaver === "none") {
-      alert(missingFeatureMessage());
+      showDialog(missingFeatureMessage());
       return;
     }
     onPreview(localSaver);
@@ -58,7 +60,7 @@ export default function ScreensaverApp({
           <button
             key={tab}
             className="ns-saver-app__tab"
-            onClick={() => alert(missingFeatureMessage())}
+            onClick={() => showDialog(missingFeatureMessage())}
           >
             {tab}
           </button>
@@ -121,7 +123,7 @@ export default function ScreensaverApp({
             </button>
             <button
               className="ns-saver-app__btn"
-              onClick={() => alert(missingFeatureMessage())}
+              onClick={() => showDialog(missingFeatureMessage())}
             >
               Settings…
             </button>
@@ -136,7 +138,7 @@ export default function ScreensaverApp({
         </button>
         <button
           className="ns-saver-app__btn"
-          onClick={() => alert(missingFeatureMessage())}
+          onClick={() => showDialog(missingFeatureMessage())}
         >
           Cancel
         </button>

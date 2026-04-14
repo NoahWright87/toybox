@@ -1,0 +1,96 @@
+.ns-about {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 28px 20px;
+  gap: 10px;
+  background: #1e1e1e;
+  text-align: center;
+  min-width: 300px;
+}
+
+.ns-about__logo {
+  font-size: 56px;
+  line-height: 1;
+  filter: drop-shadow(0 0 16px rgba(255, 107, 0, 0.5));
+}
+
+.ns-about__name {
+  font-family: "Press Start 2P", monospace;
+  font-size: 13px;
+  color: #ff9a44;
+  text-shadow: 0 0 12px rgba(255, 107, 0, 0.5);
+  letter-spacing: 0.05em;
+}
+
+.ns-about__version {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #9b59d4;
+}
+
+.ns-about__rule {
+  width: 80%;
+  height: 0;
+  border-top: 1px solid #330000;
+  border-bottom: 1px solid #ff9a44;
+  margin: 2px 0;
+}
+
+.ns-about__tagline {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffcc88;
+  margin: 0;
+  line-height: 1.8;
+}
+
+.ns-about__credits {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #bbbbbb;
+  margin: 0;
+}
+
+.ns-about__link {
+  color: #ff9a44;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ns-about__link:hover {
+  color: #ffcc88;
+}
+
+.ns-about__copyright {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #666666;
+  margin: 0;
+  line-height: 1.8;
+}
+
+.ns-about__footer {
+  margin-top: 8px;
+}
+
+.ns-about__ok {
+  padding: 8px 36px;
+  background: linear-gradient(180deg, #ff7a1a 0%, #cc4400 100%);
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.ns-about__ok:hover {
+  background: linear-gradient(180deg, #ff8a2a 0%, #dd5500 100%);
+}
+
+.ns-about__ok:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: linear-gradient(180deg, #cc4400 0%, #ff7a1a 100%);
+}

@@ -1,0 +1,160 @@
+.ns-internet {
+  display: flex;
+  flex-direction: column;
+  background: #f0f0f0;
+  width: 600px;
+  height: 480px;
+}
+
+/* ── Browser toolbar ─────────────────────────────────────────────────────── */
+
+.ns-internet__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: #d4d0c8;
+  border-bottom: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  flex-shrink: 0;
+}
+
+.ns-internet__nav-btns {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.ns-internet__nav-btn {
+  width: 26px;
+  height: 24px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+}
+
+.ns-internet__nav-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.ns-internet__address-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ns-internet__address-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ns-internet__address {
+  flex: 1;
+  padding: 2px 6px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ns-internet__sunken {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffffff;
+}
+
+.ns-internet__go {
+  padding: 2px 10px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  flex-shrink: 0;
+}
+
+.ns-internet__go:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* ── Page content ────────────────────────────────────────────────────────── */
+
+.ns-internet__content {
+  flex: 1;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.ns-internet__page {
+  padding: 20px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ns-internet__page-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin: 0;
+  color: #000;
+}
+
+.ns-internet__page-sub {
+  font-size: 0.9rem;
+  color: #555;
+  margin: 0;
+}
+
+.ns-internet__filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ns-internet__filter {
+  padding: 4px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #333;
+}
+
+.ns-internet__filter:hover {
+  background: #e8e8e8;
+}
+
+.ns-internet__filter--active {
+  background: #0055cc;
+  border-color: #003399;
+  color: #fff;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+.ns-internet__statusbar {
+  padding: 3px 8px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #444;
+  flex-shrink: 0;
+  background: #d4d0c8;
+  border-top: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}

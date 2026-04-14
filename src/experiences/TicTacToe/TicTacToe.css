@@ -1,150 +1,267 @@
-/* ── Setup Screen ─────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   TicTacToe — Noahsoft 90s Redesign
+   Orange = primary (X, active states, buttons)
+   Purple = secondary (O, accents)
+   Win95-style raised/sunken beveled chrome throughout
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Setup Screen ─────────────────────────────────────────────────────────── */
 
 .ttt-setup {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 2rem 1.5rem;
-  gap: 2.5rem;
-  color: #fff;
+  padding: 16px 16px 20px;
+  gap: 14px;
+  background: #c0c0c0;
+  color: #000;
 }
 
 .ttt-setup__title {
-  font-size: clamp(2rem, 7vw, 3.5rem);
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  color: #cc4400;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25);
   margin: 0;
-  color: #a78bfa;
-  text-shadow: 0 0 48px #7c3aed66;
+  letter-spacing: 0.04em;
 }
 
 .ttt-setup__section {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
 }
 
 .ttt-setup__label {
-  font-size: 0.75rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #333;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: #9ca3af;
+  letter-spacing: 0.12em;
 }
 
 .ttt-setup__options {
   display: flex;
-  gap: 0.75rem;
+  gap: 6px;
   flex-wrap: wrap;
-  justify-content: center;
 }
 
+/* Win95 raised button */
 .ttt-setup__option {
-  padding: 0.6rem 1.4rem;
-  border: 2px solid #374151;
-  border-radius: 0.5rem;
-  background: transparent;
-  color: #9ca3af;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 5px 12px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.ttt-setup__option:hover {
-  border-color: #6d28d9;
-  color: #e9d5ff;
-}
-
-.ttt-setup__option--active {
-  border-color: #7c3aed;
-  background: rgba(124, 58, 237, 0.15);
-  color: #e9d5ff;
-}
-
-.ttt-setup__hint {
-  font-size: 0.8rem;
-  color: #6b7280;
-  min-height: 1.2em;
+  min-width: 58px;
   text-align: center;
 }
 
+.ttt-setup__option:hover {
+  background: #cccccc;
+}
+
+/* Active = sunken + orange text */
+.ttt-setup__option--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+  color: #cc4400;
+}
+
+.ttt-setup__option--active:hover {
+  background: #b8b8b8;
+}
+
+.ttt-setup__hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #555;
+  min-height: 14px;
+  line-height: 1.4;
+}
+
+/* Start button */
 .ttt-setup__start {
-  margin-top: 0.5rem;
-  padding: 0.85rem 3rem;
-  background: #7c3aed;
+  margin-top: 4px;
+  padding: 8px 28px;
+  background: #ff6b00;
   color: #fff;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 1.1rem;
-  font-weight: 700;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 .ttt-setup__start:hover {
-  background: #6d28d9;
-  transform: translateY(-1px);
+  background: #ff7a1a;
 }
 
 .ttt-setup__start:active {
-  transform: translateY(0);
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(1px);
 }
 
-/* ── Game Board ───────────────────────────────────────────── */
+/* ── Game Board ───────────────────────────────────────────────────────────── */
 
 .ttt {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 1rem;
-  gap: 1.5rem;
-  color: #fff;
+  padding: 12px 12px 16px;
+  gap: 12px;
+  background: #c0c0c0;
 }
 
+/* Status bar — Win95 sunken inset */
 .ttt__status {
-  font-size: 1.25rem;
-  font-weight: 600;
-  min-height: 2rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  min-height: 24px;
+  width: 100%;
+  box-sizing: border-box;
   text-align: center;
-  color: #d1d5db;
-  transition: color 0.2s;
+  color: #000;
+  padding: 5px 8px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  line-height: 1.5;
 }
 
-.ttt__status--x-win { color: #60a5fa; }
-.ttt__status--o-win { color: #f87171; }
-.ttt__status--draw  { color: #fbbf24; }
+.ttt__status--x-win { color: #cc4400; }    /* orange */
+.ttt__status--o-win { color: #5b2d8e; }    /* purple */
+.ttt__status--draw  { color: #228833; }    /* green  */
 
+/* Board — Win95 raised frame */
 .ttt__board {
   display: grid;
-  gap: 4px;
-  background: #2d3748;
-  border: 4px solid #2d3748;
-  border-radius: 8px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  gap: 3px;
+  background: #808080;
+  border: 3px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
 }
 
+/* Cell — Win95 sunken box */
 .ttt__cell {
   position: relative;
   width: var(--cell-size, 80px);
   height: var(--cell-size, 80px);
-  background: #111827;
-  border: none;
+  background: #c8c8c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
   color: inherit;
   font-size: var(--cell-font, 2rem);
+  font-family: "Press Start 2P", monospace;
   font-weight: 800;
   cursor: default;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s;
+  transition: background 0.05s;
   user-select: none;
   line-height: 1;
 }
+
+/* X = orange, O = purple */
+.ttt__cell--x { color: #cc4400; }
+.ttt__cell--o { color: #5b2d8e; }
+
+.ttt__cell--clickable { cursor: pointer; }
+
+.ttt__cell--clickable:hover {
+  background: #d4d4d4;
+}
+
+/* Win cells: raised bevel, glowing text */
+.ttt__cell--win {
+  background: #e8e0d0;
+  animation: ttt-win-pop 0.3s ease-out;
+}
+
+.ttt__cell--win.ttt__cell--x {
+  color: #ff6b00;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  text-shadow: 0 0 6px rgba(255, 107, 0, 0.5);
+}
+
+.ttt__cell--win.ttt__cell--o {
+  color: #7b3dbe;
+  border-color: #ab6df4 #2d0066 #2d0066 #ab6df4;
+  text-shadow: 0 0 6px rgba(91, 45, 142, 0.5);
+}
+
+@keyframes ttt-win-pop {
+  0%   { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* ── Action buttons ───────────────────────────────────────────────────────── */
+
+.ttt__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ttt__btn {
+  padding: 6px 16px;
+  background: #ff6b00;
+  color: #fff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.ttt__btn:hover { background: #ff7a1a; }
+
+.ttt__btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+}
+
+.ttt__btn--secondary {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  text-shadow: none;
+}
+
+.ttt__btn--secondary:hover { background: #cccccc; }
+
+.ttt__btn--secondary:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+
+/* ── Legend ───────────────────────────────────────────────────────────────── */
+
+.ttt__legend {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+  text-align: center;
+  line-height: 2;
+}
+
+.ttt__legend-x { color: #cc4400; }
+.ttt__legend-o { color: #5b2d8e; }
+
+/* ── Debug weight overlay ─────────────────────────────────────────────────── */
 
 .ttt__weight {
   position: absolute;
@@ -152,105 +269,37 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(0.55rem, 2vw, 0.85rem);
+  font-size: clamp(0.45rem, 2vw, 0.7rem);
+  font-family: "Courier New", Courier, monospace;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+  opacity: 0.75;
   pointer-events: none;
 }
 
-.ttt__weight--x { color: #60a5fa; }
-.ttt__weight--o { color: #f87171; }
+.ttt__weight--x { color: #cc4400; }
+.ttt__weight--o { color: #5b2d8e; }
 
-.ttt__cell--x { color: #60a5fa; }
-.ttt__cell--o { color: #f87171; }
+/* ── Drop-In variant ──────────────────────────────────────────────────────── */
 
-.ttt__cell--clickable {
-  cursor: pointer;
-}
-
-.ttt__cell--clickable:hover {
-  background: #1f2937;
-}
-
-.ttt__cell--win {
-  background: #1e1b4b;
-  animation: ttt-win-pop 0.3s ease-out;
-}
-
-.ttt__cell--win.ttt__cell--x {
-  color: #93c5fd;
-  text-shadow: 0 0 20px #3b82f688;
-}
-
-.ttt__cell--win.ttt__cell--o {
-  color: #fca5a5;
-  text-shadow: 0 0 20px #ef444488;
-}
-
-@keyframes ttt-win-pop {
-  0%   { transform: scale(1.2); }
-  100% { transform: scale(1); }
-}
-
-.ttt__actions {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.ttt__btn {
-  padding: 0.7rem 1.8rem;
-  background: #7c3aed;
-  color: #fff;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.ttt__btn:hover { background: #6d28d9; }
-
-.ttt__btn--secondary {
-  background: #374151;
-}
-
-.ttt__btn--secondary:hover { background: #4b5563; }
-
-.ttt__legend {
-  font-size: 0.85rem;
-  color: #6b7280;
-  text-align: center;
-}
-
-.ttt__legend-x { color: #60a5fa; font-weight: 600; }
-.ttt__legend-o { color: #f87171; font-weight: 600; }
-
-/* ── Drop-In variant ──────────────────────────────────────── */
-
-/* In drop-in mode, override the generic hover so only the landing
-   cell gets the strong highlight — not every cell in the column. */
+/* Override generic hover — only the landing cell should highlight */
 .ttt__board--drop-in .ttt__cell--clickable:hover {
-  background: #111827;
+  background: #c8c8c8;
 }
 
-/* Subtle column wash when hovering */
+/* Subtle column wash */
 .ttt__cell--col-hover {
-  background: #161f2e;
+  background: #d0d0d0;
 }
 
-/* Landing-cell highlight, colored to match the current player */
+/* Landing cell */
 .ttt__cell--drop-target {
-  background: #1a2235;
+  background: #ddd8c8;
 }
 
 .ttt__cell--drop-target-x {
-  box-shadow: inset 0 0 0 2px #3b82f655;
+  box-shadow: inset 0 0 0 2px rgba(204, 68, 0, 0.4);
 }
 
 .ttt__cell--drop-target-o {
-  box-shadow: inset 0 0 0 2px #ef444455;
+  box-shadow: inset 0 0 0 2px rgba(91, 45, 142, 0.4);
 }

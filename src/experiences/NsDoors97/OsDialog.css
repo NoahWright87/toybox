@@ -1,0 +1,122 @@
+/* Sits above everything except the screensaver */
+.ns-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9200;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ns-dialog {
+  background: #3a1800;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.7);
+  min-width: 280px;
+  max-width: min(480px, 92vw);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Title bar */
+.ns-dialog__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: linear-gradient(90deg, #cc4400 0%, #ff6b00 50%, #cc4400 100%);
+  user-select: none;
+}
+
+.ns-dialog__titlebar-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ns-dialog__titlebar-title {
+  flex: 1;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-dialog__titlebar-close {
+  width: 20px;
+  height: 18px;
+  font-size: 10px;
+  font-family: monospace;
+  color: #fff;
+  background: #c84020;
+  border: 2px solid;
+  border-color: #ff8060 #660000 #660000 #ff8060;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.ns-dialog__titlebar-close:active {
+  border-color: #660000 #ff8060 #ff8060 #660000;
+}
+
+/* Body */
+.ns-dialog__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 20px 16px;
+}
+
+.ns-dialog__icon {
+  font-size: 36px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ns-dialog__message {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #ffcc88;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Footer */
+.ns-dialog__footer {
+  display: flex;
+  justify-content: center;
+  padding: 8px 20px 16px;
+}
+
+.ns-dialog__ok {
+  padding: 6px 32px;
+  background: linear-gradient(180deg, #ff7a1a 0%, #cc4400 100%);
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.05em;
+  min-width: 80px;
+}
+
+.ns-dialog__ok:hover {
+  background: linear-gradient(180deg, #ff8a2a 0%, #dd5500 100%);
+}
+
+.ns-dialog__ok:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: linear-gradient(180deg, #cc4400 0%, #ff7a1a 100%);
+}
