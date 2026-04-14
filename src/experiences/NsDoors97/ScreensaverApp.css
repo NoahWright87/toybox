@@ -1,0 +1,246 @@
+.ns-saver-app {
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  min-width: 420px;
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+
+.ns-saver-app__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: #2a1000;
+  border-bottom: 2px solid #ff9a44;
+}
+
+.ns-saver-app__tab {
+  padding: 5px 10px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #aaaaaa;
+  background: #3a1800;
+  border: 2px solid;
+  border-bottom: none;
+  border-color: #ff9a44 #330000 transparent #ff9a44;
+  cursor: pointer;
+  position: relative;
+  bottom: -2px;
+}
+
+.ns-saver-app__tab:hover {
+  color: #dddddd;
+  background: #4a2200;
+}
+
+.ns-saver-app__tab--active {
+  background: #1e1e1e;
+  color: #ff9a44;
+  border-color: #ff9a44 #330000 #1e1e1e #ff9a44;
+  z-index: 1;
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+
+.ns-saver-app__body {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  align-items: flex-start;
+}
+
+/* ── CRT monitor ─────────────────────────────────────────────────────────── */
+
+.ns-saver-app__monitor-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ns-saver-app__monitor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 160px;
+}
+
+.ns-saver-app__screen {
+  width: 148px;
+  height: 108px;
+  background: #050505;
+  border: 3px solid;
+  border-color: #220a00 #cc8844 #cc8844 #220a00;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  /* CRT curvature illusion */
+  border-radius: 4px;
+}
+
+/* Scanline overlay for CRT feel */
+.ns-saver-app__screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.15) 3px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+}
+
+.ns-saver-app__screen-icon {
+  font-size: 40px;
+  filter: drop-shadow(0 0 8px rgba(255, 150, 50, 0.6));
+  animation: ns-saver-float 3s ease-in-out infinite;
+}
+
+@keyframes ns-saver-float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+.ns-saver-app__screen-off {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #333333;
+  letter-spacing: 0.1em;
+}
+
+/* Monitor neck */
+.ns-saver-app__monitor-neck {
+  width: 32px;
+  height: 10px;
+  background: #3a3a3a;
+  border-left: 2px solid #666;
+  border-right: 2px solid #222;
+}
+
+/* Monitor base */
+.ns-saver-app__monitor-base {
+  width: 80px;
+  height: 10px;
+  background: #3a3a3a;
+  border: 2px solid;
+  border-color: #666 #222 #222 #666;
+  border-radius: 0 0 4px 4px;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.ns-saver-app__controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ns-saver-app__label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #cccccc;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ns-saver-app__select {
+  width: 100%;
+  padding: 4px 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffffff;
+  background: #0a0a0a;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  cursor: pointer;
+}
+
+.ns-saver-app__select option {
+  background: #1a1a1a;
+}
+
+.ns-saver-app__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ns-saver-app__number {
+  width: 48px;
+  padding: 3px 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffffff;
+  background: #0a0a0a;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  text-align: center;
+}
+
+.ns-saver-app__unit {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #aaaaaa;
+}
+
+.ns-saver-app__btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.ns-saver-app__btn {
+  padding: 6px 12px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffffff;
+  background: #4a2000;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ns-saver-app__btn:hover {
+  background: #5a2800;
+}
+
+.ns-saver-app__btn:active {
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #3a1800;
+}
+
+.ns-saver-app__btn--primary {
+  background: #5b2d8e;
+  border-color: #ab6df4 #2d0066 #2d0066 #ab6df4;
+}
+
+.ns-saver-app__btn--primary:hover {
+  background: #6b3dae;
+}
+
+.ns-saver-app__btn--primary:active {
+  border-color: #2d0066 #ab6df4 #ab6df4 #2d0066;
+  background: #4b1d7e;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+
+.ns-saver-app__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #330000;
+  background: #1a0800;
+}

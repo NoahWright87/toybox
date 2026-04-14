@@ -10,16 +10,18 @@
   font-family: "Press Start 2P", monospace;
 }
 
-/* ── Icon grid ─────────────────────────────────────────────────────────────── */
+/* ── Icon grid — Win95-style: fills column top-to-bottom, then wraps right ── */
 
 .ns-desktop__icons {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
   padding: 12px 6px;
-  gap: 2px;
-  max-height: 100%;
-  overflow: hidden;
+  height: 100%;
+  overflow-y: hidden;
+  overflow-x: auto;
 }
 
 /* ── Branding watermark (bottom-right corner) ──────────────────────────────── */

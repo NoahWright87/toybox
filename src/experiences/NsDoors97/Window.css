@@ -9,6 +9,7 @@
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 107, 0, 0.15);
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 52px); /* don't bleed under taskbar */
 }
 
 .ns-window__content {
@@ -17,10 +18,15 @@
   min-height: 0;
 }
 
-/* Mobile: full-screen windows */
-@media (pointer: coarse), (max-width: 600px) {
-  .ns-window {
-    width: 96vw !important;
-    max-height: 80vh;
-  }
+/* Portrait / mobile: maximized, fills viewport above taskbar */
+.ns-window--maximized {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100vh - 42px);
+  max-height: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
 }

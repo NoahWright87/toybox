@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import Draggable from "react-draggable";
 import TitleBar from "./TitleBar";
 import "./Window.css";
@@ -14,6 +14,19 @@ interface WindowProps {
   children: React.ReactNode;
 }
 
+function useIsPortrait() {
+  const [isPortrait, setIsPortrait] = useState(
+    () => window.matchMedia("(orientation: portrait)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: portrait)");
+    const handler = (e: MediaQueryListEvent) => setIsPortrait(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isPortrait;
+}
+
 export default function Window({
   id,
   title,
@@ -25,16 +38,34 @@ export default function Window({
   children,
 }: WindowProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
-  const isTouchDevice =
-    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const isPortrait = useIsPortrait();
 
+  const titleBar = (
+    <TitleBar title={title} icon={icon} onClose={() => onClose(id)} />
+  );
+
+  // Portrait mode: maximized, no drag
+  if (isPortrait) {
+    return (
+      <div
+        ref={nodeRef}
+        className="ns-window ns-window--maximized"
+        style={{ zIndex }}
+        onMouseDown={() => onFocus(id)}
+      >
+        {titleBar}
+        <div className="ns-window__content">{children}</div>
+      </div>
+    );
+  }
+
+  // Landscape / desktop: draggable
   return (
     <Draggable
       handle=".ns-titlebar"
       defaultPosition={defaultPosition}
       bounds="parent"
       nodeRef={nodeRef}
-      disabled={isTouchDevice}
       onStart={() => onFocus(id)}
     >
       <div
@@ -43,11 +74,7 @@ export default function Window({
         style={{ zIndex }}
         onMouseDown={() => onFocus(id)}
       >
-        <TitleBar
-          title={title}
-          icon={icon}
-          onClose={() => onClose(id)}
-        />
+        {titleBar}
         <div className="ns-window__content">{children}</div>
       </div>
     </Draggable>

@@ -8,6 +8,8 @@
   border: 2px solid transparent;
   cursor: pointer;
   width: 82px;
+  height: 90px;   /* fixed height so flex-wrap knows when to start a new column */
+  flex-shrink: 0;
   text-align: center;
   border-radius: 2px;
   transition: background 0.1s;

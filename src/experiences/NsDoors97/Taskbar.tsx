@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
 import "./Taskbar.css";
 
@@ -14,42 +14,84 @@ interface TaskbarProps {
   onWindowFocus: (id: string) => void;
 }
 
+// ── Retro clock: real time, date shifted 30 years back ────────────────────────
+
 function RetroClock() {
   const [timeStr, setTimeStr] = useState("");
+  const [dateStr, setDateStr] = useState("");
 
-  function buildDisplay() {
-    const now = new Date();
-    return now.toLocaleTimeString("en-US", {
+  function buildTime() {
+    return new Date().toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
   }
 
-  function buildTooltip() {
+  function buildDate() {
     const now = new Date();
-    const retroYear = now.getFullYear() - 30;
-    const dateStr = now.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
+    const retro = new Date(now);
+    retro.setFullYear(now.getFullYear() - 30);
+    return retro.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
       day: "numeric",
       year: "numeric",
     });
-    return dateStr.replace(now.getFullYear().toString(), retroYear.toString());
   }
 
   useEffect(() => {
-    setTimeStr(buildDisplay());
-    const id = setInterval(() => setTimeStr(buildDisplay()), 30_000);
+    setTimeStr(buildTime());
+    setDateStr(buildDate());
+    const id = setInterval(() => {
+      setTimeStr(buildTime());
+      setDateStr(buildDate());
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 
   return (
-    <div className="ns-taskbar__clock" title={buildTooltip()}>
-      {timeStr}
+    <div className="ns-taskbar__clock" title="NS Doors 97 System Clock">
+      <span className="ns-taskbar__clock-time">{timeStr}</span>
+      <span className="ns-taskbar__clock-date">{dateStr}</span>
     </div>
   );
 }
+
+// ── Fullscreen toggle ─────────────────────────────────────────────────────────
+
+function FullscreenButton() {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function onFsChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  return (
+    <button
+      className="ns-taskbar__fullscreen"
+      onClick={toggle}
+      title={isFullscreen ? "Exit fullscreen" : "Go fullscreen"}
+      aria-label={isFullscreen ? "Exit fullscreen" : "Go fullscreen"}
+    >
+      {isFullscreen ? "⊡" : "⛶"}
+    </button>
+  );
+}
+
+// ── Taskbar ───────────────────────────────────────────────────────────────────
 
 export default function Taskbar({ windows, activeWindowId, onWindowFocus }: TaskbarProps) {
   function handleStartClick() {
@@ -80,6 +122,8 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus }: Task
       </div>
 
       <div className="ns-taskbar__tray">
+        <FullscreenButton />
+        <div className="ns-taskbar__tray-divider" />
         <RetroClock />
       </div>
     </div>
