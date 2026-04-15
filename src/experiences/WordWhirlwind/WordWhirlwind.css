@@ -1,19 +1,24 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Word Whirlwind — Noahsoft Win95 Redesign
+   Orange accent, Win95 chrome throughout.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 /* ── Shared tokens ───────────────────────────────────────────────────────── */
 
 :root {
-  --ww-accent:   #06b6d4;
-  --ww-accent2:  #0891b2;
-  --ww-found:    #10b981;
-  --ww-found-bg: #064e3b;
-  --ww-danger:   #ef4444;
-  --ww-warn:     #f59e0b;
-  --ww-text:     #e2e8f0;
-  --ww-muted:    #64748b;
-  --ww-surface:  #0f172a;
-  --ww-surface2: #1e293b;
-  --ww-surface3: #334155;
-  --ww-border:   #1e293b;
-  --ww-tile-w:   clamp(40px, 9.5vw, 54px);
+  --ww-accent:   #cc4400;
+  --ww-accent2:  #ff6b00;
+  --ww-found:    #228833;
+  --ww-found-bg: #d4ecd4;
+  --ww-danger:   #cc0000;
+  --ww-warn:     #cc8800;
+  --ww-text:     #000000;
+  --ww-muted:    #555555;
+  --ww-surface:  #c0c0c0;
+  --ww-surface2: #d4d0c8;
+  --ww-surface3: #a0a0a0;
+  --ww-border:   #808080;
+  --ww-tile-w:   clamp(40px, 9.5vw, 52px);
 }
 
 /* ── Setup screen ─────────────────────────────────────────────────────────── */
@@ -25,26 +30,26 @@
   justify-content: center;
   min-height: 100vh;
   padding: 2rem 1.5rem;
-  gap: 2.25rem;
+  gap: 2rem;
   color: var(--ww-text);
 }
 
 .ww-setup__title {
-  font-size: clamp(2.2rem, 7vw, 3.5rem);
-  font-weight: 900;
-  letter-spacing: 0.03em;
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(14px, 4vw, 22px);
+  font-weight: normal;
   margin: 0;
-  background: linear-gradient(135deg, #06b6d4, #3b82f6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #cc4400;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.04em;
 }
 
 .ww-setup__subtitle {
-  margin: -1.5rem 0 0;
-  font-size: 0.9rem;
+  margin: -1.25rem 0 0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   color: var(--ww-muted);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -54,11 +59,12 @@
   align-items: center;
   gap: 0.6rem;
   width: 100%;
-  max-width: 480px;
+  max-width: 440px;
 }
 
 .ww-setup__label {
-  font-size: 0.7rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: var(--ww-muted);
@@ -66,32 +72,37 @@
 
 .ww-setup__options {
   display: flex;
-  gap: 0.6rem;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
+/* Win95 raised button */
 .ww-setup__option {
-  padding: 0.5rem 1.2rem;
-  border: 2px solid var(--ww-surface3);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--ww-muted);
-  font-size: 0.95rem;
-  font-weight: 600;
+  padding: 6px 14px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: background 0.08s;
 }
 
 .ww-setup__option:hover {
-  border-color: var(--ww-accent2);
-  color: var(--ww-text);
+  background: #cccccc;
 }
 
+/* Active = sunken + orange text */
 .ww-setup__option--active {
-  border-color: var(--ww-accent);
-  background: rgba(6, 182, 212, 0.12);
-  color: #cffafe;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+  color: #cc4400;
+}
+
+.ww-setup__option--active:hover {
+  background: #b8b8b8;
 }
 
 .ww-setup__option--standalone {
@@ -99,47 +110,50 @@
 }
 
 .ww-setup__hint {
-  font-size: 0.78rem;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
   color: var(--ww-muted);
   text-align: center;
-  min-height: 1.2em;
+  min-height: 1.3em;
 }
 
+/* Start button */
 .ww-setup__start {
   margin-top: 0.25rem;
-  padding: 0.85rem 3.5rem;
-  background: var(--ww-accent);
-  color: #083344;
-  border: none;
-  border-radius: 0.6rem;
-  font-size: 1.15rem;
-  font-weight: 800;
+  padding: 8px 36px;
+  background: #ff6b00;
+  color: #fff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
   cursor: pointer;
-  letter-spacing: 0.05em;
-  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 .ww-setup__start:hover {
-  background: #22d3ee;
-  transform: translateY(-2px);
+  background: #ff7a1a;
 }
 
 .ww-setup__start:active {
-  transform: translateY(0);
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(1px);
 }
 
 .ww-setup__home {
   background: transparent;
   border: none;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   color: var(--ww-muted);
-  font-size: 0.85rem;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  transition: color 0.15s;
+  padding: 4px 8px;
 }
 
 .ww-setup__home:hover {
-  color: var(--ww-text);
+  color: #000;
 }
 
 /* ── Game layout ──────────────────────────────────────────────────────────── */
@@ -151,56 +165,60 @@
   overflow: hidden;
   color: var(--ww-text);
   background: var(--ww-surface);
+  width: min(560px, 100vw);
+  border: 3px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
 }
 
-/* ── Game bar ─────────────────────────────────────────────────────────────── */
+/* ── Game bar — Win95 menu bar style ─────────────────────────────────────── */
 
 .ww-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: var(--ww-surface2);
-  border-bottom: 1px solid var(--ww-border);
+  padding: 4px 8px;
+  background: #c0c0c0;
+  border-bottom: 2px solid #808080;
   flex-shrink: 0;
-  gap: 0.75rem;
-  min-height: 48px;
+  gap: 8px;
+  min-height: 32px;
 }
 
 .ww-bar__left {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 8px;
   flex: 1;
 }
 
 .ww-bar__right {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 8px;
   flex: 1;
   justify-content: flex-end;
 }
 
 .ww-bar__round {
-  font-weight: 700;
-  font-size: 0.95rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   color: var(--ww-text);
 }
 
 .ww-bar__mode {
-  font-size: 0.72rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   color: var(--ww-muted);
-  padding: 0.15rem 0.5rem;
-  border: 1px solid var(--ww-surface3);
-  border-radius: 999px;
+  padding: 2px 6px;
+  border: 1px solid #808080;
+  background: #d4d0c8;
 }
 
 .ww-bar__timer {
-  font-size: 1.3rem;
-  font-weight: 800;
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--ww-text);
   min-width: 3.5ch;
@@ -216,31 +234,35 @@
 
 @keyframes ww-pulse {
   from { opacity: 1; }
-  to   { opacity: 0.4; }
+  to   { opacity: 0.35; }
 }
 
 .ww-bar__score {
-  font-size: 1rem;
-  font-weight: 700;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
   font-variant-numeric: tabular-nums;
-  color: var(--ww-accent);
+  color: #cc4400;
 }
 
+/* Win95 secondary button */
 .ww-bar__quit {
-  padding: 0.25rem 0.75rem;
-  background: transparent;
-  color: var(--ww-muted);
-  border: 1px solid var(--ww-surface3);
-  border-radius: 0.375rem;
-  font-size: 0.78rem;
-  font-weight: 600;
+  padding: 3px 10px;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
 }
 
 .ww-bar__quit:hover {
-  color: var(--ww-danger);
-  border-color: var(--ww-danger);
+  background: #cccccc;
+}
+
+.ww-bar__quit:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
 }
 
 /* ── Word groups panel ────────────────────────────────────────────────────── */
@@ -248,66 +270,69 @@
 .ww-word-groups {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0.75rem 0;
+  padding: 4px 6px 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  /* Custom scrollbar */
+  gap: 3px;
+  background: var(--ww-surface2);
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 4px 4px 0;
   scrollbar-width: thin;
-  scrollbar-color: var(--ww-surface3) transparent;
+  scrollbar-color: #808080 #d4d0c8;
 }
 
-.ww-word-groups::-webkit-scrollbar { width: 6px; }
+.ww-word-groups::-webkit-scrollbar { width: 12px; }
+.ww-word-groups::-webkit-scrollbar-track { background: #d4d0c8; }
 .ww-word-groups::-webkit-scrollbar-thumb {
-  background: var(--ww-surface3);
-  border-radius: 3px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
 }
 
 .ww-group {
-  border: 1px solid var(--ww-border);
-  border-radius: 0.5rem;
-  overflow: hidden;
-  background: var(--ww-surface2);
-  transition: border-color 0.2s;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c0c0c0;
 }
 
 .ww-group--complete {
-  border-color: var(--ww-found);
-  background: rgba(16, 185, 129, 0.06);
+  border-color: #228833 #88cc88 #88cc88 #228833;
+  background: #d4ecd4;
 }
 
 .ww-group__header {
   width: 100%;
   display: flex;
   align-items: center;
-  padding: 0.4rem 0.75rem;
+  padding: 4px 8px;
   background: transparent;
   border: none;
   color: var(--ww-text);
   cursor: pointer;
-  gap: 0.5rem;
+  gap: 6px;
   text-align: left;
-  transition: background 0.1s;
 }
 
 .ww-group__header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .ww-group--complete .ww-group__header {
-  color: #6ee7b7;
+  color: #116622;
 }
 
 .ww-group__title {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   flex: 1;
 }
 
 .ww-group__count {
-  font-size: 0.75rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
   font-variant-numeric: tabular-nums;
   color: var(--ww-muted);
 }
@@ -317,7 +342,7 @@
 }
 
 .ww-group__chevron {
-  font-size: 0.75rem;
+  font-size: 8px;
   color: var(--ww-muted);
   width: 1em;
   text-align: center;
@@ -326,8 +351,8 @@
 .ww-group__words {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  padding: 0.35rem 0.75rem 0.5rem;
+  gap: 4px;
+  padding: 3px 8px 6px;
 }
 
 /* ── Individual word slot ─────────────────────────────────────────────────── */
@@ -341,13 +366,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(15px, 3.5vw, 19px);
-  height: clamp(19px, 4.5vw, 23px);
-  border: 1px solid var(--ww-surface3);
-  border-radius: 3px;
-  font-size: clamp(0.6rem, 1.5vw, 0.75rem);
-  font-weight: 800;
-  background: var(--ww-surface);
+  width: clamp(14px, 3.2vw, 18px);
+  height: clamp(18px, 4.2vw, 22px);
+  border: 1px solid #808080;
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(5px, 1.2vw, 7px);
+  background: #d4d0c8;
   color: transparent;
   user-select: none;
 }
@@ -355,7 +379,7 @@
 .ww-word--found .ww-word__letter {
   background: var(--ww-found-bg);
   border-color: var(--ww-found);
-  color: #6ee7b7;
+  color: #116622;
   animation: ww-found-pop 0.3s ease-out both;
 }
 
@@ -377,19 +401,19 @@
 
 /* Hint letters (deducible from found neighbors) */
 .ww-word__letter--hint {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: #3b82f6;
-  color: #93c5fd;
+  background: #dde0f0;
+  border-color: #5b2d8e;
+  color: #5b2d8e;
 }
 
 /* Collapsed run placeholder */
 .ww-word-ellipsis {
-  font-size: 0.68rem;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
   color: var(--ww-muted);
   font-style: italic;
   padding: 0 0.2rem;
   align-self: center;
-  letter-spacing: 0.04em;
 }
 
 /* ── Input area ───────────────────────────────────────────────────────────── */
@@ -399,89 +423,92 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 1rem 0.9rem;
-  background: var(--ww-surface2);
-  border-top: 1px solid var(--ww-border);
+  gap: 6px;
+  padding: 6px 8px 10px;
+  background: #c0c0c0;
+  border-top: 2px solid #808080;
+  margin: 0 4px 4px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  margin: 0 4px 4px;
 }
 
 /* Flash */
 
 .ww-flash-wrap {
-  height: 1.6rem;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .ww-flash {
-  font-size: 0.9rem;
-  font-weight: 700;
-  padding: 0.2rem 0.9rem;
-  border-radius: 999px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 3px 10px;
+  border: 2px solid;
   animation: ww-flash-in 0.15s ease-out;
 }
 
 @keyframes ww-flash-in {
-  from { opacity: 0; transform: translateY(-4px) scale(0.95); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .ww-flash--good {
-  background: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #d4ecd4;
+  color: #116622;
+  border-color: #228833 #88cc88 #88cc88 #228833;
 }
 
 .ww-flash--bad {
-  background: rgba(239, 68, 68, 0.12);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: #f0d4d4;
+  color: #880000;
+  border-color: #cc0000 #ffaaaa #ffaaaa #cc0000;
 }
 
 /* Board */
 
 .ww-board {
   display: flex;
-  gap: 0.35rem;
+  gap: 3px;
   justify-content: center;
   flex-wrap: wrap;
 }
 
+/* Win95 sunken input slot */
 .ww-board__slot {
   width: var(--ww-tile-w);
   height: var(--ww-tile-w);
-  border-radius: 6px;
-  border: 2px dashed var(--ww-surface3);
-  background: var(--ww-surface);
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
   color: var(--ww-text);
-  font-size: clamp(1.1rem, 2.8vw, 1.5rem);
-  font-weight: 900;
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(10px, 2.4vw, 14px);
   cursor: default;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s, border-color 0.1s;
 }
 
+/* Filled slot — raised, orange-tinted */
 .ww-board__slot--filled {
-  border-style: solid;
-  border-color: var(--ww-accent2);
-  background: rgba(6, 182, 212, 0.1);
-  color: #a5f3fc;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #ffe0cc;
+  color: #cc4400;
   cursor: pointer;
   animation: ww-tile-enter 0.18s ease-out;
 }
 
 @keyframes ww-tile-enter {
   0%   { transform: scale(0.65) translateY(-6px); opacity: 0.4; }
-  65%  { transform: scale(1.1); }
+  65%  { transform: scale(1.08); }
   100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 
 .ww-board__slot--filled:hover {
-  background: rgba(6, 182, 212, 0.2);
-  border-color: var(--ww-accent);
+  background: #ffd0aa;
 }
 
 /* Controls */
@@ -490,47 +517,63 @@
   display: flex;
   justify-content: space-between;
   width: 100%;
-  max-width: 480px;
-  gap: 0.5rem;
+  max-width: 440px;
+  gap: 4px;
 }
 
 .ww-controls__left,
 .ww-controls__right {
   display: flex;
-  gap: 0.4rem;
+  gap: 4px;
   align-items: center;
 }
 
+/* Win95 button base */
 .ww-btn {
-  padding: 0.4rem 1rem;
-  border-radius: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 700;
+  padding: 5px 12px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   cursor: pointer;
-  border: none;
-  transition: background 0.15s, transform 0.1s;
 }
 
-.ww-btn:active { transform: scale(0.96); }
+.ww-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+  transform: translateY(1px);
+}
 
 .ww-btn--secondary {
-  background: var(--ww-surface3);
-  color: var(--ww-text);
+  /* inherits base Win95 style */
 }
 
-.ww-btn--secondary:hover { background: #475569; }
+.ww-btn--secondary:hover { background: #cccccc; }
 
+/* Submit — orange primary */
 .ww-btn--submit {
-  background: var(--ww-accent);
-  color: #083344;
+  background: #ff6b00;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
-.ww-btn--submit:hover { background: #22d3ee; }
+.ww-btn--submit:hover { background: #ff7a1a; }
 
+.ww-btn--submit:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+}
+
+/* Advance — green success */
 .ww-btn--advance {
-  background: var(--ww-found);
-  color: #022c22;
+  background: #228833;
+  color: #fff;
+  border-color: #88cc88 #114422 #114422 #88cc88;
   animation: ww-advance-appear 0.35s ease-out;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 @keyframes ww-advance-appear {
@@ -538,42 +581,45 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
-.ww-btn--advance:hover { background: #34d399; }
+.ww-btn--advance:hover { background: #339944; }
 
 /* Pool */
 
 .ww-pool {
   display: flex;
-  gap: 0.4rem;
+  gap: 4px;
   justify-content: center;
   flex-wrap: wrap;
   min-height: var(--ww-tile-w);
 }
 
+/* Win95 raised tile — orange-branded */
 .ww-pool__tile {
   width: var(--ww-tile-w);
   height: var(--ww-tile-w);
-  border-radius: 8px;
-  background: var(--ww-accent2);
-  color: #ecfeff;
-  font-size: clamp(1.1rem, 2.8vw, 1.5rem);
-  font-weight: 900;
-  border: 2px solid var(--ww-accent);
+  background: #ff6b00;
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(10px, 2.4vw, 14px);
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
   cursor: pointer;
-  transition: background 0.12s, transform 0.1s, box-shadow 0.12s;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.08s, transform 0.08s;
 }
 
 .ww-pool__tile:hover {
-  background: var(--ww-accent);
-  transform: translateY(-3px);
-  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4);
+  background: #ff7a1a;
+  transform: translateY(-2px);
 }
 
 .ww-pool__tile:active {
-  transform: translateY(-1px);
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(0);
 }
 
 /* ── Round summary overlay ────────────────────────────────────────────────── */
@@ -581,12 +627,12 @@
 .ww-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
-  animation: ww-overlay-in 0.2s ease-out;
+  animation: ww-overlay-in 0.15s ease-out;
 }
 
 @keyframes ww-overlay-in {
@@ -594,38 +640,41 @@
   to   { opacity: 1; }
 }
 
+/* Win95 dialog box */
 .ww-overlay__box {
-  background: #0f1f35;
-  border: 1px solid var(--ww-accent2);
-  border-radius: 1rem;
-  padding: 2rem 2.5rem;
+  background: #c0c0c0;
+  border: 3px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 16px 24px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.25rem;
-  min-width: 280px;
+  gap: 12px;
+  min-width: 260px;
   max-width: 90vw;
-  animation: ww-box-in 0.2s ease-out;
-  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.6);
+  animation: ww-box-in 0.18s ease-out;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
 }
 
 @keyframes ww-box-in {
-  from { transform: scale(0.9) translateY(10px); }
+  from { transform: scale(0.9) translateY(8px); }
   to   { transform: scale(1) translateY(0); }
 }
 
 .ww-overlay__title {
-  font-size: 1.6rem;
-  font-weight: 900;
-  color: var(--ww-accent);
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  color: #cc4400;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
 }
 
 .ww-overlay__title--gameover {
-  color: var(--ww-danger);
+  color: #cc0000;
 }
 
 .ww-overlay__answer {
-  font-size: 0.9rem;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
   color: var(--ww-muted);
 }
 
@@ -633,48 +682,59 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 3px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px 8px;
 }
 
 .ww-overlay__row {
   display: flex;
   justify-content: space-between;
-  font-size: 0.9rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
   color: var(--ww-muted);
-  padding: 0.2rem 0;
-  border-bottom: 1px solid var(--ww-border);
+  padding: 3px 0;
+  border-bottom: 1px solid #808080;
 }
 
 .ww-overlay__row--bonus {
-  color: #6ee7b7;
+  color: #228833;
 }
 
 .ww-overlay__row--total {
-  color: var(--ww-text);
-  font-weight: 700;
-  font-size: 1rem;
+  color: #000;
+  font-size: 7px;
   border-bottom: none;
-  margin-top: 0.25rem;
+  margin-top: 2px;
 }
 
+/* Orange primary button */
 .ww-overlay__btn {
-  padding: 0.7rem 2.5rem;
-  background: var(--ww-accent);
-  color: #083344;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 1rem;
-  font-weight: 800;
+  padding: 8px 28px;
+  background: #ff6b00;
+  color: #fff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
-.ww-overlay__btn:hover { background: #22d3ee; }
+.ww-overlay__btn:hover { background: #ff7a1a; }
+
+.ww-overlay__btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(1px);
+}
 
 /* ── Game over screen ─────────────────────────────────────────────────────── */
 
 .ww-word-groups__spacer {
-  height: 1.25rem;
+  height: 16px;
   flex-shrink: 0;
 }
 
@@ -684,35 +744,39 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  gap: 1rem;
+  gap: 12px;
   color: var(--ww-text);
+  background: #c0c0c0;
 }
 
 .ww-gameover__label {
-  font-size: 0.75rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.15em;
   color: var(--ww-muted);
 }
 
 .ww-gameover__score {
-  font-size: clamp(3rem, 12vw, 5.5rem);
-  font-weight: 900;
-  color: var(--ww-accent);
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(24px, 8vw, 48px);
+  color: #cc4400;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
 }
 
 .ww-gameover__rounds {
-  font-size: 0.9rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
   color: var(--ww-muted);
-  margin-bottom: 0.5rem;
+  margin-bottom: 4px;
 }
 
 .ww-gameover__actions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  gap: 8px;
+  margin-top: 4px;
 }

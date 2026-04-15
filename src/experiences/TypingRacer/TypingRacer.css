@@ -1,111 +1,165 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Typing Racer — Noahsoft Win95 Redesign
+   Win95 chrome throughout; Courier New for the phrase (legibility);
+   Press Start 2P for all HUD / status labels.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .typing-racer {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100%;
-  padding: var(--spacing-xl);
-  gap: var(--spacing-lg);
+  padding: 14px 16px 18px;
+  gap: 12px;
+  background: #c0c0c0;
+  width: min(560px, 94vw);
 }
+
+/* ── Stats bar — Win95 sunken status strip ─────────────────────────────── */
 
 .typing-racer__stats {
   display: flex;
-  gap: var(--spacing-lg);
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 1rem;
+  gap: 16px;
+  width: 100%;
+  padding: 4px 8px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  box-sizing: border-box;
   font-variant-numeric: tabular-nums;
-  min-height: 1.5rem;
+  min-height: 22px;
+  align-items: center;
 }
 
 .typing-racer__timer {
-  color: rgba(255, 255, 255, 0.25);
+  color: #cc4400;
+  margin-left: auto;
 }
 
+/* ── Phrase display — Win95 inset panel ───────────────────────────────── */
+
 .typing-racer__phrase {
-  max-width: 640px;
-  font-size: 1.6rem;
-  line-height: 1.9;
-  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 1.15rem;
+  line-height: 1.8;
+  text-align: left;
   user-select: none;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
+  word-break: break-word;
 }
 
 .typing-racer__char {
-  color: rgba(255, 255, 255, 0.25);
+  color: #888;
 }
 
 .typing-racer__char--correct {
-  color: #44ee88;
+  color: #228833;
 }
 
 .typing-racer__char--wrong {
-  color: #ff4466;
-  background: rgba(255, 68, 102, 0.18);
-  border-radius: 2px;
+  color: #cc0000;
+  background: rgba(204, 0, 0, 0.12);
 }
 
 .typing-racer__char--cursor {
-  color: rgba(255, 255, 255, 0.9);
-  border-bottom: 2px solid #fff;
+  color: #000;
+  border-bottom: 2px solid #cc4400;
 }
+
+/* ── Input — Win95 text field ────────────────────────────────────────── */
 
 .typing-racer__input {
   width: 100%;
-  max-width: 640px;
-  padding: var(--spacing-sm) var(--spacing-md);
+  box-sizing: border-box;
+  padding: 5px 8px;
+  font-family: "Courier New", Courier, monospace;
   font-size: 1rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #fff;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
   outline: none;
-  caret-color: transparent;
+  caret-color: #cc4400;
 }
 
 .typing-racer__input:focus {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: #000000 #c0c0c0 #c0c0c0 #000000;
 }
+
+/* ── Result screen ──────────────────────────────────────────────────── */
 
 .typing-racer__result {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: 12px;
+  width: 100%;
 }
 
 .typing-racer__result-stats {
   display: flex;
-  gap: var(--spacing-xl);
+  gap: 0;
+  width: 100%;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
+.typing-racer__result-stats > div {
+  flex: 1;
   text-align: center;
+  padding: 10px 8px;
+  border-right: 1px solid #808080;
+}
+
+.typing-racer__result-stats > div:last-child {
+  border-right: none;
 }
 
 .typing-racer__result-value {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 14px;
+  color: #cc4400;
   font-variant-numeric: tabular-nums;
 }
 
 .typing-racer__result-label {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.45);
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #555;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: 2px;
+  letter-spacing: 0.1em;
+  margin-top: 6px;
 }
 
+/* Win95 orange primary button */
 .typing-racer__reset {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 7px 24px;
+  background: #ff6b00;
   color: #fff;
-  font-size: 1rem;
-  border-radius: 6px;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+  letter-spacing: 0.04em;
 }
 
 .typing-racer__reset:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: #ff7a1a;
+}
+
+.typing-racer__reset:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(1px);
 }
