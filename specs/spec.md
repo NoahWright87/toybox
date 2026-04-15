@@ -54,6 +54,14 @@ src/
 - Cards are interactive and navigate to the experience route on click.
 - Category filter bar above the grid: pill-style toggle buttons (`All` + one per category); filters the card grid by `experience.category`. Categories are derived dynamically from the registry.
 
+## Agent Pipeline Integration
+
+The repo is wired into a home-lab automation pipeline. Feature requests arrive from Discord as GitHub Issues; the bot monitors PRs and preview links centrally so no per-repo notification workflow is needed.
+
+### GitHub Label
+
+A `agent-task` label (color `#0075ca`) exists on the repo. The Discord bot applies it to issues and PRs it creates.
+
 ## Experiences
 
 Each experience lives in `src/experiences/{Name}/` and is routed at `/{name}` in `App.tsx`. Currently shipped:
