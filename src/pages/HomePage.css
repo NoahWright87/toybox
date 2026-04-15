@@ -1,42 +1,44 @@
 .toybox-wordmark {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: "Press Start 2P", monospace;
+  font-size: 13px;
+  color: #cc4400;
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25);
 }
 
 .homepage__filters {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-sm);
+  gap: 6px;
   justify-content: center;
   padding: var(--spacing-md) 0;
 }
 
+/* Win95 raised filter button */
 .homepage__filter-btn {
-  padding: 4px 14px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  border-radius: 999px;
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.15));
-  background: transparent;
-  color: var(--color-text-muted, #666);
+  padding: 5px 14px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
   text-transform: capitalize;
+  letter-spacing: 0.04em;
 }
 
 .homepage__filter-btn:hover {
-  background: var(--color-surface-raised, rgba(0, 0, 0, 0.05));
-  color: var(--color-text, #111);
+  background: #cccccc;
 }
 
+/* Active = sunken + orange text */
 .homepage__filter-btn--active {
-  background: var(--color-primary, #3355ee);
-  border-color: var(--color-primary, #3355ee);
-  color: #fff;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+  color: #cc4400;
 }
 
 .homepage__filter-btn--active:hover {
-  background: var(--color-primary, #3355ee);
-  color: #fff;
+  background: #b8b8b8;
 }
