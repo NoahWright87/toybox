@@ -1,0 +1,177 @@
+/* ── Shared black overlay ───────────────────────────────────────────────── */
+
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+  /* No animation — abrupt appearance by design */
+}
+
+/* ── BIOS POST terminal ─────────────────────────────────────────────────── */
+
+.boot-bios {
+  position: absolute;
+  inset: 0;
+  color: #b2b2b2;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 28px 36px;
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .boot-bios { font-size: 10px; padding: 16px 18px; }
+}
+
+.boot-bios__header { color: #ffffff; }
+.boot-bios__line   { color: #b2b2b2; white-space: pre; }
+.boot-bios__skip   { color: #ff9a44; white-space: pre; }
+.boot-bios__spacer { height: 1.6em; }
+
+/* Cursor area — keeps line height consistent */
+.boot-bios__cursor-line {
+  height: 1.6em;
+  display: flex;
+  align-items: center;
+}
+
+/* Blinking block cursor */
+.boot-bios__cursor {
+  display: inline-block;
+  width: 9px;
+  height: 13px;
+  background: #b2b2b2;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+  animation: boot-cursor-blink 0.75s step-end infinite;
+}
+
+@keyframes boot-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Spinning cursor character */
+.boot-bios__spin-char {
+  color: #b2b2b2;
+  font-family: "Courier New", Courier, monospace;
+}
+
+/* ── Splash screen ──────────────────────────────────────────────────────── */
+
+/* No fade-in — abrupt and jarring, just like the real thing */
+.boot-splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 24px 16px 40px;
+}
+
+.boot-splash__top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 56px;
+}
+
+.boot-splash__brand {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #cc4400;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.boot-splash__logo {
+  font-size: 80px;
+  line-height: 1;
+  filter: drop-shadow(0 0 24px rgba(255, 107, 0, 0.5));
+}
+
+@media (max-width: 480px) {
+  .boot-splash__logo { font-size: 56px; }
+}
+
+.boot-splash__title {
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(20px, 5vw, 36px);
+  color: #ff6b00;
+  text-shadow:
+    0 0 20px rgba(255, 107, 0, 0.7),
+    0 0 50px rgba(255, 107, 0, 0.35),
+    0 0 90px rgba(255, 107, 0, 0.15);
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.boot-splash__tagline {
+  font-family: "Courier New", Courier, monospace;
+  font-style: italic;
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+  max-width: 380px;
+  margin-top: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .boot-splash__tagline { font-size: 10px; }
+}
+
+/* Progress area */
+.boot-splash__bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Win95-style segmented progress bar */
+.boot-splash__bar {
+  display: flex;
+  gap: 3px;
+}
+
+.boot-splash__segment {
+  width: 13px;
+  height: 13px;
+  background: #111;
+  border: 1px solid #1e1e1e;
+  flex-shrink: 0;
+}
+
+.boot-splash__segment--on {
+  background: linear-gradient(180deg, #ff9a44 0%, #cc4400 100%);
+  border-color: #ff6b00;
+  box-shadow: 0 0 5px rgba(255, 107, 0, 0.55);
+}
+
+.boot-splash__status {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #4a4a4a;
+  text-align: center;
+  min-width: 300px;
+  min-height: 1.5em;
+}
+
+/* Backspace hint — bottom-right corner */
+.boot-splash__skip {
+  position: fixed;
+  bottom: 14px;
+  right: 18px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #2a2a2a;
+}
