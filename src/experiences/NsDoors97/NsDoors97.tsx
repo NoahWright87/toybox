@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { experiences, type Experience } from "../../data/experiences";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
+import { randomDelay } from "../../utils/retroTiming";
 import { useOsDialog } from "./OsDialog";
 import DesktopIcon from "./DesktopIcon";
 import Window from "./Window";
@@ -119,17 +120,81 @@ export default function NsDoors97() {
   const navigate = useNavigate();
   const { showDialog } = useOsDialog();
 
-  const [showBoot, setShowBoot] = useState(() => shouldShowBoot());
-  const [shuttingDown, setShuttingDown] = useState(false);
+  const [showBoot, setShowBoot]           = useState(() => shouldShowBoot());
+  const [shuttingDown, setShuttingDown]   = useState(false);
+  const [desktopLoading, setDesktopLoading] = useState(false);
+
+  // Icons visible on desktop — starts empty when there's a boot screen,
+  // all-visible immediately when there isn't one.
+  const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
+    if (shouldShowBoot()) return new Set<string>();
+    return new Set(ALL_DESKTOP_ICONS.map((d) => d.id));
+  });
+
+  // Called when the boot screen finishes (both initial boot and after restart)
+  const handleBootComplete = useCallback(() => {
+    setShowBoot(false);
+    setDesktopLoading(true);
+  }, []);
 
   const handleRestart = useCallback(() => {
     playShutdownSound();
     setShuttingDown(true);
+    setVisibleIcons(new Set()); // icons will re-pop-in after boot
     setTimeout(() => {
       setShuttingDown(false);
       setShowBoot(true);
     }, 1500);
   }, []);
+
+  // ── Janky desktop startup ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!desktopLoading) return;
+
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const t = (cb: () => void, ms: number) => {
+      const id = setTimeout(() => { if (!cancelled) cb(); }, ms);
+      timers.push(id);
+    };
+
+    // Phase 1 — hourglass while "system initialises"
+    document.body.style.cursor = "wait";
+
+    const phase1 = randomDelay({ base: 900, variance: 0.6, panicChance: 0.15, panicMultiplier: 4 });
+    t(() => {
+      document.body.style.cursor = "";
+
+      // Phase 2 — icons pop in one by one in random order
+      const shuffled = [...ALL_DESKTOP_ICONS.map((d) => d.id)];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      let iconDelay = 0;
+      shuffled.forEach((id) => {
+        iconDelay += randomDelay({ base: 130, variance: 0.8, panicChance: 0.03, panicMultiplier: 5 });
+        t(() => setVisibleIcons((prev) => new Set([...prev, id])), iconDelay);
+      });
+
+      // Maybe flash hourglass again partway through — 55% chance
+      if (Math.random() < 0.55) {
+        const freezeAt  = iconDelay * (0.25 + Math.random() * 0.35);
+        const freezeFor = randomDelay({ base: 700, variance: 0.5, panicChance: 0.12, panicMultiplier: 4 });
+        t(() => { document.body.style.cursor = "wait"; }, freezeAt);
+        t(() => { document.body.style.cursor = ""; },     freezeAt + freezeFor);
+      }
+
+      t(() => setDesktopLoading(false), iconDelay + 100);
+    }, phase1);
+
+    return () => {
+      cancelled = true;
+      document.body.style.cursor = "";
+      timers.forEach(clearTimeout);
+    };
+  }, [desktopLoading]);
 
   const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
@@ -249,9 +314,9 @@ export default function NsDoors97() {
 
   return (
     <div className="ns-desktop">
-      {/* ── Icon grid ── */}
+      {/* ── Icon grid (icons pop in one by one during boot) ── */}
       <div className="ns-desktop__icons">
-        {ALL_DESKTOP_ICONS.map((def) => (
+        {ALL_DESKTOP_ICONS.filter((def) => visibleIcons.has(def.id)).map((def) => (
           <DesktopIcon
             key={def.id}
             id={def.id}
@@ -355,7 +420,7 @@ export default function NsDoors97() {
 
       {/* ── Boot screen (renders on top of everything) ── */}
       {showBoot && (
-        <BootScreen onComplete={() => setShowBoot(false)} />
+        <BootScreen onComplete={handleBootComplete} />
       )}
     </div>
   );

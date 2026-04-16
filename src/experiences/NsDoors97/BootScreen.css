@@ -1,10 +1,18 @@
-/* ── BIOS POST terminal ─────────────────────────────────────────────────── */
+/* ── Shared black overlay ───────────────────────────────────────────────── */
 
-.boot-bios {
+.boot-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
   background: #000;
+  /* No animation — abrupt appearance by design */
+}
+
+/* ── BIOS POST terminal ─────────────────────────────────────────────────── */
+
+.boot-bios {
+  position: absolute;
+  inset: 0;
   color: #b2b2b2;
   font-family: "Courier New", Courier, monospace;
   font-size: 13px;
@@ -14,32 +22,22 @@
 }
 
 @media (max-width: 640px) {
-  .boot-bios {
-    font-size: 10px;
-    padding: 16px 18px;
-  }
+  .boot-bios { font-size: 10px; padding: 16px 18px; }
 }
 
-.boot-bios__header {
-  color: #ffffff;
-  margin-bottom: 1px;
-}
+.boot-bios__header { color: #ffffff; }
+.boot-bios__line   { color: #b2b2b2; white-space: pre; }
+.boot-bios__skip   { color: #ff9a44; white-space: pre; }
+.boot-bios__spacer { height: 1.6em; }
 
-.boot-bios__line {
-  color: #b2b2b2;
-  white-space: pre;
-}
-
-.boot-bios__spacer {
+/* Cursor area — keeps line height consistent */
+.boot-bios__cursor-line {
   height: 1.6em;
+  display: flex;
+  align-items: center;
 }
 
-.boot-bios__skip {
-  color: #ff9a44;
-  white-space: pre;
-}
-
-/* Blinking block cursor after the last revealed line */
+/* Blinking block cursor */
 .boot-bios__cursor {
   display: inline-block;
   width: 9px;
@@ -55,113 +53,125 @@
   50%       { opacity: 0; }
 }
 
-/* ── Boot logo screen ───────────────────────────────────────────────────── */
+/* Spinning cursor character */
+.boot-bios__spin-char {
+  color: #b2b2b2;
+  font-family: "Courier New", Courier, monospace;
+}
 
-.boot-logo {
-  position: fixed;
+/* ── Splash screen ──────────────────────────────────────────────────────── */
+
+/* No fade-in — abrupt and jarring, just like the real thing */
+.boot-splash {
+  position: absolute;
   inset: 0;
-  z-index: 10000;
-  background: #000;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0;
-  animation: boot-logo-fadein 0.25s ease-out;
+  padding: 24px 16px 40px;
 }
 
-@keyframes boot-logo-fadein {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.boot-logo__center {
+.boot-splash__top {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 56px;
 }
 
-.boot-logo__brand {
+.boot-splash__brand {
   font-family: "Press Start 2P", monospace;
-  font-size: 9px;
+  font-size: 8px;
   color: #cc4400;
-  letter-spacing: 0.45em;
+  letter-spacing: 0.5em;
   text-transform: uppercase;
+  margin-bottom: 4px;
 }
 
-.boot-logo__title {
+.boot-splash__logo {
+  font-size: 80px;
+  line-height: 1;
+  filter: drop-shadow(0 0 24px rgba(255, 107, 0, 0.5));
+}
+
+@media (max-width: 480px) {
+  .boot-splash__logo { font-size: 56px; }
+}
+
+.boot-splash__title {
   font-family: "Press Start 2P", monospace;
-  font-size: 22px;
+  font-size: clamp(20px, 5vw, 36px);
   color: #ff6b00;
   text-shadow:
-    0 0 18px rgba(255, 107, 0, 0.65),
-    0 0 40px rgba(255, 107, 0, 0.3),
-    0 0 80px rgba(255, 107, 0, 0.12);
-  line-height: 1.35;
+    0 0 20px rgba(255, 107, 0, 0.7),
+    0 0 50px rgba(255, 107, 0, 0.35),
+    0 0 90px rgba(255, 107, 0, 0.15);
+  letter-spacing: 0.08em;
+  line-height: 1.2;
   text-align: center;
+  margin-top: 4px;
 }
 
-@media (max-width: 500px) {
-  .boot-logo__title {
-    font-size: 14px;
-  }
-}
-
-.boot-logo__tagline {
+.boot-splash__tagline {
   font-family: "Courier New", Courier, monospace;
-  font-size: 10px;
-  color: #3a3a3a;
-  letter-spacing: 0.04em;
-  margin-top: 6px;
+  font-style: italic;
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+  max-width: 380px;
+  margin-top: 12px;
+  line-height: 1.6;
 }
 
-/* Progress bar — Win95-style segmented blocks */
+@media (max-width: 480px) {
+  .boot-splash__tagline { font-size: 10px; }
+}
 
-.boot-logo__progress-area {
+/* Progress area */
+.boot-splash__bottom {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
-.boot-logo__bar {
+/* Win95-style segmented progress bar */
+.boot-splash__bar {
   display: flex;
   gap: 3px;
 }
 
-.boot-logo__segment {
+.boot-splash__segment {
   width: 13px;
   height: 13px;
   background: #111;
-  border: 1px solid #222;
+  border: 1px solid #1e1e1e;
   flex-shrink: 0;
 }
 
-.boot-logo__segment--on {
+.boot-splash__segment--on {
   background: linear-gradient(180deg, #ff9a44 0%, #cc4400 100%);
   border-color: #ff6b00;
   box-shadow: 0 0 5px rgba(255, 107, 0, 0.55);
 }
 
-.boot-logo__status {
+.boot-splash__status {
   font-family: "Courier New", Courier, monospace;
   font-size: 11px;
   color: #4a4a4a;
   text-align: center;
-  min-width: 320px;
+  min-width: 300px;
   min-height: 1.5em;
 }
 
 /* Backspace hint — bottom-right corner */
-
-.boot-logo__skip-hint {
+.boot-splash__skip {
   position: fixed;
   bottom: 14px;
   right: 18px;
   font-family: "Courier New", Courier, monospace;
   font-size: 10px;
   color: #2a2a2a;
-  letter-spacing: 0.03em;
 }
