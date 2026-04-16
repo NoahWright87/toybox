@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
 import { useOsDialog } from "./OsDialog";
 import "./Taskbar.css";
@@ -13,6 +13,7 @@ interface TaskbarProps {
   windows: TaskbarWindowEntry[];
   activeWindowId: string | null;
   onWindowFocus: (id: string) => void;
+  onRestart: () => void;
 }
 
 // ── Retro clock: real time, date shifted 30 years back ────────────────────────
@@ -92,21 +93,83 @@ function FullscreenButton() {
   );
 }
 
+// ── Start menu ────────────────────────────────────────────────────────────────
+
+const START_MENU_ITEMS = [
+  { id: "programs", icon: "📂", label: "Programs",  arrow: true  },
+  { id: "settings", icon: "⚙️",  label: "Settings",  arrow: true  },
+  { id: "help",     icon: "❓",  label: "Help",       arrow: false },
+] as const;
+
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
-export default function Taskbar({ windows, activeWindowId, onWindowFocus }: TaskbarProps) {
+export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart }: TaskbarProps) {
   const { showDialog } = useOsDialog();
+  const [startOpen, setStartOpen] = useState(false);
+  const startAreaRef = useRef<HTMLDivElement>(null);
 
-  function handleStartClick() {
+  // Close on outside click
+  useEffect(() => {
+    if (!startOpen) return;
+    function handler(e: MouseEvent) {
+      if (startAreaRef.current && !startAreaRef.current.contains(e.target as Node)) {
+        setStartOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [startOpen]);
+
+  const handlePlaceholder = useCallback(() => {
+    setStartOpen(false);
     showDialog(missingFeatureMessage());
-  }
+  }, [showDialog]);
+
+  const handleRestart = useCallback(() => {
+    setStartOpen(false);
+    onRestart();
+  }, [onRestart]);
 
   return (
     <div className="ns-taskbar">
-      <button className="ns-taskbar__start" onClick={handleStartClick}>
-        <span className="ns-taskbar__start-logo">🚪</span>
-        <span className="ns-taskbar__start-label">Open</span>
-      </button>
+      {/* ── Start button + menu ── */}
+      <div className="ns-taskbar__start-area" ref={startAreaRef}>
+        {startOpen && (
+          <div className="ns-start-menu">
+            <div className="ns-start-menu__sidebar">
+              <span className="ns-start-menu__sidebar-text">NS DOORS 97</span>
+            </div>
+            <div className="ns-start-menu__items">
+              {START_MENU_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  className="ns-start-menu__item"
+                  onClick={handlePlaceholder}
+                >
+                  <span className="ns-start-menu__item-icon">{item.icon}</span>
+                  <span className="ns-start-menu__item-label">{item.label}</span>
+                  {item.arrow && <span className="ns-start-menu__item-arrow">▶</span>}
+                </button>
+              ))}
+
+              <div className="ns-start-menu__divider" />
+
+              <button className="ns-start-menu__item ns-start-menu__item--restart" onClick={handleRestart}>
+                <span className="ns-start-menu__item-icon">🔄</span>
+                <span className="ns-start-menu__item-label">Restart...</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button
+          className={`ns-taskbar__start${startOpen ? " ns-taskbar__start--active" : ""}`}
+          onClick={() => setStartOpen((v) => !v)}
+        >
+          <span className="ns-taskbar__start-logo">🚪</span>
+          <span className="ns-taskbar__start-label">Open</span>
+        </button>
+      </div>
 
       <div className="ns-taskbar__separator" />
 

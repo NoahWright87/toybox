@@ -164,6 +164,39 @@ function generateBootMessages(): string[] {
 
 // ── Audio ──────────────────────────────────────────────────────────────────
 
+export function playShutdownSound(): void {
+  try {
+    const ctx = new AudioContext();
+    // Descending arpeggio — mirror image of startup
+    const notes = [
+      { freq: 783.99, t: 0.0,  dur: 0.14 },  // G5
+      { freq: 659.25, t: 0.11, dur: 0.14 },  // E5
+      { freq: 523.25, t: 0.22, dur: 0.14 },  // C5
+      { freq: 392.0,  t: 0.33, dur: 0.14 },  // G4
+      { freq: 329.63, t: 0.44, dur: 0.14 },  // E4
+      { freq: 261.63, t: 0.55, dur: 0.55 },  // C4 — hold and fade out
+    ];
+    notes.forEach(({ freq, t, dur }) => {
+      const osc = ctx.createOscillator();
+      const gn = ctx.createGain();
+      osc.connect(gn);
+      gn.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const at = ctx.currentTime + t;
+      gn.gain.setValueAtTime(0, at);
+      gn.gain.linearRampToValueAtTime(0.12, at + 0.015);
+      gn.gain.setValueAtTime(0.12, at + dur - 0.05);
+      gn.gain.linearRampToValueAtTime(0, at + dur);
+      osc.start(at);
+      osc.stop(at + dur + 0.01);
+    });
+    setTimeout(() => ctx.close(), 2500);
+  } catch {
+    // Audio not available — ignore
+  }
+}
+
 function playPostBeep(): void {
   try {
     const ctx = new AudioContext();

@@ -15,6 +15,101 @@
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.6);
 }
 
+/* ── Start button area (positions the popup menu) ───────────────────────── */
+
+.ns-taskbar__start-area {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ── Start menu popup ────────────────────────────────────────────────────── */
+
+.ns-start-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 3px;
+  width: 234px;
+  display: flex;
+  background: #3a1800;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85);
+  z-index: 9600;
+}
+
+.ns-start-menu__sidebar {
+  width: 26px;
+  flex-shrink: 0;
+  background: linear-gradient(0deg, #5b2d8e 0%, #2a0060 100%);
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 8px;
+}
+
+.ns-start-menu__sidebar-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  padding-left: 5px;
+}
+
+.ns-start-menu__items {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 3px 0;
+}
+
+.ns-start-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 8px;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffcc88;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.ns-start-menu__item:hover {
+  background: linear-gradient(90deg, #cc4400 0%, #ff6b00 100%);
+  color: #ffffff;
+}
+
+.ns-start-menu__item-icon {
+  font-size: 15px;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ns-start-menu__item-label {
+  flex: 1;
+}
+
+.ns-start-menu__item-arrow {
+  font-size: 6px;
+  opacity: 0.6;
+}
+
+.ns-start-menu__divider {
+  height: 0;
+  border-top: 1px solid #330000;
+  border-bottom: 1px solid #7a3a00;
+  margin: 4px 8px;
+}
+
 /* ── Start / Open button ─────────────────────────────────────────────────── */
 
 .ns-taskbar__start {
@@ -41,7 +136,8 @@
   background: linear-gradient(180deg, #ff8a2a 0%, #dd5500 100%);
 }
 
-.ns-taskbar__start:active {
+.ns-taskbar__start:active,
+.ns-taskbar__start--active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
   background: linear-gradient(180deg, #cc4400 0%, #ff7a1a 100%);
 }

@@ -143,3 +143,18 @@
   color: #555555;
   margin: 0;
 }
+
+/* ── Shutdown / restart overlay ──────────────────────────────────────────── */
+
+.ns-shutdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: #000;
+  animation: ns-shutdown-fadein 0.35s ease-out forwards;
+}
+
+@keyframes ns-shutdown-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

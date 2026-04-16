@@ -12,7 +12,7 @@ import AboutApp from "./AboutApp";
 import FolderApp from "./FolderApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
-import BootScreen, { shouldShowBoot } from "./BootScreen";
+import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
 
 // ── Icon / experience config ───────────────────────────────────────────────
@@ -120,6 +120,16 @@ export default function NsDoors97() {
   const { showDialog } = useOsDialog();
 
   const [showBoot, setShowBoot] = useState(() => shouldShowBoot());
+  const [shuttingDown, setShuttingDown] = useState(false);
+
+  const handleRestart = useCallback(() => {
+    playShutdownSound();
+    setShuttingDown(true);
+    setTimeout(() => {
+      setShuttingDown(false);
+      setShowBoot(true);
+    }, 1500);
+  }, []);
 
   const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
@@ -326,6 +336,7 @@ export default function NsDoors97() {
         windows={openWindows.map((w) => ({ id: w.id, title: w.title, icon: w.icon }))}
         activeWindowId={activeWindowId}
         onWindowFocus={focusWindow}
+        onRestart={handleRestart}
       />
 
       {/* ── Screensaver overlay ── */}
@@ -338,6 +349,9 @@ export default function NsDoors97() {
           }}
         />
       )}
+
+      {/* ── Shutdown overlay (black screen while restarting) ── */}
+      {shuttingDown && <div className="ns-shutdown-overlay" />}
 
       {/* ── Boot screen (renders on top of everything) ── */}
       {showBoot && (
