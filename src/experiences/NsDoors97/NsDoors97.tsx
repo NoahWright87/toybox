@@ -12,6 +12,7 @@ import AboutApp from "./AboutApp";
 import FolderApp from "./FolderApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
+import BootScreen, { shouldShowBoot } from "./BootScreen";
 import "./NsDoors97.css";
 
 // ── Icon / experience config ───────────────────────────────────────────────
@@ -117,6 +118,8 @@ function AppLauncher({
 export default function NsDoors97() {
   const navigate = useNavigate();
   const { showDialog } = useOsDialog();
+
+  const [showBoot, setShowBoot] = useState(() => shouldShowBoot());
 
   const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
@@ -334,6 +337,11 @@ export default function NsDoors97() {
             resetIdleTimer();
           }}
         />
+      )}
+
+      {/* ── Boot screen (renders on top of everything) ── */}
+      {showBoot && (
+        <BootScreen onComplete={() => setShowBoot(false)} />
       )}
     </div>
   );
