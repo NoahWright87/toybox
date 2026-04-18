@@ -119,6 +119,9 @@
   line-height: 1;
   box-sizing: border-box;
   overflow: hidden;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .bomb-finder__cell:hover:not(.bomb-finder__cell--revealed):not(:disabled) {

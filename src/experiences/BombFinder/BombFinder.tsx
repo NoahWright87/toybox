@@ -261,31 +261,40 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     [toggleFlag]
   );
 
-  // Long-press for mobile flagging
+  // Keep a ref so the long-press timeout always calls the latest toggleFlag
+  // without needing to re-create the touchstart handler on every board change.
+  const toggleFlagRef = useRef(toggleFlag);
+  useEffect(() => { toggleFlagRef.current = toggleFlag; }, [toggleFlag]);
+
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressedRef = useRef(false);
 
-  const handleTouchStart = useCallback(
-    (_e: React.TouchEvent, row: number, col: number) => {
-      longPressedRef.current = false;
-      longPressRef.current = setTimeout(() => {
-        longPressedRef.current = true;
-        toggleFlag(row, col);
-      }, 500);
-    },
-    [toggleFlag]
-  );
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const cancelLongPress = useCallback(() => {
     if (longPressRef.current) {
       clearTimeout(longPressRef.current);
       longPressRef.current = null;
     }
-    // Prevent the click event from firing after a long press
+  }, []);
+
+  const handleTouchStart = useCallback(
+    (_e: React.TouchEvent, row: number, col: number) => {
+      longPressedRef.current = false;
+      cancelLongPress();
+      longPressRef.current = setTimeout(() => {
+        longPressedRef.current = true;
+        longPressRef.current = null;
+        toggleFlagRef.current(row, col);
+      }, 500);
+    },
+    [cancelLongPress]
+  );
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    cancelLongPress();
     if (longPressedRef.current) {
       e.preventDefault();
     }
-  }, []);
+  }, [cancelLongPress]);
 
   const faceEmoji =
     status === "won" ? "😎" : status === "lost" ? "😵" : facePressed ? "😮" : "🙂";
@@ -362,11 +371,15 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
                 <button
                   key={`${r}-${c}`}
                   className={`bomb-finder__cell${extraClass}`}
-                  onClick={() => { if (!longPressedRef.current) handleCellClick(r, c); }}
+                  onClick={() => {
+                    if (longPressedRef.current) { longPressedRef.current = false; return; }
+                    handleCellClick(r, c);
+                  }}
                   onContextMenu={(e) => handleCellRightClick(e, r, c)}
                   onTouchStart={(e) => handleTouchStart(e, r, c)}
                   onTouchEnd={handleTouchEnd}
-                  onTouchMove={handleTouchEnd}
+                  onTouchMove={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
                 >
                   {content}
                 </button>
