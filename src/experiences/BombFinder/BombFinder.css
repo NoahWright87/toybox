@@ -1,0 +1,144 @@
+.bomb-finder {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Difficulty toolbar ── */
+.bomb-finder__toolbar {
+  display: flex;
+  gap: 4px;
+}
+
+.bomb-finder__diff-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 5px 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000000;
+  white-space: nowrap;
+}
+
+.bomb-finder__diff-btn:hover {
+  background: #d0d0d0;
+}
+
+.bomb-finder__diff-btn:active,
+.bomb-finder__diff-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+}
+
+/* ── Main game panel ── */
+.bomb-finder__panel {
+  background: #c0c0c0;
+  border: 3px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Status bar ── */
+.bomb-finder__status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 5px 6px;
+  gap: 6px;
+}
+
+/* ── 7-segment style LCD displays ── */
+.bomb-finder__display {
+  background: #000000;
+  color: #dd0000;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 20px;
+  font-weight: bold;
+  padding: 2px 5px;
+  min-width: 46px;
+  text-align: right;
+  letter-spacing: 3px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  line-height: 1.2;
+}
+
+/* ── Smiley face reset button ── */
+.bomb-finder__face {
+  font-size: 16px;
+  width: 34px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.bomb-finder__face--pressed {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* ── Game board ── */
+.bomb-finder__board {
+  display: grid;
+  border: 3px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* ── Cells ── */
+.bomb-finder__cell {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.bomb-finder__cell:hover:not(.bomb-finder__cell--revealed):not(:disabled) {
+  background: #d4d0c8;
+}
+
+.bomb-finder__cell--revealed {
+  border: 1px solid #808080;
+  cursor: default;
+  background: #c0c0c0;
+}
+
+.bomb-finder__cell--death {
+  background: #ff0000 !important;
+}
+
+/* ── Number labels inside cells ── */
+.bomb-finder__cell-num {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 1;
+}

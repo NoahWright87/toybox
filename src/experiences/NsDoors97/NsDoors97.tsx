@@ -22,6 +22,7 @@ import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
+import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
 
@@ -38,6 +39,7 @@ const EXPERIENCE_ICONS: Record<string, string> = {
   "number-muncher":     "🔢",
   "tic-tac-toe":        "✖️",
   "word-whirlwind":     "🌪️",
+  "bomb-finder":        "💣",
   "ns-doors-97":        "🚪",
 };
 
@@ -46,6 +48,7 @@ type DesktopIconAction =
   | "experience"
   | "screensavers"
   | "tictactoe"
+  | "bombfinder"
   | "about"
   | "my-doors"
   | "internet"
@@ -75,7 +78,11 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     id: e.id,
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
-    action: (e.id === "tic-tac-toe" ? "tictactoe" : "experience") as DesktopIconAction,
+    action: (
+      e.id === "tic-tac-toe" ? "tictactoe" :
+      e.id === "bomb-finder" ? "bombfinder" :
+      "experience"
+    ) as DesktopIconAction,
   }));
 
 const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...EXPERIENCE_ICON_DEFS];
@@ -86,6 +93,7 @@ type WindowContent =
   | { type: "app-launcher"; experience: Experience }
   | { type: "screensaver-settings" }
   | { type: "tictactoe" }
+  | { type: "bombfinder" }
   | { type: "about" }
   | { type: "my-doors" }
   | { type: "internet" }
@@ -106,6 +114,11 @@ let windowSeq = 0;
 let maxZ = 100;
 
 const TTT_WINDOW_WIDTHS: Record<3 | 5 | 7, number> = { 3: 380, 5: 480, 7: 580 };
+const BF_WINDOW_WIDTHS: Record<BfDifficulty, number> = {
+  beginner: 310,
+  intermediate: 470,
+  expert: 820,
+};
 
 // ── App Launcher card ──────────────────────────────────────────────────────
 
@@ -285,6 +298,7 @@ export default function NsDoors97() {
         case "files":        content = { type: "files" };                width = 600; break;
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
+        case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -365,6 +379,18 @@ export default function NsDoors97() {
     []
   );
 
+  // Called by BombFinder when difficulty changes — resize the window
+  const handleBfDifficultyChange = useCallback(
+    (winId: string, diff: BfDifficulty) => {
+      setOpenWindows((prev) =>
+        prev.map((w) =>
+          w.id === winId ? { ...w, width: BF_WINDOW_WIDTHS[diff] } : w
+        )
+      );
+    },
+    []
+  );
+
   return (
     <div className="ns-desktop">
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
@@ -423,6 +449,13 @@ export default function NsDoors97() {
             <TicTacToe
               onBoardSizeChange={(size) =>
                 handleTttBoardSizeChange(win.id, size)
+              }
+            />
+          )}
+          {win.content.type === "bombfinder" && (
+            <BombFinder
+              onDifficultyChange={(diff) =>
+                handleBfDifficultyChange(win.id, diff)
               }
             />
           )}
