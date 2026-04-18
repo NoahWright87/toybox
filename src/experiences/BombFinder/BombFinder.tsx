@@ -266,7 +266,7 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   const longPressedRef = useRef(false);
 
   const handleTouchStart = useCallback(
-    (e: React.TouchEvent, row: number, col: number) => {
+    (_e: React.TouchEvent, row: number, col: number) => {
       longPressedRef.current = false;
       longPressRef.current = setTimeout(() => {
         longPressedRef.current = true;
