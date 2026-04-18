@@ -280,16 +280,54 @@ function SetupScreen({
   );
 }
 
+// ── MissedWordsSection ─────────────────────────────────────────────────────────
+
+function MissedWordsSection({
+  allWords,
+  foundWords,
+}: {
+  allWords: string[];
+  foundWords: Set<string>;
+}) {
+  const missed = allWords.filter((w) => !foundWords.has(w));
+  if (missed.length === 0) return null;
+
+  const groups = new Map<number, string[]>();
+  for (const w of missed) {
+    if (!groups.has(w.length)) groups.set(w.length, []);
+    groups.get(w.length)!.push(w);
+  }
+  const lengths = [...groups.keys()].sort((a, b) => b - a);
+
+  return (
+    <div className="ww-missed">
+      <div className="ww-missed__title">Words you missed</div>
+      {lengths.map((len) => (
+        <div key={len} className="ww-missed__group">
+          <span className="ww-missed__group-label">{len}-ltr:</span>
+          {groups.get(len)!.map((w) => (
+            <span key={w} className="ww-missed__word">
+              {w.toUpperCase()}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── WordGroupsPanel ────────────────────────────────────────────────────────────
 
 function WordGroupsPanel({
   allWords,
   foundWords,
   showHints,
+  revealAll,
 }: {
   allWords: string[];
   foundWords: Set<string>;
   showHints: boolean;
+  revealAll?: boolean;
 }) {
   const groups = new Map<number, string[]>();
   for (const w of allWords) {
@@ -382,20 +420,22 @@ function WordGroupsPanel({
                     );
                   }
                   const isFound = item.type === "found";
+                  const isMissed = revealAll && !isFound;
                   const hint = item.type === "unfound" ? item.hint : "";
                   return (
                     <div
                       key={item.word}
-                      className={`ww-word${isFound ? " ww-word--found" : ""}`}
+                      className={`ww-word${isFound ? " ww-word--found" : ""}${isMissed ? " ww-word--missed" : ""}`}
                     >
                       {item.word.split("").map((ch, i) => {
-                        const hinted = !isFound && i < hint.length;
+                        const showLetter = isFound || isMissed;
+                        const hinted = !showLetter && i < hint.length;
                         return (
                           <span
                             key={i}
                             className={`ww-word__letter${hinted ? " ww-word__letter--hint" : ""}`}
                           >
-                            {isFound || hinted ? ch.toUpperCase() : ""}
+                            {showLetter || hinted ? ch.toUpperCase() : ""}
                           </span>
                         );
                       })}
@@ -418,11 +458,15 @@ function RoundSummaryOverlay({
   summary,
   round,
   totalScore,
+  allWords,
+  foundWords,
   onContinue,
 }: {
   summary: RoundSummary;
   round: number;
   totalScore: number;
+  allWords: string[];
+  foundWords: Set<string>;
   onContinue: () => void;
 }) {
   return (
@@ -466,6 +510,8 @@ function RoundSummaryOverlay({
           </div>
         </div>
 
+        <MissedWordsSection allWords={allWords} foundWords={foundWords} />
+
         <button className="ww-overlay__btn" onClick={onContinue}>
           {summary.isGameOver ? "See Final Score →" : "Next Round →"}
         </button>
@@ -479,12 +525,16 @@ function RoundSummaryOverlay({
 function GameOverScreen({
   score,
   rounds,
+  allWords,
+  foundWords,
   onPlayAgain,
   onSettings,
   onHome,
 }: {
   score: number;
   rounds: number;
+  allWords: string[];
+  foundWords: Set<string>;
   onPlayAgain: () => void;
   onSettings: () => void;
   onHome?: () => void;
@@ -496,6 +546,7 @@ function GameOverScreen({
       <div className="ww-gameover__rounds">
         {rounds} round{rounds !== 1 ? "s" : ""} completed
       </div>
+      <MissedWordsSection allWords={allWords} foundWords={foundWords} />
       <div className="ww-gameover__actions">
         <button className="ww-setup__start" onClick={onPlayAgain}>
           Play Again
@@ -954,6 +1005,8 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       <GameOverScreen
         score={score}
         rounds={round - 1}
+        allWords={allWords}
+        foundWords={foundWords}
         onPlayAgain={() => startRound(settings, 1, 0)}
         onSettings={() => setPhase("setup")}
         onHome={onHome}
@@ -1083,6 +1136,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
         allWords={allWords}
         foundWords={foundWords}
         showHints={settings.showHints}
+        revealAll={roundSummary !== null}
       />
 
       {/* ── Round summary overlay ── */}
@@ -1091,6 +1145,8 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
           summary={roundSummary}
           round={round}
           totalScore={score}
+          allWords={allWords}
+          foundWords={foundWords}
           onContinue={handleContinueAfterSummary}
         />
       )}
