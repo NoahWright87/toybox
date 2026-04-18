@@ -6,7 +6,6 @@ import {
   type FsFolder,
   type FsFile,
   getNodeIcon,
-  isReadable,
 } from "./fileSystem";
 import "./FilesApp.css";
 
