@@ -261,13 +261,13 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     [toggleFlag]
   );
 
-  // Keep a ref so the long-press timeout always calls the latest toggleFlag
-  // without needing to re-create the touchstart handler on every board change.
+  // Ref to always call latest toggleFlag from inside the setTimeout
   const toggleFlagRef = useRef(toggleFlag);
   useEffect(() => { toggleFlagRef.current = toggleFlag; }, [toggleFlag]);
 
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressedRef = useRef(false);
+  const pointerStartPos = useRef({ x: 0, y: 0 });
 
   const cancelLongPress = useCallback(() => {
     if (longPressRef.current) {
@@ -276,8 +276,13 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     }
   }, []);
 
-  const handleTouchStart = useCallback(
-    (_e: React.TouchEvent, row: number, col: number) => {
+  // Pointer Events API long press — works uniformly on iOS Safari, Android,
+  // and desktop, unlike Touch Events which have iOS-specific quirks.
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>, row: number, col: number) => {
+      if (e.pointerType === "mouse") return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      pointerStartPos.current = { x: e.clientX, y: e.clientY };
       longPressedRef.current = false;
       cancelLongPress();
       longPressRef.current = setTimeout(() => {
@@ -289,12 +294,15 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     [cancelLongPress]
   );
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    cancelLongPress();
-    if (longPressedRef.current) {
-      e.preventDefault();
-    }
-  }, [cancelLongPress]);
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType === "mouse") return;
+      const dx = e.clientX - pointerStartPos.current.x;
+      const dy = e.clientY - pointerStartPos.current.y;
+      if (dx * dx + dy * dy > 25) cancelLongPress(); // cancel if moved > 5px
+    },
+    [cancelLongPress]
+  );
 
   const faceEmoji =
     status === "won" ? "😎" : status === "lost" ? "😵" : facePressed ? "😮" : "🙂";
@@ -376,10 +384,10 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
                     handleCellClick(r, c);
                   }}
                   onContextMenu={(e) => handleCellRightClick(e, r, c)}
-                  onTouchStart={(e) => handleTouchStart(e, r, c)}
-                  onTouchEnd={handleTouchEnd}
-                  onTouchMove={cancelLongPress}
-                  onTouchCancel={cancelLongPress}
+                  onPointerDown={(e) => handlePointerDown(e, r, c)}
+                  onPointerUp={() => cancelLongPress()}
+                  onPointerCancel={() => cancelLongPress()}
+                  onPointerMove={handlePointerMove}
                 >
                   {content}
                 </button>

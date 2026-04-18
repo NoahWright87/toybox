@@ -119,7 +119,8 @@
   line-height: 1;
   box-sizing: border-box;
   overflow: hidden;
-  touch-action: manipulation;
+  touch-action: none;
+  -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
