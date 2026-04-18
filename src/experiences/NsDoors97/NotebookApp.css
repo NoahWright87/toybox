@@ -1,0 +1,152 @@
+.nsnb-window {
+  display: flex;
+  flex-direction: column;
+  background: #1a0c00;
+  width: 100%;
+  height: 420px;
+}
+
+/* ── Menu bar ─────────────────────────────────────────────────────────────── */
+
+.nsnb-menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: #2a1000;
+  border-bottom: 2px solid #330000;
+  flex-shrink: 0;
+}
+
+.nsnb-menubar__item {
+  padding: 3px 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #ffcc88;
+  background: #3a1800;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nsnb-menubar__item:hover:not(:disabled) {
+  background: #4a2000;
+}
+
+.nsnb-menubar__item:active:not(:disabled) {
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #2a1200;
+}
+
+.nsnb-menubar__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nsnb-menubar__item--active {
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #2a1200;
+}
+
+.nsnb-menubar__sep {
+  width: 1px;
+  height: 16px;
+  background: #553300;
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.nsnb-menubar__badge {
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  color: #886644;
+  padding: 2px 6px;
+}
+
+.nsnb-menubar__badge--dirty {
+  color: #ffaa44;
+  animation: nb-blink 1.2s step-start infinite;
+}
+
+.nsnb-menubar__badge--saved {
+  color: #44aa66;
+}
+
+@keyframes nb-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* ── Path bar ─────────────────────────────────────────────────────────────── */
+
+.nsnb-pathbar {
+  padding: 3px 8px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #cc8844;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+/* ── Editor ───────────────────────────────────────────────────────────────── */
+
+.nsnb-editor {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 10px 12px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #f0d8b0;
+  background: #0e0700;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  caret-color: #ff9a44;
+}
+
+.nsnb-editor::selection {
+  background: rgba(255, 107, 0, 0.35);
+  color: #ffffff;
+}
+
+.nsnb-editor--nowrap {
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.nsnb-editor:read-only {
+  color: #aa8866;
+  background: #0a0500;
+  cursor: default;
+}
+
+/* ── Status bar ───────────────────────────────────────────────────────────── */
+
+.nsnb-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #886644;
+  flex-shrink: 0;
+}
+
+.nsnb-statusbar__sep {
+  margin: 0 8px;
+  color: #553322;
+}
+
+.nsnb-sunken {
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #150800;
+}

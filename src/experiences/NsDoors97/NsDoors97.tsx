@@ -11,6 +11,8 @@ import ScreensaverApp from "./ScreensaverApp";
 import ScreensaverOverlay, { type ScreensaverId } from "./ScreensaverOverlay";
 import AboutApp from "./AboutApp";
 import FolderApp from "./FolderApp";
+import FilesApp from "./FilesApp";
+import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
@@ -36,7 +38,9 @@ type DesktopIconAction =
   | "tictactoe"
   | "about"
   | "my-doors"
-  | "internet";
+  | "internet"
+  | "files"
+  | "notebook";
 
 interface DesktopIconDef {
   id: string;
@@ -47,6 +51,8 @@ interface DesktopIconDef {
 
 const STATIC_ICONS: DesktopIconDef[] = [
   { id: "my-doors",     title: "My Doors",     icon: "🖥️", action: "my-doors"     },
+  { id: "files",        title: "My Files",     icon: "📁", action: "files"        },
+  { id: "notebook",     title: "Notebook",     icon: "📝", action: "notebook"     },
   { id: "recycle-bin",  title: "Recycle Bin",  icon: "🗑️", action: "placeholder"  },
   { id: "about",        title: "About NS Doors 97", icon: "ℹ️", action: "about"   },
   { id: "internet",     title: "Internet",     icon: "🌐", action: "internet"     },
@@ -72,7 +78,9 @@ type WindowContent =
   | { type: "tictactoe" }
   | { type: "about" }
   | { type: "my-doors" }
-  | { type: "internet" };
+  | { type: "internet" }
+  | { type: "files" }
+  | { type: "notebook"; filePath: string; fileName: string; initialContent: string };
 
 interface OpenWindow {
   id: string;
@@ -261,6 +269,8 @@ export default function NsDoors97() {
         case "about":        content = { type: "about" };                width = 340; break;
         case "my-doors":     content = { type: "my-doors" };             width = 440; break;
         case "internet":     content = { type: "internet" };             width = 640; break;
+        case "files":        content = { type: "files" };                width = 600; break;
+        case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
@@ -299,6 +309,36 @@ export default function NsDoors97() {
     );
     setActiveWindowId(id);
   }, []);
+
+  const openNotebook = useCallback(
+    (filePath: string, fileName: string, initialContent: string) => {
+      const winId = `notebook:${filePath}`;
+      setOpenWindows((prev) => {
+        if (prev.some((w) => w.id === winId)) {
+          maxZ++;
+          setActiveWindowId(winId);
+          return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+        }
+        const offset = (windowSeq % 8) * 32;
+        windowSeq++;
+        maxZ++;
+        setActiveWindowId(winId);
+        return [
+          ...prev,
+          {
+            id: winId,
+            title: fileName,
+            icon: "📝",
+            content: { type: "notebook" as const, filePath, fileName, initialContent },
+            zIndex: maxZ,
+            defaultPosition: { x: 100 + offset, y: 60 + offset },
+            width: 560,
+          },
+        ];
+      });
+    },
+    []
+  );
 
   // Called by TicTacToe when board size changes — resize the window
   const handleTttBoardSizeChange = useCallback(
@@ -392,6 +432,19 @@ export default function NsDoors97() {
           )}
           {win.content.type === "internet" && (
             <InternetApp onOpenExperience={openWindow} />
+          )}
+          {win.content.type === "files" && (
+            <FilesApp
+              onOpenApp={openWindow}
+              onOpenNotebook={openNotebook}
+            />
+          )}
+          {win.content.type === "notebook" && (
+            <NotebookApp
+              filePath={win.content.filePath}
+              fileName={win.content.fileName}
+              initialContent={win.content.initialContent}
+            />
           )}
         </Window>
       ))}
