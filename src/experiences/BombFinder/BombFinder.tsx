@@ -240,9 +240,8 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     [board, status, cfg, startTimer, stopTimer]
   );
 
-  const handleCellRightClick = useCallback(
-    (e: React.MouseEvent, row: number, col: number) => {
-      e.preventDefault();
+  const toggleFlag = useCallback(
+    (row: number, col: number) => {
       if (status === "won" || status === "lost") return;
       if (board[row][col].revealed) return;
 
@@ -253,6 +252,40 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     },
     [board, status, cfg.mines]
   );
+
+  const handleCellRightClick = useCallback(
+    (e: React.MouseEvent, row: number, col: number) => {
+      e.preventDefault();
+      toggleFlag(row, col);
+    },
+    [toggleFlag]
+  );
+
+  // Long-press for mobile flagging
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressedRef = useRef(false);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent, row: number, col: number) => {
+      longPressedRef.current = false;
+      longPressRef.current = setTimeout(() => {
+        longPressedRef.current = true;
+        toggleFlag(row, col);
+      }, 500);
+    },
+    [toggleFlag]
+  );
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+    // Prevent the click event from firing after a long press
+    if (longPressedRef.current) {
+      e.preventDefault();
+    }
+  }, []);
 
   const faceEmoji =
     status === "won" ? "😎" : status === "lost" ? "😵" : facePressed ? "😮" : "🙂";
@@ -329,8 +362,11 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
                 <button
                   key={`${r}-${c}`}
                   className={`bomb-finder__cell${extraClass}`}
-                  onClick={() => handleCellClick(r, c)}
+                  onClick={() => { if (!longPressedRef.current) handleCellClick(r, c); }}
                   onContextMenu={(e) => handleCellRightClick(e, r, c)}
+                  onTouchStart={(e) => handleTouchStart(e, r, c)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchEnd}
                 >
                   {content}
                 </button>
