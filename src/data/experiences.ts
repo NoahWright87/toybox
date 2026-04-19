@@ -78,6 +78,13 @@ export const experiences: Experience[] = [
     path: "/word-whirlwind",
   },
   {
+    id: "bomb-finder",
+    title: "Bomb Finder",
+    description: "Classic mine-sweeping puzzle. Flag the bombs, clear the field. Don't go boom.",
+    category: "game",
+    path: "/bomb-finder",
+  },
+  {
     id: "ns-doors-97",
     title: "NS Doors 97",
     description: "A fake 90s desktop OS. Double-click icons to open apps. It's not Windows. It's a Door.™",

@@ -10,6 +10,7 @@ import TypingRacerPage from "./pages/TypingRacerPage";
 import NumberMuncherPage from "./pages/NumberMuncherPage";
 import TicTacToePage from "./pages/TicTacToePage";
 import WordWhirlwindPage from "./pages/WordWhirlwindPage";
+import BombFinderPage from "./pages/BombFinderPage";
 import NsDoors97Page from "./pages/NsDoors97Page";
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/number-muncher" element={<NumberMuncherPage />} />
         <Route path="/tic-tac-toe" element={<TicTacToePage />} />
         <Route path="/word-whirlwind" element={<WordWhirlwindPage />} />
+        <Route path="/bomb-finder" element={<BombFinderPage />} />
         <Route path="/doors97" element={<NsDoors97Page />} />
       </Routes>
     </BrowserRouter>
