@@ -26,6 +26,7 @@ import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import NoGame from "../Cards/NoGame";
+import Blackjack from "../Cards/Blackjack";
 import type { CardsGame, DeckSettings } from "../Cards/types";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
@@ -125,6 +126,8 @@ let windowSeq = 0;
 let maxZ = 100;
 
 const TTT_WINDOW_WIDTHS: Record<3 | 5 | 7, number> = { 3: 380, 5: 480, 7: 580 };
+const CARDS_GAME_TITLES: Record<CardsGame, string> = { "no-game": "No Game", "blackjack": "Blackjack" };
+const CARDS_GAME_WIDTHS: Record<CardsGame, number> = { "no-game": 380, "blackjack": 520 };
 const BF_WINDOW_WIDTHS: Record<BfDifficulty, number> = {
   beginner: 310,
   intermediate: 470,
@@ -417,12 +420,12 @@ export default function NsDoors97() {
           ...filtered,
           {
             id: "cards-game",
-            title: "No Game",
+            title: CARDS_GAME_TITLES[game],
             icon: "🃏",
             content: { type: "cards-game" as const, game, settings },
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
-            width: 380,
+            width: CARDS_GAME_WIDTHS[game],
           },
         ];
       });
@@ -520,8 +523,11 @@ export default function NsDoors97() {
               onLaunch={(game, settings) => handleCardsLaunch(win.id, game, settings)}
             />
           )}
-          {win.content.type === "cards-game" && (
+          {win.content.type === "cards-game" && win.content.game === "no-game" && (
             <NoGame settings={win.content.settings} />
+          )}
+          {win.content.type === "cards-game" && win.content.game === "blackjack" && (
+            <Blackjack settings={win.content.settings} />
           )}
           {win.content.type === "bombfinder" && (
             <BombFinder

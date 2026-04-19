@@ -58,7 +58,8 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
           onChange={(e) => setGame(e.target.value as CardsGame)}
         >
           <option value="no-game">No Game</option>
-          <option disabled>── Coming Soon ──</option>
+          <option value="blackjack">Blackjack</option>
+          <option disabled>── More Coming Soon ──</option>
         </select>
       </div>
 

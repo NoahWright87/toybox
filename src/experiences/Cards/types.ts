@@ -28,7 +28,7 @@ export interface DeckSettings {
   cardBack: string; // hex color
 }
 
-export type CardsGame = "no-game";
+export type CardsGame = "no-game" | "blackjack";
 
 export const DEFAULT_DECK_SETTINGS: DeckSettings = {
   numDecks: 1,

@@ -1,0 +1,189 @@
+/* ─── Blackjack ─────────────────────────────────────────────────────── */
+
+.bj {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+}
+
+/* Felt table area */
+.bj__table {
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 8px 8px 4px;
+  padding: 12px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 256px;
+}
+
+/* Hand section (dealer or player) */
+.bj__section-label {
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bj__score {
+  font-size: 9px;
+  color: #ffffff;
+}
+
+.bj__score--bust { color: #ff6666; }
+.bj__score--bj   { color: #ffdd44; }
+
+/* Card row with overlap */
+.bj__hand {
+  display: flex;
+  flex-wrap: nowrap;
+  min-height: 104px; /* card height + shadow */
+}
+
+.bj__card {
+  flex-shrink: 0;
+}
+
+.bj__card + .bj__card {
+  margin-left: -14px;
+}
+
+/* Outcome overlay — floats above the felt */
+.bj__outcome {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.88);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  padding: 10px 16px;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.bj__outcome--win  { color: #55ee55; }
+.bj__outcome--push { color: #eeee44; }
+.bj__outcome--lose { color: #ee5555; }
+
+/* Controls */
+.bj__controls {
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bj__info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bj__chips-label {
+  font-size: 8px;
+  color: #000;
+}
+
+.bj__divider {
+  height: 0;
+  border: none;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+}
+
+/* Bet adjustment row */
+.bj__bet-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Shared button base */
+.bj__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 5px 9px;
+  border: 2px solid;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Small neutral (bet controls) */
+.bj__btn--sm {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+.bj__btn--sm:hover:not(:disabled) { background: #d4d0c8; }
+.bj__btn--sm:active:not(:disabled) { border-color: #808080 #ffffff #ffffff #808080; }
+.bj__btn--sm:disabled { color: #808080; cursor: default; }
+
+/* Deal / New Hand — orange primary */
+.bj__btn--deal {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-size: 9px;
+  padding: 7px 14px;
+}
+.bj__btn--deal:hover { background: #ee5500; }
+.bj__btn--deal:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+.bj__btn--deal:disabled { background: #994400; cursor: default; }
+
+/* Hit — orange */
+.bj__btn--hit {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.bj__btn--hit:hover { background: #ee5500; }
+.bj__btn--hit:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+
+/* Stand — neutral */
+.bj__btn--stand {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+.bj__btn--stand:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* Double — purple */
+.bj__btn--double {
+  background: #5b2d8e;
+  color: #fff;
+  border-color: #9966cc #331155 #331155 #9966cc;
+}
+.bj__btn--double:hover { background: #7b3dbe; }
+.bj__btn--double:active { border-color: #331155 #9966cc #9966cc #331155; }
+
+/* Action row */
+.bj__action-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.bj__waiting {
+  font-size: 7px;
+  color: #808080;
+  font-style: italic;
+}
+
+.bj__notice {
+  font-size: 6px;
+  color: #808080;
+  text-align: right;
+}
