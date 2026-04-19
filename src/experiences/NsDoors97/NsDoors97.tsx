@@ -22,6 +22,7 @@ import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
+import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
@@ -48,6 +49,7 @@ type DesktopIconAction =
   | "experience"
   | "screensavers"
   | "tictactoe"
+  | "nomnom"
   | "bombfinder"
   | "about"
   | "my-doors"
@@ -80,6 +82,7 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
     action: (
       e.id === "tic-tac-toe" ? "tictactoe" :
+      e.id === "number-muncher" ? "nomnom" :
       e.id === "bomb-finder" ? "bombfinder" :
       "experience"
     ) as DesktopIconAction,
@@ -93,6 +96,7 @@ type WindowContent =
   | { type: "app-launcher"; experience: Experience }
   | { type: "screensaver-settings" }
   | { type: "tictactoe" }
+  | { type: "nomnom" }
   | { type: "bombfinder" }
   | { type: "about" }
   | { type: "my-doors" }
@@ -298,6 +302,7 @@ export default function NsDoors97() {
         case "files":        content = { type: "files" };                width = 600; break;
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
+        case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
@@ -452,6 +457,7 @@ export default function NsDoors97() {
               }
             />
           )}
+          {win.content.type === "nomnom" && <NumberMuncher />}
           {win.content.type === "bombfinder" && (
             <BombFinder
               onDifficultyChange={(diff) =>

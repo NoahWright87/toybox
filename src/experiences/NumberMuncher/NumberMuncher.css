@@ -1,107 +1,239 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   Number Muncher — Noahsoft Win95 Redesign
-   Win95 chrome; orange player cursor; green/red flash states.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-.number-muncher {
+.number-muncher,
+.number-muncher-launcher {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 14px 16px;
   gap: 10px;
+  padding: 12px 14px 14px;
   background: #c0c0c0;
+  width: min(620px, calc(100vw - 48px));
+  box-sizing: border-box;
   position: relative;
 }
 
-/* ── HUD — Win95 sunken status bar ─────────────────────────────────────── */
+.number-muncher-launcher__title {
+  margin: 0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 15px;
+  color: #cc4400;
+  text-align: center;
+}
 
-.number-muncher__hud {
-  display: flex;
-  gap: 16px;
+.number-muncher-launcher__section {
   width: 100%;
-  padding: 4px 8px;
+}
+
+.number-muncher-launcher__label {
+  display: block;
+  margin-bottom: 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #111;
+}
+
+.number-muncher-launcher__select {
+  width: 100%;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 14px;
+}
+
+.number-muncher-launcher__sizes {
+  display: flex;
+  gap: 8px;
+}
+
+.number-muncher-launcher__size-btn {
+  flex: 1;
+  padding: 8px 10px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+}
+
+.number-muncher-launcher__size-btn--active {
+  background: #ff6b00;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.number-muncher-launcher__monster-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #888;
+}
+
+.number-muncher-launcher__actions {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.number-muncher-launcher__help-btn,
+.number-muncher-launcher__start-btn,
+.number-muncher__restart,
+.number-muncher__touch-btn,
+.number-muncher__exit {
+  padding: 7px 14px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #d4d0c8;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+}
+
+.number-muncher-launcher__start-btn,
+.number-muncher__touch-btn--eat,
+.number-muncher__restart,
+.number-muncher__exit {
+  background: #ff6b00;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.number-muncher-launcher__help {
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  color: #000;
-  align-items: center;
-  box-sizing: border-box;
-  flex-wrap: wrap;
-  min-height: 24px;
 }
 
-.number-muncher__hud strong {
+.number-muncher__exit {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.number-muncher__goal {
+  width: 100%;
+  text-align: center;
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
   color: #cc4400;
 }
 
-/* ── Grid — Win95 raised panel ─────────────────────────────────────────── */
-
 .number-muncher__grid {
+  --nm-cell-width: 56px;
+  --nm-cell-height: 42px;
+  --nm-grid-gap: 3px;
+  --nm-grid-pad: 6px;
+
   display: grid;
-  gap: 3px;
-  padding: 6px;
+  gap: var(--nm-grid-gap);
+  padding: var(--nm-grid-pad);
   background: #808080;
   border: 3px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
   box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
   transition: background 0.15s;
+  position: relative;
 }
 
 .number-muncher--correct .number-muncher__grid {
   background: #338833;
-  border-color: #88cc88 #224422 #224422 #88cc88;
 }
 
 .number-muncher--wrong .number-muncher__grid {
   background: #883333;
-  border-color: #cc8888 #441111 #441111 #cc8888;
 }
 
-/* ── Cell — Win95 sunken box ───────────────────────────────────────────── */
-
 .number-muncher__cell {
-  width: 52px;
-  height: 40px;
+  width: var(--nm-cell-width);
+  height: var(--nm-cell-height);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: "Press Start 2P", monospace;
-  font-size: 9px;
+  font-size: 10px;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   background: #c8c8c8;
-  color: #555;
+  color: #333;
   font-variant-numeric: tabular-nums;
-  transition: background 0.08s, opacity 0.2s;
+  transition: opacity 0.2s;
 }
 
-/* Numbers that match the current rule */
-.number-muncher__cell--match {
-  color: #000;
-  background: #d4d0c8;
+.number-muncher__muncher {
+  position: absolute;
+  width: calc(var(--nm-cell-width) - 10px);
+  height: calc(var(--nm-cell-height) - 10px);
+  top: calc(var(--nm-grid-pad) + 5px);
+  left: calc(var(--nm-grid-pad) + 5px);
+  transform: translate(
+    calc(var(--muncher-col) * (var(--nm-cell-width) + var(--nm-grid-gap))),
+    calc(var(--muncher-row) * (var(--nm-cell-height) + var(--nm-grid-gap)))
+  );
+  background: transparent;
+  border: 4px solid #ff6b00;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 2px rgba(102, 68, 0, 0.75);
+  transition: transform 0.16s ease;
+  z-index: 1;
+  pointer-events: none;
 }
 
-/* Player position — orange raised bevel */
-.number-muncher__cell--player {
-  background: #ff6b00;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
-  color: #fff;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+.number-muncher__muncher--munching {
+  transform: translate(
+      calc(var(--muncher-col) * (var(--nm-cell-width) + var(--nm-grid-gap))),
+      calc(var(--muncher-row) * (var(--nm-cell-height) + var(--nm-grid-gap)))
+    )
+    scale(0.84);
 }
 
-.number-muncher__cell--player.number-muncher__cell--match {
-  background: #ff7a1a;
-}
-
-/* Eaten (invisible) */
 .number-muncher__cell--eaten {
   opacity: 0;
   pointer-events: none;
 }
 
-/* ── Game over overlay ──────────────────────────────────────────────────── */
+.number-muncher__bottom-bar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-top: 2px;
+  min-height: 30px;
+}
+
+.number-muncher__score {
+  justify-self: start;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+}
+
+.number-muncher__left-hint {
+  justify-self: center;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #cc4400;
+  min-width: 120px;
+  text-align: center;
+}
+
+.number-muncher__lives {
+  justify-self: end;
+  font-size: 24px;
+  line-height: 1;
+}
 
 .number-muncher__overlay {
   position: absolute;
@@ -110,9 +242,10 @@
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.75);
+  z-index: 20;
 }
 
-.number-muncher__gameover {
+.number-muncher__dialog {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -124,46 +257,70 @@
   padding: 20px 28px;
 }
 
-.number-muncher__gameover-title {
+.number-muncher__dialog-title {
   font-family: "Press Start 2P", monospace;
   font-size: 13px;
   color: #cc0000;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
 }
 
-.number-muncher__gameover-score {
+.number-muncher__dialog-score {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
-  color: #000;
 }
 
-/* Win95 orange button */
-.number-muncher__restart {
-  padding: 7px 20px;
-  background: #ff6b00;
-  border: 2px solid;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
-  color: #fff;
-  font-family: "Press Start 2P", monospace;
-  font-size: 8px;
-  cursor: pointer;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+.number-muncher__gameover-actions {
+  display: flex;
+  gap: 8px;
 }
 
-.number-muncher__restart:hover {
-  background: #ff7a1a;
+.number-muncher__touch-controls {
+  display: none;
 }
 
-.number-muncher__restart:active {
-  border-color: #664400 #ffcc88 #ffcc88 #664400;
-  background: #cc4400;
-  transform: translateY(1px);
+@media (hover: none) and (pointer: coarse) {
+  .number-muncher__touch-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .number-muncher__touch-middle-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .number-muncher__touch-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 11px;
+    touch-action: manipulation;
+  }
+
+  .number-muncher__touch-btn--eat {
+    min-width: 76px;
+  }
 }
 
-/* ── Hint bar ───────────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .number-muncher,
+  .number-muncher-launcher {
+    width: min(620px, calc(100vw - 20px));
+    padding: 10px;
+  }
 
-.number-muncher__hint {
-  font-family: "Courier New", Courier, monospace;
-  font-size: 10px;
-  color: #555;
+  .number-muncher__grid {
+    --nm-cell-width: 40px;
+    --nm-cell-height: 34px;
+    --nm-grid-gap: 2px;
+  }
+
+  .number-muncher__cell {
+    font-size: 8px;
+  }
+
+  .number-muncher__goal {
+    font-size: 9px;
+  }
 }

@@ -23,6 +23,7 @@ This directory uses **spec-driven development**. Specs are the source of truth; 
 - Be explicit where ambiguity could cause bugs
 - Keep specs short, readable, and skimmable
 - Future or uncommitted behavior belongs in `spec.todo.md`, not `spec.md`
+- Prefer fake-OS framing in experience specs: apps run inside NS Doors 97 windows by default unless a spec explicitly defines a full-page mode
 
 ## Split rule
 

@@ -3,6 +3,7 @@
 ## Purpose
 
 A collection of browser-based games, toys, and screensavers wrapped in a fake 1990s desktop OS called **NS Doors 97**.
+The default UX is in-OS app windows: experiences are expected to launch inside NS Doors 97 windows unless a spec explicitly defines another mode.
 
 ## Related
 
@@ -86,7 +87,7 @@ src/
 | `/tic-tac-toe` | Tic-Tac-Toe | |
 | `/word-whirlwind` | Word Whirlwind | |
 | `/typing-racer` | Typing Racer | |
-| `/number-muncher` | Number Muncher | |
+| `/number-muncher` | Nom Nom Numerals | |
 | `/starfield` | Starfield | |
 | `/fireworks` | Fireworks | |
 | `/bouncing-shapes` | Bouncing Shapes | |
@@ -107,7 +108,7 @@ Each experience lives in `src/experiences/{Name}/` and is routed at `/{name}` in
 - **Tic-Tac-Toe** (`/tic-tac-toe`) — see [`tic-tac-toe.md`](tic-tac-toe.md)
 - **Word Whirlwind** (`/word-whirlwind`) — see [`word-whirlwind.md`](word-whirlwind.md)
 - **Typing Racer** (`/typing-racer`) — see [`typing-racer.md`](typing-racer.md)
-- **Number Muncher** (`/number-muncher`) — see [`number-muncher.md`](number-muncher.md)
+- **Nom Nom Numerals** (`/number-muncher`) — see [`number-muncher.md`](number-muncher.md)
 - **Starfield** (`/starfield`) — see [`starfield.md`](starfield.md)
 - **Fireworks** (`/fireworks`) — see [`fireworks.md`](fireworks.md)
 - **Bouncing Shapes** (`/bouncing-shapes`) — see [`bouncing-shapes.md`](bouncing-shapes.md)

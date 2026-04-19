@@ -58,8 +58,8 @@ export const experiences: Experience[] = [
   },
   {
     id: "number-muncher",
-    title: "Number Muncher",
-    description: "Navigate the grid and eat numbers that match the rule.",
+    title: "Nom Nom Numerals",
+    description: "Guide the critter and munch only numbers that match the selected rule.",
     category: "educational",
     path: "/number-muncher",
   },
