@@ -39,14 +39,20 @@
 /* ── Grid — Win95 raised panel ─────────────────────────────────────────── */
 
 .number-muncher__grid {
+  --nm-cell-width: 52px;
+  --nm-cell-height: 40px;
+  --nm-grid-gap: 3px;
+  --nm-grid-pad: 6px;
+
   display: grid;
-  gap: 3px;
-  padding: 6px;
+  gap: var(--nm-grid-gap);
+  padding: var(--nm-grid-pad);
   background: #808080;
   border: 3px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
   box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
   transition: background 0.15s;
+  position: relative;
 }
 
 .number-muncher--correct .number-muncher__grid {
@@ -62,8 +68,8 @@
 /* ── Cell — Win95 sunken box ───────────────────────────────────────────── */
 
 .number-muncher__cell {
-  width: 52px;
-  height: 40px;
+  width: var(--nm-cell-width);
+  height: var(--nm-cell-height);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -77,22 +83,32 @@
   transition: background 0.08s, opacity 0.2s;
 }
 
-/* Numbers that match the current rule */
-.number-muncher__cell--match {
-  color: #000;
-  background: #d4d0c8;
+/* Player placeholder critter */
+.number-muncher__muncher {
+  position: absolute;
+  width: calc(var(--nm-cell-width) - 10px);
+  height: calc(var(--nm-cell-height) - 10px);
+  top: calc(var(--nm-grid-pad) + 5px);
+  left: calc(var(--nm-grid-pad) + 5px);
+  transform: translate(
+    calc(var(--muncher-col) * (var(--nm-cell-width) + var(--nm-grid-gap))),
+    calc(var(--muncher-row) * (var(--nm-cell-height) + var(--nm-grid-gap)))
+  );
+  background: radial-gradient(circle at 35% 35%, #ffd4a6 0 28%, #ff6b00 35% 100%);
+  border: 2px solid #664400;
+  border-radius: 999px;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s ease;
+  z-index: 2;
+  pointer-events: none;
 }
 
-/* Player position — orange raised bevel */
-.number-muncher__cell--player {
-  background: #ff6b00;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
-  color: #fff;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
-}
-
-.number-muncher__cell--player.number-muncher__cell--match {
-  background: #ff7a1a;
+.number-muncher__muncher--munching {
+  transform: translate(
+      calc(var(--muncher-col) * (var(--nm-cell-width) + var(--nm-grid-gap))),
+      calc(var(--muncher-row) * (var(--nm-cell-height) + var(--nm-grid-gap)))
+    )
+    scale(0.83);
 }
 
 /* Eaten (invisible) */
@@ -166,4 +182,59 @@
   font-family: "Courier New", Courier, monospace;
   font-size: 10px;
   color: #555;
+}
+
+.number-muncher__touch-controls {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .number-muncher__touch-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  }
+
+  .number-muncher__touch-middle-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .number-muncher__touch-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+    background: #d4d0c8;
+    border: 2px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    font-family: "Press Start 2P", monospace;
+    font-size: 11px;
+    color: #111;
+    touch-action: manipulation;
+  }
+
+  .number-muncher__touch-btn--eat {
+    min-width: 76px;
+    background: #ff6b00;
+    color: #fff;
+    border-color: #ffcc88 #664400 #664400 #ffcc88;
+  }
+
+  .number-muncher__touch-btn:active {
+    border-color: #808080 #ffffff #ffffff #808080;
+    transform: translateY(1px);
+  }
+}
+
+@media (max-width: 640px) {
+  .number-muncher__grid {
+    --nm-cell-width: 39px;
+    --nm-cell-height: 32px;
+    --nm-grid-gap: 2px;
+  }
+
+  .number-muncher__cell {
+    font-size: 8px;
+  }
 }

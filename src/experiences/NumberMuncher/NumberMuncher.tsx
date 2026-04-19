@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import "./NumberMuncher.css";
 
 const COLS = 7;
@@ -63,6 +63,18 @@ export default function NumberMuncher() {
   const [lives, setLives] = useState(3);
   const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
   const [gameOver, setGameOver] = useState(false);
+  const [isMunching, setIsMunching] = useState(false);
+
+  const moveBy = useCallback(
+    (rowDelta: number, colDelta: number) => {
+      if (gameOver) return;
+      setPos((prev) => ({
+        row: Math.max(0, Math.min(ROWS - 1, prev.row + rowDelta)),
+        col: Math.max(0, Math.min(COLS - 1, prev.col + colDelta)),
+      }));
+    },
+    [gameOver]
+  );
 
   // Detect level completion and advance
   useEffect(() => {
@@ -85,6 +97,8 @@ export default function NumberMuncher() {
 
   const eat = useCallback(() => {
     if (gameOver || eaten[pos.row][pos.col]) return;
+    setIsMunching(true);
+    setTimeout(() => setIsMunching(false), 180);
     const val = grid[pos.row][pos.col];
     if (rule.test(val)) {
       setEaten((prev) => {
@@ -106,25 +120,37 @@ export default function NumberMuncher() {
     }
   }, [gameOver, eaten, pos, grid, rule]);
 
+  const handleCellTap = useCallback(
+    (row: number, col: number) => {
+      if (gameOver) return;
+      if (row === pos.row && col === pos.col) {
+        eat();
+        return;
+      }
+      setPos({ row, col });
+    },
+    [eat, gameOver, pos.col, pos.row]
+  );
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (gameOver) return;
       switch (e.key) {
         case "ArrowUp":
           e.preventDefault();
-          setPos((p) => ({ ...p, row: Math.max(0, p.row - 1) }));
+          moveBy(-1, 0);
           break;
         case "ArrowDown":
           e.preventDefault();
-          setPos((p) => ({ ...p, row: Math.min(ROWS - 1, p.row + 1) }));
+          moveBy(1, 0);
           break;
         case "ArrowLeft":
           e.preventDefault();
-          setPos((p) => ({ ...p, col: Math.max(0, p.col - 1) }));
+          moveBy(0, -1);
           break;
         case "ArrowRight":
           e.preventDefault();
-          setPos((p) => ({ ...p, col: Math.min(COLS - 1, p.col + 1) }));
+          moveBy(0, 1);
           break;
         case " ":
         case "Enter":
@@ -135,7 +161,7 @@ export default function NumberMuncher() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [eat, gameOver]);
+  }, [eat, gameOver, moveBy]);
 
   function restart() {
     const startRule = RULES[0];
@@ -170,22 +196,40 @@ export default function NumberMuncher() {
         className="number-muncher__grid"
         style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
       >
+        <div
+          className={[
+            "number-muncher__muncher",
+            isMunching ? "number-muncher__muncher--munching" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={
+            {
+              "--muncher-row": pos.row,
+              "--muncher-col": pos.col,
+            } as CSSProperties
+          }
+          aria-hidden="true"
+        />
         {grid.map((row, r) =>
           row.map((val, c) => (
             <div
               key={`${r}-${c}`}
               className={[
                 "number-muncher__cell",
-                pos.row === r && pos.col === c
-                  ? "number-muncher__cell--player"
-                  : "",
                 eaten[r][c] ? "number-muncher__cell--eaten" : "",
-                rule.test(val) && !eaten[r][c]
-                  ? "number-muncher__cell--match"
-                  : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
+              onClick={() => handleCellTap(r, c)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                handleCellTap(r, c);
+              }}
+              aria-label={`Number ${val} at row ${r + 1}, column ${c + 1}`}
             >
               {!eaten[r][c] && val}
             </div>
@@ -208,7 +252,46 @@ export default function NumberMuncher() {
       )}
 
       <div className="number-muncher__hint">
-        Arrow keys to move · Space or Enter to eat
+        Arrow keys to move · Space or Enter to eat · Tap a square to move/eat
+      </div>
+      <div className="number-muncher__touch-controls" aria-label="Touch controls">
+        <button
+          type="button"
+          className="number-muncher__touch-btn"
+          onClick={() => moveBy(-1, 0)}
+        >
+          ↑
+        </button>
+        <div className="number-muncher__touch-middle-row">
+          <button
+            type="button"
+            className="number-muncher__touch-btn"
+            onClick={() => moveBy(0, -1)}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="number-muncher__touch-btn number-muncher__touch-btn--eat"
+            onClick={eat}
+          >
+            Eat
+          </button>
+          <button
+            type="button"
+            className="number-muncher__touch-btn"
+            onClick={() => moveBy(0, 1)}
+          >
+            →
+          </button>
+        </div>
+        <button
+          type="button"
+          className="number-muncher__touch-btn"
+          onClick={() => moveBy(1, 0)}
+        >
+          ↓
+        </button>
       </div>
     </div>
   );
