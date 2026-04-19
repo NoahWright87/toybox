@@ -6,6 +6,8 @@ A collection of browser-based games, toys, and screensavers wrapped in a fake 19
 
 The main entry point is **NS Doors 97**, a parody of Windows 95/98 built by Noahsoft™. You get a draggable-window desktop, a Start menu, a taskbar, a screensaver, and a growing library of retro-styled games and toys accessible as windows inside the OS.
 
+**Project UX goal:** experiences should feel like fake desktop apps running inside NS Doors 97 windows (not standalone pages) unless a spec explicitly calls out a full-page mode.
+
 Everything has a Win9X aesthetic: `#c0c0c0` chrome, beveled borders, pixel fonts, and orange-and-purple brand colors.
 
 ## Stack
@@ -24,7 +26,7 @@ Everything has a Win9X aesthetic: `#c0c0c0` chrome, beveled borders, pixel fonts
 | Tic-Tac-Toe | `/tic-tac-toe` | game |
 | Word Whirlwind | `/word-whirlwind` | game |
 | Typing Racer | `/typing-racer` | game |
-| Number Muncher | `/number-muncher` | educational |
+| Nom Nom Numerals | `/number-muncher` | educational |
 | Starfield | `/starfield` | screensaver |
 | Fireworks | `/fireworks` | toy |
 | Bouncing Shapes | `/bouncing-shapes` | screensaver |

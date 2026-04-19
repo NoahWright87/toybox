@@ -3,6 +3,7 @@
 ## Purpose
 
 A collection of browser-based games, toys, and screensavers wrapped in a fake 1990s desktop OS called **NS Doors 97**.
+The default UX is in-OS app windows: experiences are expected to launch inside NS Doors 97 windows unless a spec explicitly defines another mode.
 
 ## Related
 

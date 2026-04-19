@@ -2,6 +2,12 @@
 
 Keep this repo aligned with spec-driven development. Specs are the source of truth; code implements them.
 
+## Product direction
+
+- Toy Box is a fake operating system experience first (NS Doors 97).
+- Games and toys should launch as apps inside draggable OS windows whenever practical.
+- Full-page routes can exist for development or deep-linking, but in-product UX should prioritize in-OS app windows.
+
 ## Structure
 
 - Specs live in `specs/` and mirror the source tree.

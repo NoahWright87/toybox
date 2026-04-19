@@ -15,6 +15,7 @@ import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
+import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
 
@@ -36,6 +37,7 @@ type DesktopIconAction =
   | "experience"
   | "screensavers"
   | "tictactoe"
+  | "nomnom"
   | "about"
   | "my-doors"
   | "internet"
@@ -65,7 +67,11 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     id: e.id,
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
-    action: (e.id === "tic-tac-toe" ? "tictactoe" : "experience") as DesktopIconAction,
+    action: (e.id === "tic-tac-toe"
+      ? "tictactoe"
+      : e.id === "number-muncher"
+      ? "nomnom"
+      : "experience") as DesktopIconAction,
   }));
 
 const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...EXPERIENCE_ICON_DEFS];
@@ -76,6 +82,7 @@ type WindowContent =
   | { type: "app-launcher"; experience: Experience }
   | { type: "screensaver-settings" }
   | { type: "tictactoe" }
+  | { type: "nomnom" }
   | { type: "about" }
   | { type: "my-doors" }
   | { type: "internet" }
@@ -272,6 +279,7 @@ export default function NsDoors97() {
         case "files":        content = { type: "files" };                width = 600; break;
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
+        case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -413,6 +421,7 @@ export default function NsDoors97() {
               }
             />
           )}
+          {win.content.type === "nomnom" && <NumberMuncher />}
           {win.content.type === "screensaver-settings" && (
             <ScreensaverApp
               currentScreensaver={screensaverConfig.screensaver}

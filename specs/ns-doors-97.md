@@ -33,7 +33,7 @@ NS Doors 97 is the flagship Toy Box experience: a simulated 1990s desktop OS (a 
 
 ### Experience icons
 
-One icon per experience registered in `src/data/experiences.ts` (excluding NS Doors 97 itself). Opening launches an app-launcher window or, for Tic-Tac-Toe, an embedded game window.
+One icon per experience registered in `src/data/experiences.ts` (excluding NS Doors 97 itself). Opening launches either an app-launcher window or an embedded app window, depending on the experience.
 
 ## Windows
 
@@ -50,6 +50,7 @@ Multiple windows can be open simultaneously. Clicking a window brings it to the 
 |---|---|
 | `app-launcher` | "Open in new tab" button for external experiences |
 | `tictactoe` | Embedded `<TicTacToe />` component |
+| `nomnom` | Embedded `<NumberMuncher />` (Nom Nom Numerals) |
 | `screensaver-settings` | Screensaver picker and preview |
 | `about` | About Noahsoft dialog |
 | `my-doors` | Folder / file browser |
