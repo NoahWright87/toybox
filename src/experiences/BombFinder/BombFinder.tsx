@@ -165,6 +165,8 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   const [deathCell, setDeathCell] = useState<{ row: number; col: number } | null>(null);
   const [facePressed, setFacePressed] = useState(false);
   const [mobileMode, setMobileMode] = useState<MobileMode>("reveal");
+  const [pressedCell, setPressedCell] = useState<[number, number] | null>(null);
+  const [chordingCell, setChordingCell] = useState<[number, number] | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -183,6 +185,13 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   }, [stopTimer]);
 
   useEffect(() => () => stopTimer(), [stopTimer]);
+
+  // Clear press state if the mouse is released anywhere outside a cell
+  useEffect(() => {
+    const cleanup = () => { setPressedCell(null); setChordingCell(null); };
+    document.addEventListener("mouseup", cleanup);
+    return () => document.removeEventListener("mouseup", cleanup);
+  }, []);
 
   const resetGame = useCallback(
     (newDiff?: Difficulty) => {
@@ -388,7 +397,8 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   );
 
   const faceEmoji =
-    status === "won" ? "😎" : status === "lost" ? "😵" : facePressed ? "😮" : "🙂";
+    status === "won" ? "😎" : status === "lost" ? "😵"
+    : (facePressed || pressedCell || chordingCell) ? "😮" : "🙂";
 
   return (
     <div className="bomb-finder">
@@ -426,19 +436,32 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
         <div
           className="bomb-finder__board"
           style={{ gridTemplateColumns: `repeat(${cfg.cols}, 24px)` }}
+          onMouseLeave={() => { setPressedCell(null); setChordingCell(null); }}
         >
           {board.map((row, r) =>
             row.map((cell, c) => {
               const isDeath = deathCell?.row === r && deathCell?.col === c;
-              let content: React.ReactNode = null;
-              let extraClass = "";
 
+              // Pressed visual: single-cell press or chord-neighbor press
+              const isSinglePressed =
+                !cell.revealed && !cell.flagged &&
+                pressedCell?.[0] === r && pressedCell?.[1] === c;
+              const isChordPressed =
+                chordingCell !== null && !cell.revealed && !cell.flagged &&
+                Math.abs(r - chordingCell[0]) <= 1 && Math.abs(c - chordingCell[1]) <= 1 &&
+                !(r === chordingCell[0] && c === chordingCell[1]);
+
+              let extraClass = "";
               if (cell.revealed) {
                 extraClass += " bomb-finder__cell--revealed";
-                if (isDeath) {
-                  extraClass += " bomb-finder__cell--death";
-                  content = "💣";
-                } else if (cell.hasBomb) {
+                if (isDeath) extraClass += " bomb-finder__cell--death";
+              } else if (isSinglePressed || isChordPressed) {
+                extraClass += " bomb-finder__cell--pressed";
+              }
+
+              let content: React.ReactNode = null;
+              if (cell.revealed) {
+                if (isDeath || cell.hasBomb) {
                   content = "💣";
                 } else if (cell.adjacentCount > 0) {
                   content = (
@@ -450,30 +473,51 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
                     </span>
                   );
                 }
-              } else {
-                if (cell.wrongFlag) {
-                  content = "❌";
-                } else if (cell.flagged) {
-                  content = "🚩";
-                }
+              } else if (!isSinglePressed && !isChordPressed) {
+                // Only show flag/wrong-flag when not visually pressed
+                if (cell.wrongFlag) content = "❌";
+                else if (cell.flagged) content = "🚩";
               }
 
               return (
                 <button
                   key={`${r}-${c}`}
                   className={`bomb-finder__cell${extraClass}`}
-                  onClick={() => {
-                    if (longPressedRef.current) { longPressedRef.current = false; return; }
-                    if (pointerTypeRef.current === "touch") {
-                      if (mobileMode === "reveal") handleCellClick(r, c);
-                      else if (mobileMode === "flag") toggleFlag(r, c);
-                      else chordReveal(r, c);
-                    } else {
-                      handleCellClick(r, c);
+                  // Mouse: press visual on mousedown, execute on mouseup
+                  onMouseDown={(e) => {
+                    if (pointerTypeRef.current === "touch") return;
+                    if (e.buttons === 3) {
+                      setPressedCell(null);
+                      setChordingCell([r, c]);
+                    } else if (e.button === 0 && !cell.revealed && !cell.flagged) {
+                      setPressedCell([r, c]);
                     }
                   }}
-                  onMouseDown={(e) => { if (e.buttons === 3) chordReveal(r, c); }}
+                  onMouseUp={() => {
+                    if (pointerTypeRef.current === "touch") return;
+                    if (chordingCell) {
+                      chordReveal(chordingCell[0], chordingCell[1]);
+                      setChordingCell(null);
+                      setPressedCell(null);
+                    } else if (pressedCell?.[0] === r && pressedCell?.[1] === c) {
+                      handleCellClick(r, c);
+                      setPressedCell(null);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (pressedCell?.[0] === r && pressedCell?.[1] === c) {
+                      setPressedCell(null);
+                    }
+                  }}
                   onContextMenu={(e) => handleCellRightClick(e, r, c)}
+                  // Touch: mode toggle via onClick, long-press via pointer events
+                  onClick={() => {
+                    if (pointerTypeRef.current !== "touch") return;
+                    if (longPressedRef.current) { longPressedRef.current = false; return; }
+                    if (mobileMode === "reveal") handleCellClick(r, c);
+                    else if (mobileMode === "flag") toggleFlag(r, c);
+                    else chordReveal(r, c);
+                  }}
                   onPointerDown={(e) => handlePointerDown(e, r, c)}
                   onPointerUp={() => cancelLongPress()}
                   onPointerCancel={() => cancelLongPress()}

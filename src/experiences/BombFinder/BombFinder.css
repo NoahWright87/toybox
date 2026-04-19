@@ -135,6 +135,11 @@
   background: #c0c0c0;
 }
 
+.bomb-finder__cell--pressed {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c8c8c8;
+}
+
 .bomb-finder__cell--death {
   background: #ff0000 !important;
 }
