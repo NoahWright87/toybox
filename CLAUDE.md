@@ -155,6 +155,10 @@ NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
 - Built-in apps: file browser, About Noahsoft dialog, simulated internet browser, Tic-Tac-Toe window
 - All windows use Win95-style chrome: title bar (orange/brown gradient), close/min/max buttons, beveled borders
 
+## Before finishing any task
+
+Always run `npx tsc --noEmit` before committing. The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports and variables are **build errors** that will fail the Netlify deploy. Fix every reported error before pushing.
+
 ## Known conventions
 
 - Commits reference the feature or PR (see git log for style)
