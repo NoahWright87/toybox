@@ -273,6 +273,7 @@ export const ROOT: FsFolder = {
             { kind: "file", name: "Tic-Tac-Toe.exe",    type: "exe", action: "tic-tac-toe"    },
             { kind: "file", name: "Word Whirlwind.exe",  type: "exe", action: "word-whirlwind" },
             { kind: "file", name: "Number Muncher.exe",  type: "exe", action: "number-muncher" },
+            { kind: "file", name: "Cards.exe",           type: "exe", action: "cards"          },
             { kind: "file", name: "Solitaire.exe",       type: "exe", action: "noop"           },
             { kind: "file", name: "Minesweeper.exe",     type: "exe", action: "noop"           },
             { kind: "file", name: "SkiFree.exe",         type: "exe", action: "noop"           },

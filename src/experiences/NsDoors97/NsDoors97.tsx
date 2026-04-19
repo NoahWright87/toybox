@@ -24,6 +24,9 @@ import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
+import CardsLauncher from "../Cards/CardsLauncher";
+import NoGame from "../Cards/NoGame";
+import type { CardsGame, DeckSettings } from "../Cards/types";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
 
@@ -51,6 +54,7 @@ type DesktopIconAction =
   | "tictactoe"
   | "nomnom"
   | "bombfinder"
+  | "cards"
   | "about"
   | "my-doors"
   | "internet"
@@ -72,6 +76,7 @@ const STATIC_ICONS: DesktopIconDef[] = [
   { id: "about",        title: "About NS Doors 97", icon: "ℹ️", action: "about"   },
   { id: "internet",     title: "Internet",     icon: "🌐", action: "internet"     },
   { id: "screensavers", title: "Screensavers", icon: "💤", action: "screensavers" },
+  { id: "cards",        title: "Cards",        icon: "🃏", action: "cards"        },
 ];
 
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
@@ -98,6 +103,8 @@ type WindowContent =
   | { type: "tictactoe" }
   | { type: "nomnom" }
   | { type: "bombfinder" }
+  | { type: "cards-launcher" }
+  | { type: "cards-game"; game: CardsGame; settings: DeckSettings }
   | { type: "about" }
   | { type: "my-doors" }
   | { type: "internet" }
@@ -304,6 +311,7 @@ export default function NsDoors97() {
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
+        case "cards":        content = { type: "cards-launcher" };       width = 320; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -396,6 +404,55 @@ export default function NsDoors97() {
     []
   );
 
+  // Close the Cards launcher and open the chosen game in a new window
+  const handleCardsLaunch = useCallback(
+    (launcherWinId: string, game: CardsGame, settings: DeckSettings) => {
+      setOpenWindows((prev) => {
+        const filtered = prev.filter((w) => w.id !== launcherWinId);
+        const offset = (windowSeq % 8) * 32;
+        windowSeq++;
+        maxZ++;
+        setActiveWindowId("cards-game");
+        return [
+          ...filtered,
+          {
+            id: "cards-game",
+            title: "No Game",
+            icon: "🃏",
+            content: { type: "cards-game" as const, game, settings },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 380,
+          },
+        ];
+      });
+    },
+    []
+  );
+
+  // Close the Cards game and reopen the launcher
+  const handleCardsGameClose = useCallback((id: string) => {
+    setOpenWindows((prev) => {
+      const filtered = prev.filter((w) => w.id !== id);
+      const offset = (windowSeq % 8) * 32;
+      windowSeq++;
+      maxZ++;
+      setActiveWindowId("cards");
+      return [
+        ...filtered,
+        {
+          id: "cards",
+          title: "Cards",
+          icon: "🃏",
+          content: { type: "cards-launcher" as const },
+          zIndex: maxZ,
+          defaultPosition: { x: 80 + offset, y: 48 + offset },
+          width: 320,
+        },
+      ];
+    });
+  }, []);
+
   return (
     <div className="ns-desktop">
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
@@ -436,7 +493,7 @@ export default function NsDoors97() {
           zIndex={win.zIndex}
           defaultPosition={win.defaultPosition}
           width={win.width}
-          onClose={closeWindow}
+          onClose={win.content.type === "cards-game" ? handleCardsGameClose : closeWindow}
           onFocus={focusWindow}
         >
           {win.content.type === "app-launcher" && (
@@ -458,6 +515,14 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nomnom" && <NumberMuncher />}
+          {win.content.type === "cards-launcher" && (
+            <CardsLauncher
+              onLaunch={(game, settings) => handleCardsLaunch(win.id, game, settings)}
+            />
+          )}
+          {win.content.type === "cards-game" && (
+            <NoGame settings={win.content.settings} />
+          )}
           {win.content.type === "bombfinder" && (
             <BombFinder
               onDifficultyChange={(diff) =>
