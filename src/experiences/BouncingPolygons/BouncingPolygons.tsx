@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { type BouncingPolygonsSettings } from "../NsDoors97/screensaverSettings";
 
-const DEFAULTS: BouncingPolygonsSettings = { count: 3, vertices: 4, speed: 3, rounded: false };
+const DEFAULTS: BouncingPolygonsSettings = { count: 3, vertices: 4, speed: 3, rounded: false, trailLength: 20 };
 
 interface PolyPoint {
   x: number;
@@ -78,8 +78,6 @@ export default function BouncingPolygons({ settings = DEFAULTS }: { settings?: B
     let rafId = 0;
     let lastTime = 0;
 
-    // Trail: keep last N frames of point positions for each polygon
-    const TRAIL_LEN = 20;
     type Trail = { points: { x: number; y: number }[]; hue: number }[];
     let trails: Trail[] = [];
 
@@ -99,7 +97,7 @@ export default function BouncingPolygons({ settings = DEFAULTS }: { settings?: B
       if (ts - lastTime < 16) { rafId = requestAnimationFrame(frame); return; }
       lastTime = ts;
 
-      const { count, vertices, speed, rounded } = settingsRef.current;
+      const { count, vertices, speed, rounded, trailLength } = settingsRef.current;
 
       // Reconcile polygon count / vertex count
       if (polygons.length !== count || (polygons[0]?.points.length ?? 0) !== vertices) {
@@ -126,8 +124,12 @@ export default function BouncingPolygons({ settings = DEFAULTS }: { settings?: B
 
         // Record trail snapshot
         const trail = trails[pi] ?? [];
-        trail.push({ points: poly.points.map(p => ({ x: p.x, y: p.y })), hue: poly.hue });
-        if (trail.length > TRAIL_LEN) trail.shift();
+        if (trailLength > 0) {
+          trail.push({ points: poly.points.map(p => ({ x: p.x, y: p.y })), hue: poly.hue });
+          while (trail.length > trailLength) trail.shift();
+        } else {
+          trail.length = 0;
+        }
         trails[pi] = trail;
 
         // Draw trail (oldest = most transparent)

@@ -30,16 +30,19 @@ export interface ScrollingTextSettings {
 }
 
 export interface BouncingPolygonsSettings {
-  count: number;      // 1–20
-  vertices: number;   // 3–8
-  speed: number;      // 1–10
+  count: number;       // 1–20
+  vertices: number;    // 3–8
+  speed: number;       // 1–10
   rounded: boolean;
+  trailLength: number; // 0–60
 }
 
 export interface RainingEmojisSettings {
-  density: number;         // 10–100
+  density: number;         // 10–150
   speedMultiplier: number; // 1–10
   customEmojis: string;    // comma-separated
+  minSize: number;         // 10–100
+  maxSize: number;         // 10–100
 }
 
 export interface AllScreensaverSettings {
@@ -56,8 +59,8 @@ export const DEFAULT_SETTINGS: AllScreensaverSettings = {
   fireworks: { particlesPerBurst: 60, burstRate: 30 },
   "bouncing-shapes": { shapeCount: 15, speed: 3 },
   "scrolling-text": { textMode: "catchphrase", customText: "", speed: 4, color: "#ff9a44", fontSize: 40 },
-  "bouncing-polygons": { count: 3, vertices: 4, speed: 3, rounded: false },
-  "raining-emojis": { density: 40, speedMultiplier: 3, customEmojis: "" },
+  "bouncing-polygons": { count: 3, vertices: 4, speed: 3, rounded: false, trailLength: 20 },
+  "raining-emojis": { density: 40, speedMultiplier: 3, customEmojis: "", minSize: 14, maxSize: 60 },
 };
 
 export interface FullScreensaverConfig {

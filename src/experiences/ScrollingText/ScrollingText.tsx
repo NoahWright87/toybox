@@ -15,8 +15,7 @@ function pickCatchphrase(): string {
 }
 
 function formatDateTime(): string {
-  const now = new Date();
-  return now.toLocaleString(undefined, {
+  return new Date().toLocaleString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -24,6 +23,12 @@ function formatDateTime(): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function getNextText(s: ScrollingTextSettings): string {
+  if (s.textMode === "datetime") return formatDateTime();
+  if (s.textMode === "catchphrase") return pickCatchphrase();
+  return s.customText || "NS DOORS 97";
 }
 
 export default function ScrollingText({ settings = DEFAULTS }: { settings?: ScrollingTextSettings }) {
@@ -38,42 +43,27 @@ export default function ScrollingText({ settings = DEFAULTS }: { settings?: Scro
     let rafId = 0;
     let lastTime = 0;
 
-    // Bouncing state
-    let x = 0, y = 0;
-    let vx = 1, vy = 1;
+    let x = 0;
+    let y = 0;
     let displayText = "";
     let lastDateUpdate = 0;
 
-    function initText() {
-      const s = settingsRef.current;
-      if (s.textMode === "datetime") {
-        displayText = formatDateTime();
-      } else if (s.textMode === "catchphrase") {
-        displayText = pickCatchphrase();
-      } else {
-        displayText = s.customText || "NS DOORS 97";
-      }
+    function setFont() {
+      ctx.font = `bold ${settingsRef.current.fontSize}px "Press Start 2P", monospace`;
     }
 
-    function measureText(): { w: number; h: number } {
+    function startNewPass() {
       const s = settingsRef.current;
-      ctx.font = `bold ${s.fontSize}px "Press Start 2P", monospace`;
-      const m = ctx.measureText(displayText);
-      return { w: m.width, h: s.fontSize };
+      displayText = getNextText(s);
+      setFont();
+      x = W; // just off right edge
+      y = s.fontSize + Math.random() * Math.max(4, H - s.fontSize * 2.5);
     }
 
     function resize() {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
-
-      // Place text at a random starting position
-      const { w, h } = measureText();
-      x = Math.max(0, Math.random() * (W - w));
-      y = h + Math.random() * Math.max(0, H - h * 2);
-
-      const dir = () => (Math.random() > 0.5 ? 1 : -1);
-      vx = dir();
-      vy = dir();
+      startNewPass();
     }
 
     function frame(ts: number) {
@@ -81,26 +71,24 @@ export default function ScrollingText({ settings = DEFAULTS }: { settings?: Scro
       lastTime = ts;
 
       const s = settingsRef.current;
-      const speed = s.speed * 0.4 + 0.4;
+      const speed = s.speed * 1.5 + 0.5;
 
-      // Update datetime every second
+      setFont();
+
+      // For datetime mode update text every second (in-place — string may change length)
       if (s.textMode === "datetime" && ts - lastDateUpdate > 1000) {
         displayText = formatDateTime();
         lastDateUpdate = ts;
       }
 
-      ctx.font = `bold ${s.fontSize}px "Press Start 2P", monospace`;
+      x -= speed;
+
       const tw = ctx.measureText(displayText).width;
-      const th = s.fontSize;
 
-      x += vx * speed;
-      y += vy * speed;
-
-      // Bounce off edges
-      if (x <= 0) { x = 0; vx = Math.abs(vx); }
-      if (x + tw >= W) { x = Math.max(0, W - tw); vx = -Math.abs(vx); }
-      if (y - th <= 0) { y = th; vy = Math.abs(vy); }
-      if (y >= H) { y = H; vy = -Math.abs(vy); }
+      // Once text is fully off left edge, start a new pass
+      if (x + tw < 0) {
+        startNewPass();
+      }
 
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, W, H);
@@ -111,7 +99,6 @@ export default function ScrollingText({ settings = DEFAULTS }: { settings?: Scro
       rafId = requestAnimationFrame(frame);
     }
 
-    initText();
     resize();
     rafId = requestAnimationFrame(frame);
     window.addEventListener("resize", resize);

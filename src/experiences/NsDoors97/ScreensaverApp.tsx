@@ -31,9 +31,9 @@ interface ScreensaverAppProps {
 
 const INACTIVE_TABS = ["Background", "Appearance", "Settings"];
 
-// ── Tiny helpers ──────────────────────────────────────────────────────────────
+// ── Shared input primitives ───────────────────────────────────────────────────
 
-function NumInput({
+function SliderInput({
   label, value, min, max, onChange,
 }: {
   label: string;
@@ -44,15 +44,16 @@ function NumInput({
 }) {
   return (
     <div className="ns-saver-app__row">
-      <label className="ns-saver-app__label">{label}</label>
+      <label className="ns-saver-app__label ns-saver-app__label--slider">{label}</label>
       <input
-        className="ns-saver-app__number ns-saver-app__number--wide"
-        type="number"
+        className="ns-saver-app__slider"
+        type="range"
         min={min}
         max={max}
         value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))}
+        onChange={(e) => onChange(Number(e.target.value))}
       />
+      <span className="ns-saver-app__slider-val">{value}</span>
     </div>
   );
 }
@@ -87,8 +88,8 @@ function StarfieldPanel({
 }) {
   return (
     <>
-      <NumInput label="Speed" value={s.speed} min={1} max={30} onChange={(v) => patch({ speed: v })} />
-      <NumInput label="Stars" value={s.starCount} min={100} max={1000} onChange={(v) => patch({ starCount: v })} />
+      <SliderInput label="Speed" value={s.speed} min={1} max={30} onChange={(v) => patch({ speed: v })} />
+      <SliderInput label="Stars" value={s.starCount} min={100} max={1000} onChange={(v) => patch({ starCount: v })} />
     </>
   );
 }
@@ -101,8 +102,8 @@ function FireworksPanel({
 }) {
   return (
     <>
-      <NumInput label="Particles / burst" value={s.particlesPerBurst} min={20} max={120} onChange={(v) => patch({ particlesPerBurst: v })} />
-      <NumInput label="Bursts / min" value={s.burstRate} min={5} max={120} onChange={(v) => patch({ burstRate: v })} />
+      <SliderInput label="Particles" value={s.particlesPerBurst} min={20} max={120} onChange={(v) => patch({ particlesPerBurst: v })} />
+      <SliderInput label="Bursts/min" value={s.burstRate} min={5} max={120} onChange={(v) => patch({ burstRate: v })} />
     </>
   );
 }
@@ -115,8 +116,8 @@ function BouncingShapesPanel({
 }) {
   return (
     <>
-      <NumInput label="Shapes" value={s.shapeCount} min={3} max={30} onChange={(v) => patch({ shapeCount: v })} />
-      <NumInput label="Speed" value={s.speed} min={1} max={10} onChange={(v) => patch({ speed: v })} />
+      <SliderInput label="Shapes" value={s.shapeCount} min={3} max={30} onChange={(v) => patch({ shapeCount: v })} />
+      <SliderInput label="Speed" value={s.speed} min={1} max={10} onChange={(v) => patch({ speed: v })} />
     </>
   );
 }
@@ -154,7 +155,7 @@ function ScrollingTextPanel({
           />
         </div>
       )}
-      <NumInput label="Speed" value={s.speed} min={1} max={10} onChange={(v) => patch({ speed: v })} />
+      <SliderInput label="Speed" value={s.speed} min={1} max={10} onChange={(v) => patch({ speed: v })} />
       <div className="ns-saver-app__row">
         <label className="ns-saver-app__label">Color</label>
         <input
@@ -164,7 +165,7 @@ function ScrollingTextPanel({
           onChange={(e) => patch({ color: e.target.value })}
         />
       </div>
-      <NumInput label="Font size" value={s.fontSize} min={16} max={80} onChange={(v) => patch({ fontSize: v })} />
+      <SliderInput label="Font size" value={s.fontSize} min={16} max={80} onChange={(v) => patch({ fontSize: v })} />
     </>
   );
 }
@@ -177,9 +178,10 @@ function BouncingPolygonsPanel({
 }) {
   return (
     <>
-      <NumInput label="Polygons" value={s.count} min={1} max={20} onChange={(v) => patch({ count: v })} />
-      <NumInput label="Vertices" value={s.vertices} min={3} max={8} onChange={(v) => patch({ vertices: v })} />
-      <NumInput label="Speed" value={s.speed} min={1} max={10} onChange={(v) => patch({ speed: v })} />
+      <SliderInput label="Polygons" value={s.count} min={1} max={20} onChange={(v) => patch({ count: v })} />
+      <SliderInput label="Vertices" value={s.vertices} min={3} max={8} onChange={(v) => patch({ vertices: v })} />
+      <SliderInput label="Speed" value={s.speed} min={1} max={10} onChange={(v) => patch({ speed: v })} />
+      <SliderInput label="Trail" value={s.trailLength} min={0} max={60} onChange={(v) => patch({ trailLength: v })} />
       <CheckInput label="Rounded" checked={s.rounded} onChange={(v) => patch({ rounded: v })} />
     </>
   );
@@ -193,8 +195,10 @@ function RainingEmojisPanel({
 }) {
   return (
     <>
-      <NumInput label="Density" value={s.density} min={10} max={150} onChange={(v) => patch({ density: v })} />
-      <NumInput label="Speed" value={s.speedMultiplier} min={1} max={10} onChange={(v) => patch({ speedMultiplier: v })} />
+      <SliderInput label="Density" value={s.density} min={10} max={150} onChange={(v) => patch({ density: v })} />
+      <SliderInput label="Speed" value={s.speedMultiplier} min={1} max={10} onChange={(v) => patch({ speedMultiplier: v })} />
+      <SliderInput label="Min size" value={s.minSize} min={10} max={100} onChange={(v) => patch({ minSize: v })} />
+      <SliderInput label="Max size" value={s.maxSize} min={10} max={100} onChange={(v) => patch({ maxSize: v })} />
       <div className="ns-saver-app__row">
         <label className="ns-saver-app__label">Emojis</label>
         <input
@@ -337,40 +341,22 @@ export default function ScreensaverApp({
           <div className="ns-saver-app__settings-title">⚙ Settings</div>
 
           {localSaver === "starfield" && (
-            <StarfieldPanel
-              s={local.settings.starfield}
-              patch={(p) => patchSettings("starfield", p)}
-            />
+            <StarfieldPanel s={local.settings.starfield} patch={(p) => patchSettings("starfield", p)} />
           )}
           {localSaver === "fireworks" && (
-            <FireworksPanel
-              s={local.settings.fireworks}
-              patch={(p) => patchSettings("fireworks", p)}
-            />
+            <FireworksPanel s={local.settings.fireworks} patch={(p) => patchSettings("fireworks", p)} />
           )}
           {localSaver === "bouncing-shapes" && (
-            <BouncingShapesPanel
-              s={local.settings["bouncing-shapes"]}
-              patch={(p) => patchSettings("bouncing-shapes", p)}
-            />
+            <BouncingShapesPanel s={local.settings["bouncing-shapes"]} patch={(p) => patchSettings("bouncing-shapes", p)} />
           )}
           {localSaver === "scrolling-text" && (
-            <ScrollingTextPanel
-              s={local.settings["scrolling-text"]}
-              patch={(p) => patchSettings("scrolling-text", p)}
-            />
+            <ScrollingTextPanel s={local.settings["scrolling-text"]} patch={(p) => patchSettings("scrolling-text", p)} />
           )}
           {localSaver === "bouncing-polygons" && (
-            <BouncingPolygonsPanel
-              s={local.settings["bouncing-polygons"]}
-              patch={(p) => patchSettings("bouncing-polygons", p)}
-            />
+            <BouncingPolygonsPanel s={local.settings["bouncing-polygons"]} patch={(p) => patchSettings("bouncing-polygons", p)} />
           )}
           {localSaver === "raining-emojis" && (
-            <RainingEmojisPanel
-              s={local.settings["raining-emojis"]}
-              patch={(p) => patchSettings("raining-emojis", p)}
-            />
+            <RainingEmojisPanel s={local.settings["raining-emojis"]} patch={(p) => patchSettings("raining-emojis", p)} />
           )}
         </div>
       )}

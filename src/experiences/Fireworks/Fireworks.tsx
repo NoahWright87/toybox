@@ -48,27 +48,33 @@ export default function Fireworks({ settings = DEFAULTS }: { settings?: Firework
     let W = 0, H = 0;
     let particles: Particle[] = [];
     let rafId = 0;
-    let lastBurst = 0;
+    // Next burst fires at this absolute timestamp; 0 = fire immediately on first frame
+    let nextBurstAt = 0;
 
     function resize() {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
     }
 
+    function scheduleNext(now: number) {
+      const { burstRate } = settingsRef.current;
+      const baseMsPerBurst = 60000 / burstRate;
+      // ±60% random variance so bursts feel organic
+      const variance = (Math.random() - 0.5) * 1.2;
+      nextBurstAt = now + baseMsPerBurst * (1 + variance);
+    }
+
     function spawnBurst() {
       const { particlesPerBurst } = settingsRef.current;
       const x = Math.random() * W;
-      const y = Math.random() * H * 0.75; // bias toward upper 3/4
+      const y = Math.random() * H * 0.75;
       particles.push(...createBurst(x, y, particlesPerBurst));
     }
 
     function frame(ts: number) {
-      // Auto-fire based on burstRate
-      const { burstRate } = settingsRef.current;
-      const msPerBurst = 60000 / burstRate;
-      if (lastBurst === 0 || ts - lastBurst >= msPerBurst) {
+      if (ts >= nextBurstAt) {
         spawnBurst();
-        lastBurst = ts;
+        scheduleNext(ts);
       }
 
       ctx.fillStyle = "rgba(0,0,0,0.15)";

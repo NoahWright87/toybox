@@ -70,7 +70,7 @@ const STATIC_ICONS: DesktopIconDef[] = [
 ];
 
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
-  .filter((e) => e.id !== "ns-doors-97")
+  .filter((e) => e.id !== "ns-doors-97" && e.category !== "screensaver")
   .map((e) => ({
     id: e.id,
     title: e.title,
