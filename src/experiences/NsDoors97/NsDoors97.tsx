@@ -8,7 +8,14 @@ import DesktopIcon from "./DesktopIcon";
 import Window from "./Window";
 import Taskbar from "./Taskbar";
 import ScreensaverApp from "./ScreensaverApp";
-import ScreensaverOverlay, { type ScreensaverId } from "./ScreensaverOverlay";
+import ScreensaverOverlay from "./ScreensaverOverlay";
+import {
+  loadScreensaverConfig,
+  saveScreensaverConfig,
+  type FullScreensaverConfig,
+  type AllScreensaverSettings,
+  type ScreensaverId,
+} from "./screensaverSettings";
 import AboutApp from "./AboutApp";
 import FolderApp from "./FolderApp";
 import FilesApp from "./FilesApp";
@@ -21,14 +28,17 @@ import "./NsDoors97.css";
 // ── Icon / experience config ───────────────────────────────────────────────
 
 const EXPERIENCE_ICONS: Record<string, string> = {
-  starfield:          "⭐",
-  fireworks:          "🎆",
-  "bouncing-shapes":  "🔷",
-  "typing-racer":     "⌨️",
-  "number-muncher":   "🔢",
-  "tic-tac-toe":      "✖️",
-  "word-whirlwind":   "🌪️",
-  "ns-doors-97":      "🚪",
+  starfield:            "⭐",
+  fireworks:            "🎆",
+  "bouncing-shapes":    "🔷",
+  "scrolling-text":     "📜",
+  "bouncing-polygons":  "🔺",
+  "raining-emojis":     "🌧️",
+  "typing-racer":       "⌨️",
+  "number-muncher":     "🔢",
+  "tic-tac-toe":        "✖️",
+  "word-whirlwind":     "🌪️",
+  "ns-doors-97":        "🚪",
 };
 
 type DesktopIconAction =
@@ -208,11 +218,14 @@ export default function NsDoors97() {
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
 
   // ── Screensaver ──────────────────────────────────────────────────────────
-  const [screensaverConfig, setScreensaverConfig] = useState<{
-    screensaver: ScreensaverId | null;
-    waitMinutes: number;
-  }>({ screensaver: null, waitMinutes: 1 });
-  const [activeScreensaver, setActiveScreensaver] = useState<ScreensaverId | null>(null);
+  const [screensaverConfig, setScreensaverConfig] = useState<FullScreensaverConfig>(
+    () => loadScreensaverConfig()
+  );
+  // Active overlay: either auto-triggered (uses saved settings) or preview (uses unsaved settings)
+  const [activeOverlay, setActiveOverlay] = useState<{
+    id: ScreensaverId;
+    settings: AllScreensaverSettings;
+  } | null>(null);
 
   const screensaverConfigRef = useRef(screensaverConfig);
   useEffect(() => { screensaverConfigRef.current = screensaverConfig; }, [screensaverConfig]);
@@ -220,10 +233,10 @@ export default function NsDoors97() {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    const { screensaver, waitMinutes } = screensaverConfigRef.current;
-    if (screensaver) {
+    const { screensaver, waitMinutes, settings } = screensaverConfigRef.current;
+    if (screensaver && waitMinutes > 0) {
       idleTimerRef.current = setTimeout(() => {
-        setActiveScreensaver(screensaver);
+        setActiveOverlay({ id: screensaver, settings });
       }, waitMinutes * 60 * 1000);
     }
   }, []);
@@ -415,13 +428,16 @@ export default function NsDoors97() {
           )}
           {win.content.type === "screensaver-settings" && (
             <ScreensaverApp
-              currentScreensaver={screensaverConfig.screensaver}
-              waitMinutes={screensaverConfig.waitMinutes}
-              onSave={(screensaver, waitMinutes) => {
-                setScreensaverConfig({ screensaver, waitMinutes });
+              config={screensaverConfig}
+              onSave={(cfg) => {
+                setScreensaverConfig(cfg);
+                saveScreensaverConfig(cfg);
                 closeWindow(win.id);
               }}
-              onPreview={(screensaver) => setActiveScreensaver(screensaver)}
+              onPreview={(screensaver, settings) => {
+                setActiveOverlay({ id: screensaver, settings });
+              }}
+              onCancel={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "about" && (
@@ -458,11 +474,12 @@ export default function NsDoors97() {
       />
 
       {/* ── Screensaver overlay ── */}
-      {activeScreensaver && (
+      {activeOverlay && (
         <ScreensaverOverlay
-          screensaver={activeScreensaver}
+          screensaver={activeOverlay.id}
+          settings={activeOverlay.settings}
           onDismiss={() => {
-            setActiveScreensaver(null);
+            setActiveOverlay(null);
             resetIdleTimer();
           }}
         />

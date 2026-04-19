@@ -173,6 +173,10 @@
   gap: 8px;
 }
 
+.ns-saver-app__row--wait {
+  margin-top: 4px;
+}
+
 .ns-saver-app__number {
   width: 48px;
   padding: 3px 6px;
@@ -185,16 +189,82 @@
   text-align: center;
 }
 
+.ns-saver-app__number--wide {
+  width: 64px;
+}
+
 .ns-saver-app__unit {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
   color: #aaaaaa;
 }
 
+.ns-saver-app__checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #ff9a44;
+}
+
+.ns-saver-app__text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #ffffff;
+  background: #0a0a0a;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+}
+
+.ns-saver-app__text-input::placeholder {
+  color: #666;
+}
+
+.ns-saver-app__color {
+  width: 36px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: none;
+  cursor: pointer;
+}
+
+.ns-saver-app__select--sm {
+  width: auto;
+  flex: 1;
+}
+
 .ns-saver-app__btn-row {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* ── Per-screensaver settings panel ─────────────────────────────────────────── */
+
+.ns-saver-app__settings-panel {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #330000;
+  background: #160a00;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ns-saver-app__settings-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ff9a44;
+  margin-bottom: 4px;
+}
+
+/* Disabled tab style */
+.ns-saver-app__tab:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */

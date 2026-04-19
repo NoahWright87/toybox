@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
+import { type FireworksSettings } from "../NsDoors97/screensaverSettings";
 
-const PARTICLES_PER_BURST = 60;
 const GRAVITY = 0.08;
 const FRICTION = 0.99;
+
+const DEFAULTS: FireworksSettings = { particlesPerBurst: 60, burstRate: 30 };
 
 interface Particle {
   x: number;
@@ -16,9 +18,9 @@ interface Particle {
   size: number;
 }
 
-function createBurst(cx: number, cy: number): Particle[] {
+function createBurst(cx: number, cy: number, count: number): Particle[] {
   const hue = Math.floor(Math.random() * 360);
-  return Array.from({ length: PARTICLES_PER_BURST }, () => {
+  return Array.from({ length: count }, () => {
     const angle = Math.random() * Math.PI * 2;
     const speed = 2 + Math.random() * 6;
     return {
@@ -35,8 +37,10 @@ function createBurst(cx: number, cy: number): Particle[] {
   });
 }
 
-export default function Fireworks() {
+export default function Fireworks({ settings = DEFAULTS }: { settings?: FireworksSettings }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -44,13 +48,29 @@ export default function Fireworks() {
     let W = 0, H = 0;
     let particles: Particle[] = [];
     let rafId = 0;
+    let lastBurst = 0;
 
     function resize() {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
     }
 
-    function frame() {
+    function spawnBurst() {
+      const { particlesPerBurst } = settingsRef.current;
+      const x = Math.random() * W;
+      const y = Math.random() * H * 0.75; // bias toward upper 3/4
+      particles.push(...createBurst(x, y, particlesPerBurst));
+    }
+
+    function frame(ts: number) {
+      // Auto-fire based on burstRate
+      const { burstRate } = settingsRef.current;
+      const msPerBurst = 60000 / burstRate;
+      if (lastBurst === 0 || ts - lastBurst >= msPerBurst) {
+        spawnBurst();
+        lastBurst = ts;
+      }
+
       ctx.fillStyle = "rgba(0,0,0,0.15)";
       ctx.fillRect(0, 0, W, H);
 
@@ -78,30 +98,12 @@ export default function Fireworks() {
       rafId = requestAnimationFrame(frame);
     }
 
-    function spawnBurst(x: number, y: number) {
-      particles.push(...createBurst(x, y));
-    }
-
-    function onClick(e: MouseEvent) {
-      spawnBurst(e.clientX, e.clientY);
-    }
-
-    function onTouch(e: TouchEvent) {
-      for (let i = 0; i < e.touches.length; i++) {
-        spawnBurst(e.touches[i].clientX, e.touches[i].clientY);
-      }
-    }
-
     resize();
     rafId = requestAnimationFrame(frame);
-    canvas.addEventListener("click", onClick);
-    canvas.addEventListener("touchstart", onTouch, { passive: true });
     window.addEventListener("resize", resize);
 
     return () => {
       cancelAnimationFrame(rafId);
-      canvas.removeEventListener("click", onClick);
-      canvas.removeEventListener("touchstart", onTouch);
       window.removeEventListener("resize", resize);
     };
   }, []);
@@ -109,13 +111,7 @@ export default function Fireworks() {
   return (
     <canvas
       ref={canvasRef}
-      style={{
-        display: "block",
-        width: "100%",
-        height: "100%",
-        cursor: "crosshair",
-      }}
-      title="Click to launch fireworks"
+      style={{ display: "block", width: "100%", height: "100%" }}
     />
   );
 }
