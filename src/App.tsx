@@ -3,6 +3,9 @@ import HomePage from "./pages/HomePage";
 import StarfieldPage from "./pages/StarfieldPage";
 import FireworksPage from "./pages/FireworksPage";
 import BouncingShapesPage from "./pages/BouncingShapesPage";
+import ScrollingTextPage from "./pages/ScrollingTextPage";
+import BouncingPolygonsPage from "./pages/BouncingPolygonsPage";
+import RainingEmojisPage from "./pages/RainingEmojisPage";
 import TypingRacerPage from "./pages/TypingRacerPage";
 import NumberMuncherPage from "./pages/NumberMuncherPage";
 import TicTacToePage from "./pages/TicTacToePage";
@@ -18,6 +21,9 @@ export default function App() {
         <Route path="/starfield" element={<StarfieldPage />} />
         <Route path="/fireworks" element={<FireworksPage />} />
         <Route path="/bouncing-shapes" element={<BouncingShapesPage />} />
+        <Route path="/scrolling-text" element={<ScrollingTextPage />} />
+        <Route path="/bouncing-polygons" element={<BouncingPolygonsPage />} />
+        <Route path="/raining-emojis" element={<RainingEmojisPage />} />
         <Route path="/typing-racer" element={<TypingRacerPage />} />
         <Route path="/number-muncher" element={<NumberMuncherPage />} />
         <Route path="/tic-tac-toe" element={<TicTacToePage />} />
