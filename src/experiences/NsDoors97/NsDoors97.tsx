@@ -8,7 +8,14 @@ import DesktopIcon from "./DesktopIcon";
 import Window from "./Window";
 import Taskbar from "./Taskbar";
 import ScreensaverApp from "./ScreensaverApp";
-import ScreensaverOverlay, { type ScreensaverId } from "./ScreensaverOverlay";
+import ScreensaverOverlay from "./ScreensaverOverlay";
+import {
+  loadScreensaverConfig,
+  saveScreensaverConfig,
+  type FullScreensaverConfig,
+  type AllScreensaverSettings,
+  type ScreensaverId,
+} from "./screensaverSettings";
 import AboutApp from "./AboutApp";
 import FolderApp from "./FolderApp";
 import FilesApp from "./FilesApp";
@@ -16,20 +23,25 @@ import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
+import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
 
 // ── Icon / experience config ───────────────────────────────────────────────
 
 const EXPERIENCE_ICONS: Record<string, string> = {
-  starfield:          "⭐",
-  fireworks:          "🎆",
-  "bouncing-shapes":  "🔷",
-  "typing-racer":     "⌨️",
-  "number-muncher":   "🔢",
-  "tic-tac-toe":      "✖️",
-  "word-whirlwind":   "🌪️",
-  "ns-doors-97":      "🚪",
+  starfield:            "⭐",
+  fireworks:            "🎆",
+  "bouncing-shapes":    "🔷",
+  "scrolling-text":     "📜",
+  "bouncing-polygons":  "🔺",
+  "raining-emojis":     "🌧️",
+  "typing-racer":       "⌨️",
+  "number-muncher":     "🔢",
+  "tic-tac-toe":        "✖️",
+  "word-whirlwind":     "🌪️",
+  "bomb-finder":        "💣",
+  "ns-doors-97":        "🚪",
 };
 
 type DesktopIconAction =
@@ -38,6 +50,7 @@ type DesktopIconAction =
   | "screensavers"
   | "tictactoe"
   | "nomnom"
+  | "bombfinder"
   | "about"
   | "my-doors"
   | "internet"
@@ -62,16 +75,17 @@ const STATIC_ICONS: DesktopIconDef[] = [
 ];
 
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
-  .filter((e) => e.id !== "ns-doors-97")
+  .filter((e) => e.id !== "ns-doors-97" && e.category !== "screensaver")
   .map((e) => ({
     id: e.id,
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
-    action: (e.id === "tic-tac-toe"
-      ? "tictactoe"
-      : e.id === "number-muncher"
-      ? "nomnom"
-      : "experience") as DesktopIconAction,
+    action: (
+      e.id === "tic-tac-toe" ? "tictactoe" :
+      e.id === "number-muncher" ? "nomnom" :
+      e.id === "bomb-finder" ? "bombfinder" :
+      "experience"
+    ) as DesktopIconAction,
   }));
 
 const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...EXPERIENCE_ICON_DEFS];
@@ -83,6 +97,7 @@ type WindowContent =
   | { type: "screensaver-settings" }
   | { type: "tictactoe" }
   | { type: "nomnom" }
+  | { type: "bombfinder" }
   | { type: "about" }
   | { type: "my-doors" }
   | { type: "internet" }
@@ -103,6 +118,11 @@ let windowSeq = 0;
 let maxZ = 100;
 
 const TTT_WINDOW_WIDTHS: Record<3 | 5 | 7, number> = { 3: 380, 5: 480, 7: 580 };
+const BF_WINDOW_WIDTHS: Record<BfDifficulty, number> = {
+  beginner: 310,
+  intermediate: 470,
+  expert: 820,
+};
 
 // ── App Launcher card ──────────────────────────────────────────────────────
 
@@ -215,11 +235,14 @@ export default function NsDoors97() {
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
 
   // ── Screensaver ──────────────────────────────────────────────────────────
-  const [screensaverConfig, setScreensaverConfig] = useState<{
-    screensaver: ScreensaverId | null;
-    waitMinutes: number;
-  }>({ screensaver: null, waitMinutes: 1 });
-  const [activeScreensaver, setActiveScreensaver] = useState<ScreensaverId | null>(null);
+  const [screensaverConfig, setScreensaverConfig] = useState<FullScreensaverConfig>(
+    () => loadScreensaverConfig()
+  );
+  // Active overlay: either auto-triggered (uses saved settings) or preview (uses unsaved settings)
+  const [activeOverlay, setActiveOverlay] = useState<{
+    id: ScreensaverId;
+    settings: AllScreensaverSettings;
+  } | null>(null);
 
   const screensaverConfigRef = useRef(screensaverConfig);
   useEffect(() => { screensaverConfigRef.current = screensaverConfig; }, [screensaverConfig]);
@@ -227,10 +250,10 @@ export default function NsDoors97() {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    const { screensaver, waitMinutes } = screensaverConfigRef.current;
-    if (screensaver) {
+    const { screensaver, waitMinutes, settings } = screensaverConfigRef.current;
+    if (screensaver && waitMinutes > 0) {
       idleTimerRef.current = setTimeout(() => {
-        setActiveScreensaver(screensaver);
+        setActiveOverlay({ id: screensaver, settings });
       }, waitMinutes * 60 * 1000);
     }
   }, []);
@@ -280,6 +303,7 @@ export default function NsDoors97() {
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "nomnom":       content = { type: "nomnom" };               width = 700; break;
+        case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -360,6 +384,18 @@ export default function NsDoors97() {
     []
   );
 
+  // Called by BombFinder when difficulty changes — resize the window
+  const handleBfDifficultyChange = useCallback(
+    (winId: string, diff: BfDifficulty) => {
+      setOpenWindows((prev) =>
+        prev.map((w) =>
+          w.id === winId ? { ...w, width: BF_WINDOW_WIDTHS[diff] } : w
+        )
+      );
+    },
+    []
+  );
+
   return (
     <div className="ns-desktop">
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
@@ -422,15 +458,25 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nomnom" && <NumberMuncher />}
+          {win.content.type === "bombfinder" && (
+            <BombFinder
+              onDifficultyChange={(diff) =>
+                handleBfDifficultyChange(win.id, diff)
+              }
+            />
+          )}
           {win.content.type === "screensaver-settings" && (
             <ScreensaverApp
-              currentScreensaver={screensaverConfig.screensaver}
-              waitMinutes={screensaverConfig.waitMinutes}
-              onSave={(screensaver, waitMinutes) => {
-                setScreensaverConfig({ screensaver, waitMinutes });
+              config={screensaverConfig}
+              onSave={(cfg) => {
+                setScreensaverConfig(cfg);
+                saveScreensaverConfig(cfg);
                 closeWindow(win.id);
               }}
-              onPreview={(screensaver) => setActiveScreensaver(screensaver)}
+              onPreview={(screensaver, settings) => {
+                setActiveOverlay({ id: screensaver, settings });
+              }}
+              onCancel={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "about" && (
@@ -467,11 +513,12 @@ export default function NsDoors97() {
       />
 
       {/* ── Screensaver overlay ── */}
-      {activeScreensaver && (
+      {activeOverlay && (
         <ScreensaverOverlay
-          screensaver={activeScreensaver}
+          screensaver={activeOverlay.id}
+          settings={activeOverlay.settings}
           onDismiss={() => {
-            setActiveScreensaver(null);
+            setActiveOverlay(null);
             resetIdleTimer();
           }}
         />

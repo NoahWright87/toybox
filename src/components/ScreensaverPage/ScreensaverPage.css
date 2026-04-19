@@ -1,0 +1,37 @@
+.ss-page {
+  position: fixed;
+  inset: 0;
+  outline: none;
+}
+
+.ss-page__content {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ss-page__dismiss {
+  position: absolute;
+  inset: 0;
+  cursor: none;
+}
+
+.ss-page__hint {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: rgba(255, 154, 68, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: ss-hint-fade 6s ease forwards;
+}
+
+@keyframes ss-hint-fade {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}

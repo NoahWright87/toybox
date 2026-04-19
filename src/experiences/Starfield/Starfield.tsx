@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { type StarfieldSettings } from "../NsDoors97/screensaverSettings";
 
 interface Star {
   x: number;
@@ -9,10 +10,11 @@ interface Star {
   pz: number;
 }
 
-const NUM_STARS = 500;
 const MAX_Z = 1000;
 const TARGET_FPS = 60;
 const FRAME_MS = 1000 / TARGET_FPS;
+
+const DEFAULTS: StarfieldSettings = { speed: 4, starCount: 500 };
 
 function randomStar(w: number, h: number): Star {
   const z = Math.random() * MAX_Z + 1;
@@ -26,10 +28,10 @@ function randomStar(w: number, h: number): Star {
   };
 }
 
-export default function Starfield() {
+export default function Starfield({ settings = DEFAULTS }: { settings?: StarfieldSettings }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const speedRef = useRef(4);
-  const boostRef = useRef(0);
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -45,6 +47,7 @@ export default function Starfield() {
       H = canvas.height = window.innerHeight;
       CX = W / 2;
       CY = H / 2;
+      stars = Array.from({ length: settingsRef.current.starCount }, () => randomStar(W, H));
     }
 
     function project(x: number, y: number, z: number) {
@@ -59,13 +62,14 @@ export default function Starfield() {
       if (ts - lastTime < FRAME_MS) { rafId = requestAnimationFrame(frame); return; }
       lastTime = ts;
 
+      const { speed, starCount } = settingsRef.current;
+
+      // Reconcile star count without reinit
+      while (stars.length < starCount) stars.push(randomStar(W, H));
+      if (stars.length > starCount) stars = stars.slice(0, starCount);
+
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.fillRect(0, 0, W, H);
-
-      const dz = speedRef.current + boostRef.current;
-      if (boostRef.current > 0) {
-        boostRef.current = Math.max(0, boostRef.current - 0.5);
-      }
 
       for (const s of stars) {
         s.pz = s.z;
@@ -73,7 +77,7 @@ export default function Starfield() {
         s.px = prev.sx;
         s.py = prev.sy;
 
-        s.z -= dz;
+        s.z -= speed;
 
         if (s.z <= 0) {
           Object.assign(s, randomStar(W, H));
@@ -100,28 +104,12 @@ export default function Starfield() {
       rafId = requestAnimationFrame(frame);
     }
 
-    function triggerBoost() {
-      boostRef.current = Math.min(boostRef.current + 18, 60);
-    }
-
-    function onWheel(e: WheelEvent) {
-      speedRef.current = Math.max(1, Math.min(30, speedRef.current + (e.deltaY > 0 ? 1 : -1)));
-    }
-
     resize();
-    stars = Array.from({ length: NUM_STARS }, () => randomStar(W, H));
     rafId = requestAnimationFrame(frame);
-
-    canvas.addEventListener("click", triggerBoost);
-    canvas.addEventListener("touchstart", triggerBoost, { passive: true });
-    window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("resize", resize);
 
     return () => {
       cancelAnimationFrame(rafId);
-      canvas.removeEventListener("click", triggerBoost);
-      canvas.removeEventListener("touchstart", triggerBoost);
-      window.removeEventListener("wheel", onWheel);
       window.removeEventListener("resize", resize);
     };
   }, []);
@@ -129,13 +117,7 @@ export default function Starfield() {
   return (
     <canvas
       ref={canvasRef}
-      style={{
-        display: "block",
-        width: "100%",
-        height: "100%",
-        cursor: "pointer",
-      }}
-      title="Click to boost · scroll to adjust speed"
+      style={{ display: "block", width: "100%", height: "100%" }}
     />
   );
 }

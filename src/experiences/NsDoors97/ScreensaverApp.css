@@ -173,6 +173,10 @@
   gap: 8px;
 }
 
+.ns-saver-app__row--wait {
+  margin-top: 4px;
+}
+
 .ns-saver-app__number {
   width: 48px;
   padding: 3px 6px;
@@ -185,16 +189,131 @@
   text-align: center;
 }
 
+.ns-saver-app__number--wide {
+  width: 64px;
+}
+
 .ns-saver-app__unit {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
   color: #aaaaaa;
 }
 
+.ns-saver-app__checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #ff9a44;
+}
+
+.ns-saver-app__text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #ffffff;
+  background: #0a0a0a;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+}
+
+.ns-saver-app__text-input::placeholder {
+  color: #666;
+}
+
+.ns-saver-app__color {
+  width: 36px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: none;
+  cursor: pointer;
+}
+
+.ns-saver-app__select--sm {
+  width: auto;
+  flex: 1;
+}
+
 .ns-saver-app__btn-row {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* ── Per-screensaver settings panel ─────────────────────────────────────────── */
+
+.ns-saver-app__settings-panel {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #330000;
+  background: #160a00;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ns-saver-app__settings-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ff9a44;
+  margin-bottom: 4px;
+}
+
+/* ── Sliders ─────────────────────────────────────────────────────────────── */
+
+.ns-saver-app__label--slider {
+  min-width: 60px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.ns-saver-app__slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #330000;
+  border: 1px solid #ff9a44;
+  outline: none;
+  cursor: pointer;
+}
+
+.ns-saver-app__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #ff9a44;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+}
+
+.ns-saver-app__slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #ff9a44;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.ns-saver-app__slider-val {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ff9a44;
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Disabled tab style */
+.ns-saver-app__tab:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */

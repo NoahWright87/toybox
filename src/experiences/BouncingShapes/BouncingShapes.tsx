@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
+import { type BouncingShapesSettings } from "../NsDoors97/screensaverSettings";
 
-const SHAPE_COUNT = 15;
+const DEFAULTS: BouncingShapesSettings = { shapeCount: 15, speed: 3 };
+
 const MIN_SIZE = 30;
 const MAX_SIZE = 70;
-const BASE_SPEED = 3;
 const COLORS = ["#ff4466", "#ff8844", "#ffdd22", "#44ff88", "#22ddff", "#aa44ff", "#ff44cc"];
 
 type ShapeKind = "circle" | "square" | "triangle";
@@ -18,16 +19,16 @@ interface Shape {
   kind: ShapeKind;
 }
 
-function randomShape(w: number, h: number): Shape {
+function randomShape(w: number, h: number, speed: number): Shape {
   const kinds: ShapeKind[] = ["circle", "square", "triangle"];
   const size = MIN_SIZE + Math.random() * (MAX_SIZE - MIN_SIZE);
-  const speed = BASE_SPEED * (0.5 + Math.random());
+  const s = speed * (0.5 + Math.random());
   const angle = Math.random() * Math.PI * 2;
   return {
     x: size + Math.random() * (w - size * 2),
     y: size + Math.random() * (h - size * 2),
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
+    vx: Math.cos(angle) * s,
+    vy: Math.sin(angle) * s,
     size,
     color: COLORS[Math.floor(Math.random() * COLORS.length)],
     kind: kinds[Math.floor(Math.random() * kinds.length)],
@@ -42,7 +43,6 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape) {
   } else if (s.kind === "square") {
     ctx.rect(s.x - s.size / 2, s.y - s.size / 2, s.size, s.size);
   } else {
-    // equilateral triangle centered at (x, y)
     const r = s.size / 2;
     ctx.moveTo(s.x, s.y - r);
     ctx.lineTo(s.x + r * Math.cos(Math.PI / 6), s.y + r * Math.sin(Math.PI / 6));
@@ -52,8 +52,10 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape) {
   ctx.fill();
 }
 
-export default function BouncingShapes() {
+export default function BouncingShapes({ settings = DEFAULTS }: { settings?: BouncingShapesSettings }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -61,15 +63,21 @@ export default function BouncingShapes() {
     let W = 0, H = 0;
     let shapes: Shape[] = [];
     let rafId = 0;
-    let cornerHits = 0;
 
     function resize() {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
-      shapes = Array.from({ length: SHAPE_COUNT }, () => randomShape(W, H));
+      const { shapeCount, speed } = settingsRef.current;
+      shapes = Array.from({ length: shapeCount }, () => randomShape(W, H, speed));
     }
 
     function frame() {
+      const { shapeCount, speed } = settingsRef.current;
+
+      // Reconcile shape count
+      while (shapes.length < shapeCount) shapes.push(randomShape(W, H, speed));
+      if (shapes.length > shapeCount) shapes = shapes.slice(0, shapeCount);
+
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, W, H);
 
@@ -78,21 +86,13 @@ export default function BouncingShapes() {
         s.y += s.vy;
 
         const r = s.size / 2;
-        let xHit = false, yHit = false;
-
-        if (s.x - r < 0) { s.x = r; s.vx = Math.abs(s.vx); xHit = true; }
-        if (s.x + r > W) { s.x = W - r; s.vx = -Math.abs(s.vx); xHit = true; }
-        if (s.y - r < 0) { s.y = r; s.vy = Math.abs(s.vy); yHit = true; }
-        if (s.y + r > H) { s.y = H - r; s.vy = -Math.abs(s.vy); yHit = true; }
-
-        if (xHit && yHit) cornerHits++;
+        if (s.x - r < 0) { s.x = r; s.vx = Math.abs(s.vx); }
+        if (s.x + r > W) { s.x = W - r; s.vx = -Math.abs(s.vx); }
+        if (s.y - r < 0) { s.y = r; s.vy = Math.abs(s.vy); }
+        if (s.y + r > H) { s.y = H - r; s.vy = -Math.abs(s.vy); }
 
         drawShape(ctx, s);
       }
-
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      ctx.font = "13px monospace";
-      ctx.fillText(`corner hits: ${cornerHits}`, 16, H - 16);
 
       rafId = requestAnimationFrame(frame);
     }
