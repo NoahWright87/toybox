@@ -1,8 +1,8 @@
-# Number Muncher — Current State
+# Nom Nom Numerals — Current State
 
 ## Purpose
 
-A stealth-learning math game. Navigate a grid of numbers with arrow keys and eat those matching the current rule. Math fluency through speed and repetition, not drilling.
+A stealth-learning math game where players guide a critter through a number grid and eat values that match a chosen math rule.
 
 ## Location
 
@@ -12,23 +12,34 @@ A stealth-learning math game. Navigate a grid of numbers with arrow keys and eat
 
 ## Behavior
 
-- 7×5 grid of random numbers (1–99). The current rule is shown in the HUD (e.g. "Eat: multiples of 3").
+- The game appears inside a windowed page shell with the title **Nom Nom Numerals**.
+- A launcher screen appears before gameplay and controls the run configuration.
+- Launcher settings:
+  - **Math Type** selector (examples: prime numbers, odd/even, multiples, factors)
+  - **Board Size** picker (5×5, 6×6, 7×7)
+  - **Monsters** checkbox shown as disabled/non-functional
+  - **Help** button that explains controls
+- During gameplay, the top header shows only the active goal label (for example, `Multiples of 3`) centered above the grid.
+- The critter is a circular placeholder that slides smoothly between cells.
 - All visible numbers use the same visual treatment. Matching numbers are not pre-highlighted.
-- **Arrow keys** — move the critter around the grid.
-- **Space / Enter** — eat the number under the cursor.
-  - Correct eat: +10 score, cell disappears, brief green flash.
-  - Wrong eat: lose a life, brief red flash. 3 lives total; game over at 0.
-- The player is represented by an orange placeholder critter (a circle) that slides smoothly between squares.
-- Touch controls are available for mobile play:
-  - directional buttons move the critter one square at a time
-  - an **Eat** button consumes the current square
-- Tapping the grid supports direct touch play:
-  - tap a different square to move the critter there
-  - tap the current square to eat it
-- **Level advance** — when all matching numbers in the grid are eaten, the rule advances to the next in the cycle and a fresh grid is generated (600ms delay).
-- **Rules cycle**: multiples of 3 → even numbers → prime numbers → multiples of 5 → multiples of 4 → odd numbers → repeat.
-- Grid guarantees at least 4 matching numbers per level.
-- Game over screen shows final score with a "Play Again" button.
+- Touch and pointer behavior:
+  - tapping a different square moves exactly one square toward that square
+  - tap movement is axis-aligned (no diagonal movement)
+  - tapping the current square eats the value in-place
+  - on touch devices, directional controls and an **Eat** button are shown
+- Keyboard behavior:
+  - arrow keys move one square
+  - space/enter eat the current square only
+- Scoring and lives:
+  - correct eat: +10 score, cell disappears, brief green flash
+  - wrong eat: lose a life, brief red flash
+  - 3 lives total, game over at 0
+- HUD placement:
+  - score is shown bottom-left
+  - lives are shown bottom-right with larger hearts
+- Hint behavior:
+  - when exactly 3 valid targets remain on the board, `3 left!` appears
+- When all valid targets are eaten, a fresh board is generated using the current launcher settings.
 
 ## Related
 
