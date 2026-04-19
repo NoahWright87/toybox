@@ -12,15 +12,20 @@ A stealth-learning math game where players guide a critter through a number grid
 
 ## Behavior
 
-- The game appears inside a windowed page shell with the title **Nom Nom Numerals**.
+- The game appears in a draggable, windowed shell with an orange title bar.
 - A launcher screen appears before gameplay and controls the run configuration.
 - Launcher settings:
-  - **Math Type** selector (examples: prime numbers, odd/even, multiples, factors)
+  - **Math Type** selector with: Multiples, Primes, Even/odd, Factors
   - **Board Size** picker (5×5, 6×6, 7×7)
   - **Monsters** checkbox shown as disabled/non-functional
   - **Help** button that explains controls
-- During gameplay, the top header shows only the active goal label (for example, `Multiples of 3`) centered above the grid.
-- The critter is a circular placeholder that slides smoothly between cells.
+- Math Type round behavior:
+  - **Multiples** picks a single-digit target each level
+  - **Primes** uses prime-number matching each level
+  - **Even/odd** alternates between even and odd each level
+  - **Factors** picks a new target number from 10–999 each level
+- During gameplay, the top header shows only the active goal label centered above the grid in orange.
+- The critter is a circular outline with a transparent center and slides smoothly between cells.
 - All visible numbers use the same visual treatment. Matching numbers are not pre-highlighted.
 - Touch and pointer behavior:
   - tapping a different square moves exactly one square toward that square
@@ -30,16 +35,20 @@ A stealth-learning math game where players guide a critter through a number grid
 - Keyboard behavior:
   - arrow keys move one square
   - space/enter eat the current square only
+  - escape returns to launcher/options
+- Gameplay flow:
+  - level completion opens a modal dialog with current score and **Next Level**
+  - pressing Enter on the completion dialog advances to the next level
 - Scoring and lives:
   - correct eat: +10 score, cell disappears, brief green flash
   - wrong eat: lose a life, brief red flash
   - 3 lives total, game over at 0
 - HUD placement:
   - score is shown bottom-left
+  - remaining-count hint is centered inline with HUD (`Only 3 left!`, `Only 2 left!`, `Only 1 left!`)
   - lives are shown bottom-right with larger hearts
-- Hint behavior:
-  - when exactly 3 valid targets remain on the board, `3 left!` appears
-- When all valid targets are eaten, a fresh board is generated using the current launcher settings.
+- A top-right 🚪 button exits the current run back to launcher/options.
+- Game over appears as the topmost modal layer.
 
 ## Related
 

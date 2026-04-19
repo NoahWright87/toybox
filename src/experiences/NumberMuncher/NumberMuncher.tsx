@@ -2,12 +2,24 @@ import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import "./NumberMuncher.css";
 
 type BoardSize = 5 | 6 | 7;
+type MathTypeId = "multiples" | "primes" | "even-odd" | "factors";
 
-interface MathMode {
-  id: string;
+interface MathTypeOption {
+  id: MathTypeId;
+  label: string;
+}
+
+interface ActiveRule {
   label: string;
   test: (n: number) => boolean;
 }
+
+const MATH_TYPES: MathTypeOption[] = [
+  { id: "multiples", label: "Multiples" },
+  { id: "primes", label: "Primes" },
+  { id: "even-odd", label: "Even/odd" },
+  { id: "factors", label: "Factors" },
+];
 
 function isPrime(n: number): boolean {
   if (n < 2) return false;
@@ -15,18 +27,33 @@ function isPrime(n: number): boolean {
   return true;
 }
 
-const MATH_MODES: MathMode[] = [
-  { id: "multiples-3", label: "Multiples of 3", test: (n) => n % 3 === 0 },
-  { id: "even", label: "Even Numbers", test: (n) => n % 2 === 0 },
-  { id: "odd", label: "Odd Numbers", test: (n) => n % 2 !== 0 },
-  { id: "prime", label: "Prime Numbers", test: isPrime },
-  { id: "factors-12", label: "Factors of 12", test: (n) => 12 % n === 0 },
-  { id: "multiples-5", label: "Multiples of 5", test: (n) => n % 5 === 0 },
-];
+function randomInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
 
-function makeGrid(rule: MathMode, size: BoardSize): number[][] {
+function buildRule(mathType: MathTypeId, level: number): ActiveRule {
+  if (mathType === "primes") return { label: "Prime Numbers", test: isPrime };
+
+  if (mathType === "multiples") {
+    const target = randomInt(2, 9);
+    return { label: `Multiples of ${target}`, test: (n) => n % target === 0 };
+  }
+
+  if (mathType === "factors") {
+    const target = randomInt(10, 999);
+    return { label: `Factors of ${target}`, test: (n) => target % n === 0 };
+  }
+
+  const evenLevel = level % 2 === 1;
+  return {
+    label: evenLevel ? "Even Numbers" : "Odd Numbers",
+    test: (n) => (evenLevel ? n % 2 === 0 : n % 2 !== 0),
+  };
+}
+
+function makeGrid(rule: ActiveRule, size: BoardSize): number[][] {
   const grid: number[][] = Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => 1 + Math.floor(Math.random() * 99))
+    Array.from({ length: size }, () => randomInt(1, 99))
   );
 
   const guaranteed = Math.max(4, Math.floor((size * size) / 5));
@@ -42,8 +69,8 @@ function makeGrid(rule: MathMode, size: BoardSize): number[][] {
     const row = Math.floor(idx / size);
     const col = idx % size;
     if (!rule.test(grid[row][col])) {
-      let value = 1 + Math.floor(Math.random() * 99);
-      while (!rule.test(value)) value = 1 + Math.floor(Math.random() * 99);
+      let value = randomInt(1, 99);
+      while (!rule.test(value)) value = randomInt(1, 99);
       grid[row][col] = value;
     }
     placed++;
@@ -56,19 +83,26 @@ function makeEaten(size: BoardSize): boolean[][] {
   return Array.from({ length: size }, () => Array(size).fill(false));
 }
 
-function getMathModeById(id: string): MathMode {
-  return MATH_MODES.find((mode) => mode.id === id) ?? MATH_MODES[0];
+function countRemaining(grid: number[][], eaten: boolean[][], rule: ActiveRule): number {
+  let remaining = 0;
+  for (let row = 0; row < grid.length; row++) {
+    for (let col = 0; col < grid[row].length; col++) {
+      if (!eaten[row][col] && rule.test(grid[row][col])) remaining++;
+    }
+  }
+  return remaining;
 }
 
 export default function NumberMuncher() {
-  const [mathModeId, setMathModeId] = useState<string>(MATH_MODES[0].id);
+  const [mathType, setMathType] = useState<MathTypeId>("multiples");
   const [boardSize, setBoardSize] = useState<BoardSize>(7);
   const [showHelp, setShowHelp] = useState(false);
   const [started, setStarted] = useState(false);
 
-  const activeMode = getMathModeById(mathModeId);
+  const [level, setLevel] = useState(1);
+  const [rule, setRule] = useState<ActiveRule>(() => buildRule("multiples", 1));
 
-  const [grid, setGrid] = useState<number[][]>(() => makeGrid(activeMode, boardSize));
+  const [grid, setGrid] = useState<number[][]>(() => makeGrid(rule, boardSize));
   const [eaten, setEaten] = useState<boolean[][]>(() => makeEaten(boardSize));
   const [pos, setPos] = useState({ row: 0, col: 0 });
   const [score, setScore] = useState(0);
@@ -76,42 +110,58 @@ export default function NumberMuncher() {
   const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [isMunching, setIsMunching] = useState(false);
+  const [levelComplete, setLevelComplete] = useState(false);
 
-  const resetBoard = useCallback((mode: MathMode, size: BoardSize) => {
-    setGrid(makeGrid(mode, size));
-    setEaten(makeEaten(size));
-    setPos({ row: 0, col: 0 });
-  }, []);
+  const resetForLevel = useCallback(
+    (nextLevel: number, keepScore: boolean) => {
+      const nextRule = buildRule(mathType, nextLevel);
+      setRule(nextRule);
+      setGrid(makeGrid(nextRule, boardSize));
+      setEaten(makeEaten(boardSize));
+      setPos({ row: 0, col: 0 });
+      setFlash(null);
+      setGameOver(false);
+      setIsMunching(false);
+      setLevelComplete(false);
+      setLevel(nextLevel);
+      if (!keepScore) {
+        setScore(0);
+        setLives(3);
+      }
+    },
+    [boardSize, mathType]
+  );
 
   const startRun = useCallback(() => {
-    const mode = getMathModeById(mathModeId);
-    resetBoard(mode, boardSize);
-    setScore(0);
-    setLives(3);
-    setFlash(null);
-    setGameOver(false);
-    setIsMunching(false);
+    resetForLevel(1, false);
     setStarted(true);
-  }, [boardSize, mathModeId, resetBoard]);
+  }, [resetForLevel]);
+
+  const backToLauncher = useCallback(() => {
+    setStarted(false);
+    setShowHelp(false);
+    setLevelComplete(false);
+    setGameOver(false);
+  }, []);
 
   const moveBy = useCallback(
     (rowDelta: number, colDelta: number) => {
-      if (!started || gameOver) return;
+      if (!started || gameOver || levelComplete) return;
       setPos((prev) => ({
         row: Math.max(0, Math.min(boardSize - 1, prev.row + rowDelta)),
         col: Math.max(0, Math.min(boardSize - 1, prev.col + colDelta)),
       }));
     },
-    [boardSize, gameOver, started]
+    [boardSize, gameOver, levelComplete, started]
   );
 
   const eat = useCallback(() => {
-    if (!started || gameOver || eaten[pos.row][pos.col]) return;
+    if (!started || gameOver || levelComplete || eaten[pos.row][pos.col]) return;
     setIsMunching(true);
     setTimeout(() => setIsMunching(false), 170);
 
     const value = grid[pos.row][pos.col];
-    if (activeMode.test(value)) {
+    if (rule.test(value)) {
       setEaten((prev) => {
         const next = prev.map((row) => [...row]);
         next[pos.row][pos.col] = true;
@@ -130,11 +180,11 @@ export default function NumberMuncher() {
     });
     setFlash("wrong");
     setTimeout(() => setFlash(null), 350);
-  }, [activeMode, eaten, gameOver, grid, pos, started]);
+  }, [eaten, gameOver, grid, levelComplete, pos, rule, started]);
 
   const handleCellTap = useCallback(
     (row: number, col: number) => {
-      if (!started || gameOver) return;
+      if (!started || gameOver || levelComplete) return;
       if (row === pos.row && col === pos.col) {
         eat();
         return;
@@ -151,31 +201,42 @@ export default function NumberMuncher() {
         return;
       }
 
-      if (rowDelta !== 0) {
-        moveBy(Math.sign(rowDelta), 0);
-      } else if (colDelta !== 0) {
-        moveBy(0, Math.sign(colDelta));
-      }
+      if (rowDelta !== 0) moveBy(Math.sign(rowDelta), 0);
+      else if (colDelta !== 0) moveBy(0, Math.sign(colDelta));
     },
-    [eat, gameOver, moveBy, pos.col, pos.row, started]
+    [eat, gameOver, levelComplete, moveBy, pos.col, pos.row, started]
   );
 
   useEffect(() => {
-    if (!started || gameOver) return;
-    const flatGrid = grid.flat();
-    const flatEaten = eaten.flat();
-    const remaining = flatGrid.filter((value, i) => activeMode.test(value) && !flatEaten[i]).length;
-    if (remaining > 0) return;
+    if (!started || gameOver || levelComplete) return;
+    if (countRemaining(grid, eaten, rule) > 0) return;
+    setLevelComplete(true);
+  }, [eaten, gameOver, grid, levelComplete, rule, started]);
 
-    const timeout = setTimeout(() => {
-      resetBoard(activeMode, boardSize);
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, [activeMode, boardSize, eaten, gameOver, grid, resetBoard, started]);
+  const goToNextLevel = useCallback(() => {
+    resetForLevel(level + 1, true);
+  }, [level, resetForLevel]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (!started || gameOver) return;
+      if (!started) return;
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        backToLauncher();
+        return;
+      }
+
+      if (gameOver) return;
+
+      if (levelComplete && event.key === "Enter") {
+        event.preventDefault();
+        goToNextLevel();
+        return;
+      }
+
+      if (levelComplete) return;
+
       switch (event.key) {
         case "ArrowUp":
           event.preventDefault();
@@ -203,11 +264,10 @@ export default function NumberMuncher() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [eat, gameOver, moveBy, started]);
+  }, [backToLauncher, eat, gameOver, goToNextLevel, levelComplete, moveBy, started]);
 
-  const remainingMatches = grid
-    .flat()
-    .filter((value, i) => activeMode.test(value) && !eaten.flat()[i]).length;
+  const remainingMatches = countRemaining(grid, eaten, rule);
+  const leftHint = remainingMatches <= 3 && remainingMatches > 0 ? `Only ${remainingMatches} left!` : "";
 
   if (!started) {
     return (
@@ -215,18 +275,18 @@ export default function NumberMuncher() {
         <h2 className="number-muncher-launcher__title">Nom Nom Numerals</h2>
 
         <div className="number-muncher-launcher__section">
-          <label className="number-muncher-launcher__label" htmlFor="nm-mode">
+          <label className="number-muncher-launcher__label" htmlFor="nm-type">
             Math Type
           </label>
           <select
-            id="nm-mode"
+            id="nm-type"
             className="number-muncher-launcher__select"
-            value={mathModeId}
-            onChange={(event) => setMathModeId(event.target.value)}
+            value={mathType}
+            onChange={(event) => setMathType(event.target.value as MathTypeId)}
           >
-            {MATH_MODES.map((mode) => (
-              <option key={mode.id} value={mode.id}>
-                {mode.label}
+            {MATH_TYPES.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -274,7 +334,7 @@ export default function NumberMuncher() {
         {showHelp && (
           <div className="number-muncher-launcher__help">
             Move with arrow keys or touch controls. Tap a square once to move one step toward it.
-            Tap your current square (or press Space/Enter) to eat.
+            Tap your current square (or press Space/Enter) to eat. Press Esc to return here.
           </div>
         )}
       </div>
@@ -290,7 +350,11 @@ export default function NumberMuncher() {
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="number-muncher__goal">{activeMode.label}</div>
+      <button className="number-muncher__exit" onClick={backToLauncher} aria-label="Exit to launcher">
+        🚪
+      </button>
+
+      <div className="number-muncher__goal">{rule.label}</div>
 
       <div
         className="number-muncher__grid"
@@ -334,18 +398,28 @@ export default function NumberMuncher() {
         )}
       </div>
 
-      {remainingMatches === 3 && <div className="number-muncher__left-hint">3 left!</div>}
+      {levelComplete && (
+        <div className="number-muncher__overlay number-muncher__overlay--complete">
+          <div className="number-muncher__dialog">
+            <div className="number-muncher__dialog-title">Level Complete</div>
+            <div className="number-muncher__dialog-score">Score: {score}</div>
+            <button className="number-muncher__restart" onClick={goToNextLevel} autoFocus>
+              Next Level
+            </button>
+          </div>
+        </div>
+      )}
 
       {gameOver && (
-        <div className="number-muncher__overlay">
-          <div className="number-muncher__gameover">
-            <div className="number-muncher__gameover-title">Game Over</div>
-            <div className="number-muncher__gameover-score">Final Score: {score}</div>
+        <div className="number-muncher__overlay number-muncher__overlay--gameover">
+          <div className="number-muncher__dialog">
+            <div className="number-muncher__dialog-title">Game Over</div>
+            <div className="number-muncher__dialog-score">Final Score: {score}</div>
             <div className="number-muncher__gameover-actions">
               <button className="number-muncher__restart" onClick={startRun}>
                 Play Again
               </button>
-              <button className="number-muncher__restart" onClick={() => setStarted(false)}>
+              <button className="number-muncher__restart" onClick={backToLauncher}>
                 Launcher
               </button>
             </div>
@@ -355,6 +429,7 @@ export default function NumberMuncher() {
 
       <div className="number-muncher__bottom-bar">
         <div className="number-muncher__score">Score: {score}</div>
+        <div className="number-muncher__left-hint">{leftHint}</div>
         <div className="number-muncher__lives">{"❤️".repeat(Math.max(0, lives))}</div>
       </div>
 

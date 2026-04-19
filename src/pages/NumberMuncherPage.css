@@ -10,6 +10,9 @@
 }
 
 .number-muncher-page__window {
+  position: absolute;
+  top: 72px;
+  left: max(20px, calc(50vw - 320px));
   border: 3px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
   background: #c0c0c0;
@@ -18,10 +21,11 @@
 
 .number-muncher-page__titlebar {
   padding: 6px 10px;
-  background: linear-gradient(90deg, #1b4b9b 0%, #2f6cd3 100%);
+  background: linear-gradient(90deg, #cc4400 0%, #ff7a1a 100%);
   color: #fff;
   font-family: "Press Start 2P", monospace;
   font-size: 9px;
+  cursor: move;
 }
 
 .number-muncher-page__back {
