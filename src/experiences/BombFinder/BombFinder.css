@@ -139,6 +139,42 @@
   background: #ff0000 !important;
 }
 
+/* ── Mobile mode toggle ── */
+.bomb-finder__mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bomb-finder__mode-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #c0c0c0;
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.bomb-finder__mode-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 5px 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000000;
+  white-space: nowrap;
+}
+
+.bomb-finder__mode-btn:hover {
+  background: #d0d0d0;
+}
+
+.bomb-finder__mode-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+}
+
 /* ── Number labels inside cells ── */
 .bomb-finder__cell-num {
   font-family: "Press Start 2P", monospace;

@@ -142,6 +142,14 @@ function fmt(n: number): string {
   return clamped.toString().padStart(3, "0");
 }
 
+type MobileMode = "reveal" | "flag" | "chord";
+
+const MOBILE_MODE_LABELS: Record<MobileMode, string> = {
+  reveal: "Reveal",
+  flag:   "Flag",
+  chord:  "Safe Reveal",
+};
+
 interface BombFinderProps {
   onDifficultyChange?: (difficulty: Difficulty) => void;
 }
@@ -156,6 +164,7 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   const [time, setTime] = useState(0);
   const [deathCell, setDeathCell] = useState<{ row: number; col: number } | null>(null);
   const [facePressed, setFacePressed] = useState(false);
+  const [mobileMode, setMobileMode] = useState<MobileMode>("reveal");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -261,6 +270,78 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     [toggleFlag]
   );
 
+  // Chord reveal: if a numbered revealed cell has exactly N adjacent flags,
+  // reveal all remaining adjacent cells. Wrong flags = boom.
+  const chordReveal = useCallback(
+    (row: number, col: number) => {
+      if (status === "won" || status === "lost") return;
+      const cell = board[row][col];
+      if (!cell.revealed || cell.adjacentCount === 0) return;
+
+      const { rows, cols, mines } = cfg;
+
+      let flagCount = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = row + dr, nc = col + dc;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && board[nr][nc].flagged)
+            flagCount++;
+        }
+      }
+      if (flagCount !== cell.adjacentCount) return;
+
+      const toReveal: [number, number][] = [];
+      let firstBomb: { row: number; col: number } | null = null;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = row + dr, nc = col + dc;
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+          const neighbor = board[nr][nc];
+          if (!neighbor.revealed && !neighbor.flagged) {
+            if (neighbor.hasBomb && !firstBomb) firstBomb = { row: nr, col: nc };
+            toReveal.push([nr, nc]);
+          }
+        }
+      }
+      if (toReveal.length === 0) return;
+
+      if (firstBomb) {
+        const lostBoard = board.map((r) =>
+          r.map((c) => {
+            if (c.hasBomb && !c.flagged) return { ...c, revealed: true };
+            if (!c.hasBomb && c.flagged) return { ...c, wrongFlag: true };
+            return { ...c };
+          })
+        );
+        setBoard(lostBoard);
+        setDeathCell(firstBomb);
+        setStatus("lost");
+        stopTimer();
+        return;
+      }
+
+      let newBoard = board;
+      for (const [nr, nc] of toReveal) {
+        newBoard = floodReveal(newBoard, rows, cols, nr, nc);
+      }
+
+      if (checkWin(newBoard, rows, cols, mines)) {
+        const wonBoard = newBoard.map((r) =>
+          r.map((c) => ({ ...c, flagged: c.hasBomb ? true : c.flagged }))
+        );
+        setBoard(wonBoard);
+        setStatus("won");
+        setMinesLeft(0);
+        stopTimer();
+      } else {
+        setBoard(newBoard);
+      }
+    },
+    [board, status, cfg, stopTimer]
+  );
+
   // Ref to always call latest toggleFlag from inside the setTimeout
   const toggleFlagRef = useRef(toggleFlag);
   useEffect(() => { toggleFlagRef.current = toggleFlag; }, [toggleFlag]);
@@ -268,6 +349,7 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressedRef = useRef(false);
   const pointerStartPos = useRef({ x: 0, y: 0 });
+  const pointerTypeRef = useRef<"mouse" | "touch">("mouse");
 
   const cancelLongPress = useCallback(() => {
     if (longPressRef.current) {
@@ -280,6 +362,7 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
   // and desktop, unlike Touch Events which have iOS-specific quirks.
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>, row: number, col: number) => {
+      pointerTypeRef.current = e.pointerType === "mouse" ? "mouse" : "touch";
       if (e.pointerType === "mouse") return;
       e.currentTarget.setPointerCapture(e.pointerId);
       pointerStartPos.current = { x: e.clientX, y: e.clientY };
@@ -381,8 +464,15 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
                   className={`bomb-finder__cell${extraClass}`}
                   onClick={() => {
                     if (longPressedRef.current) { longPressedRef.current = false; return; }
-                    handleCellClick(r, c);
+                    if (pointerTypeRef.current === "touch") {
+                      if (mobileMode === "reveal") handleCellClick(r, c);
+                      else if (mobileMode === "flag") toggleFlag(r, c);
+                      else chordReveal(r, c);
+                    } else {
+                      handleCellClick(r, c);
+                    }
                   }}
+                  onMouseDown={(e) => { if (e.buttons === 3) chordReveal(r, c); }}
                   onContextMenu={(e) => handleCellRightClick(e, r, c)}
                   onPointerDown={(e) => handlePointerDown(e, r, c)}
                   onPointerUp={() => cancelLongPress()}
@@ -395,6 +485,19 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
             })
           )}
         </div>
+      </div>
+
+      <div className="bomb-finder__mode-bar">
+        <span className="bomb-finder__mode-label">Tap:</span>
+        {(Object.keys(MOBILE_MODE_LABELS) as MobileMode[]).map((mode) => (
+          <button
+            key={mode}
+            className={`bomb-finder__mode-btn${mobileMode === mode ? " bomb-finder__mode-btn--active" : ""}`}
+            onClick={() => setMobileMode(mode)}
+          >
+            {MOBILE_MODE_LABELS[mode]}
+          </button>
+        ))}
       </div>
     </div>
   );

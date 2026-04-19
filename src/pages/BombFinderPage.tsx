@@ -27,10 +27,15 @@ export default function BombFinderPage() {
         </ul>
         <hr />
         <ul>
+          <li><strong>Safe Reveal</strong> — left+right click a number whose adjacent flags match it to reveal surrounding cells</li>
+          <li>Wrong flags mean Safe Reveal can still hit a bomb!</li>
+        </ul>
+        <hr />
+        <ul>
           <li><strong>Beginner</strong> — 9×9 grid, 10 bombs</li>
           <li><strong>Intermediate</strong> — 16×16 grid, 40 bombs</li>
           <li><strong>Expert</strong> — 30×16 grid, 99 bombs</li>
-          <li>Click 🙂 to reset the current difficulty</li>
+          <li>Click 🙂 to reset · Use <strong>Tap:</strong> buttons for mobile</li>
         </ul>
       </HelpOverlay>
     </div>
