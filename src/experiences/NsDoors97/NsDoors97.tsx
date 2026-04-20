@@ -21,6 +21,7 @@ import FolderApp from "./FolderApp";
 import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
+import DialUpApp from "./DialUpApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
@@ -59,6 +60,7 @@ type DesktopIconAction =
   | "cards"
   | "about"
   | "my-doors"
+  | "dialup"
   | "internet"
   | "files"
   | "notebook";
@@ -76,7 +78,7 @@ const STATIC_ICONS: DesktopIconDef[] = [
   { id: "notebook",     title: "Notebook",     icon: "📝", action: "notebook"     },
   { id: "recycle-bin",  title: "Recycle Bin",  icon: "🗑️", action: "placeholder"  },
   { id: "about",        title: "About NS Doors 97", icon: "ℹ️", action: "about"   },
-  { id: "internet",     title: "Internet",     icon: "🌐", action: "internet"     },
+  { id: "internet",     title: "Interwebs",    icon: "🌐", action: "dialup"      },
   { id: "screensavers", title: "Screensavers", icon: "💤", action: "screensavers" },
   { id: "cards",        title: "Cards",        icon: "🃏", action: "cards"        },
 ];
@@ -109,6 +111,7 @@ type WindowContent =
   | { type: "cards-game"; game: CardsGame; settings: DeckSettings }
   | { type: "about" }
   | { type: "my-doors" }
+  | { type: "dialup" }
   | { type: "internet" }
   | { type: "files" }
   | { type: "notebook"; filePath: string; fileName: string; initialContent: string };
@@ -309,6 +312,7 @@ export default function NsDoors97() {
         case "screensavers": content = { type: "screensaver-settings" }; width = 440; break;
         case "about":        content = { type: "about" };                width = 340; break;
         case "my-doors":     content = { type: "my-doors" };             width = 440; break;
+        case "dialup":       content = { type: "dialup" };               width = 400; break;
         case "internet":     content = { type: "internet" };             width = 640; break;
         case "files":        content = { type: "files" };                width = 600; break;
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
@@ -433,6 +437,27 @@ export default function NsDoors97() {
     },
     []
   );
+
+  // Dial-up succeeded: swap the dialup window for the actual browser
+  const handleDialupConnected = useCallback(() => {
+    const offset = (windowSeq % 8) * 32;
+    windowSeq++;
+    maxZ++;
+    const z = maxZ;
+    setActiveWindowId("internet-browser");
+    setOpenWindows((prev) => [
+      ...prev.filter((w) => w.id !== "internet"),
+      {
+        id: "internet-browser",
+        title: "Noahsoft Exploder",
+        icon: "🌐",
+        content: { type: "internet" as const },
+        zIndex: z,
+        defaultPosition: { x: 80 + offset, y: 48 + offset },
+        width: 640,
+      },
+    ]);
+  }, []);
 
   // Close the Cards game and reopen the launcher
   const handleCardsGameClose = useCallback((id: string) => {
@@ -559,6 +584,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "my-doors" && (
             <FolderApp onOpenExperience={openWindow} />
+          )}
+          {win.content.type === "dialup" && (
+            <DialUpApp onConnected={handleDialupConnected} />
           )}
           {win.content.type === "internet" && (
             <InternetApp onOpenExperience={openWindow} />

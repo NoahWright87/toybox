@@ -12,6 +12,7 @@ import TicTacToePage from "./pages/TicTacToePage";
 import WordWhirlwindPage from "./pages/WordWhirlwindPage";
 import BombFinderPage from "./pages/BombFinderPage";
 import NsDoors97Page from "./pages/NsDoors97Page";
+import ModemLabPage from "./pages/ModemLabPage";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/word-whirlwind" element={<WordWhirlwindPage />} />
         <Route path="/bomb-finder" element={<BombFinderPage />} />
         <Route path="/doors97" element={<NsDoors97Page />} />
+        <Route path="/modem-lab" element={<ModemLabPage />} />
       </Routes>
     </BrowserRouter>
   );
