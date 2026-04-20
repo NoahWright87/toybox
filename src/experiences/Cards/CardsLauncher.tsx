@@ -7,6 +7,7 @@ import {
   type CardsGame,
   type DeckSettings,
   type Suit,
+  type WarSpeed,
 } from "./types";
 import { totalCards } from "./deckUtils";
 
@@ -17,7 +18,12 @@ const SUITS: { id: Suit; symbol: string; isRed: boolean }[] = [
   { id: "clubs",    symbol: "♣", isRed: false },
 ];
 
-// Dummy card used to preview the card back in the launcher
+const WAR_SPEEDS: { value: WarSpeed; label: string }[] = [
+  { value: "slow",   label: "Slow (2s)"   },
+  { value: "normal", label: "Normal (0.9s)" },
+  { value: "fast",   label: "Fast (0.25s)" },
+];
+
 const PREVIEW_CARD = { suit: "spades" as const, rank: "A" as const, id: "preview" };
 
 interface CardsLauncherProps {
@@ -25,12 +31,11 @@ interface CardsLauncherProps {
 }
 
 export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
-  const [game, setGame] = useState<CardsGame>("no-game");
+  const [game, setGame] = useState<CardsGame>("war");
   const [settings, setSettings] = useState<DeckSettings>(DEFAULT_DECK_SETTINGS);
 
   const toggleSuit = (suit: Suit) => {
     const active = settings.suits.includes(suit);
-    // Must keep at least one suit
     if (active && settings.suits.length === 1) return;
     setSettings((prev) => ({
       ...prev,
@@ -57,8 +62,9 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
           value={game}
           onChange={(e) => setGame(e.target.value as CardsGame)}
         >
-          <option value="no-game">No Game</option>
+          <option value="war">War</option>
           <option value="blackjack">Blackjack</option>
+          <option value="pyramid">Pyramid</option>
           <option disabled>── More Coming Soon ──</option>
         </select>
       </div>
@@ -73,17 +79,9 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
         <div className="cards-launcher__row">
           <span className="cards-launcher__option-label">Number of Decks:</span>
           <div className="cards-launcher__stepper">
-            <button
-              className="cards-launcher__step-btn"
-              onClick={() => stepDecks(-1)}
-              disabled={settings.numDecks <= 1}
-            >−</button>
+            <button className="cards-launcher__step-btn" onClick={() => stepDecks(-1)} disabled={settings.numDecks <= 1}>−</button>
             <span className="cards-launcher__step-val">{settings.numDecks}</span>
-            <button
-              className="cards-launcher__step-btn"
-              onClick={() => stepDecks(1)}
-              disabled={settings.numDecks >= 6}
-            >+</button>
+            <button className="cards-launcher__step-btn" onClick={() => stepDecks(1)}  disabled={settings.numDecks >= 6}>+</button>
           </div>
         </div>
 
@@ -115,37 +113,27 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
             <input
               type="checkbox"
               checked={settings.includeJokers}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, includeJokers: e.target.checked }))
-              }
+              onChange={(e) => setSettings((prev) => ({ ...prev, includeJokers: e.target.checked }))}
             />
-            <span className="cards-launcher__checkbox-text">
-              {settings.includeJokers ? "Yes" : "No"}
-            </span>
+            <span className="cards-launcher__checkbox-text">{settings.includeJokers ? "Yes" : "No"}</span>
           </label>
         </div>
 
         {/* Card back color */}
         <div className="cards-launcher__row" style={{ alignItems: "flex-start" }}>
-          <span className="cards-launcher__option-label" style={{ paddingTop: 4 }}>
-            Card Back:
-          </span>
+          <span className="cards-launcher__option-label" style={{ paddingTop: 4 }}>Card Back:</span>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div className="cards-launcher__swatches">
               {CARD_BACK_COLORS.map((cb) => (
                 <button
                   key={cb.color}
-                  className={[
-                    "cards-launcher__swatch",
-                    settings.cardBack === cb.color ? "cards-launcher__swatch--selected" : "",
-                  ].join(" ")}
+                  className={["cards-launcher__swatch", settings.cardBack === cb.color ? "cards-launcher__swatch--selected" : ""].join(" ")}
                   style={{ background: cb.color }}
                   title={cb.label}
                   onClick={() => setSettings((prev) => ({ ...prev, cardBack: cb.color }))}
                 />
               ))}
             </div>
-            {/* Live preview */}
             <PlayingCard card={PREVIEW_CARD} faceDown backColor={settings.cardBack} />
           </div>
         </div>
@@ -153,12 +141,47 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
         <div className="cards-launcher__count">{count} card{count !== 1 ? "s" : ""} total</div>
       </div>
 
+      {/* War-specific settings */}
+      {game === "war" && (
+        <>
+          <div className="cards-launcher__divider" />
+          <div>
+            <div className="cards-launcher__section-title">War Settings:</div>
+
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Auto-play:</span>
+              <label className="cards-launcher__checkbox-wrap">
+                <input
+                  type="checkbox"
+                  checked={settings.warAutoPlay}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, warAutoPlay: e.target.checked }))}
+                />
+                <span className="cards-launcher__checkbox-text">{settings.warAutoPlay ? "On" : "Off"}</span>
+              </label>
+            </div>
+
+            {settings.warAutoPlay && (
+              <div className="cards-launcher__row">
+                <span className="cards-launcher__option-label">Speed:</span>
+                <select
+                  className="cards-launcher__select"
+                  style={{ width: "auto" }}
+                  value={settings.warSpeed}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, warSpeed: e.target.value as WarSpeed }))}
+                >
+                  {WAR_SPEEDS.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="cards-launcher__divider" />
 
-      <button
-        className="cards-launcher__launch-btn"
-        onClick={() => onLaunch(game, settings)}
-      >
+      <button className="cards-launcher__launch-btn" onClick={() => onLaunch(game, settings)}>
         ▶ Launch
       </button>
     </div>

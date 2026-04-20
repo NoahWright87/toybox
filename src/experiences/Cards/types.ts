@@ -21,18 +21,24 @@ export const CARD_BACK_COLORS: CardBackColor[] = [
   { label: "Black",   color: "#1a1a1a" },
 ];
 
+export type WarSpeed = "slow" | "normal" | "fast";
+
 export interface DeckSettings {
   numDecks: number;
   suits: Suit[];
   includeJokers: boolean;
-  cardBack: string; // hex color
+  cardBack: string;
+  warAutoPlay: boolean;
+  warSpeed: WarSpeed;
 }
 
-export type CardsGame = "no-game" | "blackjack";
+export type CardsGame = "war" | "blackjack" | "pyramid";
 
 export const DEFAULT_DECK_SETTINGS: DeckSettings = {
   numDecks: 1,
   suits: ["spades", "hearts", "diamonds", "clubs"],
   includeJokers: false,
   cardBack: "#cc4400",
+  warAutoPlay: false,
+  warSpeed: "normal",
 };

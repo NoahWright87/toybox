@@ -1,0 +1,144 @@
+/* ─── War ───────────────────────────────────────────────────────────── */
+
+.war {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+}
+
+.war__scoreboard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px 4px;
+  font-size: 7px;
+  color: #000;
+  border-bottom: 1px solid #808080;
+}
+
+.war__table {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 10px;
+  gap: 8px;
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 8px 8px 4px;
+  min-height: 200px;
+}
+
+/* Side columns (player / dealer) */
+.war__side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.war__side-label {
+  font-size: 7px;
+  color: rgba(255,255,255,0.6);
+}
+
+.war__pile-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.war__pile-count {
+  font-size: 7px;
+  color: rgba(255,255,255,0.55);
+}
+
+/* Flipped card revealed in battle */
+.war__flipped {
+  margin-top: 6px;
+}
+
+/* War cards row (face-down × 3 + face-up) */
+.war__war-cards {
+  display: flex;
+  gap: -8px;
+  align-items: flex-end;
+}
+
+.war__war-cards > * + * {
+  margin-left: -8px;
+}
+
+/* Center column */
+.war__center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 40px;
+  min-width: 40px;
+}
+
+.war__vs {
+  font-size: 9px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 1px;
+}
+
+/* Controls */
+.war__controls {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.war__banner {
+  font-size: 9px;
+  padding: 5px 12px;
+  border: 2px solid;
+  text-align: center;
+}
+
+.war__banner--win  { color: #44cc44; border-color: #44cc44; background: rgba(68,204,68,0.1); }
+.war__banner--lose { color: #cc4444; border-color: #cc4444; background: rgba(204,68,68,0.1); }
+.war__banner--war  { color: #ffcc00; border-color: #ffcc00; background: rgba(255,204,0,0.1); }
+
+.war__btn-row {
+  display: flex;
+  gap: 6px;
+}
+
+.war__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 12px;
+  border: 2px solid;
+  cursor: pointer;
+}
+
+.war__btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.war__btn--primary:hover  { background: #ee5500; }
+.war__btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+.war__btn--primary:disabled { background: #884400; cursor: default; }
+
+.war__btn--secondary {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+.war__btn--secondary:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+.war__auto-notice {
+  font-size: 7px;
+  color: #808080;
+}

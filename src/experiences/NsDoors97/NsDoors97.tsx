@@ -25,8 +25,9 @@ import TicTacToe from "../TicTacToe/TicTacToe";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
-import NoGame from "../Cards/NoGame";
+import War from "../Cards/War";
 import Blackjack from "../Cards/Blackjack";
+import Pyramid from "../Cards/Pyramid";
 import type { CardsGame, DeckSettings } from "../Cards/types";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import "./NsDoors97.css";
@@ -126,8 +127,8 @@ let windowSeq = 0;
 let maxZ = 100;
 
 const TTT_WINDOW_WIDTHS: Record<3 | 5 | 7, number> = { 3: 380, 5: 480, 7: 580 };
-const CARDS_GAME_TITLES: Record<CardsGame, string> = { "no-game": "No Game", "blackjack": "Blackjack" };
-const CARDS_GAME_WIDTHS: Record<CardsGame, number> = { "no-game": 380, "blackjack": 520 };
+const CARDS_GAME_TITLES: Record<CardsGame, string> = { "war": "War", "blackjack": "Blackjack", "pyramid": "Pyramid" };
+const CARDS_GAME_WIDTHS: Record<CardsGame, number> = { "war": 440, "blackjack": 520, "pyramid": 460 };
 const BF_WINDOW_WIDTHS: Record<BfDifficulty, number> = {
   beginner: 310,
   intermediate: 470,
@@ -523,11 +524,14 @@ export default function NsDoors97() {
               onLaunch={(game, settings) => handleCardsLaunch(win.id, game, settings)}
             />
           )}
-          {win.content.type === "cards-game" && win.content.game === "no-game" && (
-            <NoGame settings={win.content.settings} />
+          {win.content.type === "cards-game" && win.content.game === "war" && (
+            <War settings={win.content.settings} />
           )}
           {win.content.type === "cards-game" && win.content.game === "blackjack" && (
             <Blackjack settings={win.content.settings} />
+          )}
+          {win.content.type === "cards-game" && win.content.game === "pyramid" && (
+            <Pyramid settings={win.content.settings} />
           )}
           {win.content.type === "bombfinder" && (
             <BombFinder

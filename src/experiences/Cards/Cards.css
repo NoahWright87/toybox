@@ -12,6 +12,34 @@
   box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.35);
 }
 
+/* Small variant for pyramid layout */
+.playing-card--sm {
+  width: 52px;
+  height: 72px;
+}
+
+.playing-card--sm .playing-card__rank {
+  font-size: 5px;
+}
+
+.playing-card--sm .playing-card__suit-pip {
+  font-size: 6px;
+}
+
+.playing-card--sm .playing-card__center {
+  font-size: 18px;
+}
+
+.playing-card--sm .playing-card__corner--tl {
+  top: 2px;
+  left: 3px;
+}
+
+.playing-card--sm .playing-card__corner--br {
+  bottom: 2px;
+  right: 3px;
+}
+
 /* Back face — color comes from inline style --card-back */
 .playing-card--back {
   background-color: var(--card-back, #cc4400);
