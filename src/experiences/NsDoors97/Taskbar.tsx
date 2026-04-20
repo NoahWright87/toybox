@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
 import { useOsDialog } from "./OsDialog";
 import "./Taskbar.css";
@@ -105,6 +106,7 @@ const START_MENU_ITEMS = [
 
 export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart }: TaskbarProps) {
   const { showDialog } = useOsDialog();
+  const navigate = useNavigate();
   const [startOpen, setStartOpen] = useState(false);
   const startAreaRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +132,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
     onRestart();
   }, [onRestart]);
 
+  const handleDiagnostics = useCallback(() => {
+    setStartOpen(false);
+    navigate("/modem-lab");
+  }, [navigate]);
+
   return (
     <div className="ns-taskbar">
       {/* ── Start button + menu ── */}
@@ -151,6 +158,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                   {item.arrow && <span className="ns-start-menu__item-arrow">▶</span>}
                 </button>
               ))}
+
+              <button className="ns-start-menu__item" onClick={handleDiagnostics}>
+                <span className="ns-start-menu__item-icon">🔬</span>
+                <span className="ns-start-menu__item-label">Diagnostics...</span>
+              </button>
 
               <div className="ns-start-menu__divider" />
 
