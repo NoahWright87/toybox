@@ -12,11 +12,15 @@ const CARD_H = 72;
 const H_GAP = 4;   // horizontal gap between cards in the same row
 const V_STEP = 34; // vertical distance between row tops (overlap)
 
-// Width of the bottom row (widest)
 const BASE_ROW_W = ROWS * CARD_W + (ROWS - 1) * H_GAP; // 388
 const GRID_H = (ROWS - 1) * V_STEP + CARD_H;            // 276
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Array.at() is ES2022 — use this instead for broader lib compat
+function last<T>(arr: T[]): T | undefined {
+  return arr[arr.length - 1];
+}
 
 function pyramidValue(card: Card): number {
   if (card.rank === "A") return 1;
@@ -41,8 +45,8 @@ function cardY(row: number): number {
 
 interface PyramidSlot {
   card: Card;
-  row: number;  // 1–7
-  col: number;  // 0-indexed within row
+  row: number;
+  col: number;
   removed: boolean;
 }
 
@@ -52,7 +56,7 @@ interface PyramidState {
   slots: PyramidSlot[];
   stock: Card[];
   waste: Card[];
-  selected: string | null; // card.id of currently selected card (null = none)
+  selected: string | null;
   phase: GamePhase;
   removedCount: number;
 }
@@ -74,10 +78,9 @@ function buildPyramid(settings: DeckSettings): PyramidState {
   return { slots, stock, waste: [], selected: null, phase: "playing", removedCount: 0 };
 }
 
-// A slot is available if both cards that cover it (row+1, col) and (row+1, col+1) are removed
 function isAvailable(slot: PyramidSlot, slots: PyramidSlot[]): boolean {
   if (slot.removed) return false;
-  if (slot.row === ROWS) return true; // bottom row always uncovered
+  if (slot.row === ROWS) return true;
   const coversLeft  = slots.find((s) => s.row === slot.row + 1 && s.col === slot.col);
   const coversRight = slots.find((s) => s.row === slot.row + 1 && s.col === slot.col + 1);
   return (!coversLeft || coversLeft.removed) && (!coversRight || coversRight.removed);
@@ -86,23 +89,19 @@ function isAvailable(slot: PyramidSlot, slots: PyramidSlot[]): boolean {
 function checkLost(state: PyramidState): boolean {
   if (state.phase !== "playing") return false;
   const available = state.slots.filter((s) => isAvailable(s, state.slots));
-  const wasteTop = state.waste.at(-1);
+  const wasteTop = last(state.waste);
 
-  // Check if any king can be removed
   const hasKing = available.some((s) => pyramidValue(s.card) === 13) ||
                   (wasteTop !== undefined && pyramidValue(wasteTop) === 13);
   if (hasKing) return false;
 
-  // Check pairs among available pyramid cards
   for (let i = 0; i < available.length; i++) {
     for (let j = i + 1; j < available.length; j++) {
       if (pyramidValue(available[i].card) + pyramidValue(available[j].card) === 13) return false;
     }
-    // Check available card + waste top
     if (wasteTop && pyramidValue(available[i].card) + pyramidValue(wasteTop) === 13) return false;
   }
 
-  // Check if stock has cards left to draw
   if (state.stock.length > 0) return false;
 
   return true;
@@ -124,7 +123,7 @@ export default function Pyramid({ settings }: PyramidProps) {
       if (s.phase !== "playing") return s;
       if (s.stock.length === 0) return s;
       const [top, ...rest] = s.stock;
-      const next = { ...s, stock: rest, waste: [...s.waste, top], selected: null };
+      const next: PyramidState = { ...s, stock: rest, waste: [...s.waste, top], selected: null };
       return checkLost(next) ? { ...next, phase: "lost" } : next;
     });
   }, []);
@@ -133,13 +132,10 @@ export default function Pyramid({ settings }: PyramidProps) {
     setState((s) => {
       if (s.phase !== "playing") return s;
 
-      // Clicking the same card deselects
       if (s.selected === cardId) return { ...s, selected: null };
 
       const clickedSlot = fromWaste ? null : s.slots.find((sl) => sl.card.id === cardId);
-      const clickedCard = fromWaste
-        ? s.waste.at(-1)
-        : clickedSlot?.card;
+      const clickedCard = fromWaste ? last(s.waste) : clickedSlot?.card;
 
       if (!clickedCard) return s;
 
@@ -153,24 +149,23 @@ export default function Pyramid({ settings }: PyramidProps) {
           slots = s.slots.map((sl) => sl.card.id === cardId ? { ...sl, removed: true } : sl);
         }
         const removedCount = s.removedCount + 1;
-        const phase = slots.every((sl) => sl.removed) ? "won" : "playing";
-        const next = { ...s, slots, waste, selected: null, removedCount, phase };
+        const phase: GamePhase = slots.every((sl) => sl.removed) ? "won" : "playing";
+        const next: PyramidState = { ...s, slots, waste, selected: null, removedCount, phase };
         return phase === "playing" && checkLost(next) ? { ...next, phase: "lost" } : next;
       }
 
-      // No prior selection — select this card
       if (!s.selected) return { ...s, selected: cardId };
 
-      // There IS a prior selection — try to pair
-      const prevIsWaste = s.waste.at(-1)?.id === s.selected;
+      // Try to pair with previously selected card
+      const wasteTop = last(s.waste);
+      const prevIsWaste = wasteTop?.id === s.selected;
       const prevCard = prevIsWaste
-        ? s.waste.at(-1)!
+        ? wasteTop!
         : s.slots.find((sl) => sl.card.id === s.selected)?.card;
 
       if (!prevCard) return { ...s, selected: cardId };
 
       if (pyramidValue(prevCard) + pyramidValue(clickedCard) === 13) {
-        // Remove both
         let slots = s.slots;
         let waste = s.waste;
 
@@ -186,12 +181,11 @@ export default function Pyramid({ settings }: PyramidProps) {
         }
 
         const removedCount = s.removedCount + 2;
-        const phase = slots.every((sl) => sl.removed) ? "won" : "playing";
-        const next = { ...s, slots, waste, selected: null, removedCount, phase };
+        const phase: GamePhase = slots.every((sl) => sl.removed) ? "won" : "playing";
+        const next: PyramidState = { ...s, slots, waste, selected: null, removedCount, phase };
         return phase === "playing" && checkLost(next) ? { ...next, phase: "lost" } : next;
       }
 
-      // Doesn't pair — switch selection to clicked card
       return { ...s, selected: cardId };
     });
   }, []);
@@ -203,7 +197,7 @@ export default function Pyramid({ settings }: PyramidProps) {
     [state.slots]
   );
 
-  const wasteTop = state.waste.at(-1);
+  const wasteTop = last(state.waste);
   const pyramidDone = state.slots.every((s) => s.removed);
 
   function statusText(): string {
@@ -217,7 +211,6 @@ export default function Pyramid({ settings }: PyramidProps) {
   return (
     <div className="pyramid">
       <div className="pyramid__table">
-        {/* Pyramid grid */}
         {!pyramidDone && (
           <div className="pyramid__grid" style={{ width: BASE_ROW_W, height: GRID_H }}>
             {state.slots.map((slot) => {
@@ -225,9 +218,9 @@ export default function Pyramid({ settings }: PyramidProps) {
               const selected = state.selected === slot.card.id;
               const cls = [
                 "pyramid__card-wrap",
-                slot.removed      ? "pyramid__card-wrap--removed"     : "",
-                !avail            ? "pyramid__card-wrap--unavailable" : "",
-                selected          ? "pyramid__card-wrap--selected"    : "",
+                slot.removed ? "pyramid__card-wrap--removed"     : "",
+                !avail       ? "pyramid__card-wrap--unavailable" : "",
+                selected     ? "pyramid__card-wrap--selected"    : "",
               ].join(" ");
               return (
                 <div
@@ -243,7 +236,6 @@ export default function Pyramid({ settings }: PyramidProps) {
           </div>
         )}
 
-        {/* Stock and waste */}
         <div className="pyramid__piles">
           <div className="pyramid__pile">
             <div className="pyramid__pile-label">Stock</div>
@@ -261,7 +253,9 @@ export default function Pyramid({ settings }: PyramidProps) {
             {wasteTop
               ? (
                 <div
-                  className={state.selected === wasteTop.id ? "pyramid__card-wrap pyramid__card-wrap--selected" : "pyramid__card-wrap"}
+                  className={state.selected === wasteTop.id
+                    ? "pyramid__card-wrap pyramid__card-wrap--selected"
+                    : "pyramid__card-wrap"}
                   style={{ position: "relative" }}
                   onClick={() => selectCard(wasteTop.id, true)}
                 >
@@ -275,7 +269,6 @@ export default function Pyramid({ settings }: PyramidProps) {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="pyramid__controls">
         <div className={`pyramid__status${state.phase === "won" ? " pyramid__status--win" : state.phase === "lost" ? " pyramid__status--lose" : ""}`}>
           {statusText()}
@@ -292,7 +285,8 @@ export default function Pyramid({ settings }: PyramidProps) {
             </button>
           )}
           {state.selected && (
-            <button className="pyramid__btn pyramid__btn--secondary" onClick={() => setState((s) => ({ ...s, selected: null }))}>
+            <button className="pyramid__btn pyramid__btn--secondary"
+              onClick={() => setState((s) => ({ ...s, selected: null }))}>
               Deselect
             </button>
           )}
