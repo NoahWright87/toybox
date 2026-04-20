@@ -1,0 +1,128 @@
+/* ─── Pyramid Solitaire ─────────────────────────────────────────────── */
+
+.pyramid {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+}
+
+/* Green felt play area */
+.pyramid__table {
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 8px 8px 4px;
+  padding: 10px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The 7-row card triangle */
+.pyramid__grid {
+  position: relative;
+  /* width/height set by JS via style prop */
+}
+
+/* Each card slot in the pyramid */
+.pyramid__card-wrap {
+  position: absolute;
+  cursor: pointer;
+}
+
+.pyramid__card-wrap--unavailable {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.pyramid__card-wrap--selected .playing-card {
+  outline: 2px solid #ffdd00;
+  outline-offset: 1px;
+  box-shadow: 0 0 6px #ffdd00;
+}
+
+.pyramid__card-wrap--removed {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Stock + waste row */
+.pyramid__piles {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.pyramid__pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.pyramid__pile-label {
+  font-size: 6px;
+  color: rgba(255,255,255,0.5);
+}
+
+.pyramid__pile-count {
+  font-size: 6px;
+  color: rgba(255,255,255,0.5);
+}
+
+/* Clickable stock pile */
+.pyramid__stock-card {
+  cursor: pointer;
+}
+
+/* Controls area */
+.pyramid__controls {
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.pyramid__status {
+  font-size: 7px;
+  color: #444;
+  text-align: center;
+  min-height: 14px;
+}
+
+.pyramid__status--win  { color: #228833; }
+.pyramid__status--lose { color: #cc0000; }
+
+.pyramid__btn-row {
+  display: flex;
+  gap: 6px;
+}
+
+.pyramid__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 12px;
+  border: 2px solid;
+  cursor: pointer;
+}
+
+.pyramid__btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.pyramid__btn--primary:hover  { background: #ee5500; }
+.pyramid__btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+
+.pyramid__btn--secondary {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+.pyramid__btn--secondary:active { border-color: #808080 #ffffff #ffffff #808080; }
+.pyramid__btn--secondary:disabled { color: #808080; cursor: default; }

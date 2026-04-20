@@ -1,0 +1,412 @@
+/* ─── Playing Card ──────────────────────────────────────────────────── */
+
+.playing-card {
+  width: 72px;
+  height: 100px;
+  border-radius: 4px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  position: relative;
+  flex-shrink: 0;
+  user-select: none;
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* Small variant for pyramid layout */
+.playing-card--sm {
+  width: 52px;
+  height: 72px;
+}
+
+.playing-card--sm .playing-card__rank {
+  font-size: 5px;
+}
+
+.playing-card--sm .playing-card__suit-pip {
+  font-size: 6px;
+}
+
+.playing-card--sm .playing-card__center {
+  font-size: 18px;
+}
+
+.playing-card--sm .playing-card__corner--tl {
+  top: 2px;
+  left: 3px;
+}
+
+.playing-card--sm .playing-card__corner--br {
+  bottom: 2px;
+  right: 3px;
+}
+
+/* Back face — color comes from inline style --card-back */
+.playing-card--back {
+  background-color: var(--card-back, #cc4400);
+  cursor: default;
+}
+
+.playing-card__back-inner {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 5px,
+      rgba(255, 255, 255, 0.12) 5px,
+      rgba(255, 255, 255, 0.12) 6px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 5px,
+      rgba(255, 255, 255, 0.12) 5px,
+      rgba(255, 255, 255, 0.12) 6px
+    );
+}
+
+/* Front face */
+.playing-card--front {
+  background: #ffffff;
+}
+
+.playing-card__corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.playing-card__corner--tl {
+  top: 3px;
+  left: 4px;
+}
+
+.playing-card__corner--br {
+  bottom: 3px;
+  right: 4px;
+  transform: rotate(180deg);
+}
+
+.playing-card__rank {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  display: block;
+  line-height: 1.2;
+}
+
+.playing-card__suit-pip {
+  font-size: 8px;
+  display: block;
+  margin-top: 1px;
+}
+
+.playing-card__center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 26px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.playing-card--red { color: #cc0000; }
+.playing-card--black { color: #111111; }
+.playing-card--joker {
+  color: #5b2d8e;
+  font-family: "Press Start 2P", monospace;
+}
+
+.playing-card--empty {
+  width: 72px;
+  height: 100px;
+  border-radius: 4px;
+  border: 2px dashed #808080;
+  background: #d4d0c8;
+  flex-shrink: 0;
+}
+
+/* ─── Cards Launcher ────────────────────────────────────────────────── */
+
+.cards-launcher {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+}
+
+.cards-launcher__label {
+  font-size: 8px;
+  color: #000;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.cards-launcher__select {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 4px 6px;
+  width: 100%;
+  color: #000;
+  cursor: pointer;
+}
+
+.cards-launcher__divider {
+  height: 0;
+  border: none;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  margin: 2px 0;
+}
+
+.cards-launcher__section-title {
+  font-size: 8px;
+  color: #000;
+  margin-bottom: 6px;
+}
+
+.cards-launcher__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cards-launcher__option-label {
+  font-size: 7px;
+  flex: 1;
+  color: #000;
+}
+
+/* Stepper (deck count) */
+.cards-launcher__stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cards-launcher__step-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  width: 22px;
+  height: 22px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.cards-launcher__step-btn:active:not(:disabled) {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.cards-launcher__step-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+.cards-launcher__step-val {
+  font-size: 9px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Suit toggles */
+.cards-launcher__suits {
+  display: flex;
+  gap: 4px;
+}
+
+.cards-launcher__suit-btn {
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0.35;
+  transition: opacity 0.1s;
+}
+
+.cards-launcher__suit-btn--red { color: #cc0000; }
+.cards-launcher__suit-btn--black { color: #111; }
+
+.cards-launcher__suit-btn--on {
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #e8e8e8;
+  opacity: 1;
+}
+
+/* Jokers checkbox */
+.cards-launcher__checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.cards-launcher__checkbox-text {
+  font-size: 7px;
+}
+
+/* Card back color swatches */
+.cards-launcher__swatches {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.cards-launcher__swatch {
+  width: 22px;
+  height: 22px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 0;
+  position: relative;
+}
+
+.cards-launcher__swatch--selected {
+  border-color: #ffffff #808080 #808080 #ffffff;
+  outline: 2px solid #000;
+  outline-offset: 1px;
+}
+
+/* Card count summary */
+.cards-launcher__count {
+  font-size: 7px;
+  color: #444;
+  text-align: right;
+}
+
+/* Launch button */
+.cards-launcher__launch-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  background: #cc4400;
+  color: #fff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  padding: 8px 20px;
+  cursor: pointer;
+  align-self: center;
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+
+.cards-launcher__launch-btn:hover { background: #ee5500; }
+.cards-launcher__launch-btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+/* ─── No Game ───────────────────────────────────────────────────────── */
+
+.no-game {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+}
+
+.no-game__info {
+  font-size: 7px;
+  color: #444;
+  text-align: center;
+}
+
+.no-game__table {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.no-game__pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.no-game__pile-label {
+  font-size: 7px;
+  color: #444;
+}
+
+.no-game__pile-count {
+  font-size: 7px;
+  color: #444;
+}
+
+.no-game__pile-count--low {
+  color: #cc4400;
+}
+
+.no-game__arrow {
+  font-size: 18px;
+  color: #666;
+  padding-bottom: 16px;
+}
+
+.no-game__empty-msg {
+  font-size: 8px;
+  color: #cc4400;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+/* Buttons */
+.no-game__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 7px 14px;
+  border: 2px solid;
+  cursor: pointer;
+}
+
+.no-game__btn--draw {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.no-game__btn--draw:hover { background: #ee5500; }
+.no-game__btn--draw:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+.no-game__btn--reshuffle {
+  background: #5b2d8e;
+  color: #fff;
+  border-color: #9966cc #331155 #331155 #9966cc;
+}
+
+.no-game__btn--reshuffle:hover { background: #7b3dbe; }
+.no-game__btn--reshuffle:active {
+  border-color: #331155 #9966cc #9966cc #331155;
+}

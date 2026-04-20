@@ -155,6 +155,15 @@ NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
 - Built-in apps: file browser, About Noahsoft dialog, simulated internet browser, Tic-Tac-Toe window
 - All windows use Win95-style chrome: title bar (orange/brown gradient), close/min/max buttons, beveled borders
 
+## Before finishing any task
+
+Always run `npx tsc --noEmit` before committing. The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports and variables are **build errors** that will fail the Netlify deploy. Fix every reported error before pushing.
+
+**Important:** Netlify's TypeScript targets an older lib than the local `tsc` sometimes allows. Avoid these patterns or they will fail the Netlify build even if they pass locally:
+- `Array.prototype.at()` — use `arr[arr.length - 1]` instead
+- Other ES2022+ array/string methods not in ES2020 lib (`findLast`, `toSorted`, `toReversed`, etc.)
+- When spreading an object and overriding a union-typed field (e.g. `phase: GamePhase`), annotate the local variable explicitly: `const phase: GamePhase = ...` to prevent TypeScript widening it to `string`.
+
 ## Known conventions
 
 - Commits reference the feature or PR (see git log for style)

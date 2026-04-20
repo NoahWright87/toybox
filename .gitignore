@@ -4,3 +4,4 @@ dist/
 .claude/launch.json
 playwright-report/
 test-results/
+*.tsbuildinfo
