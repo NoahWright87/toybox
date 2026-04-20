@@ -1,0 +1,211 @@
+/* Win95-style dial-up networking dialog */
+
+.dialup {
+  background: #c0c0c0;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.dialup__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid #808080;
+}
+
+.dialup__header-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.dialup__header-title {
+  font-size: 8px;
+  color: #000;
+  line-height: 1.5;
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────── */
+
+.dialup__section {
+  padding: 8px 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dialup__section--box {
+  margin: 4px 8px 6px;
+  padding: 10px 8px 8px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  position: relative;
+}
+
+.dialup__box-title {
+  position: absolute;
+  top: -7px;
+  left: 8px;
+  background: #c0c0c0;
+  padding: 0 4px;
+  font-size: 6px;
+  color: #000;
+}
+
+.dialup__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.dialup__label {
+  font-size: 6px;
+  color: #000;
+  white-space: nowrap;
+  min-width: 76px;
+  flex-shrink: 0;
+}
+
+/* ── Form controls ───────────────────────────────────────────────────────── */
+
+.dialup__select {
+  flex: 1;
+  height: 20px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #000;
+  padding: 0 2px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.dialup__select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dialup__phone-display {
+  flex: 1;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #000080;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 2px 6px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Checkboxes ──────────────────────────────────────────────────────────── */
+
+.dialup__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #808080;
+}
+
+.dialup__check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 6px;
+  color: #000;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.dialup__check-label input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.dialup__check-label input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+.dialup__statusbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 6px;
+  padding: 4px 8px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  min-height: 22px;
+}
+
+.dialup__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid #555;
+}
+
+.dialup__dot--idle    { background: #c0c0c0; }
+.dialup__dot--working { background: #ffcc00; }
+.dialup__dot--ok      { background: #22aa22; }
+.dialup__dot--error   { background: #cc2200; }
+
+.dialup__status-text {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #000;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Footer buttons ──────────────────────────────────────────────────────── */
+
+.dialup__footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 10px 10px;
+}
+
+.dialup__btn {
+  min-width: 80px;
+  padding: 5px 14px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.dialup__btn:active:not(:disabled) {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.dialup__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dialup__btn--primary {
+  font-weight: bold;
+}
