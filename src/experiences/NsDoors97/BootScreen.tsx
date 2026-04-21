@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { randomDelay, chunkIncrement, makeSleep } from "../../utils/retroTiming";
+import logoUrl from "./doors97-logo.png";
 import "./BootScreen.css";
 
 // ── localStorage helpers ───────────────────────────────────────────────────
@@ -555,9 +556,12 @@ export default function BootScreen({ onComplete }: BootScreenProps) {
       {phase === "splash" && (
         <div className="boot-splash">
           <div className="boot-splash__top">
-            <div className="boot-splash__brand">Noahsoft</div>
-            <div className="boot-splash__logo">🚪</div>
-            <div className="boot-splash__title">DOORS 97</div>
+            <img
+              src={logoUrl}
+              alt="NS Doors 97"
+              className="boot-splash__logo-img"
+              draggable={false}
+            />
             <div className="boot-splash__tagline">{contentRef.current?.splash.tagline}</div>
           </div>
 

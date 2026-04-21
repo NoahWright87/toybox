@@ -14,6 +14,7 @@ interface TaskbarProps {
   activeWindowId: string | null;
   onWindowFocus: (id: string) => void;
   onRestart: () => void;
+  onOpenSettings: (setting: "display") => void;
 }
 
 // ── Retro clock: real time, date shifted 30 years back ────────────────────────
@@ -103,9 +104,10 @@ const START_MENU_ITEMS = [
 
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
-export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart }: TaskbarProps) {
+export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings }: TaskbarProps) {
   const { showDialog } = useOsDialog();
   const [startOpen, setStartOpen] = useState(false);
+  const [settingsSubOpen, setSettingsSubOpen] = useState(false);
   const startAreaRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -130,6 +132,12 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
     onRestart();
   }, [onRestart]);
 
+  const handleOpenDisplay = useCallback(() => {
+    setStartOpen(false);
+    setSettingsSubOpen(false);
+    onOpenSettings("display");
+  }, [onOpenSettings]);
+
   return (
     <div className="ns-taskbar">
       {/* ── Start button + menu ── */}
@@ -140,17 +148,46 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
               <span className="ns-start-menu__sidebar-text">NS DOORS 97</span>
             </div>
             <div className="ns-start-menu__items">
-              {START_MENU_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  className="ns-start-menu__item"
-                  onClick={handlePlaceholder}
-                >
-                  <span className="ns-start-menu__item-icon">{item.icon}</span>
-                  <span className="ns-start-menu__item-label">{item.label}</span>
-                  {item.arrow && <span className="ns-start-menu__item-arrow">▶</span>}
-                </button>
-              ))}
+              {START_MENU_ITEMS.map((item) => {
+                if (item.id === "settings") {
+                  return (
+                    <div
+                      key={item.id}
+                      className="ns-start-menu__item-wrapper"
+                      onMouseEnter={() => setSettingsSubOpen(true)}
+                      onMouseLeave={() => setSettingsSubOpen(false)}
+                    >
+                      <button className="ns-start-menu__item">
+                        <span className="ns-start-menu__item-icon">{item.icon}</span>
+                        <span className="ns-start-menu__item-label">{item.label}</span>
+                        <span className="ns-start-menu__item-arrow">▶</span>
+                      </button>
+                      {settingsSubOpen && (
+                        <div className="ns-start-submenu">
+                          <button
+                            className="ns-start-menu__item"
+                            onClick={handleOpenDisplay}
+                          >
+                            <span className="ns-start-menu__item-icon">🖥️</span>
+                            <span className="ns-start-menu__item-label">Display...</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    key={item.id}
+                    className="ns-start-menu__item"
+                    onClick={handlePlaceholder}
+                  >
+                    <span className="ns-start-menu__item-icon">{item.icon}</span>
+                    <span className="ns-start-menu__item-label">{item.label}</span>
+                    {item.arrow && <span className="ns-start-menu__item-arrow">▶</span>}
+                  </button>
+                );
+              })}
 
               <div className="ns-start-menu__divider" />
 

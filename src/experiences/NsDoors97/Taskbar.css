@@ -103,6 +103,25 @@
   opacity: 0.6;
 }
 
+/* ── Settings submenu flyout ─────────────────────────────────────────────── */
+
+.ns-start-menu__item-wrapper {
+  position: relative;
+}
+
+.ns-start-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  background: #3a1800;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85);
+  min-width: 150px;
+  z-index: 9700;
+  padding: 3px 0;
+}
+
 .ns-start-menu__divider {
   height: 0;
   border-top: 1px solid #330000;

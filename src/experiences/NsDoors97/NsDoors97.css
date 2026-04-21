@@ -4,10 +4,9 @@
   position: fixed;
   inset: 0;
   padding-bottom: 42px; /* taskbar height */
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 40%, #2a1000 0%, #180800 55%, #0c0400 100%);
   overflow: hidden;
   font-family: "Press Start 2P", monospace;
+  /* background applied via inline style from desktopSettings */
 }
 
 /* ── Icon grid — Win95-style: fills column top-to-bottom, then wraps right ── */
