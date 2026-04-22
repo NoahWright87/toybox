@@ -952,7 +952,6 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
     recordActivity();
     setRevealedLetters((prev) => {
       const next = new Map(prev);
-      const unfound = allWordsSetRef.current;
       let revealed = false;
 
       for (const word of allWordsSetRef.current) {
