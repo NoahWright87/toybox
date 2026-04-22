@@ -115,7 +115,6 @@ function commonPrefix(a: string, b: string): string {
  * For each unfound word, find the nearest found word on each side in the
  * sorted list and return the common prefix of those two bounds.
  * That prefix is provably deducible from alphabetic ordering alone.
- * If only one bound is available, use just that bound's prefix.
  */
 function computeGroupHints(
   words: string[],
@@ -132,13 +131,8 @@ function computeGroupHints(
     for (let j = i + 1; j < words.length; j++) {
       if (foundWords.has(words[j])) { right = words[j]; break; }
     }
-    // Show hint if we have at least one bound
     if (left !== null && right !== null) {
       hints.set(words[i], commonPrefix(left, right));
-    } else if (left !== null) {
-      hints.set(words[i], left.slice(0, Math.min(3, left.length)));
-    } else if (right !== null) {
-      hints.set(words[i], right.slice(0, Math.min(3, right.length)));
     }
   }
   return hints;
