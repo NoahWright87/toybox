@@ -1,13 +1,18 @@
-export type DesktopBgType = "noahsoft" | "solid";
+export type DesktopBgType    = "noahsoft" | "solid" | "wallpaper";
+export type WallpaperPreset  = "sunset" | "arch";
 
 export interface DesktopSettings {
-  bgType: DesktopBgType;
-  solidColor: string;
+  bgType:             DesktopBgType;
+  solidColor:         string;
+  wallpaperPreset:    WallpaperPreset | null;
+  wallpaperCustomUrl: string | null; // data URL for user-uploaded images
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
-  bgType: "noahsoft",
-  solidColor: "#008080",
+  bgType:             "noahsoft",
+  solidColor:         "#008080",
+  wallpaperPreset:    null,
+  wallpaperCustomUrl: null,
 };
 
 export const NOAHSOFT_GRADIENT =
@@ -15,7 +20,8 @@ export const NOAHSOFT_GRADIENT =
 
 export function getDesktopBackground(settings: DesktopSettings): string {
   if (settings.bgType === "noahsoft") return NOAHSOFT_GRADIENT;
-  return settings.solidColor;
+  if (settings.bgType === "solid")    return settings.solidColor;
+  return "#000000"; // wallpaper — backgroundImage applied separately
 }
 
 const LS_KEY = "ns-desktop-settings";
@@ -26,8 +32,10 @@ export function loadDesktopSettings(): DesktopSettings {
     if (!raw) return { ...DEFAULT_DESKTOP_SETTINGS };
     const p = JSON.parse(raw) as Partial<DesktopSettings>;
     return {
-      bgType: p.bgType ?? DEFAULT_DESKTOP_SETTINGS.bgType,
-      solidColor: p.solidColor ?? DEFAULT_DESKTOP_SETTINGS.solidColor,
+      bgType:             p.bgType             ?? DEFAULT_DESKTOP_SETTINGS.bgType,
+      solidColor:         p.solidColor         ?? DEFAULT_DESKTOP_SETTINGS.solidColor,
+      wallpaperPreset:    p.wallpaperPreset     ?? null,
+      wallpaperCustomUrl: p.wallpaperCustomUrl  ?? null,
     };
   } catch {
     return { ...DEFAULT_DESKTOP_SETTINGS };
@@ -36,6 +44,12 @@ export function loadDesktopSettings(): DesktopSettings {
 
 export function saveDesktopSettings(settings: DesktopSettings): void {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(settings));
+    // Don't persist large custom data URLs — they'd eat localStorage quota.
+    // We keep them in React state only for the current session.
+    const toSave: DesktopSettings = {
+      ...settings,
+      wallpaperCustomUrl: null,
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(toSave));
   } catch {}
 }

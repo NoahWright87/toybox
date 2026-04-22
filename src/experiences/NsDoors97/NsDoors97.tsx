@@ -30,7 +30,7 @@ import Blackjack from "../Cards/Blackjack";
 import Pyramid from "../Cards/Pyramid";
 import type { CardsGame, DeckSettings } from "../Cards/types";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
-import DisplayApp from "./DisplayApp";
+import DisplayApp, { WALLPAPER_PRESET_URLS } from "./DisplayApp";
 import {
   loadDesktopSettings,
   saveDesktopSettings,
@@ -497,8 +497,24 @@ export default function NsDoors97() {
     });
   }, []);
 
+  // ── Build desktop style (solid/gradient vs wallpaper) ────────────────────
+  const desktopStyle: React.CSSProperties = (() => {
+    if (desktopSettings.bgType === "wallpaper") {
+      const url = desktopSettings.wallpaperPreset
+        ? WALLPAPER_PRESET_URLS[desktopSettings.wallpaperPreset]
+        : (desktopSettings.wallpaperCustomUrl ?? "");
+      return {
+        backgroundImage:    url ? `url(${url})` : undefined,
+        backgroundSize:     "cover",
+        backgroundPosition: "center",
+        backgroundColor:    "#000000",
+      };
+    }
+    return { background: getDesktopBackground(desktopSettings) };
+  })();
+
   return (
-    <div className="ns-desktop" style={{ background: getDesktopBackground(desktopSettings) }}>
+    <div className="ns-desktop" style={desktopStyle}>
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
       <div className="ns-desktop__icons">
         {ALL_DESKTOP_ICONS.filter((def) => visibleIcons.has(def.id)).map((def) => (

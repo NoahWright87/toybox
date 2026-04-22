@@ -233,6 +233,86 @@
   color: #aaaaaa;
 }
 
+/* ── Wallpaper preset thumbnails ─────────────────────────────────────────── */
+
+.ns-display-app__wp-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ns-display-app__wp-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: #0a0a0a;
+  border: 2px solid #444;
+  cursor: pointer;
+  width: 68px;
+  flex-shrink: 0;
+}
+
+.ns-display-app__wp-thumb:hover {
+  border-color: #ff9a44;
+}
+
+.ns-display-app__wp-thumb--active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 1px #ff9a44;
+}
+
+.ns-display-app__wp-thumb-img {
+  width: 60px;
+  height: 36px;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+
+.ns-display-app__wp-thumb-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  color: #aaaaaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+}
+
+/* ── Upload row ──────────────────────────────────────────────────────────── */
+
+.ns-display-app__upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.ns-display-app__btn--upload {
+  white-space: nowrap;
+}
+
+.ns-display-app__upload-hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #ff9a44;
+  animation: ns-upload-blink 0.8s step-end infinite;
+}
+
+@keyframes ns-upload-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.ns-display-app__upload-error {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #ff4444;
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 
 .ns-display-app__footer {

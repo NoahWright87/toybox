@@ -1,52 +1,141 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   type DesktopSettings,
   type DesktopBgType,
+  type WallpaperPreset,
   NOAHSOFT_GRADIENT,
 } from "./desktopSettings";
+import { degradeForWallpaper } from "./imageDegrade";
+import sunsetDegradedUrl from "./wallpapers/sunset-degraded.png";
+import archDegradedUrl   from "./wallpapers/arch-degraded.png";
 import "./DisplayApp.css";
 
-interface ColorPreset {
-  label: string;
-  color: string;
-}
+// ── Wallpaper preset registry ─────────────────────────────────────────────────
+
+export const WALLPAPER_PRESET_URLS: Record<WallpaperPreset, string> = {
+  sunset: sunsetDegradedUrl,
+  arch:   archDegradedUrl,
+};
+
+const WALLPAPER_PRESET_LABELS: Record<WallpaperPreset, string> = {
+  sunset: "Sunset",
+  arch:   "Desert Arch",
+};
+
+const WALLPAPER_PRESETS: WallpaperPreset[] = ["sunset", "arch"];
+
+// ── Colour presets ────────────────────────────────────────────────────────────
+
+interface ColorPreset { label: string; color: string; }
 
 const COLOR_PRESETS: ColorPreset[] = [
-  { label: "Teal",         color: "#008080" },
-  { label: "Navy",         color: "#000080" },
-  { label: "Maroon",       color: "#800000" },
-  { label: "Purple",       color: "#800080" },
-  { label: "Forest",       color: "#228833" },
-  { label: "Olive",        color: "#808000" },
-  { label: "Win98 Blue",   color: "#3a6ea5" },
-  { label: "Slate",        color: "#2f4f4f" },
-  { label: "Black",        color: "#000000" },
-  { label: "Dark Gray",    color: "#404040" },
-  { label: "Brick",        color: "#993333" },
-  { label: "Noahsoft",     color: "#2a1000" },
+  { label: "Teal",       color: "#008080" },
+  { label: "Navy",       color: "#000080" },
+  { label: "Maroon",     color: "#800000" },
+  { label: "Purple",     color: "#800080" },
+  { label: "Forest",     color: "#228833" },
+  { label: "Olive",      color: "#808000" },
+  { label: "Win98 Blue", color: "#3a6ea5" },
+  { label: "Slate",      color: "#2f4f4f" },
+  { label: "Black",      color: "#000000" },
+  { label: "Dark Gray",  color: "#404040" },
+  { label: "Brick",      color: "#993333" },
+  { label: "Noahsoft",   color: "#2a1000" },
 ];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function resolveWallpaperUrl(settings: DesktopSettings): string {
+  if (settings.wallpaperPreset) return WALLPAPER_PRESET_URLS[settings.wallpaperPreset];
+  return settings.wallpaperCustomUrl ?? "";
+}
+
+function getPreviewStyle(settings: DesktopSettings): React.CSSProperties {
+  if (settings.bgType === "wallpaper") {
+    const url = resolveWallpaperUrl(settings);
+    return url
+      ? { backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundPosition: "center" }
+      : { background: "#000" };
+  }
+  if (settings.bgType === "solid")    return { background: settings.solidColor };
+  return { background: NOAHSOFT_GRADIENT };
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface DisplayAppProps {
   settings: DesktopSettings;
-  onApply: (settings: DesktopSettings) => void;
+  onApply:  (settings: DesktopSettings) => void;
   onCancel: () => void;
 }
 
 const INACTIVE_TABS = ["Appearance", "Settings"];
 
-export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppProps) {
-  const [local, setLocal] = useState<DesktopSettings>({ ...settings });
+// ── Component ─────────────────────────────────────────────────────────────────
 
-  const previewBg =
-    local.bgType === "noahsoft" ? NOAHSOFT_GRADIENT : local.solidColor;
+export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppProps) {
+  const [local, setLocal]       = useState<DesktopSettings>({ ...settings });
+  const [degrading, setDegrading] = useState(false);
+  const [degradeError, setDegradeError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function setType(bgType: DesktopBgType) {
     setLocal((prev) => ({ ...prev, bgType }));
+    setDegradeError(null);
   }
 
-  function setColor(solidColor: string) {
-    setLocal({ bgType: "solid", solidColor });
+  function setSolidColor(solidColor: string) {
+    setLocal({ ...local, bgType: "solid", solidColor });
   }
+
+  function selectPreset(preset: WallpaperPreset) {
+    setLocal((prev) => ({
+      ...prev,
+      bgType:             "wallpaper",
+      wallpaperPreset:    preset,
+      wallpaperCustomUrl: null,
+    }));
+    setDegradeError(null);
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setDegradeError("Please select an image file.");
+      return;
+    }
+
+    setDegrading(true);
+    setDegradeError(null);
+
+    try {
+      const srcUrl = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+
+      const degradedUrl = await degradeForWallpaper(srcUrl);
+
+      setLocal((prev) => ({
+        ...prev,
+        bgType:             "wallpaper",
+        wallpaperPreset:    null,
+        wallpaperCustomUrl: degradedUrl,
+      }));
+    } catch {
+      setDegradeError("Could not process image. Try a different file.");
+    } finally {
+      setDegrading(false);
+      // Reset so the same file can be picked again
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  const previewStyle = getPreviewStyle(local);
+  const customUrl    = local.wallpaperCustomUrl;
 
   return (
     <div className="ns-display-app">
@@ -56,9 +145,7 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
           Background
         </button>
         {INACTIVE_TABS.map((t) => (
-          <button key={t} className="ns-display-app__tab" disabled>
-            {t}
-          </button>
+          <button key={t} className="ns-display-app__tab" disabled>{t}</button>
         ))}
       </div>
 
@@ -66,14 +153,13 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
         {/* CRT monitor preview */}
         <div className="ns-display-app__monitor-wrap">
           <div className="ns-display-app__monitor">
-            <div
-              className="ns-display-app__screen"
-              style={{ background: previewBg }}
-            >
-              <div className="ns-display-app__screen-icons">
-                <div className="ns-display-app__screen-icon">🖥️</div>
-                <div className="ns-display-app__screen-icon">📁</div>
-              </div>
+            <div className="ns-display-app__screen" style={previewStyle}>
+              {local.bgType !== "wallpaper" && (
+                <div className="ns-display-app__screen-icons">
+                  <div className="ns-display-app__screen-icon">🖥️</div>
+                  <div className="ns-display-app__screen-icon">📁</div>
+                </div>
+              )}
               <div className="ns-display-app__screen-taskbar" />
             </div>
             <div className="ns-display-app__monitor-neck" />
@@ -83,6 +169,7 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
 
         {/* Controls */}
         <div className="ns-display-app__controls">
+          {/* Background type */}
           <label className="ns-display-app__label">Background</label>
           <select
             className="ns-display-app__select"
@@ -91,13 +178,13 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
           >
             <option value="noahsoft">Noahsoft Theme</option>
             <option value="solid">Solid Color</option>
+            <option value="wallpaper">Wallpaper</option>
           </select>
 
+          {/* ── Solid color controls ── */}
           {local.bgType === "solid" && (
             <>
-              <label className="ns-display-app__label ns-display-app__label--gap">
-                Color
-              </label>
+              <label className="ns-display-app__label ns-display-app__label--gap">Color</label>
               <div className="ns-display-app__presets">
                 {COLOR_PRESETS.map(({ label, color }) => (
                   <button
@@ -105,7 +192,7 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
                     className={`ns-display-app__swatch${local.solidColor === color ? " ns-display-app__swatch--active" : ""}`}
                     style={{ background: color }}
                     title={label}
-                    onClick={() => setColor(color)}
+                    onClick={() => setSolidColor(color)}
                     aria-label={label}
                   />
                 ))}
@@ -116,9 +203,77 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
                   className="ns-display-app__color-picker"
                   type="color"
                   value={local.solidColor}
-                  onChange={(e) => setColor(e.target.value)}
+                  onChange={(e) => setSolidColor(e.target.value)}
                 />
                 <span className="ns-display-app__color-hex">{local.solidColor}</span>
+              </div>
+            </>
+          )}
+
+          {/* ── Wallpaper controls ── */}
+          {local.bgType === "wallpaper" && (
+            <>
+              <label className="ns-display-app__label ns-display-app__label--gap">Preset</label>
+              <div className="ns-display-app__wp-presets">
+                {WALLPAPER_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    className={`ns-display-app__wp-thumb${local.wallpaperPreset === preset ? " ns-display-app__wp-thumb--active" : ""}`}
+                    onClick={() => selectPreset(preset)}
+                    title={WALLPAPER_PRESET_LABELS[preset]}
+                  >
+                    <img
+                      src={WALLPAPER_PRESET_URLS[preset]}
+                      alt={WALLPAPER_PRESET_LABELS[preset]}
+                      className="ns-display-app__wp-thumb-img"
+                    />
+                    <span className="ns-display-app__wp-thumb-label">
+                      {WALLPAPER_PRESET_LABELS[preset]}
+                    </span>
+                  </button>
+                ))}
+
+                {/* Custom upload slot */}
+                {customUrl && (
+                  <button
+                    className={`ns-display-app__wp-thumb${local.wallpaperPreset === null && customUrl ? " ns-display-app__wp-thumb--active" : ""}`}
+                    onClick={() => setLocal((p) => ({ ...p, wallpaperPreset: null }))}
+                    title="Custom"
+                  >
+                    <img
+                      src={customUrl}
+                      alt="Custom"
+                      className="ns-display-app__wp-thumb-img"
+                    />
+                    <span className="ns-display-app__wp-thumb-label">Custom</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Upload button */}
+              <div className="ns-display-app__upload-row">
+                <button
+                  className="ns-display-app__btn ns-display-app__btn--upload"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={degrading}
+                >
+                  {degrading ? "Degrading..." : "Browse..."}
+                </button>
+                {degrading && (
+                  <span className="ns-display-app__upload-hint">
+                    Applying 1997 treatment…
+                  </span>
+                )}
+                {degradeError && (
+                  <span className="ns-display-app__upload-error">{degradeError}</span>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handleFileChange}
+                />
               </div>
             </>
           )}
@@ -127,12 +282,14 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
 
       {/* Footer */}
       <div className="ns-display-app__footer">
-        <button className="ns-display-app__btn ns-display-app__btn--primary" onClick={() => onApply(local)}>
+        <button
+          className="ns-display-app__btn ns-display-app__btn--primary"
+          onClick={() => onApply(local)}
+          disabled={degrading}
+        >
           OK
         </button>
-        <button className="ns-display-app__btn" onClick={onCancel}>
-          Cancel
-        </button>
+        <button className="ns-display-app__btn" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
