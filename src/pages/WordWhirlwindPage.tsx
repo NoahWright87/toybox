@@ -23,6 +23,7 @@ export default function WordWhirlwindPage() {
           <li><strong>Space</strong> — scramble the pool letters</li>
           <li><strong>Backspace</strong> — remove the last board letter</li>
           <li><strong>Esc</strong> — clear the whole board</li>
+          <li><strong>H</strong> — reveal the next letter of an unfound word</li>
         </ul>
         <hr />
         <ul>

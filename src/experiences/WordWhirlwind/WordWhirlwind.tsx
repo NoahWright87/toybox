@@ -102,6 +102,7 @@ function commonPrefix(a: string, b: string): string {
  * For each unfound word, find the nearest found word on each side in the
  * sorted list and return the common prefix of those two bounds.
  * That prefix is provably deducible from alphabetic ordering alone.
+ * If only one bound is available, use just that bound's prefix.
  */
 function computeGroupHints(
   words: string[],
@@ -118,8 +119,13 @@ function computeGroupHints(
     for (let j = i + 1; j < words.length; j++) {
       if (foundWords.has(words[j])) { right = words[j]; break; }
     }
+    // Show hint if we have at least one bound
     if (left !== null && right !== null) {
       hints.set(words[i], commonPrefix(left, right));
+    } else if (left !== null) {
+      hints.set(words[i], left.slice(0, Math.min(3, left.length)));
+    } else if (right !== null) {
+      hints.set(words[i], right.slice(0, Math.min(3, right.length)));
     }
   }
   return hints;
@@ -323,11 +329,13 @@ function WordGroupsPanel({
   foundWords,
   showHints,
   revealAll,
+  revealedLetters,
 }: {
   allWords: string[];
   foundWords: Set<string>;
   showHints: boolean;
   revealAll?: boolean;
+  revealedLetters?: Map<string, number>;
 }) {
   const groups = new Map<number, string[]>();
   for (const w of allWords) {
@@ -422,6 +430,7 @@ function WordGroupsPanel({
                   const isFound = item.type === "found";
                   const isMissed = revealAll && !isFound;
                   const hint = item.type === "unfound" ? item.hint : "";
+                  const revealCount = revealedLetters?.get(item.word) ?? 0;
                   return (
                     <div
                       key={item.word}
@@ -430,12 +439,13 @@ function WordGroupsPanel({
                       {item.word.split("").map((ch, i) => {
                         const showLetter = isFound || isMissed;
                         const hinted = !showLetter && i < hint.length;
+                        const revealed = !showLetter && i < revealCount;
                         return (
                           <span
                             key={i}
-                            className={`ww-word__letter${hinted ? " ww-word__letter--hint" : ""}`}
+                            className={`ww-word__letter${hinted ? " ww-word__letter--hint" : ""}${revealed ? " ww-word__letter--revealed" : ""}`}
                           >
-                            {showLetter || hinted ? ch.toUpperCase() : ""}
+                            {showLetter || hinted || revealed ? ch.toUpperCase() : ""}
                           </span>
                         );
                       })}
@@ -592,6 +602,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
   const [lastFoundWord, setLastFoundWord] = useState("");
   const [lastActivityTime, setLastActivityTime] = useState(() => Date.now());
   const [advanceBtnVisible, setAdvanceBtnVisible] = useState(false);
+  const [revealedLetters, setRevealedLetters] = useState<Map<string, number>>(new Map());
 
   // Refs for keyboard handler (avoids stale closures)
   const tilesRef = useRef<Tile[]>([]);
@@ -728,6 +739,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       setAdvanceBtnVisible(false);
       setLastActivityTime(Date.now());
       setFlash(null);
+      setRevealedLetters(new Map());
 
       if (s.timeLimit !== null) {
         setTimeRemaining(s.timeLimit);
@@ -906,6 +918,31 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
     setBoardTileIds((prev) => prev.slice(0, -1));
   }, [recordActivity]);
 
+  const revealNextLetter = useCallback(() => {
+    recordActivity();
+    setRevealedLetters((prev) => {
+      const next = new Map(prev);
+      const unfound = allWordsSetRef.current;
+      let revealed = false;
+
+      for (const word of allWordsSetRef.current) {
+        if (!foundWordsRef.current.has(word)) {
+          const current = next.get(word) ?? 0;
+          if (current < word.length) {
+            next.set(word, current + 1);
+            revealed = true;
+            break;
+          }
+        }
+      }
+
+      if (revealed) {
+        showFlash("Letter revealed", "good");
+      }
+      return next;
+    });
+  }, [recordActivity, showFlash]);
+
   // ── Keyboard handler ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -932,6 +969,9 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       } else if (e.key === "Escape") {
         e.preventDefault();
         clearBoard();
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        revealNextLetter();
       } else if (/^[a-zA-Z]$/.test(e.key)) {
         e.preventDefault();
         addLetterFromPool(e.key.toLowerCase());
@@ -947,6 +987,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
     removeLastFromBoard,
     clearBoard,
     addLetterFromPool,
+    revealNextLetter,
   ]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -1137,6 +1178,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
         foundWords={foundWords}
         showHints={settings.showHints}
         revealAll={roundSummary !== null}
+        revealedLetters={revealedLetters}
       />
 
       {/* ── Round summary overlay ── */}

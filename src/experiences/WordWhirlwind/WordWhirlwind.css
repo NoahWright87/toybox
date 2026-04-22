@@ -406,6 +406,13 @@
   color: #5b2d8e;
 }
 
+/* Revealed letters (progressive hint system) */
+.ww-word__letter--revealed {
+  background: #ffe0cc;
+  border-color: #ff6b00;
+  color: #cc4400;
+}
+
 /* Missed/unguessed word — revealed after round ends */
 .ww-word--missed .ww-word__letter {
   background: #f0d4d4;
