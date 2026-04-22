@@ -81,37 +81,20 @@
   margin-bottom: 56px;
 }
 
-.boot-splash__brand {
-  font-family: "Press Start 2P", monospace;
-  font-size: 8px;
-  color: #cc4400;
-  letter-spacing: 0.5em;
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.boot-splash__logo {
-  font-size: 80px;
-  line-height: 1;
-  filter: drop-shadow(0 0 24px rgba(255, 107, 0, 0.5));
-}
-
-@media (max-width: 480px) {
-  .boot-splash__logo { font-size: 56px; }
-}
-
-.boot-splash__title {
-  font-family: "Press Start 2P", monospace;
-  font-size: clamp(20px, 5vw, 36px);
-  color: #ff6b00;
-  text-shadow:
-    0 0 20px rgba(255, 107, 0, 0.7),
-    0 0 50px rgba(255, 107, 0, 0.35),
-    0 0 90px rgba(255, 107, 0, 0.15);
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-align: center;
-  margin-top: 4px;
+/* Logo image — retro 1997 quality treatment */
+.boot-splash__logo-img {
+  max-width: min(420px, 90vw);
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  filter:
+    contrast(1.08)
+    saturate(0.82)
+    brightness(0.92)
+    blur(0.4px);
+  /* Subtle orange glow to tie into the OS palette */
+  drop-shadow: 0 0 20px rgba(255, 107, 0, 0.4);
+  user-select: none;
 }
 
 .boot-splash__tagline {

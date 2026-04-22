@@ -30,6 +30,13 @@ import Blackjack from "../Cards/Blackjack";
 import Pyramid from "../Cards/Pyramid";
 import type { CardsGame, DeckSettings } from "../Cards/types";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
+import DisplayApp, { WALLPAPER_PRESET_URLS } from "./DisplayApp";
+import {
+  loadDesktopSettings,
+  saveDesktopSettings,
+  getDesktopBackground,
+  type DesktopSettings,
+} from "./desktopSettings";
 import "./NsDoors97.css";
 
 // ── Icon / experience config ───────────────────────────────────────────────
@@ -111,7 +118,8 @@ type WindowContent =
   | { type: "my-doors" }
   | { type: "internet" }
   | { type: "files" }
-  | { type: "notebook"; filePath: string; fileName: string; initialContent: string };
+  | { type: "notebook"; filePath: string; fileName: string; initialContent: string }
+  | { type: "desktop-display" };
 
 interface OpenWindow {
   id: string;
@@ -244,6 +252,38 @@ export default function NsDoors97() {
 
   const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
+
+  // ── Desktop settings ─────────────────────────────────────────────────────
+  const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(
+    () => loadDesktopSettings()
+  );
+
+  const openDisplaySettings = useCallback(() => {
+    const winId = "desktop-display";
+    setOpenWindows((prev) => {
+      if (prev.some((w) => w.id === winId)) {
+        maxZ++;
+        setActiveWindowId(winId);
+        return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+      }
+      const offset = (windowSeq % 8) * 32;
+      windowSeq++;
+      maxZ++;
+      setActiveWindowId(winId);
+      return [
+        ...prev,
+        {
+          id: winId,
+          title: "Display Properties",
+          icon: "🖥️",
+          content: { type: "desktop-display" as const },
+          zIndex: maxZ,
+          defaultPosition: { x: 100 + offset, y: 60 + offset },
+          width: 400,
+        },
+      ];
+    });
+  }, []);
 
   // ── Screensaver ──────────────────────────────────────────────────────────
   const [screensaverConfig, setScreensaverConfig] = useState<FullScreensaverConfig>(
@@ -457,8 +497,27 @@ export default function NsDoors97() {
     });
   }, []);
 
+  // ── Build desktop style (solid/gradient vs wallpaper) ────────────────────
+  const desktopStyle: React.CSSProperties = (() => {
+    if (desktopSettings.bgType === "wallpaper") {
+      const url = desktopSettings.wallpaperPreset
+        ? WALLPAPER_PRESET_URLS[desktopSettings.wallpaperPreset]
+        : (desktopSettings.wallpaperCustomUrl ?? "");
+      return {
+        backgroundImage:    url ? `url(${url})` : undefined,
+        backgroundSize:     desktopSettings.wallpaperFit,
+        backgroundPosition: "center",
+        backgroundRepeat:   "no-repeat",
+        backgroundColor:    "#000000",
+        // Prevent the browser from bilinear-scaling away the dithering pattern
+        imageRendering:     "pixelated",
+      };
+    }
+    return { background: getDesktopBackground(desktopSettings) };
+  })();
+
   return (
-    <div className="ns-desktop">
+    <div className="ns-desktop" style={desktopStyle}>
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
       <div className="ns-desktop__icons">
         {ALL_DESKTOP_ICONS.filter((def) => visibleIcons.has(def.id)).map((def) => (
@@ -576,6 +635,17 @@ export default function NsDoors97() {
               initialContent={win.content.initialContent}
             />
           )}
+          {win.content.type === "desktop-display" && (
+            <DisplayApp
+              settings={desktopSettings}
+              onApply={(newSettings) => {
+                setDesktopSettings(newSettings);
+                saveDesktopSettings(newSettings);
+                closeWindow(win.id);
+              }}
+              onCancel={() => closeWindow(win.id)}
+            />
+          )}
         </Window>
       ))}
 
@@ -585,6 +655,7 @@ export default function NsDoors97() {
         activeWindowId={activeWindowId}
         onWindowFocus={focusWindow}
         onRestart={handleRestart}
+        onOpenSettings={(s) => { if (s === "display") openDisplaySettings(); }}
       />
 
       {/* ── Screensaver overlay ── */}

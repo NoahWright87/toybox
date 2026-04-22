@@ -1,0 +1,377 @@
+.ns-display-app {
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  min-width: 380px;
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+
+.ns-display-app__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: #2a1000;
+  border-bottom: 2px solid #ff9a44;
+}
+
+.ns-display-app__tab {
+  padding: 5px 10px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #aaaaaa;
+  background: #3a1800;
+  border: 2px solid;
+  border-bottom: none;
+  border-color: #ff9a44 #330000 transparent #ff9a44;
+  cursor: pointer;
+  position: relative;
+  bottom: -2px;
+}
+
+.ns-display-app__tab:hover:not(:disabled) {
+  color: #dddddd;
+  background: #4a2200;
+}
+
+.ns-display-app__tab--active {
+  background: #1e1e1e;
+  color: #ff9a44;
+  border-color: #ff9a44 #330000 #1e1e1e #ff9a44;
+  z-index: 1;
+}
+
+.ns-display-app__tab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+
+.ns-display-app__body {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  align-items: flex-start;
+}
+
+/* ── CRT monitor preview ─────────────────────────────────────────────────── */
+
+.ns-display-app__monitor-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ns-display-app__monitor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 140px;
+}
+
+.ns-display-app__screen {
+  width: 128px;
+  height: 96px;
+  border: 3px solid;
+  border-color: #220a00 #cc8844 #cc8844 #220a00;
+  box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  padding: 6px 4px 0;
+  gap: 4px;
+  transition: background 0.15s;
+}
+
+/* Scanline CRT overlay */
+.ns-display-app__screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.12) 3px,
+    rgba(0, 0, 0, 0.12) 4px
+  );
+  pointer-events: none;
+}
+
+.ns-display-app__screen-icons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ns-display-app__screen-icon {
+  font-size: 14px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+.ns-display-app__screen-taskbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid rgba(255, 154, 68, 0.3);
+}
+
+.ns-display-app__monitor-neck {
+  width: 28px;
+  height: 8px;
+  background: #3a3a3a;
+  border-left: 2px solid #666;
+  border-right: 2px solid #222;
+}
+
+.ns-display-app__monitor-base {
+  width: 70px;
+  height: 8px;
+  background: #3a3a3a;
+  border: 2px solid;
+  border-color: #666 #222 #222 #666;
+  border-radius: 0 0 3px 3px;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.ns-display-app__controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ns-display-app__label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #cccccc;
+  display: block;
+}
+
+.ns-display-app__label--gap {
+  margin-top: 6px;
+}
+
+.ns-display-app__select {
+  width: 100%;
+  padding: 4px 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffffff;
+  background: #0a0a0a;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  cursor: pointer;
+}
+
+.ns-display-app__select option {
+  background: #1a1a1a;
+}
+
+/* ── Color presets grid ──────────────────────────────────────────────────── */
+
+.ns-display-app__presets {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.ns-display-app__swatch {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #555;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.ns-display-app__swatch:hover {
+  border-color: #ff9a44;
+  transform: scale(1.1);
+}
+
+.ns-display-app__swatch--active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 1px #ff9a44;
+}
+
+/* ── Custom color row ────────────────────────────────────────────────────── */
+
+.ns-display-app__color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ns-display-app__color-picker {
+  width: 36px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid;
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ns-display-app__color-hex {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #aaaaaa;
+}
+
+/* ── Wallpaper preset thumbnails ─────────────────────────────────────────── */
+
+.ns-display-app__wp-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ns-display-app__wp-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: #0a0a0a;
+  border: 2px solid #444;
+  cursor: pointer;
+  width: 68px;
+  flex-shrink: 0;
+}
+
+.ns-display-app__wp-thumb:hover {
+  border-color: #ff9a44;
+}
+
+.ns-display-app__wp-thumb--active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 1px #ff9a44;
+}
+
+.ns-display-app__wp-thumb-img {
+  width: 60px;
+  height: 36px;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+
+.ns-display-app__wp-thumb-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  color: #aaaaaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+}
+
+/* ── Fill / Fit toggle ───────────────────────────────────────────────────── */
+
+.ns-display-app__fit-row {
+  display: flex;
+  gap: 4px;
+}
+
+.ns-display-app__btn--fit {
+  min-width: 40px;
+  opacity: 0.6;
+}
+
+.ns-display-app__btn--fit-active {
+  opacity: 1;
+  border-color: #664400 #ffcc88 #ffcc88 #664400; /* sunken orange */
+}
+
+/* ── Upload row ──────────────────────────────────────────────────────────── */
+
+.ns-display-app__upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.ns-display-app__btn--upload {
+  white-space: nowrap;
+}
+
+.ns-display-app__upload-hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #ff9a44;
+  animation: ns-upload-blink 0.8s step-end infinite;
+}
+
+@keyframes ns-upload-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.ns-display-app__upload-error {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #ff4444;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+
+.ns-display-app__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #330000;
+  background: #1a0800;
+}
+
+.ns-display-app__btn {
+  padding: 6px 14px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffffff;
+  background: #4a2000;
+  border: 2px solid;
+  border-color: #ff9a44 #330000 #330000 #ff9a44;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ns-display-app__btn:hover {
+  background: #5a2800;
+}
+
+.ns-display-app__btn:active {
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #3a1800;
+}
+
+.ns-display-app__btn--primary {
+  background: #5b2d8e;
+  border-color: #ab6df4 #2d0066 #2d0066 #ab6df4;
+}
+
+.ns-display-app__btn--primary:hover {
+  background: #6b3dae;
+}
+
+.ns-display-app__btn--primary:active {
+  border-color: #2d0066 #ab6df4 #ab6df4 #2d0066;
+  background: #4b1d7e;
+}
