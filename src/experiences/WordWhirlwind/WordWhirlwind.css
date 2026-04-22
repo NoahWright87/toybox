@@ -19,6 +19,7 @@
   --ww-surface3: #a0a0a0;
   --ww-border:   #808080;
   --ww-tile-w:   clamp(40px, 9.5vw, 52px);
+  --ww-move-duration: 300ms;
 }
 
 /* ── Setup screen ─────────────────────────────────────────────────────────── */
@@ -374,6 +375,9 @@
   background: #d4d0c8;
   color: transparent;
   user-select: none;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out,
+              color var(--ww-move-duration) ease-out;
 }
 
 .ww-word--found .ww-word__letter {
@@ -394,9 +398,9 @@
 .ww-word--found .ww-word__letter:nth-child(8) { animation-delay: 245ms; }
 
 @keyframes ww-found-pop {
-  0%   { transform: scale(0.7) translateY(-4px); opacity: 0; }
-  60%  { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(1) translateY(0); }
+  0%   { transform: scale(0) translateY(-4px); opacity: 0; }
+  50%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 
 /* Hint letters (deducible from found neighbors) */
@@ -404,6 +408,9 @@
   background: #dde0f0;
   border-color: #5b2d8e;
   color: #5b2d8e;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out,
+              color var(--ww-move-duration) ease-out;
 }
 
 /* Revealed letters (progressive hint system) */
@@ -411,6 +418,9 @@
   background: #ffe0cc;
   border-color: #ff6b00;
   color: #cc4400;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out,
+              color var(--ww-move-duration) ease-out;
 }
 
 /* Missed/unguessed word — revealed after round ends */
@@ -504,6 +514,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out;
 }
 
 /* Filled slot — raised, orange-tinted */
@@ -622,7 +634,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.08s, transform 0.08s;
+  transition: background 0.08s, border-color 0.08s, transform var(--ww-move-duration) ease-out, opacity var(--ww-move-duration) ease-out;
 }
 
 .ww-pool__tile:hover {
