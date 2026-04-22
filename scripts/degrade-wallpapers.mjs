@@ -26,10 +26,10 @@ const WALLPAPERS    = resolve(__dirname, "../src/experiences/NsDoors97/wallpaper
 
 // ── Parameters (keep in sync with imageDegrade.ts) ───────────────────────────
 
-const DOWNSCALE_FACTOR = 0.5;  // 50% → 2×2 pixel blocks when upscaled
-const BITS_PER_CHANNEL = 5;    // 32 levels per R/G/B — 16-bit "High Color"
-const LEVELS           = 1 << BITS_PER_CHANNEL;         // 32
-const STEP             = 255 / (LEVELS - 1);            // ~8.226
+const DOWNSCALE_FACTOR = 0.35; // 35% → ~2.9× pixel blocks when upscaled
+const BITS_PER_CHANNEL = 4;    // 16 levels per R/G/B — 256-color era
+const LEVELS           = 1 << BITS_PER_CHANNEL;         // 16
+const STEP             = 255 / (LEVELS - 1);            // 17
 
 // ── Palette quantisation ──────────────────────────────────────────────────────
 

@@ -1,18 +1,21 @@
 export type DesktopBgType    = "noahsoft" | "solid" | "wallpaper";
 export type WallpaperPreset  = "sunset" | "arch";
+export type WallpaperFit     = "cover" | "contain";
 
 export interface DesktopSettings {
   bgType:             DesktopBgType;
   solidColor:         string;
   wallpaperPreset:    WallpaperPreset | null;
   wallpaperCustomUrl: string | null; // data URL for user-uploaded images
+  wallpaperFit:       WallpaperFit;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
-  bgType:             "noahsoft",
-  solidColor:         "#008080",
+  bgType:             "solid",
+  solidColor:         "#cc4400",
   wallpaperPreset:    null,
   wallpaperCustomUrl: null,
+  wallpaperFit:       "cover",
 };
 
 export const NOAHSOFT_GRADIENT =
@@ -36,6 +39,7 @@ export function loadDesktopSettings(): DesktopSettings {
       solidColor:         p.solidColor         ?? DEFAULT_DESKTOP_SETTINGS.solidColor,
       wallpaperPreset:    p.wallpaperPreset     ?? null,
       wallpaperCustomUrl: p.wallpaperCustomUrl  ?? null,
+      wallpaperFit:       p.wallpaperFit        ?? DEFAULT_DESKTOP_SETTINGS.wallpaperFit,
     };
   } catch {
     return { ...DEFAULT_DESKTOP_SETTINGS };

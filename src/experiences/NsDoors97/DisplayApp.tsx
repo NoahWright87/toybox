@@ -3,6 +3,7 @@ import {
   type DesktopSettings,
   type DesktopBgType,
   type WallpaperPreset,
+  type WallpaperFit,
   NOAHSOFT_GRADIENT,
 } from "./desktopSettings";
 import { degradeForWallpaper } from "./imageDegrade";
@@ -54,10 +55,17 @@ function getPreviewStyle(settings: DesktopSettings): React.CSSProperties {
   if (settings.bgType === "wallpaper") {
     const url = resolveWallpaperUrl(settings);
     return url
-      ? { backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundPosition: "center" }
+      ? {
+          backgroundImage:    `url(${url})`,
+          backgroundSize:     settings.wallpaperFit,
+          backgroundPosition: "center",
+          backgroundRepeat:   "no-repeat",
+          backgroundColor:    "#000000",
+          imageRendering:     "pixelated",
+        }
       : { background: "#000" };
   }
-  if (settings.bgType === "solid")    return { background: settings.solidColor };
+  if (settings.bgType === "solid") return { background: settings.solidColor };
   return { background: NOAHSOFT_GRADIENT };
 }
 
@@ -248,6 +256,20 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
                     <span className="ns-display-app__wp-thumb-label">Custom</span>
                   </button>
                 )}
+              </div>
+
+              {/* Fill / Fit toggle */}
+              <label className="ns-display-app__label ns-display-app__label--gap">Display</label>
+              <div className="ns-display-app__fit-row">
+                {(["cover", "contain"] as WallpaperFit[]).map((fit) => (
+                  <button
+                    key={fit}
+                    className={`ns-display-app__btn ns-display-app__btn--fit${local.wallpaperFit === fit ? " ns-display-app__btn--fit-active" : ""}`}
+                    onClick={() => setLocal((p) => ({ ...p, wallpaperFit: fit }))}
+                  >
+                    {fit === "cover" ? "Fill" : "Fit"}
+                  </button>
+                ))}
               </div>
 
               {/* Upload button */}

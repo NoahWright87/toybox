@@ -1,24 +1,28 @@
 /**
- * imageDegrade.ts — browser-side "1997 high-color" image degradation
+ * imageDegrade.ts — browser-side "1997 256-color" image degradation
  *
  * Produces images that look like they came from a Windows 95/98 machine
- * with a 16-bit "High Color" display:
+ * with an 8-bit "256 color" display:
  *
- *   1. Downscale to DOWNSCALE_FACTOR with bilinear interpolation
- *   2. Floyd-Steinberg dither to a 5-bit-per-channel palette
- *      (32 levels × 3 channels ≈ 32 768 addressable colours, but colour
- *       transitions produce the characteristic stipple/speckle pattern)
- *   3. Nearest-neighbour upscale back to original dimensions
- *      (each downscaled pixel becomes a small block — subtle pixellation)
+ *   1. Cap resolution to MAX_INPUT_DIM to avoid canvas memory failures
+ *      on large uploads (phones, hi-res photos)
+ *   2. Downscale to DOWNSCALE_FACTOR with bilinear interpolation
+ *   3. Floyd-Steinberg dither to a 4-bit-per-channel palette
+ *      (16 levels per channel, step ~17 — produces visible stippling on
+ *       any smooth gradient)
+ *   4. Nearest-neighbour upscale back to the (capped) original dimensions
+ *
+ * NOTE: the caller must set `imageRendering: pixelated` on the element that
+ * displays the result; otherwise the browser bilinear-scales it back to
+ * looking smooth.
  */
 
-const DOWNSCALE_FACTOR   = 0.5; // 50% → 2×2 pixel blocks when upscaled
-const BITS_PER_CHANNEL   = 5;   // 32 levels per R/G/B — 16-bit "High Color"
+const DOWNSCALE_FACTOR = 0.35; // 35% → ~2.9× pixel blocks when upscaled
+const BITS_PER_CHANNEL = 4;    // 16 levels per R/G/B — max error ~8.5 units
+const MAX_INPUT_DIM    = 1024; // cap before processing to stay in memory
 
-// ── Palette quantisation ──────────────────────────────────────────────────────
-
-const LEVELS = 1 << BITS_PER_CHANNEL;         // 32
-const STEP   = 255 / (LEVELS - 1);            // ~8.226
+const LEVELS = 1 << BITS_PER_CHANNEL;  // 16
+const STEP   = 255 / (LEVELS - 1);     // 17
 
 function quantize(v: number): number {
   return Math.round(v / STEP) * STEP;
@@ -27,7 +31,6 @@ function quantize(v: number): number {
 // ── Floyd-Steinberg dithering (in-place on Uint8ClampedArray) ─────────────────
 
 function floydSteinberg(data: Uint8ClampedArray, width: number, height: number): void {
-  // Floating-point error accumulators (separate from the clamped pixel data)
   const errR = new Float32Array(width * height);
   const errG = new Float32Array(width * height);
   const errB = new Float32Array(width * height);
@@ -53,7 +56,6 @@ function floydSteinberg(data: Uint8ClampedArray, width: number, height: number):
       const dG = oldG - newG;
       const dB = oldB - newB;
 
-      // Distribute error to the four neighbours:
       //   right        7/16
       //   bottom-left  3/16
       //   bottom       5/16
@@ -82,8 +84,6 @@ function floydSteinberg(data: Uint8ClampedArray, width: number, height: number):
   }
 }
 
-// ── Load a URL into an HTMLImageElement ───────────────────────────────────────
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -96,32 +96,44 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Degrades an image source URL to look like a 1997-era Windows wallpaper.
- * Returns a PNG data URL with the dithering baked in.
+ * Degrades an image source URL to look like a 1997-era Windows 256-color
+ * wallpaper. Returns a PNG data URL with the dithering baked in.
+ *
+ * The result must be displayed with `imageRendering: "pixelated"` so the
+ * browser doesn't bilinear-scale away the dithering pattern.
  */
 export async function degradeForWallpaper(src: string): Promise<string> {
-  const img  = await loadImage(src);
-  const origW = img.naturalWidth  || img.width;
-  const origH = img.naturalHeight || img.height;
+  const img = await loadImage(src);
+
+  // Step 0: cap resolution so canvas stays within mobile memory limits
+  let origW = img.naturalWidth;
+  let origH = img.naturalHeight;
+  if (!origW || !origH) throw new Error("Could not read image dimensions");
+
+  if (origW > MAX_INPUT_DIM || origH > MAX_INPUT_DIM) {
+    const scale = Math.min(MAX_INPUT_DIM / origW, MAX_INPUT_DIM / origH);
+    origW = Math.round(origW * scale);
+    origH = Math.round(origH * scale);
+  }
 
   const downW = Math.max(Math.round(origW * DOWNSCALE_FACTOR), 16);
   const downH = Math.max(Math.round(origH * DOWNSCALE_FACTOR), 16);
 
-  // ── Step 1: Downscale with smooth interpolation ───────────────────────────
+  // Step 1: downscale with smooth interpolation
   const small = document.createElement("canvas");
   small.width  = downW;
   small.height = downH;
   const smallCtx = small.getContext("2d")!;
   smallCtx.imageSmoothingEnabled = true;
   smallCtx.imageSmoothingQuality = "high";
-  smallCtx.drawImage(img, 0, 0, downW, downH);
+  smallCtx.drawImage(img, 0, 0, origW, origH, 0, 0, downW, downH);
 
-  // ── Step 2: Floyd-Steinberg dither to 5-bit palette ───────────────────────
+  // Step 2: Floyd-Steinberg dither to 4-bit palette
   const px = smallCtx.getImageData(0, 0, downW, downH);
   floydSteinberg(px.data, downW, downH);
   smallCtx.putImageData(px, 0, 0);
 
-  // ── Step 3: Nearest-neighbour upscale (pixellated, no blur) ──────────────
+  // Step 3: nearest-neighbour upscale (chunky pixel blocks, no blur)
   const out = document.createElement("canvas");
   out.width  = origW;
   out.height = origH;

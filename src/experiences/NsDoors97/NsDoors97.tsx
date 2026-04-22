@@ -505,9 +505,12 @@ export default function NsDoors97() {
         : (desktopSettings.wallpaperCustomUrl ?? "");
       return {
         backgroundImage:    url ? `url(${url})` : undefined,
-        backgroundSize:     "cover",
+        backgroundSize:     desktopSettings.wallpaperFit,
         backgroundPosition: "center",
+        backgroundRepeat:   "no-repeat",
         backgroundColor:    "#000000",
+        // Prevent the browser from bilinear-scaling away the dithering pattern
+        imageRendering:     "pixelated",
       };
     }
     return { background: getDesktopBackground(desktopSettings) };

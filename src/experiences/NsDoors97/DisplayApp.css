@@ -281,6 +281,23 @@
   max-width: 60px;
 }
 
+/* ── Fill / Fit toggle ───────────────────────────────────────────────────── */
+
+.ns-display-app__fit-row {
+  display: flex;
+  gap: 4px;
+}
+
+.ns-display-app__btn--fit {
+  min-width: 40px;
+  opacity: 0.6;
+}
+
+.ns-display-app__btn--fit-active {
+  opacity: 1;
+  border-color: #664400 #ffcc88 #ffcc88 #664400; /* sunken orange */
+}
+
 /* ── Upload row ──────────────────────────────────────────────────────────── */
 
 .ns-display-app__upload-row {
