@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getAnagramsOf, getRandomWord } from "../../utils/dictionary";
+import { getAnagramsOf, getRandomWord, getWordDifficulty } from "../../utils/dictionary";
 import "./WordWhirlwind.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -8,12 +8,14 @@ type GamePhase = "setup" | "playing" | "gameOver";
 type GameMode = "freeplay" | "standard" | "strict";
 type TimeLimit = 60 | 120 | 180 | 300 | null;
 type WordLength = 5 | 6 | 7 | 8;
+type DifficultyLevel = "easy" | "normal" | "hard" | "all";
 
 interface Settings {
   wordLength: WordLength;
   timeLimit: TimeLimit;
   mode: GameMode;
   showHints: boolean;
+  difficulty: DifficultyLevel;
 }
 
 interface Tile {
@@ -48,11 +50,18 @@ const WORD_SCORE: Record<number, number> = {
 };
 const FULL_CLEAR_BONUS = 500;
 const SPEED_BONUS_PER_SEC = 3;
+const DIFFICULTY_MAX_SCORE: Record<DifficultyLevel, number | undefined> = {
+  easy: 45,
+  normal: 70,
+  hard: 85,
+  all: undefined,
+};
 const DEFAULT_SETTINGS: Settings = {
   wordLength: 6,
   timeLimit: 120,
   mode: "standard",
   showHints: true,
+  difficulty: "normal",
 };
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
@@ -75,13 +84,17 @@ function generatePuzzle(
   settings: Settings
 ): { word: string; solutions: string[] } | null {
   const minWords = Math.max(settings.wordLength * 2, 8);
+  const maxDifficulty = DIFFICULTY_MAX_SCORE[settings.difficulty];
 
   for (let pass = 0; pass < 2; pass++) {
     const limit = pass === 0 ? 60 : 30;
     for (let i = 0; i < limit; i++) {
-      const word = getRandomWord(settings.wordLength);
+      const word = getRandomWord(settings.wordLength, maxDifficulty);
       if (!word) return null;
-      const solutions = getAnagramsOf(word, 3);
+      const solutions = getAnagramsOf(word, 3).filter((w) => {
+        const diff = getWordDifficulty(w);
+        return maxDifficulty === undefined || diff <= maxDifficulty;
+      });
       if (solutions.length >= (pass === 0 ? minWords : 1)) {
         return { word, solutions: [...solutions].sort() };
       }
@@ -194,6 +207,7 @@ function SetupScreen({
   const [timeLimit, setTimeLimit] = useState<TimeLimit>(120);
   const [mode, setMode] = useState<GameMode>("standard");
   const [showHints, setShowHints] = useState(true);
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>("normal");
 
   const timeLimitLabels: [TimeLimit, string][] = [
     [60, "1 min"],
@@ -270,9 +284,25 @@ function SetupScreen({
         <div className="ww-setup__hint">Reveal letters from found-word neighbors</div>
       </div>
 
+      <div className="ww-setup__section">
+        <div className="ww-setup__label">Word Difficulty</div>
+        <div className="ww-setup__options">
+          {(["easy", "normal", "hard", "all"] as DifficultyLevel[]).map((d) => (
+            <button
+              key={d}
+              className={`ww-setup__option${difficulty === d ? " ww-setup__option--active" : ""}`}
+              onClick={() => setDifficulty(d)}
+            >
+              {d.charAt(0).toUpperCase() + d.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="ww-setup__hint">Easy = common words, Hard = obscure words</div>
+      </div>
+
       <button
         className="ww-setup__start"
-        onClick={() => onStart({ wordLength, timeLimit, mode, showHints })}
+        onClick={() => onStart({ wordLength, timeLimit, mode, showHints, difficulty })}
       >
         Play!
       </button>
