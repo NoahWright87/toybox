@@ -157,7 +157,14 @@ NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
 
 ## Before finishing any task
 
-Always run `npx tsc --noEmit` before committing. The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports and variables are **build errors** that will fail the Netlify deploy. Fix every reported error before pushing.
+**CRITICAL: Always run TypeScript check and fix ALL errors before pushing.**
+
+1. Run `npx tsc --noEmit` — this must return with NO errors
+2. If any errors appear, fix them and run again until passing
+3. Commit the fixes
+4. Only then push to the branch
+
+The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports and variables are **build errors** that will fail the Netlify deploy. Every TypeScript error must be fixed before pushing—no exceptions.
 
 **Important:** Netlify's TypeScript targets an older lib than the local `tsc` sometimes allows. Avoid these patterns or they will fail the Netlify build even if they pass locally:
 - `Array.prototype.at()` — use `arr[arr.length - 1]` instead
