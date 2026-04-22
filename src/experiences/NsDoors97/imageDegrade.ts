@@ -120,13 +120,15 @@ export async function degradeForWallpaper(src: string): Promise<string> {
   const downH = Math.max(Math.round(origH * DOWNSCALE_FACTOR), 16);
 
   // Step 1: downscale with smooth interpolation
+  // Use the 5-arg drawImage form so the ENTIRE source image is scaled down,
+  // not just the top-left origW×origH pixels of a larger image.
   const small = document.createElement("canvas");
   small.width  = downW;
   small.height = downH;
   const smallCtx = small.getContext("2d")!;
   smallCtx.imageSmoothingEnabled = true;
   smallCtx.imageSmoothingQuality = "high";
-  smallCtx.drawImage(img, 0, 0, origW, origH, 0, 0, downW, downH);
+  smallCtx.drawImage(img, 0, 0, downW, downH);
 
   // Step 2: Floyd-Steinberg dither to 4-bit palette
   const px = smallCtx.getImageData(0, 0, downW, downH);

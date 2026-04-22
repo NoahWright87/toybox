@@ -117,15 +117,11 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
     setDegrading(true);
     setDegradeError(null);
 
+    // createObjectURL avoids the 33% base64 memory overhead of readAsDataURL,
+    // which prevents random out-of-memory failures on large phone photos.
+    const objectUrl = URL.createObjectURL(file);
     try {
-      const srcUrl = await new Promise<string>((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result as string);
-        reader.onerror = rej;
-        reader.readAsDataURL(file);
-      });
-
-      const degradedUrl = await degradeForWallpaper(srcUrl);
+      const degradedUrl = await degradeForWallpaper(objectUrl);
 
       setLocal((prev) => ({
         ...prev,
@@ -133,11 +129,16 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
         wallpaperPreset:    null,
         wallpaperCustomUrl: degradedUrl,
       }));
-    } catch {
-      setDegradeError("Could not process image. Try a different file.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setDegradeError(
+        msg.includes("dimensions")
+          ? "Could not read image dimensions. Try a different file."
+          : "Could not process image. Try a JPG or PNG."
+      );
     } finally {
+      URL.revokeObjectURL(objectUrl);
       setDegrading(false);
-      // Reset so the same file can be picked again
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
