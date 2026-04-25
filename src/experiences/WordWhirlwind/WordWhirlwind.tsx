@@ -116,10 +116,10 @@ function commonPrefix(a: string, b: string): string {
  * sorted list and return the common prefix of those two bounds.
  *
  * Special cases:
- * - If an unfound word comes before ALL found words, its first letter
- *   must match the first letter of the earliest found word.
- * - If an unfound word comes after ALL found words, its first letter
- *   must match the first letter of the latest found word.
+ * - If an unfound word comes BEFORE the earliest found word alphabetically,
+ *   its first letter must match the earliest found word's first letter.
+ * - If an unfound word comes AFTER the latest found word alphabetically,
+ *   its first letter must match the latest found word's first letter.
  */
 function computeGroupHints(
   words: string[],
@@ -153,12 +153,12 @@ function computeGroupHints(
     if (left !== null && right !== null) {
       hints.set(words[i], commonPrefix(left, right));
     }
-    // Special case: word comes before all found words
-    else if (left === null && earliestFound !== null) {
+    // Special case: word comes BEFORE the earliest found word
+    else if (earliestFound !== null && words[i] < earliestFound) {
       hints.set(words[i], earliestFound[0]);
     }
-    // Special case: word comes after all found words
-    else if (right === null && latestFound !== null) {
+    // Special case: word comes AFTER the latest found word
+    else if (latestFound !== null && words[i] > latestFound) {
       hints.set(words[i], latestFound[0]);
     }
   }
