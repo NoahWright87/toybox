@@ -114,15 +114,32 @@ function commonPrefix(a: string, b: string): string {
 /**
  * For each unfound word, find the nearest found word on each side in the
  * sorted list and return the common prefix of those two bounds.
- * That prefix is provably deducible from alphabetic ordering alone.
+ *
+ * Special cases:
+ * - If an unfound word comes before ALL found words, its first letter
+ *   must match the first letter of the earliest found word.
+ * - If an unfound word comes after ALL found words, its first letter
+ *   must match the first letter of the latest found word.
  */
 function computeGroupHints(
   words: string[],
   foundWords: Set<string>
 ): Map<string, string> {
   const hints = new Map<string, string>();
+
+  // Find earliest and latest found words
+  let earliestFound: string | null = null;
+  let latestFound: string | null = null;
+  for (const word of words) {
+    if (foundWords.has(word)) {
+      if (earliestFound === null) earliestFound = word;
+      latestFound = word;
+    }
+  }
+
   for (let i = 0; i < words.length; i++) {
     if (foundWords.has(words[i])) continue;
+
     let left: string | null = null;
     for (let j = i - 1; j >= 0; j--) {
       if (foundWords.has(words[j])) { left = words[j]; break; }
@@ -131,8 +148,18 @@ function computeGroupHints(
     for (let j = i + 1; j < words.length; j++) {
       if (foundWords.has(words[j])) { right = words[j]; break; }
     }
+
+    // Standard case: word is between two found words
     if (left !== null && right !== null) {
       hints.set(words[i], commonPrefix(left, right));
+    }
+    // Special case: word comes before all found words
+    else if (left === null && earliestFound !== null) {
+      hints.set(words[i], earliestFound[0]);
+    }
+    // Special case: word comes after all found words
+    else if (right === null && latestFound !== null) {
+      hints.set(words[i], latestFound[0]);
     }
   }
   return hints;
