@@ -1078,12 +1078,10 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
 
   // ── Derived display values ────────────────────────────────────────────────
 
-  const boardTiles = boardTileIds.map((id) => tiles[id]).filter(Boolean);
   const boardTileIdSet = new Set(boardTileIds);
-  const poolTilesOrdered = poolOrder
-    .filter((id) => !boardTileIdSet.has(id))
-    .map((id) => tiles[id])
-    .filter(Boolean);
+  // Filtered pool order (board tiles removed) — index = pool column
+  const poolOrderFiltered = poolOrder.filter((id) => !boardTileIdSet.has(id));
+  const poolColMap = new Map(poolOrderFiltered.map((id, col) => [id, col]));
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1152,18 +1150,44 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
           )}
         </div>
 
-        {/* Board slots */}
-        <div className="ww-board">
-          {Array.from({ length: settings.wordLength }).map((_, i) => {
-            const tile = boardTiles[i];
+        {/* Tile stage — board row on top, pool row below, tiles slide between them */}
+        <div
+          key={`stage-${round}`}
+          className="ww-stage"
+          style={{
+            width: `calc(${settings.wordLength} * (var(--ww-tile-w) + var(--ww-tile-gap)) - var(--ww-tile-gap))`,
+            height: `calc(var(--ww-tile-w) * 2 + var(--ww-stage-row-gap))`,
+          }}
+        >
+          {/* Static board slot outlines */}
+          {Array.from({ length: settings.wordLength }).map((_, i) => (
+            <div
+              key={`slot-${i}`}
+              className="ww-stage__slot"
+              style={{ left: `calc(${i} * (var(--ww-tile-w) + var(--ww-tile-gap)))` }}
+            />
+          ))}
+
+          {/* All tiles — absolutely positioned, slide on state change */}
+          {tiles.map((tile) => {
+            const boardIdx = boardTileIds.indexOf(tile.id);
+            const onBoard = boardIdx !== -1;
+            const col = onBoard ? boardIdx : (poolColMap.get(tile.id) ?? 0);
+            const top = onBoard
+              ? "0px"
+              : `calc(var(--ww-tile-w) + var(--ww-stage-row-gap))`;
             return (
               <button
-                key={tile ? `filled-${tile.id}` : `empty-${i}`}
-                className={`ww-board__slot${tile ? " ww-board__slot--filled" : ""}`}
-                onClick={() => tile && removeTileFromBoard(tile.id)}
-                disabled={!tile}
+                key={tile.id}
+                className={`ww-tile${onBoard ? " ww-tile--board" : ""}`}
+                style={{ left: `calc(${col} * (var(--ww-tile-w) + var(--ww-tile-gap)))`, top }}
+                onClick={() =>
+                  onBoard
+                    ? removeTileFromBoard(tile.id)
+                    : addTileToBoard(tile.id)
+                }
               >
-                {tile?.letter.toUpperCase() ?? ""}
+                {tile.letter.toUpperCase()}
               </button>
             );
           })}
@@ -1206,19 +1230,6 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
               Submit
             </button>
           </div>
-        </div>
-
-        {/* Pool */}
-        <div className="ww-pool">
-          {poolTilesOrdered.map((tile) => (
-            <button
-              key={tile.id}
-              className="ww-pool__tile"
-              onClick={() => addTileToBoard(tile.id)}
-            >
-              {tile.letter.toUpperCase()}
-            </button>
-          ))}
         </div>
       </div>
 
