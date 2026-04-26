@@ -91,15 +91,15 @@ export function computeHintReveals(
     }
     // Case 3: Word comes after all found words (after latest)
     else if (right === null && latestFound !== null) {
-      // Same logic but in reverse (from end of latestFound word)
+      // Check from start of latestFound word, matching against latest available letters
       const availableArray = Array.from(availableLetters)
         .map((x) => x.toLowerCase())
-        .sort((a, b) => b.localeCompare(a)); // Reverse sort
+        .sort((a, b) => b.localeCompare(a)); // Reverse sort (latest first)
       const remaining = new Set(availableArray);
 
-      for (let j = latestFound.length - 1; j >= 0; j--) {
+      for (let j = 0; j < latestFound.length; j++) {
         const letter = latestFound[j].toLowerCase();
-        // Check if this letter is the latest remaining available letter (in reverse order)
+        // Check if this letter is the latest remaining available letter
         const latestRemaining = Array.from(remaining).sort((a, b) =>
           b.localeCompare(a)
         )[0];
@@ -107,7 +107,7 @@ export function computeHintReveals(
           reveal++;
           remaining.delete(letter);
         } else {
-          break;
+          break; // Stop if letter doesn't match
         }
       }
     }

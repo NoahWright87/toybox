@@ -95,15 +95,15 @@ function computeHintReveals(
     }
     // Case 3: Word comes after all found words (after latest)
     else if (right === null && latestFound !== null) {
-      // Same logic but in reverse (from end of latestFound word)
+      // Check from start of latestFound word, matching against latest available letters
       const availableArray = Array.from(availableLetters)
         .map((x) => x.toLowerCase())
-        .sort((a, b) => b.localeCompare(a)); // Reverse sort
+        .sort((a, b) => b.localeCompare(a)); // Reverse sort (latest first)
       const remaining = new Set(availableArray);
 
-      for (let j = latestFound.length - 1; j >= 0; j--) {
+      for (let j = 0; j < latestFound.length; j++) {
         const letter = latestFound[j].toLowerCase();
-        // Check if this letter is the latest remaining available letter (in reverse order)
+        // Check if this letter is the latest remaining available letter
         const latestRemaining = Array.from(remaining).sort((a, b) =>
           b.localeCompare(a)
         )[0];
@@ -111,7 +111,7 @@ function computeHintReveals(
           reveal++;
           remaining.delete(letter);
         } else {
-          break;
+          break; // Stop if letter doesn't match
         }
       }
     }
@@ -244,62 +244,75 @@ test("hints before earliest word (matching start letters)", () => {
   assert.strictEqual(hints.get("abbey"), 2);
 });
 
-test("hints after latest word (reverse logic)", () => {
-  // If "year" is found and is the latest
-  // Available: {a, b, c, d, e, g, r, y}
-  // For words after "year":
-  // - Check from end of "year"
-  // - Last letter 'r', latest available (reverse sort): 'y'
-  // - 'r' != 'y' → stop at 0
-  // No hints after "year" since 'y' is not 'r'
+test("hints after latest word (matching start letters vs latest available)", () => {
+  // Words after latest found word show letters matching the latest word's start
+  // against the LATEST available letters (reverse sort)
 
-  const words = ["year", "zealot", "zephyr"];
-  const found = new Set(["year"]);
-  const available = new Set(["a", "e", "g", "h", "l", "o", "p", "r", "y", "z"]);
-
-  const hints = computeHintReveals(words, found, available);
-
-  // Last letter of "year" is 'r'
-  // Latest available (sorted desc): z, y, r, p, o, l, h, g, e, a
-  // First in reverse: 'z'
-  // 'r' != 'z' → reveal 0
-  assert.strictEqual(hints.get("zealot"), undefined);
-  assert.strictEqual(hints.get("zephyr"), undefined);
-});
-
-test("hints after latest word (matching end letters)", () => {
-  // If "rim" is found and is the latest
-  // Available: {a, b, d, e, i, m, r}
-  // For words after "rim":
-  // - Check from end: "rim"[-1] = 'm'
-  // - Latest available (reverse): m, r, i, e, d, b, a
-  // - First: 'm' → match, reveal 1
-  // - Remove 'm', next latest: 'r'
-  // - "rim"[-2] = 'i'  != 'r' → stop
-
-  const words = ["rage", "rain", "rim", "ruin"];
-  const found = new Set(["rim"]);
-  const available = new Set(["a", "b", "d", "e", "i", "m", "r", "u"]);
+  // Example 1: "wad" found, available {a, d, e, t, w}
+  // - "wad"[0] = 'w'
+  // - Latest available (reverse): w, t, e, d, a
+  // - First: 'w' == 'w' → reveal 1
+  // - "wad"[1] = 'a', remaining {t, e, d, a}, latest: 't'
+  // - 'a' != 't' → stop at 1
+  const words = ["wad", "wage", "wait", "wave"];
+  const found = new Set(["wad"]);
+  const available = new Set(["a", "d", "e", "t", "w"]);
 
   const hints = computeHintReveals(words, found, available);
 
-  // Last letter of "rim" is 'm'
-  // Latest available (reverse): u, r, m, i, e, d, b, a
-  // First: 'u' != 'm' → stop at 0
-  // Hmm, this test might not be right either
+  assert.strictEqual(hints.get("wage"), 1);
+  assert.strictEqual(hints.get("wait"), 1);
+  assert.strictEqual(hints.get("wave"), 1);
 
-  // Actually let me use an example where the last word is "room"
-  // Last letter 'm', second-to-last 'o'
-  const words2 = ["ring", "rise", "room", "rust"];
-  const found2 = new Set(["room"]);
-  const available2 = new Set(["g", "i", "m", "o", "r", "s", "t", "u"]);
+  // Example 2: "and" found, available {a, b, c, d, n}
+  // - "and"[0] = 'a'
+  // - Latest available (reverse): n, d, c, b, a
+  // - First: 'n' != 'a' → stop at 0
+  const words2 = ["and", "any", "arc"];
+  const found2 = new Set(["and"]);
+  const available2 = new Set(["a", "b", "c", "d", "n"]);
 
   const hints2 = computeHintReveals(words2, found2, available2);
 
-  // "room" = r,o,o,m
-  // Last letter 'm', latest available (reverse): u, t, s, r, o, m, i, g
-  // First: 'u' != 'm' → reveal 0
-  assert.strictEqual(hints2.get("rust"), undefined);
+  assert.strictEqual(hints2.get("any"), undefined);
+  assert.strictEqual(hints2.get("arc"), undefined);
+
+  // Example 3: "tab" found, available {a, b, d, g, r, s, t}
+  // - "tab"[0] = 't'
+  // - Latest available (reverse): t, s, r, g, d, b, a
+  // - First: 't' == 't' → reveal 1
+  // - "tab"[1] = 'a', remaining {s, r, g, d, b, a}, latest: 's'
+  // - 'a' != 's' → stop at 1
+  const words3 = ["sap", "sat", "tab", "tag", "tar"];
+  const found3 = new Set(["tab"]);
+  const available3 = new Set(["a", "b", "d", "g", "r", "s", "t"]);
+
+  const hints3 = computeHintReveals(words3, found3, available3);
+
+  assert.strictEqual(hints3.get("tag"), 1);
+  assert.strictEqual(hints3.get("tar"), 1);
+});
+
+test("real scenario: found TAB - shows T for words after it", () => {
+  // When "tab" is found:
+  // Words BEFORE (sap, sat): earliest available is 'a', "tab"[0] = 't' != 'a' → no hint
+  // Words AFTER (tad, tag, tar): latest available is 't', "tab"[0] = 't' == 't' → reveal 1
+  const words = ["sap", "sat", "tab", "tad", "tag", "tar"];
+  const found = new Set(["tab"]);
+  const available = new Set(["a", "b", "d", "g", "r", "s", "t"]);
+
+  const hints = computeHintReveals(words, found, available);
+
+  // Words before "tab": sap, sat
+  assert.strictEqual(hints.get("sap"), undefined);
+  assert.strictEqual(hints.get("sat"), undefined);
+
+  // Words after "tab": tad, tag, tar
+  // Latest available (reverse): t, s, r, g, d, b, a
+  // "tab"[0] = 't' == 't' → reveal 1
+  assert.strictEqual(hints.get("tad"), 1);
+  assert.strictEqual(hints.get("tag"), 1);
+  assert.strictEqual(hints.get("tar"), 1);
 });
 
 console.log("\n✅ All hint reveal tests passed!");
