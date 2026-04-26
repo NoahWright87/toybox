@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getAnagramsOf, getRandomWord, getWordDifficulty } from "../../utils/dictionary";
+import { computeHintReveals } from "../../utils/hints";
 import "./WordWhirlwind.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -105,69 +106,20 @@ function generatePuzzle(
 
 // ── Hint helpers ───────────────────────────────────────────────────────────────
 
-function commonPrefix(a: string, b: string): string {
-  let i = 0;
-  while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  return a.slice(0, i);
-}
-
 /**
- * For each unfound word, find the nearest found word on each side in the
- * sorted list and return the common prefix of those two bounds.
- *
- * Special cases:
- * - If an unfound word comes BEFORE the earliest found word alphabetically,
- *   its first letter must match the earliest found word's first letter.
- * - If an unfound word comes AFTER the latest found word alphabetically,
- *   its first letter must match the latest found word's first letter.
+ * Wrapper that computes hint reveals for a group of words.
  */
 function computeGroupHints(
   words: string[],
-  foundWords: Set<string>
-): Map<string, string> {
-  const hints = new Map<string, string>();
-
-  // Find earliest and latest found words
-  let earliestFound: string | null = null;
-  let latestFound: string | null = null;
-  for (const word of words) {
-    if (foundWords.has(word)) {
-      if (earliestFound === null) earliestFound = word;
-      latestFound = word;
-    }
-  }
-
-  for (let i = 0; i < words.length; i++) {
-    if (foundWords.has(words[i])) continue;
-
-    let left: string | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (foundWords.has(words[j])) { left = words[j]; break; }
-    }
-    let right: string | null = null;
-    for (let j = i + 1; j < words.length; j++) {
-      if (foundWords.has(words[j])) { right = words[j]; break; }
-    }
-
-    // Standard case: word is between two found words
-    if (left !== null && right !== null) {
-      hints.set(words[i], commonPrefix(left, right));
-    }
-    // Special case: word comes BEFORE the earliest found word
-    else if (earliestFound !== null && words[i] < earliestFound) {
-      hints.set(words[i], earliestFound[0]);
-    }
-    // Special case: word comes AFTER the latest found word
-    else if (latestFound !== null && words[i] > latestFound) {
-      hints.set(words[i], latestFound[0]);
-    }
-  }
-  return hints;
+  foundWords: Set<string>,
+  availableLetters: Set<string>
+): Map<string, number> {
+  return computeHintReveals(words, foundWords, availableLetters);
 }
 
 type DisplayItem =
   | { type: "found"; word: string }
-  | { type: "unfound"; word: string; hint: string }
+  | { type: "unfound"; word: string; hintLetters: number }
   | { type: "ellipsis"; count: number };
 
 /**
@@ -177,12 +129,12 @@ type DisplayItem =
 function buildGroupItems(
   words: string[],
   foundWords: Set<string>,
-  hints: Map<string, string>
+  hints: Map<string, number>
 ): DisplayItem[] {
   const raw: DisplayItem[] = words.map((w) =>
     foundWords.has(w)
       ? { type: "found" as const, word: w }
-      : { type: "unfound" as const, word: w, hint: hints.get(w) ?? "" }
+      : { type: "unfound" as const, word: w, hintLetters: hints.get(w) ?? 0 }
   );
 
   const result: DisplayItem[] = [];
@@ -381,13 +333,17 @@ function WordGroupsPanel({
   showHints,
   revealAll,
   revealedLetters,
+  puzzleWord,
 }: {
   allWords: string[];
   foundWords: Set<string>;
   showHints: boolean;
   revealAll?: boolean;
   revealedLetters?: Map<string, number>;
+  puzzleWord: string;
 }) {
+  const availableLetters = new Set(puzzleWord.toLowerCase().split(""));
+
   const groups = new Map<number, string[]>();
   for (const w of allWords) {
     if (!groups.has(w.length)) groups.set(w.length, []);
@@ -441,8 +397,8 @@ function WordGroupsPanel({
         const expanded = isExpanded(len);
         const hints =
           showHints && expanded
-            ? computeGroupHints(words, foundWords)
-            : new Map<string, string>();
+            ? computeGroupHints(words, foundWords, availableLetters)
+            : new Map<string, number>();
         const items = expanded
           ? buildGroupItems(words, foundWords, hints)
           : [];
@@ -480,7 +436,7 @@ function WordGroupsPanel({
                   }
                   const isFound = item.type === "found";
                   const isMissed = revealAll && !isFound;
-                  const hint = item.type === "unfound" ? item.hint : "";
+                  const hintLetters = item.type === "unfound" ? item.hintLetters : 0;
                   const revealCount = revealedLetters?.get(item.word) ?? 0;
                   return (
                     <div
@@ -489,7 +445,7 @@ function WordGroupsPanel({
                     >
                       {item.word.split("").map((ch, i) => {
                         const showLetter = isFound || isMissed;
-                        const hinted = !showLetter && i < hint.length;
+                        const hinted = !showLetter && i < hintLetters;
                         const revealed = !showLetter && i < revealCount;
                         return (
                           <span
@@ -1240,6 +1196,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
         showHints={settings.showHints}
         revealAll={roundSummary !== null}
         revealedLetters={revealedLetters}
+        puzzleWord={puzzleWord}
       />
 
       {/* ── Round summary overlay ── */}
