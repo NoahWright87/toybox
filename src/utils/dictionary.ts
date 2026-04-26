@@ -10,12 +10,14 @@
  */
 
 import rawWords from "../data/words/wordlist-clean.txt?raw";
+import rawMetadata from "../data/words/word-metadata.json";
 
 // ---------------------------------------------------------------------------
 // Internal cache
 // ---------------------------------------------------------------------------
 
 let _wordSet: Set<string> | null = null;
+const _metadata: Record<string, { difficulty: number; length: number }> = rawMetadata;
 
 function getWordSet(): Set<string> {
   if (!_wordSet) {
@@ -131,10 +133,24 @@ export function getExactAnagramsOf(letters: string): string[] {
  * Useful for generating puzzle seeds.
  *
  * @param length - Desired word length.
+ * @param maxDifficulty - Maximum difficulty score (0-100). Optional.
  * @returns A random word, or `null` if no word of that length exists.
  */
-export function getRandomWord(length: number): string | null {
-  const pool = getWordsOfLength(length);
+export function getRandomWord(length: number, maxDifficulty?: number): string | null {
+  let pool = getWordsOfLength(length);
+  if (maxDifficulty !== undefined) {
+    pool = pool.filter((w) => (_metadata[w]?.difficulty ?? 50) <= maxDifficulty);
+  }
   if (pool.length === 0) return null;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
+ * Get the difficulty score of a word.
+ *
+ * @param word - The word to check.
+ * @returns Difficulty score (0-100), or 50 if not found.
+ */
+export function getWordDifficulty(word: string): number {
+  return _metadata[word.toLowerCase()]?.difficulty ?? 50;
 }

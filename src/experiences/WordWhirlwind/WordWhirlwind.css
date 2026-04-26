@@ -18,7 +18,10 @@
   --ww-surface2: #d4d0c8;
   --ww-surface3: #a0a0a0;
   --ww-border:   #808080;
-  --ww-tile-w:   clamp(40px, 9.5vw, 52px);
+  --ww-tile-w:        clamp(40px, 9.5vw, 52px);
+  --ww-tile-gap:      6px;
+  --ww-stage-row-gap: 18px;
+  --ww-move-duration: 300ms;
 }
 
 /* ── Setup screen ─────────────────────────────────────────────────────────── */
@@ -374,6 +377,9 @@
   background: #d4d0c8;
   color: transparent;
   user-select: none;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out,
+              color var(--ww-move-duration) ease-out;
 }
 
 .ww-word--found .ww-word__letter {
@@ -394,9 +400,9 @@
 .ww-word--found .ww-word__letter:nth-child(8) { animation-delay: 245ms; }
 
 @keyframes ww-found-pop {
-  0%   { transform: scale(0.7) translateY(-4px); opacity: 0; }
-  60%  { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(1) translateY(0); }
+  0%   { transform: scale(0) translateY(-4px); opacity: 0; }
+  50%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 
 /* Hint letters (deducible from found neighbors) */
@@ -404,6 +410,19 @@
   background: #dde0f0;
   border-color: #5b2d8e;
   color: #5b2d8e;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out,
+              color var(--ww-move-duration) ease-out;
+}
+
+/* Revealed letters (progressive hint system) */
+.ww-word__letter--revealed {
+  background: #ffe0cc;
+  border-color: #ff6b00;
+  color: #cc4400;
+  transition: background var(--ww-move-duration) ease-out,
+              border-color var(--ww-move-duration) ease-out,
+              color var(--ww-move-duration) ease-out;
 }
 
 /* Missed/unguessed word — revealed after round ends */
@@ -474,48 +493,76 @@
   border-color: #cc0000 #ffaaaa #ffaaaa #cc0000;
 }
 
-/* Board */
+/* ── Tile stage (unified board + pool) ────────────────────────────────────── */
 
-.ww-board {
-  display: flex;
-  gap: 3px;
-  justify-content: center;
-  flex-wrap: wrap;
+.ww-stage {
+  position: relative;
+  flex-shrink: 0;
 }
 
-/* Win95 sunken input slot */
-.ww-board__slot {
+/* Static board slot outlines — sunken Win95 look */
+.ww-stage__slot {
+  position: absolute;
+  top: 0;
   width: var(--ww-tile-w);
   height: var(--ww-tile-w);
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   background: #d4d0c8;
-  color: var(--ww-text);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* All letter tiles — float absolutely, slide via CSS transition */
+.ww-tile {
+  position: absolute;
+  width: var(--ww-tile-w);
+  height: var(--ww-tile-w);
+  background: #ff6b00;
+  color: #fff;
   font-family: "Press Start 2P", monospace;
   font-size: clamp(10px, 2.4vw, 14px);
-  cursor: default;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  transition:
+    left var(--ww-move-duration) ease-out,
+    top  var(--ww-move-duration) ease-out,
+    background 0.08s,
+    border-color 0.08s;
+  animation: ww-tile-enter 0.25s ease-out;
 }
 
-/* Filled slot — raised, orange-tinted */
-.ww-board__slot--filled {
+.ww-tile:hover {
+  background: #ff7a1a;
+}
+
+.ww-tile:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+}
+
+/* Board tile — raised Win95, orange tint */
+.ww-tile--board {
   border-color: #ffffff #808080 #808080 #ffffff;
   background: #ffe0cc;
   color: #cc4400;
-  cursor: pointer;
-  animation: ww-tile-enter 0.18s ease-out;
+  text-shadow: none;
+}
+
+.ww-tile--board:hover {
+  background: #ffd0aa;
 }
 
 @keyframes ww-tile-enter {
-  0%   { transform: scale(0.65) translateY(-6px); opacity: 0.4; }
-  65%  { transform: scale(1.08); }
-  100% { transform: scale(1) translateY(0); opacity: 1; }
-}
-
-.ww-board__slot--filled:hover {
-  background: #ffd0aa;
+  0%   { transform: scale(0.6); opacity: 0; }
+  70%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
 }
 
 /* Controls */
@@ -590,44 +637,6 @@
 
 .ww-btn--advance:hover { background: #339944; }
 
-/* Pool */
-
-.ww-pool {
-  display: flex;
-  gap: 4px;
-  justify-content: center;
-  flex-wrap: wrap;
-  min-height: var(--ww-tile-w);
-}
-
-/* Win95 raised tile — orange-branded */
-.ww-pool__tile {
-  width: var(--ww-tile-w);
-  height: var(--ww-tile-w);
-  background: #ff6b00;
-  color: #fff;
-  font-family: "Press Start 2P", monospace;
-  font-size: clamp(10px, 2.4vw, 14px);
-  border: 2px solid;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
-  cursor: pointer;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.08s, transform 0.08s;
-}
-
-.ww-pool__tile:hover {
-  background: #ff7a1a;
-  transform: translateY(-2px);
-}
-
-.ww-pool__tile:active {
-  border-color: #664400 #ffcc88 #ffcc88 #664400;
-  background: #cc4400;
-  transform: translateY(0);
-}
 
 /* ── Round summary overlay ────────────────────────────────────────────────── */
 

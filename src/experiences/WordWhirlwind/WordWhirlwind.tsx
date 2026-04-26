@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getAnagramsOf, getRandomWord } from "../../utils/dictionary";
+import { getAnagramsOf, getRandomWord, getWordDifficulty } from "../../utils/dictionary";
+import { computeHintReveals } from "../../utils/hints";
 import "./WordWhirlwind.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -8,12 +9,14 @@ type GamePhase = "setup" | "playing" | "gameOver";
 type GameMode = "freeplay" | "standard" | "strict";
 type TimeLimit = 60 | 120 | 180 | 300 | null;
 type WordLength = 5 | 6 | 7 | 8;
+type DifficultyLevel = "easy" | "normal" | "hard" | "all";
 
 interface Settings {
   wordLength: WordLength;
   timeLimit: TimeLimit;
   mode: GameMode;
   showHints: boolean;
+  difficulty: DifficultyLevel;
 }
 
 interface Tile {
@@ -48,11 +51,18 @@ const WORD_SCORE: Record<number, number> = {
 };
 const FULL_CLEAR_BONUS = 500;
 const SPEED_BONUS_PER_SEC = 3;
+const DIFFICULTY_MAX_SCORE: Record<DifficultyLevel, number | undefined> = {
+  easy: 45,
+  normal: 70,
+  hard: 85,
+  all: undefined,
+};
 const DEFAULT_SETTINGS: Settings = {
   wordLength: 6,
   timeLimit: 120,
   mode: "standard",
   showHints: true,
+  difficulty: "normal",
 };
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
@@ -75,13 +85,17 @@ function generatePuzzle(
   settings: Settings
 ): { word: string; solutions: string[] } | null {
   const minWords = Math.max(settings.wordLength * 2, 8);
+  const maxDifficulty = DIFFICULTY_MAX_SCORE[settings.difficulty];
 
   for (let pass = 0; pass < 2; pass++) {
     const limit = pass === 0 ? 60 : 30;
     for (let i = 0; i < limit; i++) {
-      const word = getRandomWord(settings.wordLength);
+      const word = getRandomWord(settings.wordLength, maxDifficulty);
       if (!word) return null;
-      const solutions = getAnagramsOf(word, 3);
+      const solutions = getAnagramsOf(word, 3).filter((w) => {
+        const diff = getWordDifficulty(w);
+        return maxDifficulty === undefined || diff <= maxDifficulty;
+      });
       if (solutions.length >= (pass === 0 ? minWords : 1)) {
         return { word, solutions: [...solutions].sort() };
       }
@@ -92,42 +106,20 @@ function generatePuzzle(
 
 // ── Hint helpers ───────────────────────────────────────────────────────────────
 
-function commonPrefix(a: string, b: string): string {
-  let i = 0;
-  while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  return a.slice(0, i);
-}
-
 /**
- * For each unfound word, find the nearest found word on each side in the
- * sorted list and return the common prefix of those two bounds.
- * That prefix is provably deducible from alphabetic ordering alone.
+ * Wrapper that computes hint reveals for a group of words.
  */
 function computeGroupHints(
   words: string[],
-  foundWords: Set<string>
-): Map<string, string> {
-  const hints = new Map<string, string>();
-  for (let i = 0; i < words.length; i++) {
-    if (foundWords.has(words[i])) continue;
-    let left: string | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (foundWords.has(words[j])) { left = words[j]; break; }
-    }
-    let right: string | null = null;
-    for (let j = i + 1; j < words.length; j++) {
-      if (foundWords.has(words[j])) { right = words[j]; break; }
-    }
-    if (left !== null && right !== null) {
-      hints.set(words[i], commonPrefix(left, right));
-    }
-  }
-  return hints;
+  foundWords: Set<string>,
+  availableLetters: Set<string>
+): Map<string, number> {
+  return computeHintReveals(words, foundWords, availableLetters);
 }
 
 type DisplayItem =
   | { type: "found"; word: string }
-  | { type: "unfound"; word: string; hint: string }
+  | { type: "unfound"; word: string; hintLetters: number }
   | { type: "ellipsis"; count: number };
 
 /**
@@ -137,12 +129,12 @@ type DisplayItem =
 function buildGroupItems(
   words: string[],
   foundWords: Set<string>,
-  hints: Map<string, string>
+  hints: Map<string, number>
 ): DisplayItem[] {
   const raw: DisplayItem[] = words.map((w) =>
     foundWords.has(w)
       ? { type: "found" as const, word: w }
-      : { type: "unfound" as const, word: w, hint: hints.get(w) ?? "" }
+      : { type: "unfound" as const, word: w, hintLetters: hints.get(w) ?? 0 }
   );
 
   const result: DisplayItem[] = [];
@@ -188,6 +180,7 @@ function SetupScreen({
   const [timeLimit, setTimeLimit] = useState<TimeLimit>(120);
   const [mode, setMode] = useState<GameMode>("standard");
   const [showHints, setShowHints] = useState(true);
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>("normal");
 
   const timeLimitLabels: [TimeLimit, string][] = [
     [60, "1 min"],
@@ -264,9 +257,25 @@ function SetupScreen({
         <div className="ww-setup__hint">Reveal letters from found-word neighbors</div>
       </div>
 
+      <div className="ww-setup__section">
+        <div className="ww-setup__label">Word Difficulty</div>
+        <div className="ww-setup__options">
+          {(["easy", "normal", "hard", "all"] as DifficultyLevel[]).map((d) => (
+            <button
+              key={d}
+              className={`ww-setup__option${difficulty === d ? " ww-setup__option--active" : ""}`}
+              onClick={() => setDifficulty(d)}
+            >
+              {d.charAt(0).toUpperCase() + d.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="ww-setup__hint">Easy = common words, Hard = obscure words</div>
+      </div>
+
       <button
         className="ww-setup__start"
-        onClick={() => onStart({ wordLength, timeLimit, mode, showHints })}
+        onClick={() => onStart({ wordLength, timeLimit, mode, showHints, difficulty })}
       >
         Play!
       </button>
@@ -323,12 +332,18 @@ function WordGroupsPanel({
   foundWords,
   showHints,
   revealAll,
+  revealedLetters,
+  puzzleWord,
 }: {
   allWords: string[];
   foundWords: Set<string>;
   showHints: boolean;
   revealAll?: boolean;
+  revealedLetters?: Map<string, number>;
+  puzzleWord: string;
 }) {
+  const availableLetters = new Set(puzzleWord.toLowerCase().split(""));
+
   const groups = new Map<number, string[]>();
   for (const w of allWords) {
     if (!groups.has(w.length)) groups.set(w.length, []);
@@ -382,8 +397,8 @@ function WordGroupsPanel({
         const expanded = isExpanded(len);
         const hints =
           showHints && expanded
-            ? computeGroupHints(words, foundWords)
-            : new Map<string, string>();
+            ? computeGroupHints(words, foundWords, availableLetters)
+            : new Map<string, number>();
         const items = expanded
           ? buildGroupItems(words, foundWords, hints)
           : [];
@@ -421,7 +436,8 @@ function WordGroupsPanel({
                   }
                   const isFound = item.type === "found";
                   const isMissed = revealAll && !isFound;
-                  const hint = item.type === "unfound" ? item.hint : "";
+                  const hintLetters = item.type === "unfound" ? item.hintLetters : 0;
+                  const revealCount = revealedLetters?.get(item.word) ?? 0;
                   return (
                     <div
                       key={item.word}
@@ -429,13 +445,14 @@ function WordGroupsPanel({
                     >
                       {item.word.split("").map((ch, i) => {
                         const showLetter = isFound || isMissed;
-                        const hinted = !showLetter && i < hint.length;
+                        const hinted = !showLetter && i < hintLetters;
+                        const revealed = !showLetter && i < revealCount;
                         return (
                           <span
                             key={i}
-                            className={`ww-word__letter${hinted ? " ww-word__letter--hint" : ""}`}
+                            className={`ww-word__letter${hinted ? " ww-word__letter--hint" : ""}${revealed ? " ww-word__letter--revealed" : ""}`}
                           >
-                            {showLetter || hinted ? ch.toUpperCase() : ""}
+                            {showLetter || hinted || revealed ? ch.toUpperCase() : ""}
                           </span>
                         );
                       })}
@@ -592,6 +609,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
   const [lastFoundWord, setLastFoundWord] = useState("");
   const [lastActivityTime, setLastActivityTime] = useState(() => Date.now());
   const [advanceBtnVisible, setAdvanceBtnVisible] = useState(false);
+  const [revealedLetters, setRevealedLetters] = useState<Map<string, number>>(new Map());
 
   // Refs for keyboard handler (avoids stale closures)
   const tilesRef = useRef<Tile[]>([]);
@@ -728,6 +746,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       setAdvanceBtnVisible(false);
       setLastActivityTime(Date.now());
       setFlash(null);
+      setRevealedLetters(new Map());
 
       if (s.timeLimit !== null) {
         setTimeRemaining(s.timeLimit);
@@ -836,7 +855,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       return sc + pts;
     });
     setFoundWords((prev) => {
-      const next = new Set(prev);
+      const next = new Set<string>(prev);
       next.add(word);
 
       const s = settingsRef.current;
@@ -844,7 +863,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       const aw = allWordsSetRef.current;
 
       // Check advance conditions after adding word
-      const foundMaxLength = [...next].some((w) => w.length === pw.length);
+      const foundMaxLength = Array.from<string>(next).some((w) => w.length === pw.length);
       const foundAll = next.size === aw.size;
 
       if (s.mode === "strict" && foundAll) {
@@ -906,6 +925,30 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
     setBoardTileIds((prev) => prev.slice(0, -1));
   }, [recordActivity]);
 
+  const revealNextLetter = useCallback(() => {
+    recordActivity();
+    setRevealedLetters((prev) => {
+      const next = new Map<string, number>(prev);
+      let revealed = false;
+
+      for (const word of allWordsSetRef.current) {
+        if (!foundWordsRef.current.has(word)) {
+          const current = next.get(word) ?? 0;
+          if (current < word.length) {
+            next.set(word, current + 1);
+            revealed = true;
+            break;
+          }
+        }
+      }
+
+      if (revealed) {
+        showFlash("Letter revealed", "good");
+      }
+      return next;
+    });
+  }, [recordActivity, showFlash]);
+
   // ── Keyboard handler ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -932,6 +975,9 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       } else if (e.key === "Escape") {
         e.preventDefault();
         clearBoard();
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        revealNextLetter();
       } else if (/^[a-zA-Z]$/.test(e.key)) {
         e.preventDefault();
         addLetterFromPool(e.key.toLowerCase());
@@ -947,6 +993,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
     removeLastFromBoard,
     clearBoard,
     addLetterFromPool,
+    revealNextLetter,
   ]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -987,12 +1034,10 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
 
   // ── Derived display values ────────────────────────────────────────────────
 
-  const boardTiles = boardTileIds.map((id) => tiles[id]).filter(Boolean);
   const boardTileIdSet = new Set(boardTileIds);
-  const poolTilesOrdered = poolOrder
-    .filter((id) => !boardTileIdSet.has(id))
-    .map((id) => tiles[id])
-    .filter(Boolean);
+  // Filtered pool order (board tiles removed) — index = pool column
+  const poolOrderFiltered = poolOrder.filter((id) => !boardTileIdSet.has(id));
+  const poolColMap = new Map(poolOrderFiltered.map((id, col) => [id, col]));
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1061,18 +1106,44 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
           )}
         </div>
 
-        {/* Board slots */}
-        <div className="ww-board">
-          {Array.from({ length: settings.wordLength }).map((_, i) => {
-            const tile = boardTiles[i];
+        {/* Tile stage — board row on top, pool row below, tiles slide between them */}
+        <div
+          key={`stage-${round}`}
+          className="ww-stage"
+          style={{
+            width: `calc(${settings.wordLength} * (var(--ww-tile-w) + var(--ww-tile-gap)) - var(--ww-tile-gap))`,
+            height: `calc(var(--ww-tile-w) * 2 + var(--ww-stage-row-gap))`,
+          }}
+        >
+          {/* Static board slot outlines */}
+          {Array.from({ length: settings.wordLength }).map((_, i) => (
+            <div
+              key={`slot-${i}`}
+              className="ww-stage__slot"
+              style={{ left: `calc(${i} * (var(--ww-tile-w) + var(--ww-tile-gap)))` }}
+            />
+          ))}
+
+          {/* All tiles — absolutely positioned, slide on state change */}
+          {tiles.map((tile) => {
+            const boardIdx = boardTileIds.indexOf(tile.id);
+            const onBoard = boardIdx !== -1;
+            const col = onBoard ? boardIdx : (poolColMap.get(tile.id) ?? 0);
+            const top = onBoard
+              ? "0px"
+              : `calc(var(--ww-tile-w) + var(--ww-stage-row-gap))`;
             return (
               <button
-                key={tile ? `filled-${tile.id}` : `empty-${i}`}
-                className={`ww-board__slot${tile ? " ww-board__slot--filled" : ""}`}
-                onClick={() => tile && removeTileFromBoard(tile.id)}
-                disabled={!tile}
+                key={tile.id}
+                className={`ww-tile${onBoard ? " ww-tile--board" : ""}`}
+                style={{ left: `calc(${col} * (var(--ww-tile-w) + var(--ww-tile-gap)))`, top }}
+                onClick={() =>
+                  onBoard
+                    ? removeTileFromBoard(tile.id)
+                    : addTileToBoard(tile.id)
+                }
               >
-                {tile?.letter.toUpperCase() ?? ""}
+                {tile.letter.toUpperCase()}
               </button>
             );
           })}
@@ -1116,19 +1187,6 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
             </button>
           </div>
         </div>
-
-        {/* Pool */}
-        <div className="ww-pool">
-          {poolTilesOrdered.map((tile) => (
-            <button
-              key={tile.id}
-              className="ww-pool__tile"
-              onClick={() => addTileToBoard(tile.id)}
-            >
-              {tile.letter.toUpperCase()}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* ── Word groups ── */}
@@ -1137,6 +1195,8 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
         foundWords={foundWords}
         showHints={settings.showHints}
         revealAll={roundSummary !== null}
+        revealedLetters={revealedLetters}
+        puzzleWord={puzzleWord}
       />
 
       {/* ── Round summary overlay ── */}

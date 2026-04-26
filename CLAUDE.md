@@ -157,12 +157,29 @@ NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
 
 ## Before finishing any task
 
-Always run `npx tsc --noEmit` before committing. The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports and variables are **build errors** that will fail the Netlify deploy. Fix every reported error before pushing.
+**CRITICAL: Always run TypeScript check and fix ALL errors before pushing.**
+
+**DO NOT use `npx tsc --noEmit`** — `tsconfig.json` has `"files": []` so it checks nothing and always exits 0. It is a false pass.
+
+**Use this instead:**
+```
+npm run build 2>&1 | grep "error TS" | grep -v "TS2307\|TS2875\|TS7026\|TS7006\|TS7053\|TS2503\|TS2882"
+```
+This filters out the pre-existing "Cannot find module 'react'" noise from the local environment (packages are installed on Netlify) and shows only real type errors. **The output must be empty for all files you changed.**
+
+1. Run the command above — verify no errors in any file you touched
+2. If errors appear, fix them and run again until passing
+3. Commit the fixes
+4. Only then push to the branch
+
+The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports and variables are **build errors** that will fail the Netlify deploy. Every TypeScript error must be fixed before pushing—no exceptions.
 
 **Important:** Netlify's TypeScript targets an older lib than the local `tsc` sometimes allows. Avoid these patterns or they will fail the Netlify build even if they pass locally:
 - `Array.prototype.at()` — use `arr[arr.length - 1]` instead
 - Other ES2022+ array/string methods not in ES2020 lib (`findLast`, `toSorted`, `toReversed`, etc.)
 - When spreading an object and overriding a union-typed field (e.g. `phase: GamePhase`), annotate the local variable explicitly: `const phase: GamePhase = ...` to prevent TypeScript widening it to `string`.
+- Generic collections like `new Set(prev)` or `new Map(prev)` — always specify the type parameter explicitly: `new Set<string>(prev)`, `new Map<string, number>(prev)`.
+- Test files (`*.test.ts`) that use Node.js built-ins must be excluded from `tsconfig.app.json` via the `exclude` list, not just left in `src/`.
 
 ## Known conventions
 
