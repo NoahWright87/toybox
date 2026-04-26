@@ -855,7 +855,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       return sc + pts;
     });
     setFoundWords((prev) => {
-      const next = new Set(prev);
+      const next = new Set<string>(prev);
       next.add(word);
 
       const s = settingsRef.current;
@@ -863,7 +863,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
       const aw = allWordsSetRef.current;
 
       // Check advance conditions after adding word
-      const foundMaxLength = [...next].some((w) => w.length === pw.length);
+      const foundMaxLength = Array.from<string>(next).some((w) => w.length === pw.length);
       const foundAll = next.size === aw.size;
 
       if (s.mode === "strict" && foundAll) {
@@ -928,7 +928,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
   const revealNextLetter = useCallback(() => {
     recordActivity();
     setRevealedLetters((prev) => {
-      const next = new Map(prev);
+      const next = new Map<string, number>(prev);
       let revealed = false;
 
       for (const word of allWordsSetRef.current) {
