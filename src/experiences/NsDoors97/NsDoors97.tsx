@@ -175,19 +175,17 @@ export default function NsDoors97() {
   const location = useLocation();
   const { showDialog } = useOsDialog();
 
-  // Returning from NS-TOS skips the BIOS screen but still does the icon pop-in.
+  // Returning from NS-TOS shows only the splash screen (no BIOS), then desktop.
   const fromTos = (location.state as { fromTos?: boolean } | null)?.fromTos === true;
-  const initialShouldBoot = !fromTos && shouldShowBoot();
+  const initialShouldBoot = fromTos || shouldShowBoot();
 
   const [showBoot, setShowBoot]             = useState(initialShouldBoot);
   const [shuttingDown, setShuttingDown]     = useState(false);
-  const [desktopLoading, setDesktopLoading] = useState(fromTos);
+  const [desktopLoading, setDesktopLoading] = useState(false);
 
-  // Icons visible on desktop.
-  // - Full boot or returning from TOS: start empty, pop in during loading phase.
-  // - Recent normal visit: show all immediately.
+  // Icons start empty whenever there's a boot screen, all-visible otherwise.
   const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
-    if (fromTos || initialShouldBoot) return new Set<string>();
+    if (initialShouldBoot) return new Set<string>();
     return new Set(ALL_DESKTOP_ICONS.map((d) => d.id));
   });
 
@@ -686,7 +684,7 @@ export default function NsDoors97() {
 
       {/* ── Boot screen (renders on top of everything) ── */}
       {showBoot && (
-        <BootScreen onComplete={handleBootComplete} />
+        <BootScreen onComplete={handleBootComplete} splashOnly={fromTos} />
       )}
     </div>
   );
