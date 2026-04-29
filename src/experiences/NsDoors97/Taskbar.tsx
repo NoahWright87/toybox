@@ -15,6 +15,7 @@ interface TaskbarProps {
   onWindowFocus: (id: string) => void;
   onRestart: () => void;
   onOpenSettings: (setting: "display") => void;
+  onExitToTos: () => void;
 }
 
 // ── Retro clock: real time, date shifted 30 years back ────────────────────────
@@ -104,7 +105,7 @@ const START_MENU_ITEMS = [
 
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
-export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings }: TaskbarProps) {
+export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings, onExitToTos }: TaskbarProps) {
   const { showDialog } = useOsDialog();
   const [startOpen, setStartOpen] = useState(false);
   const [settingsSubOpen, setSettingsSubOpen] = useState(false);
@@ -137,6 +138,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
     setSettingsSubOpen(false);
     onOpenSettings("display");
   }, [onOpenSettings]);
+
+  const handleExitToTos = useCallback(() => {
+    setStartOpen(false);
+    onExitToTos();
+  }, [onExitToTos]);
 
   return (
     <div className="ns-taskbar">
@@ -190,6 +196,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
               })}
 
               <div className="ns-start-menu__divider" />
+
+              <button className="ns-start-menu__item" onClick={handleExitToTos}>
+                <span className="ns-start-menu__item-icon ns-start-menu__item-icon--text">&gt;_</span>
+                <span className="ns-start-menu__item-label">Exit to NS-TOS...</span>
+              </button>
 
               <button className="ns-start-menu__item ns-start-menu__item--restart" onClick={handleRestart}>
                 <span className="ns-start-menu__item-icon">🔄</span>

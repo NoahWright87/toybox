@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { experiences, type Experience } from "../../data/experiences";
 import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
 import { randomDelay } from "../../utils/retroTiming";
@@ -89,7 +89,7 @@ const STATIC_ICONS: DesktopIconDef[] = [
 ];
 
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
-  .filter((e) => e.id !== "ns-doors-97" && e.category !== "screensaver")
+  .filter((e) => e.id !== "ns-doors-97" && e.id !== "ns-tos" && e.category !== "screensaver")
   .map((e) => ({
     id: e.id,
     title: e.title,
@@ -172,16 +172,22 @@ function AppLauncher({
 
 export default function NsDoors97() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showDialog } = useOsDialog();
 
-  const [showBoot, setShowBoot]           = useState(() => shouldShowBoot());
-  const [shuttingDown, setShuttingDown]   = useState(false);
-  const [desktopLoading, setDesktopLoading] = useState(false);
+  // Returning from NS-TOS skips the BIOS screen but still does the icon pop-in.
+  const fromTos = (location.state as { fromTos?: boolean } | null)?.fromTos === true;
+  const initialShouldBoot = !fromTos && shouldShowBoot();
 
-  // Icons visible on desktop — starts empty when there's a boot screen,
-  // all-visible immediately when there isn't one.
+  const [showBoot, setShowBoot]             = useState(initialShouldBoot);
+  const [shuttingDown, setShuttingDown]     = useState(false);
+  const [desktopLoading, setDesktopLoading] = useState(fromTos);
+
+  // Icons visible on desktop.
+  // - Full boot or returning from TOS: start empty, pop in during loading phase.
+  // - Recent normal visit: show all immediately.
   const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
-    if (shouldShowBoot()) return new Set<string>();
+    if (fromTos || initialShouldBoot) return new Set<string>();
     return new Set(ALL_DESKTOP_ICONS.map((d) => d.id));
   });
 
@@ -200,6 +206,10 @@ export default function NsDoors97() {
       setShowBoot(true);
     }, 1500);
   }, []);
+
+  const handleExitToTos = useCallback(() => {
+    navigate("/ns-tos");
+  }, [navigate]);
 
   // ── Janky desktop startup ────────────────────────────────────────────────
   useEffect(() => {
@@ -656,6 +666,7 @@ export default function NsDoors97() {
         onWindowFocus={focusWindow}
         onRestart={handleRestart}
         onOpenSettings={(s) => { if (s === "display") openDisplaySettings(); }}
+        onExitToTos={handleExitToTos}
       />
 
       {/* ── Screensaver overlay ── */}
