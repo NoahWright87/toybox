@@ -1,137 +1,269 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Typing Racer — Noahsoft Win95 Redesign
-   Win95 chrome throughout; Courier New for the phrase (legibility);
-   Press Start 2P for all HUD / status labels.
+   Type 'Em Up — shmup typing game
+   Win95 chrome for menu / game-over screens; canvas renders the game itself.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.typing-racer {
+/* ── Outer container ─────────────────────────────────────────────────────── */
+
+.teu {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Win95 window chrome ─────────────────────────────────────────────────── */
+
+.teu__window {
+  width: min(440px, 96vw);
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 4px 4px 0 #000000;
+}
+
+.teu__titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: linear-gradient(to right, #7b3dbe, #cc4400);
+  user-select: none;
+}
+
+.teu__titlebar--dead {
+  background: linear-gradient(to right, #660000, #cc0000);
+}
+
+.teu__titlebar-text {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.05em;
+}
+
+.teu__titlebar-dots {
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 3px;
+}
+
+/* ── Window body ─────────────────────────────────────────────────────────── */
+
+.teu__body {
+  background: #c0c0c0;
+  padding: 20px 24px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 16px 18px;
-  gap: 12px;
-  background: #c0c0c0;
-  width: min(560px, 94vw);
+  gap: 14px;
 }
 
-/* ── Stats bar — Win95 sunken status strip ─────────────────────────────── */
+/* ── Logo / heading ──────────────────────────────────────────────────────── */
 
-.typing-racer__stats {
-  display: flex;
-  gap: 16px;
-  width: 100%;
-  padding: 4px 8px;
-  background: #d4d0c8;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
+.teu__logo {
+  font-family: "Press Start 2P", monospace;
+  font-size: 18px;
+  color: #cc4400;
+  text-shadow: 2px 2px 0 #663300, 4px 4px 0 rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.teu__logo--dead {
+  color: #cc0000;
+  text-shadow: 2px 2px 0 #660000, 4px 4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.teu__tagline {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
-  color: #000;
-  box-sizing: border-box;
-  font-variant-numeric: tabular-nums;
-  min-height: 22px;
-  align-items: center;
+  color: #666;
+  text-transform: lowercase;
+  letter-spacing: 0.1em;
 }
 
-.typing-racer__timer {
-  color: #cc4400;
-  margin-left: auto;
-}
+/* ── High score ──────────────────────────────────────────────────────────── */
 
-/* ── Phrase display — Win95 inset panel ───────────────────────────────── */
-
-.typing-racer__phrase {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 10px 12px;
+.teu__high-score {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #5b2d8e;
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 1.15rem;
+  padding: 5px 12px;
+  letter-spacing: 0.06em;
+}
+
+/* ── New record flash ────────────────────────────────────────────────────── */
+
+.teu__new-record {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #ffcc00;
+  text-shadow: 1px 1px 0 #664400;
+  animation: teu-flash 0.6s step-end infinite;
+  letter-spacing: 0.06em;
+}
+
+@keyframes teu-flash {
+  0%,  100% { opacity: 1; }
+  50%        { opacity: 0; }
+}
+
+/* ── Section label ───────────────────────────────────────────────────────── */
+
+.teu__section-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #444;
+  letter-spacing: 0.1em;
+  align-self: flex-start;
+}
+
+/* ── Difficulty buttons ──────────────────────────────────────────────────── */
+
+.teu__diff-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.teu__diff-btn {
+  flex: 1;
+  padding: 8px 4px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #333;
+  letter-spacing: 0.05em;
+}
+
+.teu__diff-btn:hover {
+  background: #d4d0c8;
+}
+
+.teu__diff-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  transform: translateY(1px);
+}
+
+/* Easy = green tint, Medium = amber, Hard = red */
+.teu__diff-btn--active:nth-child(1) {
+  background: #cceecc;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #226622;
+}
+.teu__diff-btn--active:nth-child(2) {
+  background: #ffeebb;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #664400;
+}
+.teu__diff-btn--active:nth-child(3) {
+  background: #ffcccc;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #880000;
+}
+
+/* ── Launch / action buttons ─────────────────────────────────────────────── */
+
+.teu__launch-btn {
+  padding: 10px 28px;
+  background: #ff6b00;
+  color: #ffffff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+  letter-spacing: 0.06em;
+}
+
+.teu__launch-btn:hover {
+  background: #ff7a1a;
+}
+
+.teu__launch-btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(1px);
+}
+
+.teu__launch-btn--secondary {
+  background: #c0c0c0;
+  color: #333;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  text-shadow: none;
+}
+
+.teu__launch-btn--secondary:hover {
+  background: #d4d0c8;
+}
+
+.teu__launch-btn--secondary:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+
+/* ── Tips / instructions ─────────────────────────────────────────────────── */
+
+.teu__tips {
+  width: 100%;
+  padding: 8px 10px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.teu__tips p {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+  margin: 0 0 6px;
   line-height: 1.8;
-  text-align: left;
-  user-select: none;
-  letter-spacing: 0.02em;
-  word-break: break-word;
 }
 
-.typing-racer__char {
-  color: #888;
+.teu__tips p:last-child {
+  margin-bottom: 0;
 }
 
-.typing-racer__char--correct {
-  color: #228833;
+.teu__tips-esc {
+  color: #888 !important;
 }
 
-.typing-racer__char--wrong {
-  color: #cc0000;
-  background: rgba(204, 0, 0, 0.12);
-}
+/* ── Stats grid (game over) ──────────────────────────────────────────────── */
 
-.typing-racer__char--cursor {
-  color: #000;
-  border-bottom: 2px solid #cc4400;
-}
-
-/* ── Input — Win95 text field ────────────────────────────────────────── */
-
-.typing-racer__input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 5px 8px;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 1rem;
-  background: #ffffff;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  color: #000;
-  outline: none;
-  caret-color: #cc4400;
-}
-
-.typing-racer__input:focus {
-  border-color: #000000 #c0c0c0 #c0c0c0 #000000;
-}
-
-/* ── Result screen ──────────────────────────────────────────────────── */
-
-.typing-racer__result {
+.teu__stats-grid {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-
-.typing-racer__result-stats {
-  display: flex;
-  gap: 0;
   width: 100%;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   background: #d4d0c8;
 }
 
-.typing-racer__result-stats > div {
+.teu__stat {
   flex: 1;
   text-align: center;
-  padding: 10px 8px;
+  padding: 12px 8px;
   border-right: 1px solid #808080;
 }
 
-.typing-racer__result-stats > div:last-child {
+.teu__stat:last-child {
   border-right: none;
 }
 
-.typing-racer__result-value {
+.teu__stat-val {
   font-family: "Press Start 2P", monospace;
   font-size: 14px;
   color: #cc4400;
   font-variant-numeric: tabular-nums;
 }
 
-.typing-racer__result-label {
+.teu__stat-key {
   font-family: "Press Start 2P", monospace;
   font-size: 6px;
   color: #555;
@@ -140,26 +272,92 @@
   margin-top: 6px;
 }
 
-/* Win95 orange primary button */
-.typing-racer__reset {
-  padding: 7px 24px;
-  background: #ff6b00;
-  color: #fff;
+/* ── Action row ──────────────────────────────────────────────────────────── */
+
+.teu__action-row {
+  display: flex;
+  gap: 12px;
+}
+
+/* ── Canvas + type strip wrapper (playing phase) ─────────────────────────── */
+
+.teu__game-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(560px, 96vw);
+}
+
+.teu__canvas {
+  display: block;
+  width: 100%;
+  height: auto;
   border: 2px solid;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  border-bottom: none; /* strip shares the bottom edge */
+  box-shadow: 4px 4px 0 #000000;
+  image-rendering: pixelated;
+}
+
+/* ── Type strip ──────────────────────────────────────────────────────────── */
+
+/* Visible bar below the canvas. Tapping it focuses the hidden input, which
+   brings up the mobile keyboard and resumes the game. */
+.teu__type-strip {
+  height: 38px;
+  background: #080820;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  border-top: 1px solid #222244;
+  box-shadow: 4px 4px 0 #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.teu__type-strip--paused {
+  background: #0d0d30;
+  border-color: #ffcc00 #886600 #886600 #ffcc00;
+  animation: teu-strip-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes teu-strip-pulse {
+  0%,  100% { background: #0d0d30; }
+  50%        { background: #1a1a00; }
+}
+
+.teu__strip-label {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
-  cursor: pointer;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
-  letter-spacing: 0.04em;
+  color: #ffcc00;
+  letter-spacing: 0.12em;
 }
 
-.typing-racer__reset:hover {
-  background: #ff7a1a;
+/* Blinking block cursor shown when the game is active */
+.teu__strip-cursor {
+  display: inline-block;
+  width: 10px;
+  height: 16px;
+  background: #44bb66;
+  animation: teu-blink 0.8s step-end infinite;
 }
 
-.typing-racer__reset:active {
-  border-color: #664400 #ffcc88 #ffcc88 #664400;
-  background: #cc4400;
-  transform: translateY(1px);
+@keyframes teu-blink {
+  0%,  100% { opacity: 1; }
+  50%        { opacity: 0; }
+}
+
+/* ── Hidden input (always in DOM for iOS focus support) ──────────────────── */
+
+.teu__mobile-input {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
