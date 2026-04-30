@@ -345,10 +345,11 @@ const SEGMENT_COUNT = 22;
 
 interface BootScreenProps {
   onComplete: () => void;
+  splashOnly?: boolean;
 }
 
-export default function BootScreen({ onComplete }: BootScreenProps) {
-  const [phase, setPhase]               = useState<"bios" | "black" | "splash">("bios");
+export default function BootScreen({ onComplete, splashOnly = false }: BootScreenProps) {
+  const [phase, setPhase]               = useState<"bios" | "black" | "splash">(splashOnly ? "splash" : "bios");
   const [termLines, setTermLines]        = useState<string[]>([]);
   const [active, setActive]             = useState<ActiveDisplay>(null);
   const [splashProgress, setSplashProgress] = useState(0);
@@ -389,6 +390,31 @@ export default function BootScreen({ onComplete }: BootScreenProps) {
 
     async function runAll() {
       try {
+        // ── Splash-only path (returning from NS-TOS) ──────────────────────
+        if (splashOnly) {
+          setSplashMsg(splash.bootMessages[0]);
+          setSplashProgress(0);
+          playStartupSound();
+
+          let p = 0;
+          while (p < 100) {
+            await sleep(randomDelay({ base: 185, variance: 0.7, panicChance: 0.09, panicMultiplier: 6 }));
+            const delta = chunkIncrement({ avgChunk: 3, critChance: 0.12, critMultiplier: 5 });
+            p = Math.min(p + delta, 100);
+            setSplashProgress(p);
+            const msgIdx = Math.min(
+              Math.floor((p / 100) * splash.bootMessages.length),
+              splash.bootMessages.length - 1
+            );
+            setSplashMsg(splash.bootMessages[msgIdx]);
+            if (Math.random() < 0.07) playRandomBeep();
+          }
+
+          await sleep(200);
+          doComplete();
+          return;
+        }
+
         // ── BIOS phase ────────────────────────────────────────────────────
 
         await sleep(randomDelay({ base: 220, variance: 0.4 }));

@@ -1,0 +1,91 @@
+.ns-tos {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  color: #00cc00;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 14px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: text;
+  z-index: 0;
+}
+
+/* Subtle scanline overlay */
+.ns-tos::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.08) 0px,
+    rgba(0, 0, 0, 0.08) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ns-tos__output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ns-tos__output::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ns-tos__output::-webkit-scrollbar-track {
+  background: #000;
+}
+
+.ns-tos__output::-webkit-scrollbar-thumb {
+  background: #006600;
+}
+
+.ns-tos__line {
+  min-height: 1.45em;
+}
+
+.ns-tos__line--error {
+  color: #ff4444;
+}
+
+.ns-tos__input-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 14px;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.ns-tos__prompt {
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.ns-tos__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #00cc00;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 14px;
+  line-height: 1.45;
+  caret-color: #00cc00;
+  padding: 0;
+  margin: 0;
+}
+
+.ns-tos__input::selection {
+  background: #00cc00;
+  color: #000;
+}

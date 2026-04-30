@@ -91,4 +91,11 @@ export const experiences: Experience[] = [
     category: "toy",
     path: "/doors97",
   },
+  {
+    id: "ns-tos",
+    title: "NS-TOS",
+    description: "Noahsoft Terminal Operating System. The command line beneath NS Doors 97.",
+    category: "toy",
+    path: "/ns-tos",
+  },
 ];
