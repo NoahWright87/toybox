@@ -315,13 +315,140 @@ export default function TypingRacer() {
     const s = localStorage.getItem("typeemup-highscore");
     return s ? parseInt(s, 10) : 0;
   });
+  // gamePaused drives the "tap to play" strip; gamePausedRef is readable inside
+  // the RAF loop without a stale-closure issue.
+  const [gamePaused, setGamePaused] = useState(true);
 
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const gameRef      = useRef<GameState | null>(null);
-  const rafRef       = useRef<number>(0);
-  const highScoreRef = useRef(highScore);
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const gameRef         = useRef<GameState | null>(null);
+  const rafRef          = useRef<number>(0);
+  const highScoreRef    = useRef(highScore);
+  const gamePausedRef   = useRef(true);
+  // The input is always in the DOM so iOS focus() works in a user-gesture handler.
+  const inputRef        = useRef<HTMLInputElement>(null);
+  // Prevents double-processing on desktop when both onKeyDown and onChange fire.
+  const keyHandledRef   = useRef(false);
 
   useEffect(() => { highScoreRef.current = highScore; }, [highScore]);
+
+  // ── Pause / resume helpers ─────────────────────────────────────────────────
+
+  const pauseGame = useCallback(() => {
+    gamePausedRef.current = true;
+    setGamePaused(true);
+  }, []);
+
+  const resumeGame = useCallback(() => {
+    if (!gameRef.current) return;
+    // Reset the frame timer so the first dt after a pause isn't huge.
+    gameRef.current.lastFrameTime = performance.now();
+    gamePausedRef.current = false;
+    setGamePaused(false);
+  }, []);
+
+  // ── Core char processor (shared by desktop onKeyDown and mobile onChange) ──
+
+  const processChar = useCallback((ch: string) => {
+    const state = gameRef.current;
+    if (!state) return;
+
+    if (state.targetId !== null) {
+      const target = state.words.find(w => w.id === state.targetId);
+      if (!target) { state.targetId = null; return; }
+
+      if (ch === target.text[target.typed]) {
+        target.typed++;
+        state.charsTyped++;
+
+        state.bullets.push({
+          id: state.nextId++,
+          x: target.x,
+          fromY: SHIP_Y - 34,
+          toY: target.y,
+          progress: 0,
+        });
+
+        if (target.typed === target.text.length) {
+          state.wordsDestroyed++;
+          state.score += target.text.length * 10 + Math.floor(target.speed);
+          burstParticles(state, target.x, target.y, 14);
+          state.words    = state.words.filter(w => w.id !== target.id);
+          state.targetId = null;
+        }
+      } else {
+        target.penalty += DIFF[state.difficulty].penalty;
+      }
+    } else {
+      const candidates = state.words.filter(w => w.text[0] === ch && w.typed === 0);
+      if (candidates.length === 0) return;
+
+      const target = candidates.reduce((a, b) => (a.y > b.y ? a : b));
+      state.targetId  = target.id;
+      target.typed    = 1;
+      state.charsTyped++;
+
+      state.bullets.push({
+        id: state.nextId++,
+        x: target.x,
+        fromY: SHIP_Y - 34,
+        toY: target.y,
+        progress: 0,
+      });
+
+      if (target.text.length === 1) {
+        state.wordsDestroyed++;
+        state.score += 10 + Math.floor(target.speed);
+        burstParticles(state, target.x, target.y, 10);
+        state.words    = state.words.filter(w => w.id !== target.id);
+        state.targetId = null;
+      }
+    }
+  }, []);
+
+  // ── Input event handlers ───────────────────────────────────────────────────
+
+  // Desktop: onKeyDown fires with a real key value. We preventDefault so the
+  // character never reaches the input value (no onChange needed for desktop).
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    if (e.key === "Escape") {
+      cancelAnimationFrame(rafRef.current);
+      setPhase("menu");
+      return;
+    }
+
+    if (e.key.length === 1) {
+      e.preventDefault();
+      keyHandledRef.current = true;
+      processChar(e.key.toLowerCase());
+    }
+  }, [processChar]);
+
+  // Mobile: onKeyDown gives "Unidentified", so the character ends up in the
+  // input value and onChange fires. We drain the value and clear the field.
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (keyHandledRef.current) {
+      // Desktop path already processed this keystroke.
+      keyHandledRef.current = false;
+      e.target.value = "";
+      return;
+    }
+    // Mobile path: one or more characters arrived via the IME / virtual keyboard.
+    const val = e.target.value;
+    for (const ch of val) {
+      processChar(ch.toLowerCase());
+    }
+    e.target.value = "";
+  }, [processChar]);
+
+  const handleInputFocus = useCallback(() => {
+    resumeGame();
+  }, [resumeGame]);
+
+  const handleInputBlur = useCallback(() => {
+    pauseGame();
+  }, [pauseGame]);
 
   // ── Game loop ──────────────────────────────────────────────────────────────
 
@@ -333,91 +460,91 @@ export default function TypingRacer() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dt = Math.min((timestamp - state.lastFrameTime) / 1000, 0.05);
-    state.lastFrameTime = timestamp;
+    // ── Update (skipped while paused) ────────────────────────────────────────
+    if (!gamePausedRef.current) {
+      const dt = Math.min((timestamp - state.lastFrameTime) / 1000, 0.05);
+      state.lastFrameTime = timestamp;
 
-    // WPM sample every second
-    if (timestamp - state.lastWpmUpdate > 1000) {
-      state.wpm = calcWpm(state.charsTyped, state.startTime);
-      state.wpmHistory.push({ wpm: state.wpm });
-      if (state.wpmHistory.length > 45) state.wpmHistory.shift();
-      state.lastWpmUpdate = timestamp;
-    }
-
-    // Spawn words
-    const cfg = DIFF[state.difficulty];
-    if (timestamp - state.lastSpawnTime > cfg.spawnMs && state.words.length < cfg.maxWords) {
-      spawnWord(state);
-      state.lastSpawnTime = timestamp;
-    }
-
-    // Move words & detect hits
-    const hitIds: number[] = [];
-    for (const w of state.words) {
-      w.y += (w.speed + w.penalty) * dt;
-      w.penalty = Math.max(0, w.penalty - w.penalty * 3 * dt);
-      if (w.y >= SHIP_Y - 10) hitIds.push(w.id);
-    }
-
-    // Process hits
-    let died = false;
-    for (const id of hitIds) {
-      state.words = state.words.filter(w => w.id !== id);
-      if (state.targetId === id) state.targetId = null;
-      state.lives--;
-      state.shipFlash = 1;
-      if (state.lives <= 0) { died = true; break; }
-    }
-
-    if (died) {
-      cancelAnimationFrame(rafRef.current);
-      const finalWpm = calcWpm(state.charsTyped, state.startTime);
-      const isNewRecord = state.score > highScoreRef.current;
-      setFinalStats({ score: state.score, wpm: finalWpm, wordsDestroyed: state.wordsDestroyed, isNewRecord });
-      if (isNewRecord) {
-        localStorage.setItem("typeemup-highscore", String(state.score));
-        setHighScore(state.score);
+      // WPM sample every second
+      if (timestamp - state.lastWpmUpdate > 1000) {
+        state.wpm = calcWpm(state.charsTyped, state.startTime);
+        state.wpmHistory.push({ wpm: state.wpm });
+        if (state.wpmHistory.length > 45) state.wpmHistory.shift();
+        state.lastWpmUpdate = timestamp;
       }
-      setPhase("gameover");
-      return;
+
+      // Spawn words
+      const cfg = DIFF[state.difficulty];
+      if (timestamp - state.lastSpawnTime > cfg.spawnMs && state.words.length < cfg.maxWords) {
+        spawnWord(state);
+        state.lastSpawnTime = timestamp;
+      }
+
+      // Move words & detect hits
+      const hitIds: number[] = [];
+      for (const w of state.words) {
+        w.y += (w.speed + w.penalty) * dt;
+        w.penalty = Math.max(0, w.penalty - w.penalty * 3 * dt);
+        if (w.y >= SHIP_Y - 10) hitIds.push(w.id);
+      }
+
+      // Process hits
+      let died = false;
+      for (const id of hitIds) {
+        state.words = state.words.filter(w => w.id !== id);
+        if (state.targetId === id) state.targetId = null;
+        state.lives--;
+        state.shipFlash = 1;
+        if (state.lives <= 0) { died = true; break; }
+      }
+
+      if (died) {
+        cancelAnimationFrame(rafRef.current);
+        const finalWpm = calcWpm(state.charsTyped, state.startTime);
+        const isNewRecord = state.score > highScoreRef.current;
+        setFinalStats({ score: state.score, wpm: finalWpm, wordsDestroyed: state.wordsDestroyed, isNewRecord });
+        if (isNewRecord) {
+          localStorage.setItem("typeemup-highscore", String(state.score));
+          setHighScore(state.score);
+        }
+        gameRef.current = null;
+        setPhase("gameover");
+        return;
+      }
+
+      // Decay ship flash
+      if (state.shipFlash > 0) state.shipFlash = Math.max(0, state.shipFlash - dt * 3);
+
+      // Advance bullets
+      for (const b of state.bullets) b.progress += dt * 5;
+      state.bullets = state.bullets.filter(b => b.progress < 1);
+
+      // Advance particles
+      for (const p of state.particles) {
+        p.x  += p.vx * dt;
+        p.y  += p.vy * dt;
+        p.vy += 120 * dt;
+        p.life -= dt * 2;
+      }
+      state.particles = state.particles.filter(p => p.life > 0);
     }
 
-    // Decay ship flash
-    if (state.shipFlash > 0) state.shipFlash = Math.max(0, state.shipFlash - dt * 3);
+    // ── Render (always, even while paused) ───────────────────────────────────
 
-    // Advance bullets
-    for (const b of state.bullets) b.progress += dt * 5;
-    state.bullets = state.bullets.filter(b => b.progress < 1);
-
-    // Advance particles
-    for (const p of state.particles) {
-      p.x  += p.vx * dt;
-      p.y  += p.vy * dt;
-      p.vy += 120 * dt; // gravity
-      p.life -= dt * 2;
-    }
-    state.particles = state.particles.filter(p => p.life > 0);
-
-    // ── Render ───────────────────────────────────────────────────────────────
-
-    // Background
     ctx.fillStyle = "#06061a";
     ctx.fillRect(0, 0, CW, CH);
 
-    // Stars
     for (const s of state.stars) {
       ctx.fillStyle = `rgba(255,255,255,${s.b})`;
       ctx.fillRect(s.x, s.y, s.r, s.r);
     }
 
-    // Danger zone glow at bottom
     const dangerGrad = ctx.createLinearGradient(0, SHIP_Y - 50, 0, SHIP_Y + 30);
     dangerGrad.addColorStop(0, "rgba(180,0,0,0)");
     dangerGrad.addColorStop(1, "rgba(180,0,0,0.12)");
     ctx.fillStyle = dangerGrad;
     ctx.fillRect(0, SHIP_Y - 50, CW, 80);
 
-    // Bullets
     ctx.shadowColor = "#ff6600";
     ctx.shadowBlur  = 10;
     ctx.fillStyle   = "#ff8833";
@@ -427,7 +554,6 @@ export default function TypingRacer() {
     }
     ctx.shadowBlur = 0;
 
-    // Falling words
     ctx.textBaseline = "middle";
     for (const word of state.words) {
       const isTarget = word.id === state.targetId;
@@ -454,14 +580,12 @@ export default function TypingRacer() {
         ctx.fillText(word.text[i], charX, word.y);
       }
 
-      // Underline the first char of untargeted words as a "press me" hint
       if (!isTarget && word.typed === 0) {
         ctx.fillStyle = "#44bb66";
         ctx.fillRect(word.x - half, word.y + 10, CHAR_W, 1);
       }
     }
 
-    // Particles
     for (const p of state.particles) {
       ctx.globalAlpha = p.life;
       ctx.fillStyle   = p.color;
@@ -469,88 +593,10 @@ export default function TypingRacer() {
     }
     ctx.globalAlpha = 1;
 
-    // Ship (drawn above particles)
     drawShip(ctx, state.shipFlash);
-
-    // HUD last — always on top
     drawHud(ctx, state.lives, state.score, state.wpm, state.wpmHistory, state.difficulty);
 
     rafRef.current = requestAnimationFrame(gameLoop);
-  }, []);
-
-  // ── Key handler ────────────────────────────────────────────────────────────
-
-  const handleKey = useCallback((e: KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-    const state = gameRef.current;
-    if (!state) return;
-
-    if (e.key === "Escape") {
-      cancelAnimationFrame(rafRef.current);
-      setPhase("menu");
-      return;
-    }
-
-    if (e.key.length !== 1) return;
-    const ch = e.key.toLowerCase();
-
-    if (state.targetId !== null) {
-      const target = state.words.find(w => w.id === state.targetId);
-      if (!target) { state.targetId = null; return; }
-
-      if (ch === target.text[target.typed]) {
-        // Correct letter
-        target.typed++;
-        state.charsTyped++;
-
-        state.bullets.push({
-          id: state.nextId++,
-          x: target.x,
-          fromY: SHIP_Y - 34,
-          toY: target.y,
-          progress: 0,
-        });
-
-        if (target.typed === target.text.length) {
-          // Word destroyed
-          state.wordsDestroyed++;
-          state.score += target.text.length * 10 + Math.floor(target.speed);
-          burstParticles(state, target.x, target.y, 14);
-          state.words     = state.words.filter(w => w.id !== target.id);
-          state.targetId  = null;
-        }
-      } else {
-        // Wrong letter → extra fall speed
-        target.penalty += DIFF[state.difficulty].penalty;
-      }
-    } else {
-      // No active target — acquire the lowest word starting with this char
-      const candidates = state.words.filter(w => w.text[0] === ch && w.typed === 0);
-      if (candidates.length === 0) return;
-
-      const target = candidates.reduce((a, b) => (a.y > b.y ? a : b));
-      state.targetId  = target.id;
-      target.typed    = 1;
-      state.charsTyped++;
-
-      state.bullets.push({
-        id: state.nextId++,
-        x: target.x,
-        fromY: SHIP_Y - 34,
-        toY: target.y,
-        progress: 0,
-      });
-
-      // Handle single-char words
-      if (target.text.length === 1) {
-        state.wordsDestroyed++;
-        state.score += 10 + Math.floor(target.speed);
-        burstParticles(state, target.x, target.y, 10);
-        state.words    = state.words.filter(w => w.id !== target.id);
-        state.targetId = null;
-      }
-    }
   }, []);
 
   // ── Start game ─────────────────────────────────────────────────────────────
@@ -578,7 +624,7 @@ export default function TypingRacer() {
       charsTyped: 0,
       wordsDestroyed: 0,
       startTime: Date.now(),
-      lastSpawnTime: now - DIFF[diff].spawnMs, // trigger first spawn immediately
+      lastSpawnTime: now - DIFF[diff].spawnMs,
       wpm: 0,
       wpmHistory: [],
       lastWpmUpdate: 0,
@@ -588,25 +634,59 @@ export default function TypingRacer() {
       shipFlash: 0,
     };
 
+    // Start paused; the RAF loop renders a static first frame.
+    // Game logic begins when the input receives focus.
+    gamePausedRef.current = true;
+    setGamePaused(true);
     setPhase("playing");
     rafRef.current = requestAnimationFrame(gameLoop);
   }, [gameLoop]);
 
-  // ── Effects ────────────────────────────────────────────────────────────────
+  // ── Global Escape listener (works even when input isn't focused) ───────────
 
   useEffect(() => {
     if (phase !== "playing") return;
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [phase, handleKey]);
+    function onEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        cancelAnimationFrame(rafRef.current);
+        setPhase("menu");
+      }
+    }
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [phase]);
+
+  // ── Cleanup on unmount ─────────────────────────────────────────────────────
 
   useEffect(() => () => { cancelAnimationFrame(rafRef.current); }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // The <input> is always in the DOM (visibility:hidden when not playing) so
+  // that focus() called synchronously inside a button click works on iOS.
+  const inputEl = (
+    <input
+      ref={inputRef}
+      className="teu__mobile-input"
+      type="text"
+      autoComplete="off"
+      autoCorrect="off"
+      autoCapitalize="none"
+      spellCheck={false}
+      inputMode="text"
+      tabIndex={phase === "playing" ? 0 : -1}
+      aria-label="Type here to play"
+      onFocus={handleInputFocus}
+      onBlur={handleInputBlur}
+      onKeyDown={handleInputKeyDown}
+      onChange={handleInputChange}
+    />
+  );
+
   if (phase === "menu") {
     return (
       <div className="teu">
+        {inputEl}
         <div className="teu__window">
           <div className="teu__titlebar">
             <span className="teu__titlebar-text">Type &#39;Em Up</span>
@@ -633,7 +713,15 @@ export default function TypingRacer() {
               ))}
             </div>
 
-            <button className="teu__launch-btn" onClick={() => startGame(difficulty)}>
+            <button
+              className="teu__launch-btn"
+              onClick={() => {
+                startGame(difficulty);
+                // Synchronous focus in the user-gesture handler — required for
+                // iOS to show the virtual keyboard without an extra tap.
+                inputRef.current?.focus();
+              }}
+            >
               LAUNCH
             </button>
 
@@ -641,7 +729,7 @@ export default function TypingRacer() {
               <p>Words fall from above &mdash; type them to shoot!</p>
               <p>Mistyping makes words fall faster.</p>
               <p>Don&#39;t let words reach your ship!</p>
-              <p className="teu__tips-esc">ESC pauses &amp; returns to menu.</p>
+              <p className="teu__tips-esc">ESC returns to menu.</p>
             </div>
           </div>
         </div>
@@ -652,6 +740,7 @@ export default function TypingRacer() {
   if (phase === "gameover") {
     return (
       <div className="teu">
+        {inputEl}
         <div className="teu__window">
           <div className="teu__titlebar teu__titlebar--dead">
             <span className="teu__titlebar-text">GAME OVER</span>
@@ -684,7 +773,13 @@ export default function TypingRacer() {
             )}
 
             <div className="teu__action-row">
-              <button className="teu__launch-btn" onClick={() => startGame(difficulty)}>
+              <button
+                className="teu__launch-btn"
+                onClick={() => {
+                  startGame(difficulty);
+                  inputRef.current?.focus();
+                }}
+              >
                 RETRY
               </button>
               <button
@@ -700,15 +795,31 @@ export default function TypingRacer() {
     );
   }
 
-  // Playing phase — canvas only
+  // Playing phase
   return (
     <div className="teu">
-      <canvas
-        ref={canvasRef}
-        width={CW}
-        height={CH}
-        className="teu__canvas"
-      />
+      {inputEl}
+      <div className="teu__game-wrapper">
+        <canvas
+          ref={canvasRef}
+          width={CW}
+          height={CH}
+          className="teu__canvas"
+        />
+        {/* Tap strip — always visible below the canvas during play.
+            Shows a "tap here" prompt when paused, a blinking cursor when active. */}
+        <div
+          className={`teu__type-strip${gamePaused ? " teu__type-strip--paused" : ""}`}
+          onClick={() => inputRef.current?.focus()}
+          role="button"
+          aria-label="Tap to play"
+        >
+          {gamePaused
+            ? <span className="teu__strip-label">&#9654; TAP TO PLAY</span>
+            : <span className="teu__strip-cursor" aria-hidden="true" />
+          }
+        </div>
+      </div>
     </div>
   );
 }
