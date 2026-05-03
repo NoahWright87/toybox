@@ -51,9 +51,9 @@ export const experiences: Experience[] = [
   },
   {
     id: "typing-racer",
-    title: "Typing Racer",
-    description: "Type the phrase as fast as you can. WPM and accuracy tracked.",
-    category: "educational",
+    title: "Type 'Em Up",
+    description: "Words fall from above — type them to blast them before they reach your ship!",
+    category: "game",
     path: "/typing-racer",
   },
   {
