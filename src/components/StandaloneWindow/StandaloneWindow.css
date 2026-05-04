@@ -3,10 +3,12 @@
   inset: 0;
   background: radial-gradient(ellipse at center, #2a1000 0%, #180800 55%, #0c0400 100%);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
   overflow-y: auto;
   padding: 16px;
+  isolation: isolate; /* stacking context so fixed children's z-index is local */
+  --standalone-chrome-h: 50px; /* titlebar (28px) + menubar (~22px) */
 }
 
 .standalone-window {
@@ -30,6 +32,8 @@
   min-height: 28px;
   flex-shrink: 0;
   user-select: none;
+  position: relative;
+  z-index: 10; /* paint above fixed game canvases (z-index 5) */
 }
 
 .standalone-window__icon {
@@ -83,6 +87,7 @@
   padding: 1px 2px;
   flex-shrink: 0;
   position: relative;
+  z-index: 10; /* paint above fixed game canvases (z-index 5) */
 }
 
 .standalone-window__menu {

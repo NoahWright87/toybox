@@ -839,3 +839,19 @@
   gap: 8px;
   margin-top: 4px;
 }
+
+/* ── StandaloneWindow overrides ──────────────────────────────────────────── */
+/* When rendered inside StandaloneWindow, replace 100vh sizing with the      */
+/* available height below the chrome so the window fits on screen.           */
+
+.standalone-window__content .ww-setup {
+  min-height: calc(100dvh - var(--standalone-chrome-h, 0px));
+}
+
+.standalone-window__content .ww-game {
+  height: calc(100dvh - var(--standalone-chrome-h, 0px));
+}
+
+.standalone-window__content .ww-gameover {
+  min-height: calc(100dvh - var(--standalone-chrome-h, 0px));
+}
