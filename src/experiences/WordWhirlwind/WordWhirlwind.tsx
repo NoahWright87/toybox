@@ -171,10 +171,8 @@ const MODE_HINTS: Record<GameMode, string> = {
 
 function SetupScreen({
   onStart,
-  onHome,
 }: {
   onStart: (s: Settings) => void;
-  onHome?: () => void;
 }) {
   const [wordLength, setWordLength] = useState<WordLength>(6);
   const [timeLimit, setTimeLimit] = useState<TimeLimit>(120);
@@ -280,11 +278,6 @@ function SetupScreen({
         Play!
       </button>
 
-      {onHome && (
-        <button className="ww-setup__home" onClick={onHome}>
-          ← Toy Box
-        </button>
-      )}
     </div>
   );
 }
@@ -546,7 +539,6 @@ function GameOverScreen({
   foundWords,
   onPlayAgain,
   onSettings,
-  onHome,
 }: {
   score: number;
   rounds: number;
@@ -554,7 +546,6 @@ function GameOverScreen({
   foundWords: Set<string>;
   onPlayAgain: () => void;
   onSettings: () => void;
-  onHome?: () => void;
 }) {
   return (
     <div className="ww-gameover">
@@ -574,11 +565,6 @@ function GameOverScreen({
         >
           Change Settings
         </button>
-        {onHome && (
-          <button className="ww-setup__home" onClick={onHome}>
-            ← Toy Box
-          </button>
-        )}
       </div>
     </div>
   );
@@ -586,7 +572,7 @@ function GameOverScreen({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) {
+export default function WordWhirlwind() {
   const [phase, setPhase] = useState<GamePhase>("setup");
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
@@ -1042,7 +1028,7 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (phase === "setup") {
-    return <SetupScreen onStart={handleStart} onHome={onHome} />;
+    return <SetupScreen onStart={handleStart} />;
   }
 
   if (phase === "gameOver") {
@@ -1054,7 +1040,6 @@ export default function WordWhirlwind({ onHome }: { onHome?: () => void } = {}) 
         foundWords={foundWords}
         onPlayAgain={() => startRound(settings, 1, 0)}
         onSettings={() => setPhase("setup")}
-        onHome={onHome}
       />
     );
   }

@@ -177,7 +177,9 @@ export default function NsDoors97() {
 
   // Returning from NS-TOS shows only the splash screen (no BIOS), then desktop.
   const fromTos = (location.state as { fromTos?: boolean } | null)?.fromTos === true;
-  const initialShouldBoot = fromTos || shouldShowBoot();
+  // Returning from a standalone app page skips boot entirely.
+  const skipBoot = (location.state as { skipBoot?: boolean } | null)?.skipBoot === true;
+  const initialShouldBoot = !skipBoot && (fromTos || shouldShowBoot());
 
   const [showBoot, setShowBoot]             = useState(initialShouldBoot);
   const [shuttingDown, setShuttingDown]     = useState(false);

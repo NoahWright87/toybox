@@ -376,17 +376,16 @@
 @media (pointer: coarse) {
   .teu__game-wrapper {
     position: fixed;
-    top: 0;
+    top: var(--standalone-chrome-h, 0px); /* sit below StandaloneWindow chrome */
     left: 50%;
     transform: translateX(-50%);
     width: min(560px, 100vw);
-    /* sit below the back-button and help-overlay which use z-index: 10 */
     z-index: 5;
   }
 
   .teu__canvas {
-    max-height: calc(100dvh - 42px);
+    max-height: calc(100dvh - var(--standalone-chrome-h, 0px) - 42px);
     /* maintain 560∶480 aspect ratio when max-height is the binding constraint */
-    max-width: calc((100dvh - 42px) * 560 / 480);
+    max-width: calc((100dvh - var(--standalone-chrome-h, 0px) - 42px) * 560 / 480);
   }
 }
