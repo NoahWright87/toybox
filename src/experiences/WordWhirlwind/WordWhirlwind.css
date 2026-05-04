@@ -145,20 +145,6 @@
   transform: translateY(1px);
 }
 
-.ww-setup__home {
-  background: transparent;
-  border: none;
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  color: var(--ww-muted);
-  cursor: pointer;
-  padding: 4px 8px;
-}
-
-.ww-setup__home:hover {
-  color: #000;
-}
-
 /* ── Game layout ──────────────────────────────────────────────────────────── */
 
 .ww-game {
