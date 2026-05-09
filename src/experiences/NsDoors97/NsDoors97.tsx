@@ -22,6 +22,7 @@ import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import TicTacToe from "../TicTacToe/TicTacToe";
+import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
@@ -53,6 +54,7 @@ const EXPERIENCE_ICONS: Record<string, string> = {
   "tic-tac-toe":        "✖️",
   "word-whirlwind":     "🌪️",
   "bomb-finder":        "💣",
+  "duck-hunt":          "🎯",
   "ns-doors-97":        "🚪",
 };
 
@@ -63,6 +65,7 @@ type DesktopIconAction =
   | "tictactoe"
   | "nomnom"
   | "bombfinder"
+  | "duckhunt"
   | "cards"
   | "about"
   | "my-doors"
@@ -98,6 +101,7 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
       e.id === "tic-tac-toe" ? "tictactoe" :
       e.id === "number-muncher" ? "nomnom" :
       e.id === "bomb-finder" ? "bombfinder" :
+      e.id === "duck-hunt" ? "duckhunt" :
       "experience"
     ) as DesktopIconAction,
   }));
@@ -112,6 +116,7 @@ type WindowContent =
   | { type: "tictactoe" }
   | { type: "nomnom" }
   | { type: "bombfinder" }
+  | { type: "duckhunt" }
   | { type: "cards-launcher" }
   | { type: "cards-game"; game: CardsGame; settings: DeckSettings }
   | { type: "about" }
@@ -365,6 +370,7 @@ export default function NsDoors97() {
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
+        case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
         case "cards":        content = { type: "cards-launcher" };       width = 320; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
@@ -588,6 +594,7 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nomnom" && <NumberMuncher />}
+          {win.content.type === "duckhunt" && <DuckHunt />}
           {win.content.type === "cards-launcher" && (
             <CardsLauncher
               onLaunch={(game, settings) => handleCardsLaunch(win.id, game, settings)}
