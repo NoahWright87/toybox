@@ -13,6 +13,7 @@ import WordWhirlwindPage from "./pages/WordWhirlwindPage";
 import BombFinderPage from "./pages/BombFinderPage";
 import NsDoors97Page from "./pages/NsDoors97Page";
 import NsToSPage from "./pages/NsToSPage";
+import DuckHuntPage from "./pages/DuckHuntPage";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/bomb-finder" element={<BombFinderPage />} />
         <Route path="/doors97" element={<NsDoors97Page />} />
         <Route path="/ns-tos" element={<NsToSPage />} />
+        <Route path="/duck-hunt" element={<DuckHuntPage />} />
       </Routes>
     </BrowserRouter>
   );

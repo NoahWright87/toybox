@@ -1,0 +1,505 @@
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
+
+.dh-game {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dh-canvas-wrap {
+  position: relative;
+  line-height: 0;
+}
+
+.dh-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+
+.dh-canvas--active {
+  cursor: crosshair;
+}
+
+/* ── Overlays ────────────────────────────────────────────────────────────────── */
+
+.dh-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.dh-overlay--transparent {
+  background: transparent;
+  pointer-events: none;
+}
+
+.dh-overlay--transparent button {
+  pointer-events: all;
+}
+
+/* ── Win95 panels ────────────────────────────────────────────────────────────── */
+
+.dh-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 16px 20px;
+  min-width: 280px;
+  max-width: 360px;
+  width: 90%;
+  box-shadow: 2px 2px 0 #000000;
+}
+
+.dh-panel--title {
+  text-align: center;
+  padding: 20px 24px;
+}
+
+.dh-panel--gameover {
+  text-align: center;
+  padding: 20px 24px;
+}
+
+.dh-panel__title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: #000080;
+  margin: 0 0 6px 0;
+  text-transform: uppercase;
+}
+
+.dh-panel__sub {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #444444;
+  margin: 0 0 12px 0;
+}
+
+/* ── Title screen ────────────────────────────────────────────────────────────── */
+
+.dh-title-icon {
+  font-size: 32px;
+  line-height: 1;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.dh-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #cc4400;
+  margin: 0 0 8px 0;
+  text-shadow: 1px 1px 0 #7a2200;
+}
+
+.dh-subtitle {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  line-height: 1.6;
+  color: #555555;
+  margin: 0 0 12px 0;
+}
+
+.dh-divider {
+  height: 2px;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  margin: 10px 0;
+}
+
+/* ── High scores ─────────────────────────────────────────────────────────────── */
+
+.dh-hi-scores {
+  margin-bottom: 12px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+  padding: 6px 8px;
+}
+
+.dh-hi-scores__label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000080;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.dh-hi-scores__row {
+  display: grid;
+  grid-template-columns: 14px 1fr 1fr auto;
+  gap: 4px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #222222;
+  padding: 2px 0;
+}
+
+.dh-hi-scores__row--new {
+  color: #cc4400;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────── */
+
+.dh-btn {
+  font-family: "Press Start 2P", monospace;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 6px 10px;
+  box-shadow: 1px 1px 0 #000000;
+  transition: none;
+}
+
+.dh-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
+.dh-btn--primary {
+  font-size: 9px;
+  color: #000000;
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  background: #c0c0c0;
+}
+
+.dh-btn--primary:hover {
+  background: #cc6600;
+  color: #ffffff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.dh-btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.dh-btn--option {
+  font-size: 7px;
+  color: #000000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+}
+
+.dh-btn--option:hover {
+  background: #cc4400;
+  color: #ffffff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.dh-btn--option span:first-child {
+  font-size: 20px;
+}
+
+.dh-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dh-btn--diff {
+  font-size: 7px;
+  color: #000000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.dh-btn--diff:hover {
+  background: #5b2d8e;
+  color: #ffffff;
+  border-color: #cc88ff #3a1060 #3a1060 #cc88ff;
+}
+
+.dh-btn__label {
+  font-size: 8px;
+}
+
+.dh-btn__detail {
+  font-size: 6px;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.dh-btn--continue {
+  font-size: 8px;
+  padding: 6px 14px;
+  pointer-events: all;
+}
+
+.dh-btn--continue:hover {
+  background: #228833;
+  color: #ffffff;
+  border-color: #88ffaa #114422 #114422 #88ffaa;
+}
+
+/* ── Countdown ───────────────────────────────────────────────────────────────── */
+
+.dh-countdown-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.dh-countdown-prompt {
+  font-family: "Press Start 2P", monospace;
+  font-size: 18px;
+  color: #ffdd66;
+  text-shadow: 2px 2px 0 #000000, 0 0 12px #cc8800;
+  text-align: center;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #ffaa00;
+}
+
+.dh-countdown {
+  font-family: "Press Start 2P", monospace;
+  font-size: 64px;
+  color: #ffffff;
+  text-shadow: 3px 3px 0 #000000, -1px -1px 0 #cc4400;
+  animation: dh-pop 0.25s ease-out;
+}
+
+@keyframes dh-pop {
+  0% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Round result panel ──────────────────────────────────────────────────────── */
+
+.dh-result-panel {
+  background: rgba(0, 0, 0, 0.72);
+  border: 2px solid #ffffff;
+  padding: 14px 22px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: all;
+}
+
+.dh-result-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.dh-result-main {
+  font-family: "Press Start 2P", monospace;
+  font-size: 16px;
+  line-height: 1;
+  color: #00ee44;
+  text-shadow: 2px 2px 0 #004400;
+}
+
+.dh-result-main--bad {
+  color: #ff4422;
+  text-shadow: 2px 2px 0 #440000;
+}
+
+.dh-result-combo {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #ffdd00;
+  text-shadow: 1px 1px 0 #444400;
+}
+
+.dh-result-pts {
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 0;
+}
+
+.dh-result-pts--pos { color: #66ff88; }
+.dh-result-pts--neg { color: #ff6644; }
+
+.dh-result-sub {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  line-height: 1.4;
+  color: #ff8866;
+  margin-bottom: 0;
+}
+
+/* ── Game over ───────────────────────────────────────────────────────────────── */
+
+.dh-go-icon {
+  font-size: 32px;
+  margin-bottom: 4px;
+}
+
+.dh-go-score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: center;
+  margin: 8px 0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #444444;
+}
+
+.dh-go-score__val {
+  font-size: 18px;
+  color: #cc4400;
+}
+
+/* ── HUD bar ─────────────────────────────────────────────────────────────────── */
+
+.dh-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #c0c0c0;
+  border-top: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 4px 10px;
+  min-height: 44px;
+  gap: 8px;
+}
+
+.dh-hud__left {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 100px;
+}
+
+.dh-hud__label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444444;
+}
+
+.dh-hud__val {
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  color: #cc4400;
+}
+
+.dh-hud__combo {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #ffaa00;
+  text-shadow: 0 0 4px #ff8800;
+}
+
+.dh-hud__center {
+  flex: 1;
+  text-align: center;
+}
+
+.dh-hud__prompt {
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  color: #000080;
+  text-shadow: 0 0 0 transparent;
+}
+
+.dh-hud__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 80px;
+}
+
+.dh-hud__lives {
+  display: flex;
+  gap: 3px;
+}
+
+.dh-heart {
+  font-size: 12px;
+  color: #cc0000;
+}
+
+.dh-heart--lost {
+  color: #888888;
+  opacity: 0.4;
+}
+
+.dh-hud__shots {
+  display: flex;
+  gap: 3px;
+}
+
+.dh-shot {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #cc4400;
+}
+
+.dh-shot--used {
+  color: #888888;
+  opacity: 0.3;
+}
+
+/* ── Portrait / mobile ───────────────────────────────────────────────────────── */
+
+@media (orientation: portrait) {
+  /* Make the game window fill more vertical space */
+  .dh-game {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Canvas fills whatever height the ResizeObserver calculated */
+  .dh-canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* Larger tap targets for buttons on mobile */
+  .dh-btn--option {
+    padding: 14px 8px;
+    font-size: 8px;
+  }
+
+  .dh-btn--option span:first-child {
+    font-size: 24px;
+  }
+
+  .dh-btn--diff {
+    padding: 12px 10px;
+  }
+
+  /* Slightly larger prompt text on portrait so it's readable at arm's length */
+  .dh-hud__prompt {
+    font-size: 9px;
+  }
+
+  /* Countdown prompt text smaller on narrow screens */
+  .dh-countdown-prompt {
+    font-size: 13px;
+  }
+
+  .dh-countdown {
+    font-size: 52px;
+  }
+}

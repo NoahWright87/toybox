@@ -85,6 +85,13 @@ export const experiences: Experience[] = [
     path: "/bomb-finder",
   },
   {
+    id: "duck-hunt",
+    title: "Duck & Learn",
+    description: "Shoot clay pigeons with the right answers. Addition, multiplication, primes, squares — aim fast for bonus points!",
+    category: "educational",
+    path: "/duck-hunt",
+  },
+  {
     id: "ns-doors-97",
     title: "NS Doors 97",
     description: "A fake 90s desktop OS. Double-click icons to open apps. It's not Windows. It's a Door.™",
