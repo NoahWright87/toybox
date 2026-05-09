@@ -23,9 +23,12 @@ interface PigeonState {
   y: number;
   vx: number;
   vy: number;
-  status: "flying" | "hit-correct" | "hit-wrong" | "escaped";
+  status: "pending" | "flying" | "hit-correct" | "hit-wrong" | "escaped";
   hitTime: number | null;
   radius: number;
+  launchDelay: number; // ms from roundStartTime before becoming "flying"
+  launchX: number;
+  launchY: number;
 }
 
 interface ShotEffect {
@@ -131,15 +134,6 @@ function shuffle<T>(arr: T[]): T[] {
 
 function pick<T>(arr: T[], n: number): T[] {
   return shuffle(arr).slice(0, n);
-}
-
-function getLaunchAngles(n: number): number[] {
-  if (n === 1) return [Math.PI / 2];
-  const minA = (22 * Math.PI) / 180;
-  const maxA = (158 * Math.PI) / 180;
-  return Array.from({ length: n }, (_, i) =>
-    minA + (i / (n - 1)) * (maxA - minA)
-  );
 }
 
 // ─── Math Generation ──────────────────────────────────────────────────────────
@@ -406,7 +400,7 @@ function drawTreeline(ctx: CanvasRenderingContext2D, W: number, H: number) {
 }
 
 function drawPigeon(ctx: CanvasRenderingContext2D, p: PigeonState, now: number) {
-  if (p.status === "escaped") return;
+  if (p.status === "escaped" || p.status === "pending") return;
 
   const PW = 54;
   const PH = 24;
@@ -522,6 +516,7 @@ function drawStaticScene(canvas: HTMLCanvasElement) {
 
 export default function DuckHunt() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const pidRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -604,6 +599,34 @@ export default function DuckHunt() {
     }
   }, [phase]);
 
+  // ── Responsive canvas: match container width, taller on portrait ───────────
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    function updateCanvasSize() {
+      const w = container!.offsetWidth || CW;
+      const portrait = window.innerHeight > window.innerWidth;
+      // Portrait: ~75% of viewport height minus chrome; landscape: classic 2:1
+      const maxH = portrait
+        ? Math.round(Math.min(window.innerHeight * 0.72, w * 1.35))
+        : Math.round(w * 0.5);
+      const h = Math.max(maxH, 160);
+      canvas!.width = w;
+      canvas!.height = h;
+      if (phaseRef.current !== "playing") {
+        drawStaticScene(canvas!);
+      }
+    }
+
+    const obs = new ResizeObserver(updateCanvasSize);
+    obs.observe(container);
+    updateCanvasSize();
+    return () => obs.disconnect();
+  }, []); // run once after mount
+
   // ── Game loop ──────────────────────────────────────────────────────────────
 
   const checkRoundEndRef = useRef<() => void>(() => {});
@@ -640,13 +663,23 @@ export default function DuckHunt() {
       loop.lastFrameTime = now;
 
       const grav = DIFF_CONFIG[loop.difficulty].gravity;
+      const elapsed = now - loop.roundStartTime;
+      const W = canvasRef.current?.width ?? CW;
+      const H = canvasRef.current?.height ?? CH;
+
       for (const p of loop.pigeons) {
+        if (p.status === "pending") {
+          if (elapsed >= p.launchDelay) {
+            p.status = "flying";
+            p.x = p.launchX;
+            p.y = p.launchY;
+          }
+          continue;
+        }
         if (p.status !== "flying") continue;
         p.vy += grav * dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        const W = canvasRef.current?.width ?? CW;
-        const H = canvasRef.current?.height ?? CH;
         if (p.y > H + 60 || p.x < -100 || p.x > W + 100) {
           p.status = "escaped";
         }
@@ -656,12 +689,14 @@ export default function DuckHunt() {
 
       drawFrame(now);
 
-      const anyFlying = loop.pigeons.some((p) => p.status === "flying");
-      if (!anyFlying || loop.shotsLeft <= 0) {
+      const anyActive = loop.pigeons.some(
+        (p) => p.status === "flying" || p.status === "pending"
+      );
+      if (!anyActive || loop.shotsLeft <= 0) {
         checkRoundEndRef.current();
       }
 
-      if (phaseRef.current === "playing") {
+      if (!loop.roundOver && phaseRef.current === "playing") {
         rafRef.current = requestAnimationFrame(frame);
       }
     }
@@ -673,8 +708,10 @@ export default function DuckHunt() {
     const loop = loopRef.current;
     if (loop.roundOver) return;
 
-    const anyFlying = loop.pigeons.some((p) => p.status === "flying");
-    if (anyFlying && loop.shotsLeft > 0) return;
+    const anyActive = loop.pigeons.some(
+      (p) => p.status === "flying" || p.status === "pending"
+    );
+    if (anyActive && loop.shotsLeft > 0) return;
 
     loop.roundOver = true;
     stopLoop();
@@ -728,10 +765,12 @@ export default function DuckHunt() {
 
   // ── Round launch ───────────────────────────────────────────────────────────
 
+  const pendingQuestionRef = useRef<Question | null>(null);
+
   function launchRound(cat: MathCategory, diff: Difficulty) {
     const cfg = DIFF_CONFIG[diff];
-    const question = makeQuestion(cat, diff, cfg.numPigeons);
-    setPrompt(question.prompt);
+    // Use the pre-generated question (set during countdown) so the player already knows the prompt
+    const question = pendingQuestionRef.current ?? makeQuestion(cat, diff, cfg.numPigeons);
 
     const loop = loopRef.current;
     loop.category = cat;
@@ -747,24 +786,35 @@ export default function DuckHunt() {
     const canvas = canvasRef.current;
     const W = canvas ? canvas.width : CW;
     const H = canvas ? canvas.height : CH;
-    const launchX = W / 2;
-    const launchY = H - TREELINE_H + 8;
-    const baseAngles = getLaunchAngles(question.values.length);
+    // Launch from bottom corners, alternating left/right
+    const launchY = H - TREELINE_H + 10;
+    const leftX = Math.round(W * 0.05);
+    const rightX = Math.round(W * 0.95);
+    const STAGGER_MS = 260;
 
     loop.pigeons = question.values.map((v, i) => {
-      const angle = baseAngles[i] + (Math.random() - 0.5) * 0.18;
-      const speed = cfg.launchSpeed * (0.85 + Math.random() * 0.3);
+      const fromLeft = i % 2 === 0;
+      const lx = fromLeft ? leftX : rightX;
+      // Steep upward arc from each corner toward the opposite side
+      // fromLeft: angle ~55-70° (upper-right); fromRight: ~110-125° (upper-left)
+      const baseAngleDeg = fromLeft ? 62 : 118;
+      const jitter = (Math.random() - 0.5) * 18; // ±9°
+      const angle = ((baseAngleDeg + jitter) * Math.PI) / 180;
+      const speed = cfg.launchSpeed * (0.9 + Math.random() * 0.2);
       return {
         id: pidRef.current++,
         label: v.label,
         isCorrect: v.isCorrect,
-        x: launchX,
+        x: lx,
         y: launchY,
         vx: Math.cos(angle) * speed,
         vy: -Math.sin(angle) * speed,
-        status: "flying" as const,
+        status: "pending" as const,
         hitTime: null,
         radius: 34,
+        launchDelay: i * STAGGER_MS,
+        launchX: lx,
+        launchY: launchY,
       };
     });
 
@@ -776,6 +826,11 @@ export default function DuckHunt() {
   // ── Countdown ─────────────────────────────────────────────────────────────
 
   function startCountdown(cat: MathCategory, diff: Difficulty) {
+    // Generate the question NOW so the prompt is visible during the countdown
+    const cfg = DIFF_CONFIG[diff];
+    const question = makeQuestion(cat, diff, cfg.numPigeons);
+    pendingQuestionRef.current = question;
+    setPrompt(question.prompt);
     setPhase("countdown");
     setCountdownNum(3);
     let n = 3;
@@ -816,7 +871,7 @@ export default function DuckHunt() {
     let closest: PigeonState | null = null;
     let closestDist = Infinity;
     for (const p of loop.pigeons) {
-      if (p.status !== "flying") continue;
+      if (p.status !== "flying") continue; // skip pending, hit, escaped
       const dx = p.x - cx;
       const dy = p.y - cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -925,11 +980,9 @@ export default function DuckHunt() {
   return (
     <div className="dh-game">
       {/* Canvas — always rendered, overlaid with phase UI */}
-      <div className="dh-canvas-wrap">
+      <div className="dh-canvas-wrap" ref={containerRef}>
         <canvas
           ref={canvasRef}
-          width={CW}
-          height={CH}
           className={`dh-canvas${phase === "playing" ? " dh-canvas--active" : ""}`}
           onClick={handleCanvasClick}
         />
@@ -1013,8 +1066,11 @@ export default function DuckHunt() {
 
         {phase === "countdown" && (
           <div className="dh-overlay dh-overlay--transparent">
-            <div className="dh-countdown">
-              {countdownNum > 0 ? countdownNum : "GO!"}
+            <div className="dh-countdown-wrap">
+              <div className="dh-countdown-prompt">{prompt}</div>
+              <div className="dh-countdown">
+                {countdownNum > 0 ? countdownNum : "GO!"}
+              </div>
             </div>
           </div>
         )}

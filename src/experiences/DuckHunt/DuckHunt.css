@@ -252,6 +252,24 @@
 
 /* ── Countdown ───────────────────────────────────────────────────────────────── */
 
+.dh-countdown-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.dh-countdown-prompt {
+  font-family: "Press Start 2P", monospace;
+  font-size: 18px;
+  color: #ffdd66;
+  text-shadow: 2px 2px 0 #000000, 0 0 12px #cc8800;
+  text-align: center;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #ffaa00;
+}
+
 .dh-countdown {
   font-family: "Press Start 2P", monospace;
   font-size: 64px;
@@ -430,4 +448,49 @@
 .dh-shot--used {
   color: #888888;
   opacity: 0.3;
+}
+
+/* ── Portrait / mobile ───────────────────────────────────────────────────────── */
+
+@media (orientation: portrait) {
+  /* Make the game window fill more vertical space */
+  .dh-game {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Canvas fills whatever height the ResizeObserver calculated */
+  .dh-canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* Larger tap targets for buttons on mobile */
+  .dh-btn--option {
+    padding: 14px 8px;
+    font-size: 8px;
+  }
+
+  .dh-btn--option span:first-child {
+    font-size: 24px;
+  }
+
+  .dh-btn--diff {
+    padding: 12px 10px;
+  }
+
+  /* Slightly larger prompt text on portrait so it's readable at arm's length */
+  .dh-hud__prompt {
+    font-size: 9px;
+  }
+
+  /* Countdown prompt text smaller on narrow screens */
+  .dh-countdown-prompt {
+    font-size: 13px;
+  }
+
+  .dh-countdown {
+    font-size: 52px;
+  }
 }
