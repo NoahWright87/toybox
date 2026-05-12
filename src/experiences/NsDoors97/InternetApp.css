@@ -37,10 +37,17 @@
   align-items: center;
   justify-content: center;
   color: #000;
+  padding: 0;
 }
 
-.ns-internet__nav-btn:active {
+.ns-internet__nav-btn:active:not(:disabled) {
   border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.ns-internet__nav-btn:disabled {
+  color: #808080;
+  cursor: default;
+  border-color: #d4d0c8 #808080 #808080 #d4d0c8;
 }
 
 .ns-internet__address-wrap {
@@ -59,15 +66,17 @@
   flex-shrink: 0;
 }
 
-.ns-internet__address {
+.ns-internet__address-input {
   flex: 1;
   padding: 2px 6px;
   font-family: "Courier New", Courier, monospace;
   font-size: 11px;
   color: #000;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffffff;
+  outline: none;
+  min-width: 0;
 }
 
 .ns-internet__sunken {
@@ -92,12 +101,13 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
-/* ── Page content ────────────────────────────────────────────────────────── */
+/* ── Page content (home) ─────────────────────────────────────────────────── */
 
 .ns-internet__content {
   flex: 1;
   overflow-y: auto;
   background: #ffffff;
+  min-height: 0;
 }
 
 .ns-internet__page {
@@ -146,6 +156,50 @@
   color: #fff;
 }
 
+/* ── Iframe (external pages) ─────────────────────────────────────────────── */
+
+.ns-internet__iframe-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ns-internet__iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
+  display: block;
+  min-height: 0;
+}
+
+/* Loading bar across the top of the iframe area */
+.ns-internet__loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #d4d0c8;
+  z-index: 10;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ns-internet__loading-bar-fill {
+  height: 100%;
+  width: 40%;
+  background: #cc4400;
+  animation: ns-loading-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes ns-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 /* ── Status bar ──────────────────────────────────────────────────────────── */
 
 .ns-internet__statusbar {
@@ -157,4 +211,7 @@
   background: #d4d0c8;
   border-top: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
