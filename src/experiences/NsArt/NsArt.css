@@ -351,3 +351,89 @@
   margin-left: auto;
   white-space: nowrap;
 }
+
+/* ── Hidden native color picker ──────────────────────────────────────────── */
+
+.ns-art__hidden-picker {
+  display: none;
+}
+
+/* ── Confirm / alert dialog overlay ─────────────────────────────────────── */
+
+.ns-art__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.ns-art__dialog {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 240px;
+  max-width: 340px;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.ns-art__dialog-titlebar {
+  background: linear-gradient(to right, #7b3dbe, #cc4400);
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.ns-art__dialog-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.ns-art__dialog-body {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  padding: 16px 12px 12px;
+  line-height: 1.7;
+}
+
+.ns-art__dialog-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 4px 10px 10px;
+}
+
+.ns-art__dialog-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: #000;
+  white-space: nowrap;
+  min-width: 64px;
+}
+
+.ns-art__dialog-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.ns-art__dialog-btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.ns-art__dialog-btn--primary:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}

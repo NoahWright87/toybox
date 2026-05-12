@@ -12,6 +12,7 @@ interface WindowProps {
   width?: number;        // optional override — defaults to CSS 440px
   onClose: (id: string) => void;
   onFocus: (id: string) => void;
+  onCloseRequested?: (id: string, proceed: () => void) => void;
   children: React.ReactNode;
 }
 
@@ -47,6 +48,7 @@ export default function Window({
   width,
   onClose,
   onFocus,
+  onCloseRequested,
   children,
 }: WindowProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -63,8 +65,16 @@ export default function Window({
     ...(scale < 1 ? { zoom: scale } : {}),
   };
 
+  function handleClose() {
+    if (onCloseRequested) {
+      onCloseRequested(id, () => onClose(id));
+    } else {
+      onClose(id);
+    }
+  }
+
   const titleBar = (
-    <TitleBar title={title} icon={icon} onClose={() => onClose(id)} />
+    <TitleBar title={title} icon={icon} onClose={handleClose} />
   );
 
   // Portrait mode: maximized, no drag
