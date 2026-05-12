@@ -21,6 +21,7 @@ import FolderApp from "./FolderApp";
 import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
+import NsArt, { type NsArtHandle } from "../NsArt/NsArt";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
@@ -56,6 +57,7 @@ const EXPERIENCE_ICONS: Record<string, string> = {
   "bomb-finder":        "💣",
   "duck-hunt":          "🎯",
   "ns-doors-97":        "🚪",
+  "ns-art":             "🎨",
 };
 
 type DesktopIconAction =
@@ -71,7 +73,9 @@ type DesktopIconAction =
   | "my-doors"
   | "internet"
   | "files"
-  | "notebook";
+  | "notebook"
+  | "nsart"
+  | "art-backup";
 
 interface DesktopIconDef {
   id: string;
@@ -89,6 +93,7 @@ const STATIC_ICONS: DesktopIconDef[] = [
   { id: "internet",     title: "Internet",     icon: "🌐", action: "internet"     },
   { id: "screensavers", title: "Screensavers", icon: "💤", action: "screensavers" },
   { id: "cards",        title: "Cards",        icon: "🃏", action: "cards"        },
+  { id: "art-backup",   title: "Backup.png",   icon: "🖼️", action: "art-backup"   },
 ];
 
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
@@ -98,10 +103,11 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
     action: (
-      e.id === "tic-tac-toe" ? "tictactoe" :
-      e.id === "number-muncher" ? "nomnom" :
-      e.id === "bomb-finder" ? "bombfinder" :
-      e.id === "duck-hunt" ? "duckhunt" :
+      e.id === "tic-tac-toe"     ? "tictactoe" :
+      e.id === "number-muncher"  ? "nomnom"    :
+      e.id === "bomb-finder"     ? "bombfinder":
+      e.id === "duck-hunt"       ? "duckhunt"  :
+      e.id === "ns-art"          ? "nsart"     :
       "experience"
     ) as DesktopIconAction,
   }));
@@ -124,7 +130,9 @@ type WindowContent =
   | { type: "internet" }
   | { type: "files" }
   | { type: "notebook"; filePath: string; fileName: string; initialContent: string }
-  | { type: "desktop-display" };
+  | { type: "desktop-display" }
+  | { type: "nsart" }
+  | { type: "nsart-backup" };
 
 interface OpenWindow {
   id: string;
@@ -186,15 +194,31 @@ export default function NsDoors97() {
   const skipBoot = (location.state as { skipBoot?: boolean } | null)?.skipBoot === true;
   const initialShouldBoot = !skipBoot && (fromTos || shouldShowBoot());
 
+  const nsArtRef       = useRef<NsArtHandle>(null);
+  const nsArtBackupRef = useRef<NsArtHandle>(null);
+  const [hasArtBackup, setHasArtBackup] = useState(() =>
+    Boolean(localStorage.getItem("ns-art-backup"))
+  );
+
   const [showBoot, setShowBoot]             = useState(initialShouldBoot);
   const [shuttingDown, setShuttingDown]     = useState(false);
   const [desktopLoading, setDesktopLoading] = useState(false);
 
-  // Icons start empty whenever there's a boot screen, all-visible otherwise.
+  // Icons start empty whenever there's a boot screen; all-visible otherwise.
+  // art-backup is excluded unless a saved backup exists.
   const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
     if (initialShouldBoot) return new Set<string>();
-    return new Set(ALL_DESKTOP_ICONS.map((d) => d.id));
+    return new Set(
+      ALL_DESKTOP_ICONS.filter((d) => d.id !== "art-backup" || Boolean(localStorage.getItem("ns-art-backup"))).map((d) => d.id)
+    );
   });
+
+  // Reveal the Backup.png icon whenever a backup is first saved
+  useEffect(() => {
+    if (hasArtBackup) {
+      setVisibleIcons((prev) => new Set<string>([...prev, "art-backup"]));
+    }
+  }, [hasArtBackup]);
 
   // Called when the boot screen finishes (both initial boot and after restart)
   const handleBootComplete = useCallback(() => {
@@ -235,7 +259,12 @@ export default function NsDoors97() {
       document.body.style.cursor = "";
 
       // Phase 2 — icons pop in one by one in random order
-      const shuffled = [...ALL_DESKTOP_ICONS.map((d) => d.id)];
+      // art-backup only appears if a saved backup exists
+      const shuffled = [
+        ...ALL_DESKTOP_ICONS
+          .filter((d) => d.id !== "art-backup" || Boolean(localStorage.getItem("ns-art-backup")))
+          .map((d) => d.id),
+      ];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -367,6 +396,8 @@ export default function NsDoors97() {
         case "internet":     content = { type: "internet" };             width = 640; break;
         case "files":        content = { type: "files" };                width = 600; break;
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
+        case "nsart":        content = { type: "nsart" };                width = 760; break;
+        case "art-backup":  content = { type: "nsart-backup" };         width = 760; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
@@ -574,6 +605,14 @@ export default function NsDoors97() {
           width={win.width}
           onClose={win.content.type === "cards-game" ? handleCardsGameClose : closeWindow}
           onFocus={focusWindow}
+          onCloseRequested={
+            (win.content.type === "nsart" || win.content.type === "nsart-backup")
+              ? (_id, proceed) => {
+                  const r = win.content.type === "nsart" ? nsArtRef : nsArtBackupRef;
+                  if (r.current) { r.current.requestClose(proceed); } else { proceed(); }
+                }
+              : undefined
+          }
         >
           {win.content.type === "app-launcher" && (
             <AppLauncher
@@ -585,6 +624,12 @@ export default function NsDoors97() {
                 )
               }
             />
+          )}
+          {win.content.type === "nsart" && (
+            <NsArt ref={nsArtRef} onBackupSaved={() => setHasArtBackup(true)} />
+          )}
+          {win.content.type === "nsart-backup" && (
+            <NsArt ref={nsArtBackupRef} onBackupSaved={() => setHasArtBackup(true)} />
           )}
           {win.content.type === "tictactoe" && (
             <TicTacToe

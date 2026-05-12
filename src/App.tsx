@@ -14,6 +14,7 @@ import BombFinderPage from "./pages/BombFinderPage";
 import NsDoors97Page from "./pages/NsDoors97Page";
 import NsToSPage from "./pages/NsToSPage";
 import DuckHuntPage from "./pages/DuckHuntPage";
+import NsArtPage from "./pages/NsArtPage";
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/doors97" element={<NsDoors97Page />} />
         <Route path="/ns-tos" element={<NsToSPage />} />
         <Route path="/duck-hunt" element={<DuckHuntPage />} />
+        <Route path="/art" element={<NsArtPage />} />
       </Routes>
     </BrowserRouter>
   );

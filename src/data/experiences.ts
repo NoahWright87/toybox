@@ -105,4 +105,11 @@ export const experiences: Experience[] = [
     category: "toy",
     path: "/ns-tos",
   },
+  {
+    id: "ns-art",
+    title: "NS Art",
+    description: "A retro paint program. Draw, spray, fill, and export your masterpiece as a PNG.",
+    category: "toy",
+    path: "/art",
+  },
 ];
