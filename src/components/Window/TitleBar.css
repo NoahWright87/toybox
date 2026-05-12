@@ -1,4 +1,4 @@
-.ns-titlebar {
+.win95-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -11,7 +11,7 @@
   gap: 8px;
 }
 
-.ns-titlebar__left {
+.win95-titlebar__left {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -19,13 +19,13 @@
   min-width: 0;
 }
 
-.ns-titlebar__icon {
+.win95-titlebar__icon {
   font-size: 14px;
   flex-shrink: 0;
   line-height: 1;
 }
 
-.ns-titlebar__title {
+.win95-titlebar__title {
   font-family: "Press Start 2P", monospace;
   font-size: 9px;
   color: #ffffff;
@@ -36,16 +36,16 @@
   letter-spacing: 0.03em;
 }
 
-.ns-titlebar__controls {
+.win95-titlebar__controls {
   display: flex;
   gap: 3px;
   flex-shrink: 0;
 }
 
-.ns-titlebar__btn {
+.win95-titlebar__btn {
   width: 20px;
   height: 18px;
-  font-size: 10px;
+  font-size: 9px;
   font-family: monospace;
   color: #000000;
   background: #c8964a;
@@ -59,18 +59,25 @@
   line-height: 1;
 }
 
-.ns-titlebar__btn:active {
+.win95-titlebar__btn:active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
   background: #a07030;
 }
 
-.ns-titlebar__btn--close {
+.win95-titlebar__btn--close {
   color: #fff;
   background: #c84020;
   border-color: #ff8060 #660000 #660000 #ff8060;
 }
 
-.ns-titlebar__btn--close:active {
+.win95-titlebar__btn--close:active {
   border-color: #660000 #ff8060 #ff8060 #660000;
   background: #a02010;
+}
+
+/* When used inside a standalone page, title bar must paint above fixed canvases */
+.standalone-window > .win95-titlebar {
+  position: relative;
+  z-index: 10;
+  cursor: default; /* not draggable in standalone mode */
 }

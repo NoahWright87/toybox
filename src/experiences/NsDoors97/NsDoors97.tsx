@@ -180,6 +180,7 @@ interface OpenWindow {
   zIndex: number;
   defaultPosition: { x: number; y: number };
   width?: number;
+  minimized: boolean;
 }
 
 let windowSeq = 0;
@@ -362,6 +363,7 @@ export default function NsDoors97() {
           zIndex: maxZ,
           defaultPosition: { x: 100 + offset, y: 60 + offset },
           width: 400,
+          minimized: false,
         },
       ];
     });
@@ -461,6 +463,7 @@ export default function NsDoors97() {
           zIndex: maxZ,
           defaultPosition: { x: 80 + offset, y: 48 + offset },
           width,
+          minimized: false,
         },
       ];
     });
@@ -475,9 +478,16 @@ export default function NsDoors97() {
     maxZ++;
     const z = maxZ;
     setOpenWindows((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, zIndex: z } : w))
+      prev.map((w) => (w.id === id ? { ...w, zIndex: z, minimized: false } : w))
     );
     setActiveWindowId(id);
+  }, []);
+
+  const minimizeWindow = useCallback((id: string) => {
+    setOpenWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, minimized: true } : w))
+    );
+    setActiveWindowId((cur) => (cur === id ? null : cur));
   }, []);
 
   const openNotebook = useCallback(
@@ -503,6 +513,7 @@ export default function NsDoors97() {
             zIndex: maxZ,
             defaultPosition: { x: 100 + offset, y: 60 + offset },
             width: 560,
+            minimized: false,
           },
         ];
       });
@@ -553,6 +564,7 @@ export default function NsDoors97() {
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
             width: CARDS_GAME_WIDTHS[game],
+            minimized: false,
           },
         ];
       });
@@ -578,6 +590,7 @@ export default function NsDoors97() {
           zIndex: maxZ,
           defaultPosition: { x: 80 + offset, y: 48 + offset },
           width: 320,
+          minimized: false,
         },
       ];
     });
@@ -657,8 +670,10 @@ export default function NsDoors97() {
           zIndex={win.zIndex}
           defaultPosition={win.defaultPosition}
           width={win.width}
+          minimized={win.minimized}
           onClose={win.content.type === "cards-game" ? handleCardsGameClose : closeWindow}
           onFocus={focusWindow}
+          onShrink={minimizeWindow}
           onCloseRequested={
             (win.content.type === "nsart" || win.content.type === "nsart-backup")
               ? (_id, proceed) => {
@@ -767,7 +782,7 @@ export default function NsDoors97() {
 
       {/* ── Taskbar ── */}
       <Taskbar
-        windows={openWindows.map((w) => ({ id: w.id, title: w.title, icon: w.icon }))}
+        windows={openWindows.map((w) => ({ id: w.id, title: w.title, icon: w.icon, minimized: w.minimized }))}
         activeWindowId={activeWindowId}
         onWindowFocus={focusWindow}
         onRestart={handleRestart}

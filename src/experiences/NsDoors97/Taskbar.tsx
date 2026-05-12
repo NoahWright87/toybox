@@ -7,6 +7,7 @@ interface TaskbarWindowEntry {
   id: string;
   title: string;
   icon?: string;
+  minimized?: boolean;
 }
 
 interface TaskbarProps {
@@ -225,7 +226,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
         {windows.map((win) => (
           <button
             key={win.id}
-            className={`ns-taskbar__win-btn${activeWindowId === win.id ? " ns-taskbar__win-btn--active" : ""}`}
+            className={[
+              "ns-taskbar__win-btn",
+              activeWindowId === win.id ? "ns-taskbar__win-btn--active" : "",
+              win.minimized ? "ns-taskbar__win-btn--minimized" : "",
+            ].filter(Boolean).join(" ")}
             onClick={() => onWindowFocus(win.id)}
             title={win.title}
           >

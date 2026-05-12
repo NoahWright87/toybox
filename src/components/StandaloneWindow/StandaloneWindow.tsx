@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import TitleBar from "../Window/TitleBar";
+import MenuBar, { type MenuBarMenu } from "../MenuBar/MenuBar";
 import "./StandaloneWindow.css";
 
 interface StandaloneWindowProps {
@@ -11,81 +13,58 @@ interface StandaloneWindowProps {
 
 export default function StandaloneWindow({ title, icon, helpContent, children }: StandaloneWindowProps) {
   const navigate = useNavigate();
-  const [openMenu, setOpenMenu] = useState<"file" | "help" | null>(null);
-  const menuBarRef = useRef<HTMLDivElement>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   function exitToDoors() {
     navigate("/doors97", { state: { skipBoot: true } });
   }
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (menuBarRef.current && !menuBarRef.current.contains(e.target as Node)) {
-        setOpenMenu(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const menus: MenuBarMenu[] = [
+    {
+      label: "File",
+      items: [{ label: "Exit to Doors", onClick: exitToDoors }],
+    },
+    ...(helpContent
+      ? [
+          {
+            label: "Help",
+            items: [{ label: "Keyboard Shortcuts", onClick: () => setShowHelp(true) }],
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="standalone-page">
       <div className="standalone-window">
-        <div className="standalone-window__titlebar">
-          {icon && <span className="standalone-window__icon">{icon}</span>}
-          <span className="standalone-window__title">{title}</span>
-          <button
-            className="standalone-window__close"
-            onClick={exitToDoors}
-            aria-label="Exit to Doors"
-            title="Exit to Doors"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="standalone-window__menubar" ref={menuBarRef}>
-          <div className="standalone-window__menu">
-            <button
-              className={`standalone-window__menu-btn${openMenu === "file" ? " standalone-window__menu-btn--open" : ""}`}
-              onClick={() => setOpenMenu(openMenu === "file" ? null : "file")}
-            >
-              File
-            </button>
-            {openMenu === "file" && (
-              <div className="standalone-window__dropdown">
-                <button
-                  className="standalone-window__dropdown-item"
-                  onClick={exitToDoors}
-                >
-                  Exit to Doors
-                </button>
-              </div>
-            )}
-          </div>
-
-          {helpContent && (
-            <div className="standalone-window__menu">
-              <button
-                className={`standalone-window__menu-btn${openMenu === "help" ? " standalone-window__menu-btn--open" : ""}`}
-                onClick={() => setOpenMenu(openMenu === "help" ? null : "help")}
-              >
-                Help
-              </button>
-              {openMenu === "help" && (
-                <div className="standalone-window__dropdown standalone-window__dropdown--help">
-                  <div className="standalone-window__help-content">
-                    {helpContent}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
+        <TitleBar title={title} icon={icon} onClose={exitToDoors} />
+        <MenuBar menus={menus} />
         <div className="standalone-window__content">
           {children}
         </div>
+
+        {showHelp && helpContent && (
+          <div className="standalone-help-overlay" onClick={() => setShowHelp(false)}>
+            <div
+              className="standalone-help-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="standalone-help-dialog__titlebar">
+                <span>Keyboard Shortcuts</span>
+                <button
+                  className="standalone-help-dialog__close"
+                  onClick={() => setShowHelp(false)}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="standalone-help-dialog__body">
+                {helpContent}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
