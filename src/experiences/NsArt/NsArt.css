@@ -245,6 +245,7 @@
   display: block;
   cursor: crosshair;
   image-rendering: pixelated;
+  touch-action: none; /* prevent browser scroll/zoom so touch draws */
 }
 
 /* ── Bottom bar ──────────────────────────────────────────────────────────── */

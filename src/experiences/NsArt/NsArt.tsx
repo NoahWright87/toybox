@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useLayoutEffect } from "react";
 import "./NsArt.css";
 
 type Tool = "pencil" | "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "zoom";
@@ -30,36 +30,29 @@ const BRUSH_SIZES = [2, 5, 10] as const;
 type BrushSize = typeof BRUSH_SIZES[number];
 
 const TOOLS: { id: Tool; label: string; title: string }[] = [
-  { id: "pencil", label: "✏",  title: "Pencil (1px)"     },
-  { id: "brush",  label: "⬤",  title: "Brush"            },
-  { id: "spray",  label: "∷",  title: "Spray Can"        },
-  { id: "eraser", label: "◻",  title: "Eraser"           },
-  { id: "fill",   label: "▤",  title: "Fill"             },
-  { id: "line",   label: "╱",  title: "Line"             },
-  { id: "rect",   label: "▭",  title: "Rectangle"        },
-  { id: "oval",   label: "⬭",  title: "Oval"             },
-  { id: "zoom",   label: "⊕",  title: "Zoom (right-click zooms out)" },
+  { id: "pencil", label: "✏",  title: "Pencil (1px)"              },
+  { id: "brush",  label: "⬤",  title: "Brush"                     },
+  { id: "spray",  label: "∷",  title: "Spray Can"                 },
+  { id: "eraser", label: "◻",  title: "Eraser"                    },
+  { id: "fill",   label: "▤",  title: "Fill"                      },
+  { id: "line",   label: "╱",  title: "Line"                      },
+  { id: "rect",   label: "▭",  title: "Rectangle"                 },
+  { id: "oval",   label: "⬭",  title: "Oval"                      },
+  { id: "zoom",   label: "⊕",  title: "Zoom (right-click/2-tap zooms out)" },
 ];
 
-// ── Utilities ──────────────────────────────────────────────────────────────
+// ── Utilities (module-level) ───────────────────────────────────────────────
 
-function floodFill(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  fillColor: string,
-) {
+function floodFill(ctx: CanvasRenderingContext2D, sx: number, sy: number, fillColor: string) {
   const canvas = ctx.canvas;
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = canvas.width, h = canvas.height;
   if (sx < 0 || sy < 0 || sx >= w || sy >= h) return;
 
   const imageData = ctx.getImageData(0, 0, w, h);
   const d = imageData.data;
   const byteIdx = (x: number, y: number) => (y * w + x) * 4;
-
   const si = byteIdx(sx, sy);
-  const tR = d[si], tG = d[si + 1], tB = d[si + 2], tA = d[si + 3];
+  const tR = d[si], tG = d[si+1], tB = d[si+2], tA = d[si+3];
 
   let fR: number, fG: number, fB: number, fA: number;
   if (fillColor === "transparent") {
@@ -69,12 +62,10 @@ function floodFill(
     if (!m) return;
     [fR, fG, fB, fA] = [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16), 255];
   }
-
   if (tR === fR && tG === fG && tB === fB && tA === fA) return;
 
   const visited = new Uint8Array(w * h);
   const stack: number[] = [si];
-
   while (stack.length > 0) {
     const i = stack.pop()!;
     const pi = i >> 2;
@@ -82,14 +73,12 @@ function floodFill(
     if (d[i] !== tR || d[i+1] !== tG || d[i+2] !== tB || d[i+3] !== tA) continue;
     visited[pi] = 1;
     d[i] = fR; d[i+1] = fG; d[i+2] = fB; d[i+3] = fA;
-    const x = pi % w;
-    const y = Math.floor(pi / w);
+    const x = pi % w, y = Math.floor(pi / w);
     if (x > 0)     stack.push(i - 4);
     if (x < w - 1) stack.push(i + 4);
     if (y > 0)     stack.push(i - w * 4);
     if (y < h - 1) stack.push(i + w * 4);
   }
-
   ctx.putImageData(imageData, 0, 0);
 }
 
@@ -103,9 +92,9 @@ function applyColor(ctx: CanvasRenderingContext2D, color: string, size: number) 
     ctx.strokeStyle = color;
     ctx.fillStyle   = color;
   }
-  ctx.lineWidth  = size;
-  ctx.lineCap    = "round";
-  ctx.lineJoin   = "round";
+  ctx.lineWidth = size;
+  ctx.lineCap   = "round";
+  ctx.lineJoin  = "round";
 }
 
 function resetCtx(ctx: CanvasRenderingContext2D) {
@@ -114,26 +103,18 @@ function resetCtx(ctx: CanvasRenderingContext2D) {
 
 function strokeLine(
   ctx: CanvasRenderingContext2D,
-  x0: number, y0: number,
-  x1: number, y1: number,
-  color: string,
-  size: number,
+  x0: number, y0: number, x1: number, y1: number,
+  color: string, size: number,
 ) {
   applyColor(ctx, color, size);
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
   resetCtx(ctx);
 }
 
 function strokeRect(
   ctx: CanvasRenderingContext2D,
-  x0: number, y0: number,
-  x1: number, y1: number,
-  color: string,
-  size: number,
-  mode: FillMode,
+  x0: number, y0: number, x1: number, y1: number,
+  color: string, size: number, mode: FillMode,
 ) {
   applyColor(ctx, color, size);
   const x = Math.min(x0, x1), y = Math.min(y0, y1);
@@ -145,11 +126,8 @@ function strokeRect(
 
 function strokeOval(
   ctx: CanvasRenderingContext2D,
-  x0: number, y0: number,
-  x1: number, y1: number,
-  color: string,
-  size: number,
-  mode: FillMode,
+  x0: number, y0: number, x1: number, y1: number,
+  color: string, size: number, mode: FillMode,
 ) {
   applyColor(ctx, color, size);
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -162,31 +140,57 @@ function strokeOval(
   resetCtx(ctx);
 }
 
+function doSpray(canvas: HTMLCanvasElement, x: number, y: number, color: string, size: number) {
+  const ctx = canvas.getContext("2d")!;
+  applyColor(ctx, color, 1);
+  const radius = size * 5, density = size * 4;
+  for (let i = 0; i < density; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * radius;
+    ctx.fillRect(Math.round(x + Math.cos(angle) * r), Math.round(y + Math.sin(angle) * r), 1, 1);
+  }
+  resetCtx(ctx);
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function NsArt() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
 
-  const [tool,            setTool]           = useState<Tool>("pencil");
-  const [primaryColor,    setPrimaryColor]   = useState("#000000");
-  const [secondaryColor,  setSecondaryColor] = useState("#ffffff");
-  const [brushSize,       setBrushSize]      = useState<BrushSize>(2);
-  const [fillMode,        setFillMode]       = useState<FillMode>("outline");
-  const [zoom,            setZoom]           = useState(1);
-  const [canvasSize,      setCanvasSize]     = useState<CanvasSize>({ w: 640, h: 480 });
-  const [showSizeMenu,    setShowSizeMenu]   = useState(false);
-  const [status,          setStatus]         = useState("Ready");
+  const [tool,           setTool]          = useState<Tool>("pencil");
+  const [primaryColor,   setPrimaryColor]  = useState("#000000");
+  const [secondaryColor, setSecondaryColor]= useState("#ffffff");
+  const [brushSize,      setBrushSize]     = useState<BrushSize>(2);
+  const [fillMode,       setFillMode]      = useState<FillMode>("outline");
+  const [zoom,           setZoom]          = useState(1);
+  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 640, h: 480 });
+  const [showSizeMenu,   setShowSizeMenu]  = useState(false);
+  const [status,         setStatus]        = useState("Ready");
 
-  const isDrawingRef        = useRef(false);
-  const startRef            = useRef({ x: 0, y: 0 });
-  const lastRef             = useRef({ x: 0, y: 0 });
-  const snapshotRef         = useRef<ImageData | null>(null);
-  const undoRef             = useRef<ImageData[]>([]);
-  const sprayRef            = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeColorRef      = useRef("#000000");
-  const activeSizeRef       = useRef<number>(1);
+  const isDrawingRef   = useRef(false);
+  const startRef       = useRef({ x: 0, y: 0 });
+  const lastRef        = useRef({ x: 0, y: 0 });
+  const snapshotRef    = useRef<ImageData | null>(null);
+  const undoRef        = useRef<ImageData[]>([]);
+  const sprayRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeColorRef = useRef("#000000");
+  const activeSizeRef  = useRef<number>(1);
 
-  // White-fill whenever canvas size changes (creates new canvas element)
+  // Pick the largest canvas preset that fits the available area on first render
+  useLayoutEffect(() => {
+    const el = canvasAreaRef.current;
+    if (!el) return;
+    const availW = el.clientWidth  - 16;
+    const availH = el.clientHeight - 16;
+    let best = CANVAS_PRESETS[0];
+    for (const p of CANVAS_PRESETS) {
+      if (p.w <= availW && p.h <= availH) best = p;
+    }
+    setCanvasSize(best);
+  }, []);
+
+  // White-fill when canvas size changes (changing canvas dimensions also clears it)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -199,7 +203,7 @@ export default function NsArt() {
   const pushUndo = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
+    const ctx  = canvas.getContext("2d")!;
     const snap = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const stack = undoRef.current;
     undoRef.current = stack.length >= 5 ? [...stack.slice(1), snap] : [...stack, snap];
@@ -208,7 +212,7 @@ export default function NsArt() {
   const undo = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || undoRef.current.length === 0) return;
-    const ctx = canvas.getContext("2d")!;
+    const ctx  = canvas.getContext("2d")!;
     const prev = undoRef.current[undoRef.current.length - 1];
     undoRef.current = undoRef.current.slice(0, -1);
     ctx.putImageData(prev, 0, 0);
@@ -235,164 +239,171 @@ export default function NsArt() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-        e.preventDefault();
-        undo();
-      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [undo]);
 
-  function sprayAt(x: number, y: number, color: string, size: number) {
+  // ── Shared drawing helpers ─────────────────────────────────────────────
+
+  const startDrawing = useCallback((x: number, y: number, isSecondary: boolean) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    applyColor(ctx, color, 1);
-    const radius  = size * 5;
-    const density = size * 4;
-    for (let i = 0; i < density; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const r     = Math.random() * radius;
-      ctx.fillRect(
-        Math.round(x + Math.cos(angle) * r),
-        Math.round(y + Math.sin(angle) * r),
-        1, 1,
-      );
+    const ctx   = canvas.getContext("2d")!;
+    const color = isSecondary ? secondaryColor : primaryColor;
+
+    if (tool === "zoom") {
+      setZoom(z => isSecondary ? Math.max(1, z / 2) : Math.min(4, z * 2));
+      return;
     }
-    resetCtx(ctx);
-  }
+    if (tool === "fill") {
+      pushUndo();
+      floodFill(ctx, x, y, color);
+      return;
+    }
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx  = canvas.getContext("2d")!;
-      const pos  = { x: Math.floor((e.clientX - canvas.getBoundingClientRect().left) / zoom),
-                     y: Math.floor((e.clientY - canvas.getBoundingClientRect().top)  / zoom) };
-      const color = e.button === 2 ? secondaryColor : primaryColor;
+    isDrawingRef.current   = true;
+    startRef.current       = { x, y };
+    lastRef.current        = { x, y };
+    activeColorRef.current = color;
+    activeSizeRef.current  = tool === "pencil" ? 1 : brushSize;
 
-      if (tool === "zoom") {
-        setZoom(z => e.button === 2 ? Math.max(1, z / 2) : Math.min(4, z * 2));
-        return;
-      }
+    if (tool === "pencil" || tool === "brush" || tool === "eraser") {
+      pushUndo();
+      const ec = tool === "eraser" ? "transparent" : color;
+      const es = tool === "pencil" ? 1 : brushSize;
+      applyColor(ctx, ec, es);
+      ctx.beginPath();
+      ctx.arc(x, y, es / 2, 0, Math.PI * 2);
+      ctx.fill();
+      resetCtx(ctx);
+    } else if (tool === "spray") {
+      pushUndo();
+      doSpray(canvas, x, y, color, brushSize);
+      const cc = color, cs = brushSize;
+      sprayRef.current = setInterval(() => {
+        if (!isDrawingRef.current || !canvasRef.current) return;
+        doSpray(canvasRef.current, lastRef.current.x, lastRef.current.y, cc, cs);
+      }, 50);
+    } else {
+      pushUndo();
+      snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
+  }, [tool, primaryColor, secondaryColor, brushSize, pushUndo]);
 
-      if (tool === "fill") {
-        pushUndo();
-        floodFill(ctx, pos.x, pos.y, color);
-        return;
-      }
+  const continueDrawing = useCallback((x: number, y: number) => {
+    if (!isDrawingRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx   = canvas.getContext("2d")!;
+    const color = activeColorRef.current;
+    const size  = activeSizeRef.current;
 
-      isDrawingRef.current   = true;
-      startRef.current       = pos;
-      lastRef.current        = pos;
-      activeColorRef.current = color;
-      activeSizeRef.current  = tool === "pencil" ? 1 : brushSize;
+    if (tool === "pencil" || tool === "brush") {
+      strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size);
+    } else if (tool === "eraser") {
+      strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, "transparent", brushSize);
+    } else if (tool === "spray") {
+      doSpray(canvas, x, y, color, brushSize);
+    } else if (snapshotRef.current) {
+      ctx.putImageData(snapshotRef.current, 0, 0);
+      const { x: sx, y: sy } = startRef.current;
+      if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, size, fillMode);
+      else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, size, fillMode);
+    }
+    lastRef.current = { x, y };
+  }, [tool, brushSize, fillMode]);
 
-      if (tool === "pencil" || tool === "brush" || tool === "eraser") {
-        pushUndo();
-        const effectiveColor = tool === "eraser" ? "transparent" : color;
-        const effectiveSize  = tool === "pencil" ? 1 : brushSize;
-        // Draw initial dot
-        applyColor(ctx, effectiveColor, effectiveSize);
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, effectiveSize / 2, 0, Math.PI * 2);
-        ctx.fill();
-        resetCtx(ctx);
-      } else if (tool === "spray") {
-        pushUndo();
-        sprayAt(pos.x, pos.y, color, brushSize);
-        const capturedColor = color;
-        const capturedSize  = brushSize;
-        sprayRef.current = setInterval(() => {
-          if (!isDrawingRef.current) return;
-          sprayAt(lastRef.current.x, lastRef.current.y, capturedColor, capturedSize);
-        }, 50);
-      } else {
-        // line / rect / oval — save snapshot for live preview
-        pushUndo();
-        snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      }
-    },
-    [tool, primaryColor, secondaryColor, brushSize, pushUndo, zoom],
-  );
+  const endDrawing = useCallback((x: number, y: number) => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    if (sprayRef.current) { clearInterval(sprayRef.current); sprayRef.current = null; }
 
-  const onMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const pos  = {
-        x: Math.floor((e.clientX - rect.left) / zoom),
-        y: Math.floor((e.clientY - rect.top)  / zoom),
-      };
-      setStatus(`${pos.x}, ${pos.y}`);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx   = canvas.getContext("2d")!;
+    const color = activeColorRef.current;
+    const size  = activeSizeRef.current;
 
-      if (!isDrawingRef.current) return;
-      const ctx   = canvas.getContext("2d")!;
-      const color = activeColorRef.current;
-      const size  = activeSizeRef.current;
+    if (snapshotRef.current) {
+      ctx.putImageData(snapshotRef.current, 0, 0);
+      const { x: sx, y: sy } = startRef.current;
+      if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, size, fillMode);
+      else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, size, fillMode);
+      snapshotRef.current = null;
+    }
+  }, [tool, fillMode]);
 
-      if (tool === "pencil" || tool === "brush") {
-        strokeLine(ctx, lastRef.current.x, lastRef.current.y, pos.x, pos.y, color, size);
-      } else if (tool === "eraser") {
-        strokeLine(ctx, lastRef.current.x, lastRef.current.y, pos.x, pos.y, "transparent", brushSize);
-      } else if (tool === "spray") {
-        sprayAt(pos.x, pos.y, color, brushSize);
-      } else if (snapshotRef.current) {
-        ctx.putImageData(snapshotRef.current, 0, 0);
-        const { x: sx, y: sy } = startRef.current;
-        if (tool === "line") strokeLine(ctx, sx, sy, pos.x, pos.y, color, size);
-        else if (tool === "rect") strokeRect(ctx, sx, sy, pos.x, pos.y, color, size, fillMode);
-        else if (tool === "oval") strokeOval(ctx, sx, sy, pos.x, pos.y, color, size, fillMode);
-      }
+  // ── Mouse handlers ─────────────────────────────────────────────────────
 
-      lastRef.current = pos;
-    },
-    [tool, brushSize, fillMode, zoom],
-  );
+  const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const { x, y } = { x: Math.floor((e.clientX - canvasRef.current!.getBoundingClientRect().left) / zoom),
+                       y: Math.floor((e.clientY - canvasRef.current!.getBoundingClientRect().top)  / zoom) };
+    startDrawing(x, y, e.button === 2);
+  }, [startDrawing, zoom]);
 
-  const onMouseUp = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!isDrawingRef.current) return;
-      isDrawingRef.current = false;
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / zoom);
+    const y = Math.floor((e.clientY - rect.top)  / zoom);
+    setStatus(`${x}, ${y}`);
+    continueDrawing(x, y);
+  }, [continueDrawing, zoom]);
 
-      if (sprayRef.current) {
-        clearInterval(sprayRef.current);
-        sprayRef.current = null;
-      }
+  const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    endDrawing(
+      Math.floor((e.clientX - rect.left) / zoom),
+      Math.floor((e.clientY - rect.top)  / zoom),
+    );
+  }, [endDrawing, zoom]);
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx   = canvas.getContext("2d")!;
-      const rect  = canvas.getBoundingClientRect();
-      const pos   = {
-        x: Math.floor((e.clientX - rect.left) / zoom),
-        y: Math.floor((e.clientY - rect.top)  / zoom),
-      };
-      const color = activeColorRef.current;
-      const size  = activeSizeRef.current;
+  const onMouseLeave = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    setStatus("Ready");
+    onMouseUp(e);
+  }, [onMouseUp]);
 
-      if (snapshotRef.current) {
-        ctx.putImageData(snapshotRef.current, 0, 0);
-        const { x: sx, y: sy } = startRef.current;
-        if (tool === "line")      strokeLine(ctx, sx, sy, pos.x, pos.y, color, size);
-        else if (tool === "rect") strokeRect(ctx, sx, sy, pos.x, pos.y, color, size, fillMode);
-        else if (tool === "oval") strokeOval(ctx, sx, sy, pos.x, pos.y, color, size, fillMode);
-        snapshotRef.current = null;
-      }
-    },
-    [tool, fillMode, zoom],
-  );
+  // ── Touch handlers ─────────────────────────────────────────────────────
 
-  const onMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      setStatus("Ready");
-      if (isDrawingRef.current) onMouseUp(e);
-    },
-    [onMouseUp],
-  );
+  const onTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 0 || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const t = e.touches[0];
+    startDrawing(
+      Math.floor((t.clientX - rect.left) / zoom),
+      Math.floor((t.clientY - rect.top)  / zoom),
+      false,
+    );
+  }, [startDrawing, zoom]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 0 || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const t = e.touches[0];
+    const x = Math.floor((t.clientX - rect.left) / zoom);
+    const y = Math.floor((t.clientY - rect.top)  / zoom);
+    setStatus(`${x}, ${y}`);
+    continueDrawing(x, y);
+  }, [continueDrawing, zoom]);
+
+  const onTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const t = e.changedTouches[0];
+    endDrawing(
+      Math.floor((t.clientX - rect.left) / zoom),
+      Math.floor((t.clientY - rect.top)  / zoom),
+    );
+    setStatus("Ready");
+  }, [endDrawing, zoom]);
+
+  // ── Size picker ────────────────────────────────────────────────────────
 
   const handleSizeSelect = useCallback((preset: CanvasSize) => {
     setCanvasSize(preset);
@@ -406,9 +417,9 @@ export default function NsArt() {
     <div className="ns-art">
       {/* ── Action bar ── */}
       <div className="ns-art__actions">
-        <button className="ns-art__action-btn" onClick={newCanvas}  title="New (clears canvas)">New</button>
-        <button className="ns-art__action-btn" onClick={exportPng}  title="Export as PNG">Export PNG</button>
-        <button className="ns-art__action-btn" onClick={undo}       title="Undo (Ctrl+Z)">Undo</button>
+        <button className="ns-art__action-btn" onClick={newCanvas} title="New (clears canvas)">New</button>
+        <button className="ns-art__action-btn" onClick={exportPng} title="Export as PNG">Export PNG</button>
+        <button className="ns-art__action-btn" onClick={undo}      title="Undo (Ctrl+Z)">Undo</button>
         <div className="ns-art__action-sep" />
         <div className="ns-art__size-picker">
           <button
@@ -453,7 +464,6 @@ export default function NsArt() {
 
           <div className="ns-art__toolbox-sep" />
 
-          {/* Brush sizes */}
           <div className="ns-art__size-dots">
             {BRUSH_SIZES.map(s => (
               <button
@@ -467,7 +477,6 @@ export default function NsArt() {
             ))}
           </div>
 
-          {/* Fill mode (shapes only) */}
           {showFillMode && (
             <>
               <div className="ns-art__toolbox-sep" />
@@ -486,7 +495,6 @@ export default function NsArt() {
             </>
           )}
 
-          {/* Zoom indicator */}
           {zoom > 1 && (
             <>
               <div className="ns-art__toolbox-sep" />
@@ -496,7 +504,7 @@ export default function NsArt() {
         </div>
 
         {/* Canvas scroll area */}
-        <div className="ns-art__canvas-area">
+        <div className="ns-art__canvas-area" ref={canvasAreaRef}>
           <div
             className="ns-art__canvas-wrap"
             style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
@@ -511,6 +519,9 @@ export default function NsArt() {
               onMouseMove={onMouseMove}
               onMouseUp={onMouseUp}
               onMouseLeave={onMouseLeave}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
               onContextMenu={e => e.preventDefault()}
             />
           </div>
@@ -519,7 +530,6 @@ export default function NsArt() {
 
       {/* ── Bottom: color swatches + palette + status ── */}
       <div className="ns-art__bottom">
-        {/* Active color display */}
         <div className="ns-art__swatch-box">
           <div
             className="ns-art__swatch ns-art__swatch--secondary"
@@ -535,7 +545,6 @@ export default function NsArt() {
           />
         </div>
 
-        {/* Palette */}
         <div className="ns-art__palette">
           {PALETTE.map((color, i) => (
             <button
@@ -547,7 +556,6 @@ export default function NsArt() {
               onContextMenu={e => { e.preventDefault(); setSecondaryColor(color); }}
             />
           ))}
-          {/* Transparent swatch */}
           <button
             className={`ns-art__pal-swatch ns-art__pal-swatch--transparent${primaryColor === "transparent" ? " ns-art__pal-swatch--pri" : ""}${secondaryColor === "transparent" ? " ns-art__pal-swatch--sec" : ""}`}
             title="Transparent / Eraser"
