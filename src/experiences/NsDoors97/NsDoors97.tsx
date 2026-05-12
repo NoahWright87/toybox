@@ -640,7 +640,7 @@ export default function NsDoors97() {
             id={def.id}
             title={def.title}
             icon={def.icon}
-            onOpen={openWindow}
+            onOpen={openWindow as (id: string) => void}
           />
         ))}
       </div>
@@ -661,7 +661,7 @@ export default function NsDoors97() {
       </div>
 
       {/* ── Open windows ── */}
-      {openWindows.map((win) => (
+      {(openWindows as OpenWindow[]).map((win) => (
         <Window
           key={win.id}
           id={win.id}

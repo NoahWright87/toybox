@@ -102,7 +102,7 @@ export default function FolderApp({ onOpenExperience }: FolderAppProps) {
                 key={cat}
                 icon={CATEGORY_META[cat].icon}
                 label={CATEGORY_META[cat].label}
-                onOpen={() => setCurrentCat(cat)}
+                onOpen={() => { setCurrentCat(cat); }}
               />
             ))
           : toysInCategory.map((exp) => (
@@ -110,7 +110,7 @@ export default function FolderApp({ onOpenExperience }: FolderAppProps) {
                 key={exp.id}
                 icon={EXPERIENCE_ICONS[exp.id] ?? "🖥️"}
                 label={exp.title}
-                onOpen={() => onOpenExperience(exp.id)}
+                onOpen={() => { onOpenExperience(exp.id); }}
               />
             ))}
       </div>

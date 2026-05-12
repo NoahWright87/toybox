@@ -150,7 +150,7 @@ export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
         {current.children.length === 0 ? (
           <div className="nsf-empty">This folder is empty.</div>
         ) : (
-          current.children.map((node) => (
+          current.children.map((node: FsNode) => (
             <FolderItem key={node.name} node={node} onOpen={openNode} />
           ))
         )}

@@ -268,7 +268,7 @@ export default function War({ settings }: WarProps) {
 
   const { phase, playerCard, dealerCard, playerPile, dealerPile,
           warPlayerCards, warDealerCards, warPlayerFinal, warDealerFinal,
-          roundResult, gameResult, roundCount } = state;
+          roundResult, gameResult, roundCount } = state as WarState;
 
   const isWar = phase === "war-ready" || phase === "war-revealed";
 

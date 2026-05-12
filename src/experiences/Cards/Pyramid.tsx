@@ -119,7 +119,7 @@ export default function Pyramid({ settings }: PyramidProps) {
   const newGame = useCallback(() => setState(buildPyramid(settings)), [settings]);
 
   const drawFromStock = useCallback(() => {
-    setState((s) => {
+    setState((s: PyramidState) => {
       if (s.phase !== "playing") return s;
       if (s.stock.length === 0) return s;
       const [top, ...rest] = s.stock;
@@ -129,7 +129,7 @@ export default function Pyramid({ settings }: PyramidProps) {
   }, []);
 
   const selectCard = useCallback((cardId: string, fromWaste: boolean) => {
-    setState((s) => {
+    setState((s: PyramidState) => {
       if (s.phase !== "playing") return s;
 
       if (s.selected === cardId) return { ...s, selected: null };
@@ -197,7 +197,7 @@ export default function Pyramid({ settings }: PyramidProps) {
     [state.slots]
   );
 
-  const wasteTop = last(state.waste);
+  const wasteTop = last<Card>(state.waste);
   const pyramidDone = state.slots.every((s) => s.removed);
 
   function statusText(): string {

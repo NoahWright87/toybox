@@ -253,6 +253,7 @@ export default function Blackjack({ settings }: BlackjackProps) {
       case "bust":             return `BUST!  -$${Math.abs(chipDelta)}`;
       case "lose":             return `DEALER WINS  -$${Math.abs(chipDelta)}`;
     }
+    return "";
   }
 
   function outcomeClass(): string {

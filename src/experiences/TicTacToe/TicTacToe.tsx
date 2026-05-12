@@ -528,7 +528,7 @@ export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
   }
 
   const winCells = new Set(
-    winResult?.cells.map(([r, c]) => `${r}-${c}`) ?? []
+    winResult?.cells.map(([r, c]: [number, number]) => `${r}-${c}`) ?? []
   );
   const gameOver = !!(winResult || isDraw);
   const isAITurn =
