@@ -1,53 +1,28 @@
+/*
+  ns-internet fills the entire window content area (ns-window__content).
+  Width: 100% so it doesn't overflow on mobile.
+  No fixed height: flex stretches to fill the parent.
+*/
 .ns-internet {
   display: flex;
   flex-direction: column;
   background: #f0f0f0;
-  width: 600px;
-  height: 480px;
+  width: 100%;
+  height: 100%;
+  min-height: 320px; /* reasonable desktop fallback */
 }
 
-/* ── Browser toolbar ─────────────────────────────────────────────────────── */
+/* ── Address bar ─────────────────────────────────────────────────────────── */
 
 .ns-internet__toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
+  gap: 4px;
+  padding: 3px 6px;
   background: #d4d0c8;
   border-bottom: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   flex-shrink: 0;
-}
-
-.ns-internet__nav-btns {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.ns-internet__nav-btn {
-  width: 26px;
-  height: 24px;
-  background: #d4d0c8;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  cursor: pointer;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #000;
-}
-
-.ns-internet__nav-btn:active {
-  border-color: #808080 #ffffff #ffffff #808080;
-}
-
-.ns-internet__address-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
   min-width: 0;
 }
 
@@ -59,21 +34,17 @@
   flex-shrink: 0;
 }
 
-.ns-internet__address {
+.ns-internet__address-input {
   flex: 1;
   padding: 2px 6px;
   font-family: "Courier New", Courier, monospace;
   font-size: 11px;
   color: #000;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ns-internet__sunken {
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   background: #ffffff;
+  outline: none;
+  min-width: 0;
 }
 
 .ns-internet__go {
@@ -86,64 +57,177 @@
   font-size: 6px;
   color: #000;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .ns-internet__go:active {
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
-/* ── Page content ────────────────────────────────────────────────────────── */
+/* ── Home page ───────────────────────────────────────────────────────────── */
 
 .ns-internet__content {
   flex: 1;
   overflow-y: auto;
   background: #ffffff;
+  min-height: 0;
 }
 
-.ns-internet__page {
-  padding: 20px 16px 24px;
+.ns-internet__hp-header {
+  background: linear-gradient(90deg, #002060 0%, #0050a0 100%);
+  color: #ffffff;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ns-internet__hp-logo {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.ns-internet__hp-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #ffcc00;
+  line-height: 1.4;
+}
+
+.ns-internet__hp-subtitle {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #88bbff;
+  margin-top: 4px;
+}
+
+.ns-internet__hp-body {
+  padding: 0;
+}
+
+.ns-internet__hp-section {
+  padding: 12px 16px;
+}
+
+.ns-internet__hp-heading {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #002060;
+  margin: 0 0 10px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ns-internet__hp-p {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #000000;
+  margin: 0 0 7px 0;
+  line-height: 1.6;
+}
+
+.ns-internet__hp-note {
+  color: #885500;
+  font-size: 10px;
+}
+
+.ns-internet__hp-hr {
+  border: none;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  margin: 0 16px;
+}
+
+.ns-internet__hp-favs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.ns-internet__page-title {
-  font-size: 1.6rem;
-  font-weight: 800;
-  margin: 0;
-  color: #000;
-}
-
-.ns-internet__page-sub {
-  font-size: 0.9rem;
-  color: #555;
-  margin: 0;
-}
-
-.ns-internet__filters {
+.ns-internet__hp-fav {
   display: flex;
-  gap: 6px;
+  align-items: baseline;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.ns-internet__filter {
-  padding: 4px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: #f5f5f5;
-  font-size: 0.8rem;
+.ns-internet__hp-link {
+  background: none;
+  border: none;
   cursor: pointer;
-  color: #333;
+  color: #0000cc;
+  text-decoration: underline;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  padding: 0;
+  text-align: left;
 }
 
-.ns-internet__filter:hover {
-  background: #e8e8e8;
+.ns-internet__hp-link:hover {
+  color: #cc0000;
 }
 
-.ns-internet__filter--active {
-  background: #0055cc;
-  border-color: #003399;
-  color: #fff;
+.ns-internet__hp-fav-desc {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #555555;
+}
+
+/* ── Iframe (external pages) ─────────────────────────────────────────────── */
+
+.ns-internet__iframe-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ns-internet__iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
+  display: block;
+  min-height: 0;
+}
+
+/* Cover that slowly reveals the iframe from top to bottom */
+.ns-internet__cover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  z-index: 5;
+}
+
+/* Loading bar across the top of the iframe area */
+.ns-internet__loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #d4d0c8;
+  z-index: 10;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ns-internet__loading-bar-fill {
+  height: 100%;
+  width: 40%;
+  background: #cc4400;
+  animation: ns-loading-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes ns-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
 }
 
 /* ── Status bar ──────────────────────────────────────────────────────────── */
@@ -157,4 +241,7 @@
   background: #d4d0c8;
   border-top: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
