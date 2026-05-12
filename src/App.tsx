@@ -15,6 +15,7 @@ import NsDoors97Page from "./pages/NsDoors97Page";
 import NsToSPage from "./pages/NsToSPage";
 import DuckHuntPage from "./pages/DuckHuntPage";
 import NsArtPage from "./pages/NsArtPage";
+import HellzonePage from "./pages/HellzonePage";
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/ns-tos" element={<NsToSPage />} />
         <Route path="/duck-hunt" element={<DuckHuntPage />} />
         <Route path="/art" element={<NsArtPage />} />
+        <Route path="/hellzone" element={<HellzonePage />} />
       </Routes>
     </BrowserRouter>
   );

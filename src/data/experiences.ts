@@ -106,6 +106,13 @@ export const experiences: Experience[] = [
     path: "/ns-tos",
   },
   {
+    id: "hellzone",
+    title: "HELLZONE PRO",
+    description: "A 1994 shareware FPS. Procedural BSP maps, raycaster engine, 3 enemy types. © Brimstone Software Inc.",
+    category: "game",
+    path: "/hellzone",
+  },
+  {
     id: "ns-art",
     title: "NS Art",
     description: "A retro paint program. Draw, spray, fill, and export your masterpiece as a PNG.",

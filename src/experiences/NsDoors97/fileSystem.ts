@@ -224,6 +224,37 @@ keyboard=*vkd
 MaxBPs=768
 `;
 
+const HELLZONE_README = `HELLZONE PRO v0.3 — SHAREWARE
+==============================
+© 1994 Brimstone Software Inc.
+1-800-HELLZNE  |  BBS: 614-555-0139
+
+SYSTEM REQUIREMENTS:
+  486 DX2/66 or faster
+  4 MB RAM (8 MB recommended)
+  VGA 320x200, 256 colors
+  Sound Blaster or compatible
+
+CONTROLS:
+  Arrow keys or WASD — Move / Turn
+  Space or Left Mouse — Fire
+  M                  — Toggle map
+  Esc                — Return to title
+
+TO REGISTER THE FULL GAME ($29.99):
+  Call 1-800-HELLZNE or mail check/MO to:
+  Brimstone Software Inc.
+  PO Box 1994, Columbus OH 43215
+
+Registration includes Episodes 2 and 3,
+cheat codes, and a Brimstone sticker.
+
+WARNING: HELLZONE PRO contains extreme
+violence and demonic imagery. Not for
+children. Brimstone Software is not
+responsible for nightmares.
+`;
+
 const RECYCLE_DRAFT = `Draft letter - never sent
 
 June 3, 1997
@@ -270,6 +301,7 @@ export const ROOT: FsFolder = {
           kind: "folder",
           name: "Games",
           children: [
+            { kind: "file", name: "HELL.EXE",            type: "exe", action: "hellzone"       },
             { kind: "file", name: "Tic-Tac-Toe.exe",    type: "exe", action: "tic-tac-toe"    },
             { kind: "file", name: "Word Whirlwind.exe",  type: "exe", action: "word-whirlwind" },
             { kind: "file", name: "Number Muncher.exe",  type: "exe", action: "number-muncher" },
@@ -347,6 +379,15 @@ export const ROOT: FsFolder = {
         { kind: "file", name: "clipart_pack_vol2.zip", type: "zip", action: "noop" },
         { kind: "file", name: "cool_space_wallpaper.bmp", type: "bmp", action: "noop" },
         { kind: "file", name: "AUTORUN.INF", type: "ini", action: "noop" },
+      ],
+    },
+    {
+      kind: "folder",
+      name: "BRIMSTONE",
+      children: [
+        { kind: "file", name: "HELL.EXE",    type: "exe",  action: "hellzone"             },
+        { kind: "file", name: "README.TXT",   type: "text", content: HELLZONE_README       },
+        { kind: "file", name: "INSTALL.BAT",  type: "bat",  content: "@ECHO OFF\nECHO HELLZONE PRO is already installed.\nECHO Type HELL to play.\n" },
       ],
     },
     {

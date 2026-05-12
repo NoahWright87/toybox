@@ -166,6 +166,7 @@ export default function NsToS() {
             { text: "  DATE            Display the current date" },
             { text: "  DIR             List files in current directory" },
             { text: "  DOORS           Launch NS Doors 97" },
+            { text: "  HELL            Launch HELLZONE PRO (Brimstone Software)" },
             { text: "  ECHO [text]     Display a message" },
             { text: "  HELP            Display this help text" },
             { text: "  TIME            Display the current time" },
@@ -356,6 +357,18 @@ export default function NsToS() {
           setTimeout(() => {
             navigate("/", { state: { fromTos: true } });
           }, 800);
+          break;
+        }
+
+        case "HELL":
+        case "HELL.EXE": {
+          addLines([
+            { text: "" },
+            { text: "HELLZONE PRO v0.3 — BRIMSTONE SOFTWARE INC." },
+            { text: "Loading..." },
+            { text: "" },
+          ]);
+          setTimeout(() => navigate("/hellzone"), 900);
           break;
         }
 
