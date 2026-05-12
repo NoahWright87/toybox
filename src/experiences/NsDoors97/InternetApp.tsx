@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Card, CardGrid, Text, Pill } from "@noahwright/design";
 import { experiences } from "../../data/experiences";
 import "./InternetApp.css";
@@ -19,6 +19,30 @@ function normalizeUrl(raw: string): string {
   return trimmed;
 }
 
+function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch (_) {
+    return url;
+  }
+}
+
+// Generates a sequence of (delay ms, reveal %) steps that add up to 100%
+function generateRevealPlan(): Array<{ delay: number; reveal: number }> {
+  const steps: Array<{ delay: number; reveal: number }> = [];
+  let remaining = 100;
+  while (remaining > 0.5) {
+    const chunk = Math.min(remaining, 0.5 + Math.random() * 4.5);
+    const isStall = Math.random() < 0.1;
+    const delay = isStall
+      ? 400 + Math.random() * 600   // occasional long pause
+      : 30 + Math.random() * 250;   // normal jitter
+    steps.push({ delay, reveal: chunk });
+    remaining -= chunk;
+  }
+  return steps;
+}
+
 export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   const [inputValue, setInputValue] = useState(HOME_DISPLAY);
   const [history, setHistory] = useState<string[]>([HOME_URL]);
@@ -26,10 +50,16 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [frameKey, setFrameKey] = useState(0);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [turboMode, setTurboMode] = useState(false);
+  const [revealPct, setRevealPct] = useState(100); // 0 = cover full, 100 = fully revealed
+  const [fakeKbReceived, setFakeKbReceived] = useState(0);
+  const [fakeKbTotal, setFakeKbTotal] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const cancelRevealRef = useRef<(() => void) | null>(null);
 
   const currentUrl = history[historyIdx];
   const isHome = currentUrl === HOME_URL;
+  const isRevealing = !isHome && !isLoading && revealPct < 100;
 
   const visibleExperiences = experiences.filter((e) => e.id !== "ns-doors-97");
   const categories = useMemo(
@@ -41,15 +71,59 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
     ? visibleExperiences.filter((e) => e.category === activeCategory)
     : visibleExperiences;
 
+  const cancelReveal = useCallback(() => {
+    if (cancelRevealRef.current) {
+      cancelRevealRef.current();
+      cancelRevealRef.current = null;
+    }
+  }, []);
+
+  const beginReveal = useCallback(() => {
+    cancelReveal();
+
+    let cancelled = false;
+    cancelRevealRef.current = () => { cancelled = true; };
+
+    const totalKb = 50 + Math.random() * 200;
+    setFakeKbTotal(totalKb);
+    setFakeKbReceived(0);
+    setRevealPct(0);
+
+    const plan = generateRevealPlan();
+    let stepIdx = 0;
+    let currentPct = 0;
+
+    const tick = () => {
+      if (cancelled) return;
+      if (stepIdx >= plan.length) {
+        setRevealPct(100);
+        setFakeKbReceived(totalKb);
+        cancelRevealRef.current = null;
+        return;
+      }
+      const step = plan[stepIdx++];
+      currentPct = Math.min(100, currentPct + step.reveal);
+      setRevealPct(currentPct);
+      setFakeKbReceived((currentPct / 100) * totalKb);
+      setTimeout(tick, step.delay);
+    };
+
+    setTimeout(tick, 50);
+  }, [cancelReveal]);
+
+  useEffect(() => () => cancelReveal(), [cancelReveal]);
+
   const navigateTo = useCallback(
     (url: string) => {
+      cancelReveal();
       setHistory((prev) => [...prev.slice(0, historyIdx + 1), url]);
       setHistoryIdx((i) => i + 1);
       setInputValue(url === HOME_URL ? HOME_DISPLAY : url);
       setIsLoading(url !== HOME_URL);
+      setRevealPct(url === HOME_URL ? 100 : 0);
       setFrameKey((k) => k + 1);
     },
-    [historyIdx]
+    [historyIdx, cancelReveal]
   );
 
   const handleGo = useCallback(() => {
@@ -58,79 +132,72 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
 
   const handleBack = useCallback(() => {
     if (historyIdx <= 0) return;
+    cancelReveal();
     const newIdx = historyIdx - 1;
     const url = history[newIdx];
     setHistoryIdx(newIdx);
     setInputValue(url === HOME_URL ? HOME_DISPLAY : url);
     setIsLoading(url !== HOME_URL);
+    setRevealPct(url === HOME_URL ? 100 : 0);
     setFrameKey((k) => k + 1);
-  }, [history, historyIdx]);
+  }, [history, historyIdx, cancelReveal]);
 
   const handleForward = useCallback(() => {
     if (historyIdx >= history.length - 1) return;
+    cancelReveal();
     const newIdx = historyIdx + 1;
     const url = history[newIdx];
     setHistoryIdx(newIdx);
     setInputValue(url === HOME_URL ? HOME_DISPLAY : url);
     setIsLoading(url !== HOME_URL);
+    setRevealPct(url === HOME_URL ? 100 : 0);
     setFrameKey((k) => k + 1);
-  }, [history, historyIdx]);
+  }, [history, historyIdx, cancelReveal]);
 
   const handleStop = useCallback(() => {
-    try {
-      iframeRef.current?.contentWindow?.stop();
-    } catch (_) {
-      // cross-origin stop may throw
-    }
+    try { iframeRef.current?.contentWindow?.stop(); } catch (_) {}
+    cancelReveal();
     setIsLoading(false);
-  }, []);
+    setRevealPct(100);
+  }, [cancelReveal]);
 
   const handleRefresh = useCallback(() => {
     if (isHome) return;
+    cancelReveal();
     setIsLoading(true);
+    setRevealPct(0);
     setFrameKey((k) => k + 1);
-  }, [isHome]);
+  }, [isHome, cancelReveal]);
+
+  const handleIframeLoad = useCallback(() => {
+    setIsLoading(false);
+    if (turboMode) {
+      setRevealPct(100);
+    } else {
+      beginReveal();
+    }
+  }, [turboMode, beginReveal]);
 
   const canBack = historyIdx > 0;
   const canForward = historyIdx < history.length - 1;
+  const canStop = isLoading || isRevealing;
+
+  let statusText = "Done";
+  if (isLoading) {
+    statusText = `Connecting to ${getHostname(currentUrl)}…`;
+  } else if (isRevealing) {
+    statusText = `Receiving data… ${fakeKbReceived.toFixed(1)} KB of ${fakeKbTotal.toFixed(1)} KB @ 28.8 Kbps`;
+  }
 
   return (
     <div className="ns-internet">
       {/* ── Browser toolbar ── */}
       <div className="ns-internet__toolbar">
         <div className="ns-internet__nav-btns">
-          <button
-            className="ns-internet__nav-btn"
-            onClick={handleBack}
-            disabled={!canBack}
-            title="Back"
-          >
-            ◄
-          </button>
-          <button
-            className="ns-internet__nav-btn"
-            onClick={handleForward}
-            disabled={!canForward}
-            title="Forward"
-          >
-            ►
-          </button>
-          <button
-            className="ns-internet__nav-btn"
-            onClick={handleStop}
-            disabled={!isLoading}
-            title="Stop"
-          >
-            ✕
-          </button>
-          <button
-            className="ns-internet__nav-btn"
-            onClick={handleRefresh}
-            disabled={isHome}
-            title="Refresh"
-          >
-            ⟳
-          </button>
+          <button className="ns-internet__nav-btn" onClick={handleBack} disabled={!canBack} title="Back">◄</button>
+          <button className="ns-internet__nav-btn" onClick={handleForward} disabled={!canForward} title="Forward">►</button>
+          <button className="ns-internet__nav-btn" onClick={handleStop} disabled={!canStop} title="Stop">✕</button>
+          <button className="ns-internet__nav-btn" onClick={handleRefresh} disabled={isHome} title="Refresh">⟳</button>
         </div>
         <div className="ns-internet__address-wrap">
           <span className="ns-internet__address-label">Address:</span>
@@ -138,16 +205,19 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
             className="ns-internet__address-input"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleGo();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") handleGo(); }}
             onFocus={(e) => e.currentTarget.select()}
             spellCheck={false}
             autoComplete="off"
           />
         </div>
-        <button className="ns-internet__go" onClick={handleGo}>
-          Go
+        <button className="ns-internet__go" onClick={handleGo}>Go</button>
+        <button
+          className={`ns-internet__turbo${turboMode ? " ns-internet__turbo--on" : ""}`}
+          onClick={() => setTurboMode((t) => !t)}
+          title={turboMode ? "Turbo ON — click for 56K speed" : "56K mode — click for instant loading"}
+        >
+          {turboMode ? "⚡" : "56K"}
         </button>
       </div>
 
@@ -170,9 +240,7 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
                 <button
                   key={cat}
                   className={`ns-internet__filter${activeCategory === cat ? " ns-internet__filter--active" : ""}`}
-                  onClick={() =>
-                    setActiveCategory(cat === activeCategory ? null : cat)
-                  }
+                  onClick={() => setActiveCategory(cat === activeCategory ? null : cat)}
                 >
                   {cat}
                 </button>
@@ -183,11 +251,7 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
                 <Card
                   key={exp.id}
                   title={exp.title}
-                  subtitle={
-                    <Pill variant="primary" size="small">
-                      {exp.category}
-                    </Pill>
-                  }
+                  subtitle={<Pill variant="primary" size="small">{exp.category}</Pill>}
                   interactive
                   elevated
                   onClick={() => onOpenExperience(exp.id)}
@@ -210,15 +274,21 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
             ref={iframeRef}
             src={currentUrl}
             className="ns-internet__iframe"
-            onLoad={() => setIsLoading(false)}
+            onLoad={handleIframeLoad}
             title="Noahsoft Exploder"
           />
+          {revealPct < 100 && (
+            <div
+              className="ns-internet__cover"
+              style={{ height: `${100 - revealPct}%` }}
+            />
+          )}
         </div>
       )}
 
       {/* ── Status bar ── */}
       <div className="ns-internet__statusbar ns-internet__sunken">
-        {isLoading ? `Loading ${currentUrl}…` : "Done"} &nbsp;|&nbsp; Noahsoft Exploder 4.0
+        {statusText} &nbsp;|&nbsp; Noahsoft Exploder 4.0
       </div>
     </div>
   );

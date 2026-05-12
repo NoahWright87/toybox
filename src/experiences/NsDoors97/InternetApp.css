@@ -101,6 +101,31 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
+.ns-internet__turbo {
+  padding: 2px 6px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 28px;
+}
+
+.ns-internet__turbo:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* Sunken/pressed look when turbo is active */
+.ns-internet__turbo--on {
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #cc4400;
+  background: #c0c0c0;
+}
+
 /* ── Page content (home) ─────────────────────────────────────────────────── */
 
 .ns-internet__content {
@@ -173,6 +198,16 @@
   width: 100%;
   display: block;
   min-height: 0;
+}
+
+/* Cover that slowly reveals the iframe from top to bottom */
+.ns-internet__cover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  z-index: 5;
 }
 
 /* Loading bar across the top of the iframe area */
