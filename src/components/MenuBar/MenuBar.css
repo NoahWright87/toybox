@@ -1,0 +1,97 @@
+.win95-menubar {
+  display: flex;
+  flex-wrap: nowrap;
+  background: #d4d0c8;
+  border-bottom: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  flex-shrink: 0;
+  padding: 1px 2px;
+  position: relative;
+  z-index: 20;
+  overflow: visible;
+}
+
+.win95-menubar__entry {
+  position: relative;
+}
+
+.win95-menubar__label {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  white-space: nowrap;
+  line-height: 1.5;
+  user-select: none;
+}
+
+.win95-menubar__label:hover,
+.win95-menubar__label--open {
+  background: #000080;
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* ── Dropdown ──────────────────────────────────────────────────────────────── */
+
+.win95-menubar__dropdown {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 0;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 180px;
+  z-index: 200;
+  padding: 2px 0;
+  list-style: none;
+  margin: 0;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.win95-menubar__option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 3px 16px 3px 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.win95-menubar__option:hover:not(:disabled) {
+  background: #000080;
+  color: #ffffff;
+}
+
+.win95-menubar__option--disabled,
+.win95-menubar__option:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+.win95-menubar__check {
+  display: inline-block;
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.win95-menubar__option-label {
+  flex: 1;
+}
+
+.win95-menubar__sep {
+  height: 0;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  margin: 3px 4px;
+}

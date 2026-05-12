@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Card, CardGrid, Text, Pill } from "@noahwright/design";
 import { experiences } from "../../data/experiences";
+import MenuBar from "../../components/MenuBar/MenuBar";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./InternetApp.css";
 
 const HOME_URL = "__home__";
@@ -27,7 +29,6 @@ function getHostname(url: string): string {
   }
 }
 
-// Generates a sequence of (delay ms, reveal %) steps that add up to 100%
 function generateRevealPlan(): Array<{ delay: number; reveal: number }> {
   const steps: Array<{ delay: number; reveal: number }> = [];
   let remaining = 100;
@@ -35,8 +36,8 @@ function generateRevealPlan(): Array<{ delay: number; reveal: number }> {
     const chunk = Math.min(remaining, 0.5 + Math.random() * 4.5);
     const isStall = Math.random() < 0.1;
     const delay = isStall
-      ? 400 + Math.random() * 600   // occasional long pause
-      : 30 + Math.random() * 250;   // normal jitter
+      ? 400 + Math.random() * 600
+      : 30 + Math.random() * 250;
     steps.push({ delay, reveal: chunk });
     remaining -= chunk;
   }
@@ -51,7 +52,7 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   const [frameKey, setFrameKey] = useState(0);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [turboMode, setTurboMode] = useState(false);
-  const [revealPct, setRevealPct] = useState(100); // 0 = cover full, 100 = fully revealed
+  const [revealPct, setRevealPct] = useState(100);
   const [fakeKbReceived, setFakeKbReceived] = useState(0);
   const [fakeKbTotal, setFakeKbTotal] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -170,6 +171,15 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   }, [isHome, cancelReveal]);
 
   const handleIframeLoad = useCallback(() => {
+    // Try to read URL for same-origin navigations (link clicks within the same site)
+    try {
+      const href = iframeRef.current?.contentWindow?.location?.href;
+      if (href && href !== "about:blank") {
+        setInputValue(href);
+      }
+    } catch (_) {
+      // Cross-origin — leave address bar showing the typed URL
+    }
     setIsLoading(false);
     if (turboMode) {
       setRevealPct(100);
@@ -182,6 +192,30 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   const canForward = historyIdx < history.length - 1;
   const canStop = isLoading || isRevealing;
 
+  const browserMenus: MenuBarMenu[] = [
+    {
+      label: "Navigate",
+      items: [
+        { label: "Back", onClick: handleBack, disabled: !canBack },
+        { label: "Forward", onClick: handleForward, disabled: !canForward },
+        { label: "Stop", onClick: handleStop, disabled: !canStop },
+        { label: "Refresh", onClick: handleRefresh, disabled: isHome },
+        { separator: true },
+        { label: "Home", onClick: () => navigateTo(HOME_URL) },
+      ],
+    },
+    {
+      label: "Tools",
+      items: [
+        {
+          label: "Turbo Mode",
+          onClick: () => setTurboMode((t) => !t),
+          checked: turboMode,
+        },
+      ],
+    },
+  ];
+
   let statusText = "Done";
   if (isLoading) {
     statusText = `Connecting to ${getHostname(currentUrl)}…`;
@@ -191,34 +225,22 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
 
   return (
     <div className="ns-internet">
-      {/* ── Browser toolbar ── */}
+      {/* ── Win95 menu bar ── */}
+      <MenuBar menus={browserMenus} />
+
+      {/* ── Address bar ── */}
       <div className="ns-internet__toolbar">
-        <div className="ns-internet__nav-btns">
-          <button className="ns-internet__nav-btn" onClick={handleBack} disabled={!canBack} title="Back">◄</button>
-          <button className="ns-internet__nav-btn" onClick={handleForward} disabled={!canForward} title="Forward">►</button>
-          <button className="ns-internet__nav-btn" onClick={handleStop} disabled={!canStop} title="Stop">✕</button>
-          <button className="ns-internet__nav-btn" onClick={handleRefresh} disabled={isHome} title="Refresh">⟳</button>
-        </div>
-        <div className="ns-internet__address-wrap">
-          <span className="ns-internet__address-label">Address:</span>
-          <input
-            className="ns-internet__address-input"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleGo(); }}
-            onFocus={(e) => e.currentTarget.select()}
-            spellCheck={false}
-            autoComplete="off"
-          />
-        </div>
+        <span className="ns-internet__address-label">Address:</span>
+        <input
+          className="ns-internet__address-input"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleGo(); }}
+          onFocus={(e) => e.currentTarget.select()}
+          spellCheck={false}
+          autoComplete="off"
+        />
         <button className="ns-internet__go" onClick={handleGo}>Go</button>
-        <button
-          className={`ns-internet__turbo${turboMode ? " ns-internet__turbo--on" : ""}`}
-          onClick={() => setTurboMode((t) => !t)}
-          title={turboMode ? "Turbo ON — click for 56K speed" : "56K mode — click for instant loading"}
-        >
-          {turboMode ? "⚡" : "56K"}
-        </button>
       </div>
 
       {/* ── Page content ── */}
@@ -287,7 +309,7 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
       )}
 
       {/* ── Status bar ── */}
-      <div className="ns-internet__statusbar ns-internet__sunken">
+      <div className="ns-internet__statusbar">
         {statusText} &nbsp;|&nbsp; Noahsoft Exploder 4.0
       </div>
     </div>
