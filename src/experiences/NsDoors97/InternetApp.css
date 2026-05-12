@@ -73,50 +73,107 @@
   min-height: 0;
 }
 
-.ns-internet__page {
-  padding: 20px 16px 24px;
+.ns-internet__hp-header {
+  background: linear-gradient(90deg, #002060 0%, #0050a0 100%);
+  color: #ffffff;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ns-internet__hp-logo {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.ns-internet__hp-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #ffcc00;
+  line-height: 1.4;
+}
+
+.ns-internet__hp-subtitle {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #88bbff;
+  margin-top: 4px;
+}
+
+.ns-internet__hp-body {
+  padding: 0;
+}
+
+.ns-internet__hp-section {
+  padding: 12px 16px;
+}
+
+.ns-internet__hp-heading {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #002060;
+  margin: 0 0 10px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ns-internet__hp-p {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #000000;
+  margin: 0 0 7px 0;
+  line-height: 1.6;
+}
+
+.ns-internet__hp-note {
+  color: #885500;
+  font-size: 10px;
+}
+
+.ns-internet__hp-hr {
+  border: none;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  margin: 0 16px;
+}
+
+.ns-internet__hp-favs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.ns-internet__page-title {
-  font-size: 1.6rem;
-  font-weight: 800;
-  margin: 0;
-  color: #000;
-}
-
-.ns-internet__page-sub {
-  font-size: 0.9rem;
-  color: #555;
-  margin: 0;
-}
-
-.ns-internet__filters {
+.ns-internet__hp-fav {
   display: flex;
-  gap: 6px;
+  align-items: baseline;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.ns-internet__filter {
-  padding: 4px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: #f5f5f5;
-  font-size: 0.8rem;
+.ns-internet__hp-link {
+  background: none;
+  border: none;
   cursor: pointer;
-  color: #333;
+  color: #0000cc;
+  text-decoration: underline;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  padding: 0;
+  text-align: left;
 }
 
-.ns-internet__filter:hover {
-  background: #e8e8e8;
+.ns-internet__hp-link:hover {
+  color: #cc0000;
 }
 
-.ns-internet__filter--active {
-  background: #0055cc;
-  border-color: #003399;
-  color: #fff;
+.ns-internet__hp-fav-desc {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #555555;
 }
 
 /* ── Iframe (external pages) ─────────────────────────────────────────────── */

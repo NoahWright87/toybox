@@ -637,7 +637,7 @@ export default function NsDoors97() {
             <FolderApp onOpenExperience={openWindow} />
           )}
           {win.content.type === "internet" && (
-            <InternetApp onOpenExperience={openWindow} />
+            <InternetApp />
           )}
           {win.content.type === "files" && (
             <FilesApp

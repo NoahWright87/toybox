@@ -1,16 +1,16 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
-import { Card, CardGrid, Text, Pill } from "@noahwright/design";
-import { experiences } from "../../data/experiences";
+import { useState, useRef, useCallback, useEffect } from "react";
 import MenuBar from "../../components/MenuBar/MenuBar";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./InternetApp.css";
 
 const HOME_URL = "__home__";
-const HOME_DISPLAY = "http://www.noahwright.dev/toybox";
+const HOME_DISPLAY = "about:home";
 
-interface InternetAppProps {
-  onOpenExperience: (id: string) => void;
-}
+const FAVORITES = [
+  { url: "https://noahwright.dev",        display: "noahwright.dev",        description: "Doors creator's site" },
+  { url: "https://design.noahwright.dev", display: "design.noahwright.dev", description: "Web components"      },
+  { url: "https://lee.noahwright.dev",    display: "lee.noahwright.dev",    description: "Lee Game"            },
+] as const;
 
 function normalizeUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -44,13 +44,12 @@ function generateRevealPlan(): Array<{ delay: number; reveal: number }> {
   return steps;
 }
 
-export default function InternetApp({ onOpenExperience }: InternetAppProps) {
+export default function InternetApp() {
   const [inputValue, setInputValue] = useState(HOME_DISPLAY);
   const [history, setHistory] = useState<string[]>([HOME_URL]);
   const [historyIdx, setHistoryIdx] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [frameKey, setFrameKey] = useState(0);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [turboMode, setTurboMode] = useState(false);
   const [revealPct, setRevealPct] = useState(100);
   const [fakeKbReceived, setFakeKbReceived] = useState(0);
@@ -62,16 +61,6 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   const isHome = currentUrl === HOME_URL;
   const isRevealing = !isHome && !isLoading && revealPct < 100;
 
-  const visibleExperiences = experiences.filter((e) => e.id !== "ns-doors-97");
-  const categories = useMemo(
-    () => Array.from(new Set<string>(visibleExperiences.map((e) => e.category))).sort(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-  const filtered = activeCategory
-    ? visibleExperiences.filter((e) => e.category === activeCategory)
-    : visibleExperiences;
-
   const cancelReveal = useCallback(() => {
     if (cancelRevealRef.current) {
       cancelRevealRef.current();
@@ -81,7 +70,6 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
 
   const beginReveal = useCallback(() => {
     cancelReveal();
-
     let cancelled = false;
     cancelRevealRef.current = () => { cancelled = true; };
 
@@ -171,14 +159,11 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
   }, [isHome, cancelReveal]);
 
   const handleIframeLoad = useCallback(() => {
-    // Try to read URL for same-origin navigations (link clicks within the same site)
     try {
       const href = iframeRef.current?.contentWindow?.location?.href;
-      if (href && href !== "about:blank") {
-        setInputValue(href);
-      }
+      if (href && href !== "about:blank") setInputValue(href);
     } catch (_) {
-      // Cross-origin — leave address bar showing the typed URL
+      // cross-origin — leave address bar as typed
     }
     setIsLoading(false);
     if (turboMode) {
@@ -196,22 +181,18 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
     {
       label: "Navigate",
       items: [
-        { label: "Back", onClick: handleBack, disabled: !canBack },
-        { label: "Forward", onClick: handleForward, disabled: !canForward },
-        { label: "Stop", onClick: handleStop, disabled: !canStop },
-        { label: "Refresh", onClick: handleRefresh, disabled: isHome },
+        { label: "Back",    onClick: handleBack,              disabled: !canBack    },
+        { label: "Forward", onClick: handleForward,           disabled: !canForward },
+        { label: "Stop",    onClick: handleStop,              disabled: !canStop    },
+        { label: "Refresh", onClick: handleRefresh,           disabled: isHome      },
         { separator: true },
-        { label: "Home", onClick: () => navigateTo(HOME_URL) },
+        { label: "Home",    onClick: () => navigateTo(HOME_URL) },
       ],
     },
     {
       label: "Tools",
       items: [
-        {
-          label: "Turbo Mode",
-          onClick: () => setTurboMode((t) => !t),
-          checked: turboMode,
-        },
+        { label: "Turbo Mode", onClick: () => setTurboMode((t) => !t), checked: turboMode },
       ],
     },
   ];
@@ -225,10 +206,8 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
 
   return (
     <div className="ns-internet">
-      {/* ── Win95 menu bar ── */}
       <MenuBar menus={browserMenus} />
 
-      {/* ── Address bar ── */}
       <div className="ns-internet__toolbar">
         <span className="ns-internet__address-label">Address:</span>
         <input
@@ -243,45 +222,50 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
         <button className="ns-internet__go" onClick={handleGo}>Go</button>
       </div>
 
-      {/* ── Page content ── */}
       {isHome ? (
         <div className="ns-internet__content">
-          <div className="ns-internet__page">
-            <h1 className="ns-internet__page-title">🧸 Toy Box</h1>
-            <p className="ns-internet__page-sub">
-              Tiny browser-based games, toys, and experiments. Pick one and play.
-            </p>
-            <div className="ns-internet__filters">
-              <button
-                className={`ns-internet__filter${activeCategory === null ? " ns-internet__filter--active" : ""}`}
-                onClick={() => setActiveCategory(null)}
-              >
-                All
-              </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  className={`ns-internet__filter${activeCategory === cat ? " ns-internet__filter--active" : ""}`}
-                  onClick={() => setActiveCategory(cat === activeCategory ? null : cat)}
-                >
-                  {cat}
-                </button>
-              ))}
+          {/* ── Home page ── */}
+          <div className="ns-internet__hp-header">
+            <span className="ns-internet__hp-logo">🌐</span>
+            <div>
+              <div className="ns-internet__hp-title">Noahsoft Exploder 4.0</div>
+              <div className="ns-internet__hp-subtitle">Start Page</div>
             </div>
-            <CardGrid minCardWidth="220px" gap="md">
-              {filtered.map((exp) => (
-                <Card
-                  key={exp.id}
-                  title={exp.title}
-                  subtitle={<Pill variant="primary" size="small">{exp.category}</Pill>}
-                  interactive
-                  elevated
-                  onClick={() => onOpenExperience(exp.id)}
-                >
-                  <Text tone="muted">{exp.description}</Text>
-                </Card>
-              ))}
-            </CardGrid>
+          </div>
+
+          <div className="ns-internet__hp-body">
+            <section className="ns-internet__hp-section">
+              <h2 className="ns-internet__hp-heading">Getting Started</h2>
+              <p className="ns-internet__hp-p">
+                Type a web address in the <strong>Address</strong> bar and press <strong>Enter</strong> or click <strong>Go</strong>.
+              </p>
+              <p className="ns-internet__hp-p">
+                Pages load at <strong>56K modem speed</strong> by default — just like the good old days.
+                For instant loading, open the <strong>Tools</strong> menu and select <strong>Turbo Mode</strong>.
+              </p>
+              <p className="ns-internet__hp-p ns-internet__hp-note">
+                ⚠ Some sites cannot load due to security restrictions (X-Frame-Options).
+              </p>
+            </section>
+
+            <hr className="ns-internet__hp-hr" />
+
+            <section className="ns-internet__hp-section">
+              <h2 className="ns-internet__hp-heading">Favorites</h2>
+              <ul className="ns-internet__hp-favs">
+                {FAVORITES.map((fav) => (
+                  <li key={fav.url} className="ns-internet__hp-fav">
+                    <button
+                      className="ns-internet__hp-link"
+                      onClick={() => navigateTo(fav.url)}
+                    >
+                      {fav.display}
+                    </button>
+                    <span className="ns-internet__hp-fav-desc">{fav.description}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </div>
         </div>
       ) : (
@@ -308,7 +292,6 @@ export default function InternetApp({ onOpenExperience }: InternetAppProps) {
         </div>
       )}
 
-      {/* ── Status bar ── */}
       <div className="ns-internet__statusbar">
         {statusText} &nbsp;|&nbsp; Noahsoft Exploder 4.0
       </div>
