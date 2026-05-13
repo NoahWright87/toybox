@@ -687,50 +687,44 @@ export default function TypingRacer() {
     return (
       <div className="teu">
         {inputEl}
-        <div className="teu__window">
-          <div className="teu__titlebar">
-            <span className="teu__titlebar-text">Type &#39;Em Up</span>
-            <span className="teu__titlebar-dots">●●●</span>
+        <div className="teu__body">
+          <div className="teu__logo">TYPE &#39;EM UP</div>
+          <div className="teu__tagline">a typing shmup</div>
+
+          {highScore > 0 && (
+            <div className="teu__high-score">HI SCORE: {highScore}</div>
+          )}
+
+          <div className="teu__section-label">DIFFICULTY</div>
+          <div className="teu__diff-row">
+            {(["easy", "medium", "hard"] as Difficulty[]).map(d => (
+              <button
+                key={d}
+                className={`teu__diff-btn${difficulty === d ? " teu__diff-btn--active" : ""}`}
+                onClick={() => setDifficulty(d)}
+              >
+                {d.toUpperCase()}
+              </button>
+            ))}
           </div>
-          <div className="teu__body">
-            <div className="teu__logo">TYPE &#39;EM UP</div>
-            <div className="teu__tagline">a typing shmup</div>
 
-            {highScore > 0 && (
-              <div className="teu__high-score">HI SCORE: {highScore}</div>
-            )}
+          <button
+            className="teu__launch-btn"
+            onClick={() => {
+              startGame(difficulty);
+              // Synchronous focus in the user-gesture handler — required for
+              // iOS to show the virtual keyboard without an extra tap.
+              inputRef.current?.focus();
+            }}
+          >
+            LAUNCH
+          </button>
 
-            <div className="teu__section-label">DIFFICULTY</div>
-            <div className="teu__diff-row">
-              {(["easy", "medium", "hard"] as Difficulty[]).map(d => (
-                <button
-                  key={d}
-                  className={`teu__diff-btn${difficulty === d ? " teu__diff-btn--active" : ""}`}
-                  onClick={() => setDifficulty(d)}
-                >
-                  {d.toUpperCase()}
-                </button>
-              ))}
-            </div>
-
-            <button
-              className="teu__launch-btn"
-              onClick={() => {
-                startGame(difficulty);
-                // Synchronous focus in the user-gesture handler — required for
-                // iOS to show the virtual keyboard without an extra tap.
-                inputRef.current?.focus();
-              }}
-            >
-              LAUNCH
-            </button>
-
-            <div className="teu__tips">
-              <p>Words fall from above &mdash; type them to shoot!</p>
-              <p>Mistyping makes words fall faster.</p>
-              <p>Don&#39;t let words reach your ship!</p>
-              <p className="teu__tips-esc">ESC returns to menu.</p>
-            </div>
+          <div className="teu__tips">
+            <p>Words fall from above &mdash; type them to shoot!</p>
+            <p>Mistyping makes words fall faster.</p>
+            <p>Don&#39;t let words reach your ship!</p>
+            <p className="teu__tips-esc">ESC returns to menu.</p>
           </div>
         </div>
       </div>
@@ -741,54 +735,48 @@ export default function TypingRacer() {
     return (
       <div className="teu">
         {inputEl}
-        <div className="teu__window">
-          <div className="teu__titlebar teu__titlebar--dead">
-            <span className="teu__titlebar-text">GAME OVER</span>
-            <span className="teu__titlebar-dots">●●●</span>
+        <div className="teu__body">
+          <div className="teu__logo teu__logo--dead">GAME OVER</div>
+
+          {finalStats?.isNewRecord && (
+            <div className="teu__new-record">&#9733; NEW RECORD &#9733;</div>
+          )}
+
+          <div className="teu__stats-grid">
+            <div className="teu__stat">
+              <div className="teu__stat-val">{finalStats?.score ?? 0}</div>
+              <div className="teu__stat-key">SCORE</div>
+            </div>
+            <div className="teu__stat">
+              <div className="teu__stat-val">{finalStats?.wpm ?? 0}</div>
+              <div className="teu__stat-key">WPM</div>
+            </div>
+            <div className="teu__stat">
+              <div className="teu__stat-val">{finalStats?.wordsDestroyed ?? 0}</div>
+              <div className="teu__stat-key">WORDS</div>
+            </div>
           </div>
-          <div className="teu__body">
-            <div className="teu__logo teu__logo--dead">GAME OVER</div>
 
-            {finalStats?.isNewRecord && (
-              <div className="teu__new-record">&#9733; NEW RECORD &#9733;</div>
-            )}
+          {highScore > 0 && !finalStats?.isNewRecord && (
+            <div className="teu__high-score">HI SCORE: {highScore}</div>
+          )}
 
-            <div className="teu__stats-grid">
-              <div className="teu__stat">
-                <div className="teu__stat-val">{finalStats?.score ?? 0}</div>
-                <div className="teu__stat-key">SCORE</div>
-              </div>
-              <div className="teu__stat">
-                <div className="teu__stat-val">{finalStats?.wpm ?? 0}</div>
-                <div className="teu__stat-key">WPM</div>
-              </div>
-              <div className="teu__stat">
-                <div className="teu__stat-val">{finalStats?.wordsDestroyed ?? 0}</div>
-                <div className="teu__stat-key">WORDS</div>
-              </div>
-            </div>
-
-            {highScore > 0 && !finalStats?.isNewRecord && (
-              <div className="teu__high-score">HI SCORE: {highScore}</div>
-            )}
-
-            <div className="teu__action-row">
-              <button
-                className="teu__launch-btn"
-                onClick={() => {
-                  startGame(difficulty);
-                  inputRef.current?.focus();
-                }}
-              >
-                RETRY
-              </button>
-              <button
-                className="teu__launch-btn teu__launch-btn--secondary"
-                onClick={() => setPhase("menu")}
-              >
-                MENU
-              </button>
-            </div>
+          <div className="teu__action-row">
+            <button
+              className="teu__launch-btn"
+              onClick={() => {
+                startGame(difficulty);
+                inputRef.current?.focus();
+              }}
+            >
+              RETRY
+            </button>
+            <button
+              className="teu__launch-btn teu__launch-btn--secondary"
+              onClick={() => setPhase("menu")}
+            >
+              MENU
+            </button>
           </div>
         </div>
       </div>

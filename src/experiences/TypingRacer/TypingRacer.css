@@ -50,12 +50,12 @@
 /* ── Window body ─────────────────────────────────────────────────────────── */
 
 .teu__body {
-  background: #c0c0c0;
   padding: 20px 24px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  width: min(440px, 96vw);
 }
 
 /* ── Logo / heading ──────────────────────────────────────────────────────── */
@@ -362,30 +362,15 @@
   pointer-events: none;
 }
 
-/* ── Mobile: pin canvas to the top of the visual viewport ───────────────── */
+/* ── Mobile: constrain canvas height to the dynamic viewport ────────────── */
 /*
- * When the virtual keyboard opens, the browser scrolls/reflows to keep the
- * focused element visible. With the canvas centered in the page that pushes
- * it off-screen.  Fixing the game wrapper to top:0 makes it immune to that
- * scroll — the keyboard slides up from below and the canvas stays put.
- *
- * `dvh` (dynamic viewport height) shrinks as the keyboard rises, so the
- * max-height constraint automatically scales the canvas down to fit.
- * max-width keeps the 560:480 aspect ratio when height is the limiting edge.
+ * `dvh` shrinks when the virtual keyboard rises, so the canvas scales down
+ * automatically.  max-width maintains the 560∶480 aspect ratio when height
+ * is the binding constraint.
  */
 @media (pointer: coarse) {
-  .teu__game-wrapper {
-    position: fixed;
-    top: var(--standalone-chrome-h, 0px); /* sit below StandaloneWindow chrome */
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(560px, 100vw);
-    z-index: 5;
-  }
-
   .teu__canvas {
     max-height: calc(100dvh - var(--standalone-chrome-h, 0px) - 42px);
-    /* maintain 560∶480 aspect ratio when max-height is the binding constraint */
     max-width: calc((100dvh - var(--standalone-chrome-h, 0px) - 42px) * 560 / 480);
   }
 }
