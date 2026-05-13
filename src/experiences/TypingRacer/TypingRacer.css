@@ -362,13 +362,34 @@
   pointer-events: none;
 }
 
-/* ── Mobile: constrain canvas height to the dynamic viewport ────────────── */
+/* ── Mobile: full-width, keyboard-safe canvas ────────────────────────────── */
 /*
- * `dvh` shrinks when the virtual keyboard rises, so the canvas scales down
- * automatically.  max-width maintains the 560∶480 aspect ratio when height
- * is the binding constraint.
+ * standalone-page has padding:0 + align-items:flex-start on mobile, so the
+ * window starts at y=0.  The chrome (title + menu) is exactly
+ * --standalone-chrome-h tall, letting us anchor the canvas right below it
+ * with position:fixed.  dvh shrinks when the virtual keyboard rises so the
+ * canvas scales down instead of scrolling off-screen.
  */
 @media (pointer: coarse) {
+  /* Stretch the outer container so teu__body fills the window width */
+  .teu {
+    align-self: stretch;
+  }
+
+  .teu__body {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Pin the game canvas below the chrome, above the virtual keyboard */
+  .teu__game-wrapper {
+    position: fixed;
+    top: var(--standalone-chrome-h, 0px);
+    left: 0;
+    right: 0;
+    z-index: 5;
+  }
+
   .teu__canvas {
     max-height: calc(100dvh - var(--standalone-chrome-h, 0px) - 42px);
     max-width: calc((100dvh - var(--standalone-chrome-h, 0px) - 42px) * 560 / 480);

@@ -118,3 +118,14 @@
   border-top: 1px solid #808080;
   margin: 8px 0;
 }
+
+/* ── Mobile: full-width, top-anchored window so fixed children can use top: var(--standalone-chrome-h) ── */
+@media (pointer: coarse) {
+  .standalone-page {
+    padding: 0;
+    align-items: flex-start;
+  }
+  .standalone-window {
+    width: 100%;
+  }
+}
