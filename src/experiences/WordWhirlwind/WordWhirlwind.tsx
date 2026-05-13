@@ -116,17 +116,23 @@ function generatePuzzle(
   const minWords = Math.max(settings.wordLength * 2, 8);
   const maxDifficulty = DIFFICULTY_MAX_SCORE[settings.difficulty];
 
-  for (let pass = 0; pass < 2; pass++) {
-    const limit = pass === 0 ? 60 : 30;
-    for (let i = 0; i < limit; i++) {
-      const word = getRandomWord(settings.wordLength, maxDifficulty);
-      if (!word) return null;
-      const solutions = getAnagramsOf(word, 3).filter((w) => {
-        const diff = getWordDifficulty(w);
-        return maxDifficulty === undefined || diff <= maxDifficulty;
-      });
-      if (solutions.length >= (pass === 0 ? minWords : 1)) {
-        return { word, solutions: [...solutions].sort() };
+  // Try with requested difficulty first, then fall back to unconstrained
+  const diffLevels: (number | undefined)[] =
+    maxDifficulty !== undefined ? [maxDifficulty, undefined] : [undefined];
+
+  for (const maxDiff of diffLevels) {
+    for (let pass = 0; pass < 2; pass++) {
+      const limit = pass === 0 ? 60 : 30;
+      for (let i = 0; i < limit; i++) {
+        const word = getRandomWord(settings.wordLength, maxDiff);
+        if (!word) break;
+        const solutions = getAnagramsOf(word, 3).filter((w) => {
+          const diff = getWordDifficulty(w);
+          return maxDiff === undefined || diff <= maxDiff;
+        });
+        if (solutions.length >= (pass === 0 ? minWords : 1)) {
+          return { word, solutions: [...solutions].sort() };
+        }
       }
     }
   }

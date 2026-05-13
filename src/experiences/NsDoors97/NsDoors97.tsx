@@ -22,6 +22,7 @@ import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import NsArt, { type NsArtHandle } from "../NsArt/NsArt";
+import WordWhirlwind from "../WordWhirlwind/WordWhirlwind";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
@@ -66,6 +67,7 @@ type DesktopIconAction =
   | "screensavers"
   | "tictactoe"
   | "nomnom"
+  | "wordwhirlwind"
   | "bombfinder"
   | "duckhunt"
   | "cards"
@@ -141,11 +143,12 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
     action: (
-      e.id === "tic-tac-toe"     ? "tictactoe" :
-      e.id === "number-muncher"  ? "nomnom"    :
-      e.id === "bomb-finder"     ? "bombfinder":
-      e.id === "duck-hunt"       ? "duckhunt"  :
-      e.id === "ns-art"          ? "nsart"     :
+      e.id === "tic-tac-toe"     ? "tictactoe"     :
+      e.id === "number-muncher"  ? "nomnom"        :
+      e.id === "word-whirlwind"  ? "wordwhirlwind" :
+      e.id === "bomb-finder"     ? "bombfinder"    :
+      e.id === "duck-hunt"       ? "duckhunt"      :
+      e.id === "ns-art"          ? "nsart"         :
       "experience"
     ) as DesktopIconAction,
   }));
@@ -159,6 +162,7 @@ type WindowContent =
   | { type: "screensaver-settings" }
   | { type: "tictactoe" }
   | { type: "nomnom" }
+  | { type: "word-whirlwind" }
   | { type: "bombfinder" }
   | { type: "duckhunt" }
   | { type: "cards-launcher" }
@@ -441,7 +445,8 @@ export default function NsDoors97() {
         case "nsart":        content = { type: "nsart" };                width = 760; break;
         case "art-backup":  content = { type: "nsart-backup" };         width = 760; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
-        case "nomnom":       content = { type: "nomnom" };               width = 700; break;
+        case "nomnom":         content = { type: "nomnom" };               width = 700; break;
+        case "wordwhirlwind":  content = { type: "word-whirlwind" };      width = 600; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
         case "cards":        content = { type: "cards-launcher" };       width = 320; break;
@@ -718,6 +723,7 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nomnom" && <NumberMuncher onQuit={() => closeWindow(win.id)} />}
+          {win.content.type === "word-whirlwind" && <WordWhirlwind onQuit={() => closeWindow(win.id)} />}
           {win.content.type === "duckhunt" && <DuckHunt />}
           {win.content.type === "cards-launcher" && (
             <CardsLauncher
