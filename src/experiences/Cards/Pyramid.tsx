@@ -3,6 +3,9 @@ import "./Pyramid.css";
 import { PlayingCard } from "./PlayingCard";
 import type { Card, DeckSettings } from "./types";
 import { buildDeck } from "./deckUtils";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { DeckModal } from "./DeckModal";
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 
@@ -111,10 +114,13 @@ function checkLost(state: PyramidState): boolean {
 
 interface PyramidProps {
   settings: DeckSettings;
+  onNewGame?: () => void;
 }
 
-export default function Pyramid({ settings }: PyramidProps) {
+export default function Pyramid({ settings, onNewGame }: PyramidProps) {
   const [state, setState] = useState<PyramidState>(() => buildPyramid(settings));
+  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [showDeckModal, setShowDeckModal] = useState(false);
 
   const newGame = useCallback(() => setState(buildPyramid(settings)), [settings]);
 
@@ -206,10 +212,34 @@ export default function Pyramid({ settings }: PyramidProps) {
     return `${state.removedCount} removed · ${state.stock.length} in stock`;
   }
 
+  // ── Menus ─────────────────────────────────────────────────────────────────
+
+  const pyramidMenus = useMemo<MenuBarMenu[]>(() => {
+    const items: MenuBarMenu["items"] = [
+      { label: "Restart",  onClick: newGame },
+    ];
+    if (onNewGame) {
+      items.push({ label: "New Game", onClick: onNewGame });
+    }
+    return [
+      { label: "Game", items },
+      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+    ];
+  }, [newGame, onNewGame]);
+
+  useWindowMenus(pyramidMenus);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="pyramid">
+      {showDeckModal && (
+        <DeckModal
+          cardBack={cardBack}
+          onSelect={setCardBack}
+          onClose={() => setShowDeckModal(false)}
+        />
+      )}
       <div className="pyramid__table">
         {!pyramidDone && (
           <div className="pyramid__grid" style={{ width: BASE_ROW_W, height: GRID_H }}>
@@ -229,7 +259,7 @@ export default function Pyramid({ settings }: PyramidProps) {
                   style={{ left: cardX(slot.row, slot.col), top: cardY(slot.row) }}
                   onClick={() => avail && selectCard(slot.card.id, false)}
                 >
-                  <PlayingCard card={slot.card} size="sm" backColor={settings.cardBack} />
+                  <PlayingCard card={slot.card} size="sm" backColor={cardBack} />
                 </div>
               );
             })}
@@ -241,7 +271,7 @@ export default function Pyramid({ settings }: PyramidProps) {
             <div className="pyramid__pile-label">Stock</div>
             <div className="pyramid__stock-card" onClick={drawFromStock}>
               {state.stock.length > 0
-                ? <PlayingCard card={state.stock[0]} faceDown size="sm" backColor={settings.cardBack} />
+                ? <PlayingCard card={state.stock[0]} faceDown size="sm" backColor={cardBack} />
                 : <div className="playing-card--empty" style={{ width: 52, height: 72 }} />
               }
             </div>
@@ -259,7 +289,7 @@ export default function Pyramid({ settings }: PyramidProps) {
                   style={{ position: "relative" }}
                   onClick={() => selectCard(wasteTop.id, true)}
                 >
-                  <PlayingCard card={wasteTop} size="sm" backColor={settings.cardBack} />
+                  <PlayingCard card={wasteTop} size="sm" backColor={cardBack} />
                 </div>
               )
               : <div className="playing-card--empty" style={{ width: 52, height: 72 }} />

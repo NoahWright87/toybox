@@ -1,8 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import "./Blackjack.css";
 import { PlayingCard } from "./PlayingCard";
 import type { Card, DeckSettings } from "./types";
 import { buildDeck } from "./deckUtils";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { DeckModal } from "./DeckModal";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,11 +59,14 @@ function scoreLabel(cards: Card[], holeRevealed: boolean, isDealer: boolean): st
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface BlackjackProps {
+  onNewGame?: () => void;
   settings: DeckSettings;
 }
 
-export default function Blackjack({ settings }: BlackjackProps) {
+export default function Blackjack({ settings, onNewGame }: BlackjackProps) {
   const [deck, setDeck] = useState<Card[]>(() => buildDeck(settings));
+  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [showDeckModal, setShowDeckModal] = useState(false);
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
   const [dealerHand, setDealerHand] = useState<Card[]>([]);
   const [holeRevealed, setHoleRevealed] = useState(false);
@@ -236,6 +242,23 @@ export default function Blackjack({ settings }: BlackjackProps) {
     setPhase("betting");
   }, [settings]);
 
+  // ── Menus ─────────────────────────────────────────────────────────────────
+
+  const bjMenus = useMemo<MenuBarMenu[]>(() => {
+    const items: MenuBarMenu["items"] = [
+      { label: "Restart",  onClick: resetGame },
+    ];
+    if (onNewGame) {
+      items.push({ label: "New Game", onClick: onNewGame });
+    }
+    return [
+      { label: "Game", items },
+      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+    ];
+  }, [resetGame, onNewGame]);
+
+  useWindowMenus(bjMenus);
+
   // ── Derived display values ─────────────────────────────────────────────────
 
   const dealerScore = scoreLabel(dealerHand, holeRevealed, true);
@@ -269,6 +292,13 @@ export default function Blackjack({ settings }: BlackjackProps) {
 
   return (
     <div className="bj">
+      {showDeckModal && (
+        <DeckModal
+          cardBack={cardBack}
+          onSelect={setCardBack}
+          onClose={() => setShowDeckModal(false)}
+        />
+      )}
       {/* Felt table */}
       <div className="bj__table">
 
@@ -288,7 +318,7 @@ export default function Blackjack({ settings }: BlackjackProps) {
                 <PlayingCard
                   card={card}
                   faceDown={i === 1 && !holeRevealed}
-                  backColor={settings.cardBack}
+                  backColor={cardBack}
                 />
               </div>
             ))}
@@ -308,7 +338,7 @@ export default function Blackjack({ settings }: BlackjackProps) {
           <div className="bj__hand">
             {playerHand.map((card) => (
               <div key={card.id} className="bj__card">
-                <PlayingCard card={card} backColor={settings.cardBack} />
+                <PlayingCard card={card} backColor={cardBack} />
               </div>
             ))}
           </div>

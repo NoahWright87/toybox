@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useOsDialog } from "./OsDialog";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./NotebookApp.css";
 
 interface NotebookAppProps {
@@ -47,46 +49,45 @@ export default function NotebookApp({ filePath, fileName, initialContent }: Note
     setDirty(true);
   }
 
-  function save() {
-    localStorage.setItem(storageKey(filePath), content);
+  // Capture latest content via ref so save() stays stable
+  const contentRef = useRef(content);
+  contentRef.current = content;
+
+  const save = useCallback(() => {
+    localStorage.setItem(storageKey(filePath), contentRef.current);
     setDirty(false);
     const now = new Date();
     setLastSaved(now.toLocaleTimeString());
     showDialog(`File saved.\n\n${fileName}`, { title: "Notebook", icon: "💾" });
-  }
+  }, [filePath, fileName, showDialog]);
 
-  const lineCount = content.split("\n").length;
-  const charCount = content.length;
+  const toggleWordWrap = useCallback(() => setWordWrap((w) => !w), []);
 
   const isReadOnly = !isNewFile && initialContent !== undefined &&
     (filePath.includes("System\\") || filePath.includes("Drivers\\") || filePath.includes("Temp\\"));
 
+  const menus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "File",
+      items: [
+        { label: "Save", onClick: save, disabled: isReadOnly || !dirty },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        { label: "Word Wrap", onClick: toggleWordWrap, checked: wordWrap },
+      ],
+    },
+  ], [save, isReadOnly, dirty, wordWrap, toggleWordWrap]);
+
+  useWindowMenus(menus);
+
+  const lineCount = content.split("\n").length;
+  const charCount = content.length;
+
   return (
     <div className="nsnb-window">
-      {/* ── Menu bar ── */}
-      <div className="nsnb-menubar">
-        <button className="nsnb-menubar__item" onClick={save} disabled={isReadOnly || !dirty}>
-          💾 Save
-        </button>
-        <div className="nsnb-menubar__sep" />
-        <button
-          className={`nsnb-menubar__item${wordWrap ? " nsnb-menubar__item--active" : ""}`}
-          onClick={() => setWordWrap((w) => !w)}
-        >
-          ↵ Wrap
-        </button>
-        <div className="nsnb-menubar__sep" />
-        {isReadOnly && (
-          <span className="nsnb-menubar__badge">READ-ONLY</span>
-        )}
-        {dirty && !isReadOnly && (
-          <span className="nsnb-menubar__badge nsnb-menubar__badge--dirty">UNSAVED</span>
-        )}
-        {lastSaved && !dirty && (
-          <span className="nsnb-menubar__badge nsnb-menubar__badge--saved">Saved {lastSaved}</span>
-        )}
-      </div>
-
       {/* ── Path bar ── */}
       <div className="nsnb-pathbar nsnb-sunken">{filePath}</div>
 
@@ -109,7 +110,19 @@ export default function NotebookApp({ filePath, fileName, initialContent }: Note
         {isReadOnly && (
           <>
             <span className="nsnb-statusbar__sep">|</span>
-            <span>Read-only (system file)</span>
+            <span>Read-only</span>
+          </>
+        )}
+        {dirty && !isReadOnly && (
+          <>
+            <span className="nsnb-statusbar__sep">|</span>
+            <span className="nsnb-statusbar__unsaved">Unsaved</span>
+          </>
+        )}
+        {lastSaved && !dirty && !isReadOnly && (
+          <>
+            <span className="nsnb-statusbar__sep">|</span>
+            <span>Saved {lastSaved}</span>
           </>
         )}
       </div>

@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu, MenuBarItem } from "../../components/MenuBar/MenuBar";
 import "./TicTacToe.css";
 
 type Player = "X" | "O";
@@ -428,6 +430,37 @@ export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
     setHoverCol(null);
     onBoardSizeChange?.(cfg.size);
   }, [onBoardSizeChange]);
+
+  const tttMenus = useMemo<MenuBarMenu[]>(() => {
+    const items: MenuBarItem[] = [
+      { label: "New Game", onClick: () => setConfig(null) },
+    ];
+    if (config) {
+      items.push(
+        { separator: true },
+        { label: "Classic", onClick: () => startGame({ ...config, variant: "classic" }), checked: config.variant === "classic" },
+        { label: "Drop In", onClick: () => startGame({ ...config, variant: "dropIn" }),  checked: config.variant === "dropIn"  },
+        { separator: true },
+        { label: "3×3", onClick: () => startGame({ ...config, size: 3 }), checked: config.size === 3 },
+        { label: "5×5", onClick: () => startGame({ ...config, size: 5 }), checked: config.size === 5 },
+        { label: "7×7", onClick: () => startGame({ ...config, size: 7 }), checked: config.size === 7 },
+        { separator: true },
+        { label: "vs Computer", onClick: () => startGame({ ...config, mode: "ai" }),    checked: config.mode === "ai"    },
+        { label: "vs Human",    onClick: () => startGame({ ...config, mode: "human" }), checked: config.mode === "human" },
+      );
+      if (config.mode === "ai") {
+        items.push(
+          { separator: true },
+          { label: "Easy",   onClick: () => startGame({ ...config, difficulty: "easy"   }), checked: config.difficulty === "easy"   },
+          { label: "Normal", onClick: () => startGame({ ...config, difficulty: "normal" }), checked: config.difficulty === "normal" },
+          { label: "Hard",   onClick: () => startGame({ ...config, difficulty: "hard"   }), checked: config.difficulty === "hard"   },
+        );
+      }
+    }
+    return [{ label: "Game", items }];
+  }, [config, startGame]);
+
+  useWindowMenus(tttMenus);
 
   const makeMove = useCallback(
     (r: number, c: number) => {

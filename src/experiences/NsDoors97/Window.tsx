@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import Draggable from "react-draggable";
 import TitleBar from "../../components/Window/TitleBar";
 import ResizeHandles from "../../components/Window/ResizeHandles";
 import MenuBar, { type MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { WindowMenuContext } from "../../components/Window/useWindowMenus";
 import "./Window.css";
 
 interface WindowProps {
@@ -70,6 +71,16 @@ export default function Window({
   const isPortrait = useIsPortrait();
   const { w: viewportWidth } = useViewportSize();
 
+  // Dynamic menus registered by child apps via useWindowMenus
+  const [dynamicMenus, setDynamicMenus] = useState<MenuBarMenu[] | null>(null);
+  const dynamicMenusRef = useRef<MenuBarMenu[] | null>(null);
+  const registerMenus = useCallback((m: MenuBarMenu[]) => {
+    if (m !== dynamicMenusRef.current) {
+      dynamicMenusRef.current = m;
+      setDynamicMenus(m);
+    }
+  }, []);
+
   const [pos, setPos] = useState(() => defaultPosition);
   const [size, setSize] = useState<{ width: number; height: number | null }>({
     width: width ?? DEFAULT_WIDTH,
@@ -120,7 +131,7 @@ export default function Window({
     },
   ];
 
-  const resolvedMenus = menus ?? defaultMenus;
+  const resolvedMenus = dynamicMenus ?? menus ?? defaultMenus;
 
   // ── Portrait: fixed full-screen, no drag/resize ─────────────────────────
 
@@ -145,7 +156,9 @@ export default function Window({
           isMaximized={isMaximized}
         />
         <MenuBar menus={resolvedMenus} />
-        <div className="ns-window__content">{children}</div>
+        <WindowMenuContext.Provider value={registerMenus}>
+          <div className="ns-window__content">{children}</div>
+        </WindowMenuContext.Provider>
         {showAbout && (
           <AboutOverlay title={title} content={aboutContent} onClose={() => setShowAbout(false)} />
         )}
@@ -201,7 +214,9 @@ export default function Window({
           isMaximized={isMaximized}
         />
         <MenuBar menus={resolvedMenus} />
-        <div className="ns-window__content">{children}</div>
+        <WindowMenuContext.Provider value={registerMenus}>
+          <div className="ns-window__content">{children}</div>
+        </WindowMenuContext.Provider>
         {showAbout && (
           <AboutOverlay title={title} content={aboutContent} onClose={() => setShowAbout(false)} />
         )}

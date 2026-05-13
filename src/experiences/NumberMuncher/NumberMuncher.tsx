@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./NumberMuncher.css";
 
 type BoardSize = 5 | 6 | 7;
@@ -143,6 +145,12 @@ export default function NumberMuncher() {
     setLevelComplete(false);
     setGameOver(false);
   }, []);
+
+  const nmMenus = useMemo<MenuBarMenu[]>(() => [
+    { label: "Game", items: [{ label: "New Game", onClick: backToLauncher }] },
+  ], [backToLauncher]);
+
+  useWindowMenus(nmMenus);
 
   const moveBy = useCallback(
     (rowDelta: number, colDelta: number) => {

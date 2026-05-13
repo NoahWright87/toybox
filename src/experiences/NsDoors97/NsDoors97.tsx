@@ -715,13 +715,13 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "cards-game" && win.content.game === "war" && (
-            <War settings={win.content.settings} />
+            <War settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} />
           )}
           {win.content.type === "cards-game" && win.content.game === "blackjack" && (
-            <Blackjack settings={win.content.settings} />
+            <Blackjack settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} />
           )}
           {win.content.type === "cards-game" && win.content.game === "pyramid" && (
-            <Pyramid settings={win.content.settings} />
+            <Pyramid settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} />
           )}
           {win.content.type === "bombfinder" && (
             <BombFinder

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useOsDialog } from "./OsDialog";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import {
   ROOT,
   type FsNode,
@@ -52,6 +54,20 @@ function FolderItem({ node, onOpen }: FolderItemProps) {
 
 export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
   const { showDialog } = useOsDialog();
+
+  const menus = useMemo<MenuBarMenu[]>(() => [
+    { label: "File", items: [{ label: "(not implemented)", disabled: true }] },
+    { label: "Edit", items: [{ label: "(not implemented)", disabled: true }] },
+    { label: "View", items: [{ label: "(not implemented)", disabled: true }] },
+    {
+      label: "Help",
+      items: [
+        { label: "About Files", onClick: () => showDialog("NS Doors 97 Files\nBrowse and open files on this computer.", { title: "About Files", icon: "ℹ️" }) },
+      ],
+    },
+  ], [showDialog]);
+
+  useWindowMenus(menus);
 
   // Navigation stack: each entry is a FsFolder
   const [stack, setStack] = useState<FsFolder[]>([ROOT]);
@@ -117,19 +133,6 @@ export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
 
   return (
     <div className="nsf-window">
-      {/* ── Menu bar ── */}
-      <div className="nsf-menubar">
-        {["File", "Edit", "View", "Help"].map((m) => (
-          <button
-            key={m}
-            className="nsf-menubar__item"
-            onClick={() => showDialog("This menu is not yet implemented.", { title: m, icon: "ℹ️" })}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
-
       {/* ── Toolbar ── */}
       <div className="nsf-toolbar">
         <button
