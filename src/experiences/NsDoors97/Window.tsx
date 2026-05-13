@@ -155,7 +155,7 @@ export default function Window({
           onEmbiggen={handleEmbiggen}
           isMaximized={isMaximized}
         />
-        <MenuBar menus={resolvedMenus} />
+        {resolvedMenus.length > 0 && <MenuBar menus={resolvedMenus} />}
         <WindowMenuContext.Provider value={registerMenus}>
           <div className="ns-window__content">{children}</div>
         </WindowMenuContext.Provider>
@@ -213,7 +213,7 @@ export default function Window({
           onEmbiggen={handleEmbiggen}
           isMaximized={isMaximized}
         />
-        <MenuBar menus={resolvedMenus} />
+        {resolvedMenus.length > 0 && <MenuBar menus={resolvedMenus} />}
         <WindowMenuContext.Provider value={registerMenus}>
           <div className="ns-window__content">{children}</div>
         </WindowMenuContext.Provider>

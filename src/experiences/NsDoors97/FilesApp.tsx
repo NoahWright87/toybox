@@ -14,6 +14,7 @@ import "./FilesApp.css";
 interface FilesAppProps {
   onOpenApp: (appId: string) => void;
   onOpenNotebook: (path: string, fileName: string, content: string) => void;
+  onQuit?: () => void;
 }
 
 interface FolderItemProps {
@@ -52,11 +53,16 @@ function FolderItem({ node, onOpen }: FolderItemProps) {
   );
 }
 
-export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
+export default function FilesApp({ onOpenApp, onOpenNotebook, onQuit }: FilesAppProps) {
   const { showDialog } = useOsDialog();
 
   const menus = useMemo<MenuBarMenu[]>(() => [
-    { label: "File", items: [{ label: "(not implemented)", disabled: true }] },
+    {
+      label: "File",
+      items: [
+        ...(onQuit ? [{ label: "Exit", onClick: onQuit }] : [{ label: "(not implemented)", disabled: true as const }]),
+      ],
+    },
     { label: "Edit", items: [{ label: "(not implemented)", disabled: true }] },
     { label: "View", items: [{ label: "(not implemented)", disabled: true }] },
     {
@@ -65,7 +71,7 @@ export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
         { label: "About Files", onClick: () => showDialog("NS Doors 97 Files\nBrowse and open files on this computer.", { title: "About Files", icon: "ℹ️" }) },
       ],
     },
-  ], [showDialog]);
+  ], [showDialog, onQuit]);
 
   useWindowMenus(menus);
 

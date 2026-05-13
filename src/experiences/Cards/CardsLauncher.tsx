@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import "./Cards.css";
 import {
   DEFAULT_DECK_SETTINGS,
@@ -8,6 +8,9 @@ import {
   type WarSpeed,
 } from "./types";
 import { totalCards } from "./deckUtils";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { DeckModal } from "./DeckModal";
 
 const SUITS: { id: Suit; symbol: string; isRed: boolean }[] = [
   { id: "spades",   symbol: "♠", isRed: false },
@@ -24,11 +27,13 @@ const WAR_SPEEDS: { value: WarSpeed; label: string }[] = [
 
 interface CardsLauncherProps {
   onLaunch: (game: CardsGame, settings: DeckSettings) => void;
+  onQuit?: () => void;
 }
 
-export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
+export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) {
   const [game, setGame] = useState<CardsGame>("war");
   const [settings, setSettings] = useState<DeckSettings>(DEFAULT_DECK_SETTINGS);
+  const [showDeckModal, setShowDeckModal] = useState(false);
 
   const toggleSuit = (suit: Suit) => {
     const active = settings.suits.includes(suit);
@@ -47,6 +52,21 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
   };
 
   const count = totalCards(settings);
+
+  const launcherMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "Game",
+      items: [
+        ...(onQuit ? [{ label: "Exit", onClick: onQuit }] : [{ label: "(not implemented)", disabled: true as const }]),
+      ],
+    },
+    {
+      label: "Options",
+      items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }],
+    },
+  ], [onQuit]);
+
+  useWindowMenus(launcherMenus);
 
   return (
     <div className="cards-launcher">
@@ -155,6 +175,14 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
       <button className="cards-launcher__launch-btn" onClick={() => onLaunch(game, settings)}>
         ▶ Launch
       </button>
+
+      {showDeckModal && (
+        <DeckModal
+          cardBack={settings.cardBack}
+          onSelect={(color) => setSettings((prev) => ({ ...prev, cardBack: color }))}
+          onClose={() => setShowDeckModal(false)}
+        />
+      )}
     </div>
   );
 }

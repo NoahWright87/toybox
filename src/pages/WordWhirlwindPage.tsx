@@ -1,7 +1,9 @@
+import { useNavigate } from "react-router-dom";
 import WordWhirlwind from "../experiences/WordWhirlwind/WordWhirlwind";
 import StandaloneWindow from "../components/StandaloneWindow/StandaloneWindow";
 
 export default function WordWhirlwindPage() {
+  const navigate = useNavigate();
   return (
     <StandaloneWindow
       title="Word Whirlwind"
@@ -36,7 +38,7 @@ export default function WordWhirlwindPage() {
         </>
       }
     >
-      <WordWhirlwind />
+      <WordWhirlwind onQuit={() => navigate("/doors97", { state: { skipBoot: true } })} />
     </StandaloneWindow>
   );
 }

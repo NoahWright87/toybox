@@ -95,7 +95,7 @@ function countRemaining(grid: number[][], eaten: boolean[][], rule: ActiveRule):
   return remaining;
 }
 
-export default function NumberMuncher() {
+export default function NumberMuncher({ onQuit }: { onQuit?: () => void } = {}) {
   const [mathType, setMathType] = useState<MathTypeId>("multiples");
   const [boardSize, setBoardSize] = useState<BoardSize>(7);
   const [showHelp, setShowHelp] = useState(false);
@@ -147,8 +147,14 @@ export default function NumberMuncher() {
   }, []);
 
   const nmMenus = useMemo<MenuBarMenu[]>(() => [
-    { label: "Game", items: [{ label: "New Game", onClick: backToLauncher }] },
-  ], [backToLauncher]);
+    {
+      label: "Game",
+      items: [
+        { label: "New Game", onClick: backToLauncher },
+        ...(onQuit ? [{ separator: true as const }, { label: "Quit", onClick: onQuit }] : []),
+      ],
+    },
+  ], [backToLauncher, onQuit]);
 
   useWindowMenus(nmMenus);
 

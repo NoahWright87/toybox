@@ -115,9 +115,10 @@ function checkLost(state: PyramidState): boolean {
 interface PyramidProps {
   settings: DeckSettings;
   onNewGame?: () => void;
+  onQuit?: () => void;
 }
 
-export default function Pyramid({ settings, onNewGame }: PyramidProps) {
+export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
   const [state, setState] = useState<PyramidState>(() => buildPyramid(settings));
   const [cardBack, setCardBack] = useState(settings.cardBack);
   const [showDeckModal, setShowDeckModal] = useState(false);
@@ -216,16 +217,15 @@ export default function Pyramid({ settings, onNewGame }: PyramidProps) {
 
   const pyramidMenus = useMemo<MenuBarMenu[]>(() => {
     const items: MenuBarMenu["items"] = [
-      { label: "Restart",  onClick: newGame },
+      { label: "Restart", onClick: newGame },
+      ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
+      ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
     ];
-    if (onNewGame) {
-      items.push({ label: "New Game", onClick: onNewGame });
-    }
     return [
       { label: "Game", items },
       { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
     ];
-  }, [newGame, onNewGame]);
+  }, [newGame, onNewGame, onQuit]);
 
   useWindowMenus(pyramidMenus);
 

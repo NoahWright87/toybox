@@ -72,9 +72,10 @@ function makeInitialState(settings: DeckSettings): WarState {
 interface WarProps {
   settings: DeckSettings;
   onNewGame?: () => void;
+  onQuit?: () => void;
 }
 
-export default function War({ settings, onNewGame }: WarProps) {
+export default function War({ settings, onNewGame, onQuit }: WarProps) {
   const [state, setState] = useState<WarState>(() => makeInitialState(settings));
   const [cardBack, setCardBack] = useState(settings.cardBack);
   const [showDeckModal, setShowDeckModal] = useState(false);
@@ -241,16 +242,15 @@ export default function War({ settings, onNewGame }: WarProps) {
 
   const warMenus = useMemo<MenuBarMenu[]>(() => {
     const items: MenuBarMenu["items"] = [
-      { label: "Restart",  onClick: newGame },
+      { label: "Restart", onClick: newGame },
+      ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
+      ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
     ];
-    if (onNewGame) {
-      items.push({ label: "New Game", onClick: onNewGame });
-    }
     return [
       { label: "Game", items },
       { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
     ];
-  }, [newGame, onNewGame]);
+  }, [newGame, onNewGame, onQuit]);
 
   useWindowMenus(warMenus);
 

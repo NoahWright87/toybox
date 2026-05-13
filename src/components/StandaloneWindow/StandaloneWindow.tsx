@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import TitleBar from "../Window/TitleBar";
 import MenuBar, { type MenuBarMenu } from "../MenuBar/MenuBar";
+import { WindowMenuContext } from "../Window/useWindowMenus";
 import "./StandaloneWindow.css";
 
 interface StandaloneWindowProps {
@@ -15,23 +16,33 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
   const navigate = useNavigate();
   const [showHelp, setShowHelp] = useState(false);
 
+  // Dynamic menus registered by child apps via useWindowMenus
+  const [dynamicMenus, setDynamicMenus] = useState<MenuBarMenu[] | null>(null);
+  const dynamicMenusRef = useRef<MenuBarMenu[] | null>(null);
+  const registerMenus = useCallback((m: MenuBarMenu[]) => {
+    if (m !== dynamicMenusRef.current) {
+      dynamicMenusRef.current = m;
+      setDynamicMenus(m);
+    }
+  }, []);
+
   function exitToDoors() {
     navigate("/doors97", { state: { skipBoot: true } });
   }
 
+  const fileMenu: MenuBarMenu = {
+    label: "File",
+    items: [{ label: "Exit to Doors", onClick: exitToDoors }],
+  };
+
+  const helpMenu: MenuBarMenu | null = helpContent
+    ? { label: "Help", items: [{ label: "Keyboard Shortcuts", onClick: () => setShowHelp(true) }] }
+    : null;
+
   const menus: MenuBarMenu[] = [
-    {
-      label: "File",
-      items: [{ label: "Exit to Doors", onClick: exitToDoors }],
-    },
-    ...(helpContent
-      ? [
-          {
-            label: "Help",
-            items: [{ label: "Keyboard Shortcuts", onClick: () => setShowHelp(true) }],
-          },
-        ]
-      : []),
+    fileMenu,
+    ...(dynamicMenus ?? []),
+    ...(helpMenu ? [helpMenu] : []),
   ];
 
   return (
@@ -40,7 +51,9 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
         <TitleBar title={title} icon={icon} onClose={exitToDoors} />
         <MenuBar menus={menus} />
         <div className="standalone-window__content">
-          {children}
+          <WindowMenuContext.Provider value={registerMenus}>
+            {children}
+          </WindowMenuContext.Provider>
         </div>
 
         {showHelp && helpContent && (

@@ -369,6 +369,7 @@ export default function NsDoors97() {
     });
   }, []);
 
+
   // ── Screensaver ──────────────────────────────────────────────────────────
   const [screensaverConfig, setScreensaverConfig] = useState<FullScreensaverConfig>(
     () => loadScreensaverConfig()
@@ -468,6 +469,14 @@ export default function NsDoors97() {
       ];
     });
   }, [showDialog]);
+
+  const openAbout = useCallback(() => {
+    openWindow("about");
+  }, [openWindow]);
+
+  const openScreensaverSettings = useCallback(() => {
+    openWindow("screensavers");
+  }, [openWindow]);
 
   const closeWindow = useCallback((id: string) => {
     setOpenWindows((prev) => prev.filter((w) => w.id !== id));
@@ -705,23 +714,25 @@ export default function NsDoors97() {
               onBoardSizeChange={(size) =>
                 handleTttBoardSizeChange(win.id, size)
               }
+              onQuit={() => closeWindow(win.id)}
             />
           )}
-          {win.content.type === "nomnom" && <NumberMuncher />}
+          {win.content.type === "nomnom" && <NumberMuncher onQuit={() => closeWindow(win.id)} />}
           {win.content.type === "duckhunt" && <DuckHunt />}
           {win.content.type === "cards-launcher" && (
             <CardsLauncher
               onLaunch={(game, settings) => handleCardsLaunch(win.id, game, settings)}
+              onQuit={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "cards-game" && win.content.game === "war" && (
-            <War settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} />
+            <War settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "cards-game" && win.content.game === "blackjack" && (
-            <Blackjack settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} />
+            <Blackjack settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "cards-game" && win.content.game === "pyramid" && (
-            <Pyramid settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} />
+            <Pyramid settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "bombfinder" && (
             <BombFinder
@@ -757,6 +768,7 @@ export default function NsDoors97() {
             <FilesApp
               onOpenApp={openWindow}
               onOpenNotebook={openNotebook}
+              onQuit={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "notebook" && (
@@ -786,7 +798,11 @@ export default function NsDoors97() {
         activeWindowId={activeWindowId}
         onWindowFocus={focusWindow}
         onRestart={handleRestart}
-        onOpenSettings={(s) => { if (s === "display") openDisplaySettings(); }}
+        onOpenSettings={(s) => {
+          if (s === "display") openDisplaySettings();
+          else if (s === "screensavers") openScreensaverSettings();
+        }}
+        onOpenAbout={openAbout}
         onExitToTos={handleExitToTos}
       />
 

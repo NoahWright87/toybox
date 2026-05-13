@@ -60,10 +60,11 @@ function scoreLabel(cards: Card[], holeRevealed: boolean, isDealer: boolean): st
 
 interface BlackjackProps {
   onNewGame?: () => void;
+  onQuit?: () => void;
   settings: DeckSettings;
 }
 
-export default function Blackjack({ settings, onNewGame }: BlackjackProps) {
+export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProps) {
   const [deck, setDeck] = useState<Card[]>(() => buildDeck(settings));
   const [cardBack, setCardBack] = useState(settings.cardBack);
   const [showDeckModal, setShowDeckModal] = useState(false);
@@ -246,16 +247,15 @@ export default function Blackjack({ settings, onNewGame }: BlackjackProps) {
 
   const bjMenus = useMemo<MenuBarMenu[]>(() => {
     const items: MenuBarMenu["items"] = [
-      { label: "Restart",  onClick: resetGame },
+      { label: "Restart", onClick: resetGame },
+      ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
+      ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
     ];
-    if (onNewGame) {
-      items.push({ label: "New Game", onClick: onNewGame });
-    }
     return [
       { label: "Game", items },
       { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
     ];
-  }, [resetGame, onNewGame]);
+  }, [resetGame, onNewGame, onQuit]);
 
   useWindowMenus(bjMenus);
 

@@ -1,3 +1,4 @@
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import "./AboutApp.css";
 
 interface AboutAppProps {
@@ -5,6 +6,7 @@ interface AboutAppProps {
 }
 
 export default function AboutApp({ onClose }: AboutAppProps) {
+  useWindowMenus([]);
   return (
     <div className="ns-about">
       <div className="ns-about__logo" aria-hidden>🚪</div>
