@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Sprite } from "./sprites";
 import "./Hellzone.css";
 
 export default function Hellzone() {
@@ -29,8 +30,11 @@ export default function Hellzone() {
     const NUM_RAYS = SCREEN_W;
     const MAX_DEPTH = 20;
     const CELL = 64;
-    const PLAYER_SPEED = 2.5;
-    const TURN_SPEED = 0.045;
+    const PLAYER_SPEED = 3.75;
+    const TURN_SPEED = 0.022;
+    const SPRINT_MULT = 2.0;
+    const MOVE_ACCEL = 20;
+    const TURN_ACCEL = 12;
     const MOUSE_SENSITIVITY = 0.002;
 
     // ── Seeded RNG ─────────────────────────────────────────────────────────────
@@ -48,6 +52,12 @@ export default function Hellzone() {
     const TILE_EMPTY = 0, TILE_WALL = 1, TILE_EXIT = 3;
 
     interface Room { x: number; y: number; w: number; h: number; cx: number; cy: number; }
+    interface Enemy {
+      x: number; y: number; angle: number; health: number; maxHealth: number;
+      state: string; type: number; shootTimer: number; alertRange: number;
+      speed: number; deathTimer: number; muzzleFlash: number;
+    }
+    interface Pickup { x: number; y: number; type: string; taken: boolean; }
 
     class BSPNode {
       x: number; y: number; w: number; h: number;
@@ -134,11 +144,6 @@ export default function Hellzone() {
         grid[exitRoom.cy][exitRoom.cx] = TILE_EXIT;
       }
 
-      interface Enemy {
-        x: number; y: number; angle: number; health: number; maxHealth: number;
-        state: string; type: number; shootTimer: number; alertRange: number;
-        speed: number; deathTimer: number;
-      }
       const enemies: Enemy[] = [];
       for (let i = 1; i < rooms.length; i++) {
         const room = rooms[i];
@@ -151,12 +156,11 @@ export default function Hellzone() {
             health: 40, maxHealth: 40,
             state: "idle", type: Math.floor(rng() * 3),
             shootTimer: 60 + Math.floor(rng() * 120),
-            alertRange: 6 * CELL, speed: 0, deathTimer: 0,
+            alertRange: 6 * CELL, speed: 0, deathTimer: 0, muzzleFlash: 0,
           });
         }
       }
 
-      interface Pickup { x: number; y: number; type: string; taken: boolean; }
       const pickups: Pickup[] = [];
       for (let i = 2; i < rooms.length - 1; i += 2) {
         const room = rooms[i];
@@ -165,6 +169,73 @@ export default function Hellzone() {
 
       const spawn = { x: (rooms[0].cx + 0.5) * CELL, y: (rooms[0].cy + 0.5) * CELL, angle: 0 };
       return { grid, rooms, enemies, pickups, spawn, seed };
+    }
+
+    // ── Training Level Map ─────────────────────────────────────────────────────
+    function generateTrainingMap() {
+      const grid: Uint8Array[] = Array.from({ length: MAP_H }, () => new Uint8Array(MAP_W).fill(TILE_WALL));
+
+      // Room A: shooting range
+      for (let y = 2; y <= 12; y++)
+        for (let x = 3; x <= 22; x++)
+          grid[y][x] = TILE_EMPTY;
+
+      // Hallway A→B
+      for (let y = 13; y <= 19; y++)
+        for (let x = 10; x <= 12; x++)
+          grid[y][x] = TILE_EMPTY;
+
+      // Room B: patrol range
+      for (let y = 20; y <= 34; y++)
+        for (let x = 3; x <= 24; x++)
+          grid[y][x] = TILE_EMPTY;
+
+      // Exit
+      for (let x = 11; x <= 13; x++)
+        grid[35][x] = TILE_EXIT;
+
+      const enemies: Enemy[] = [];
+
+      const mkDummy = (x: number, y: number): Enemy => ({
+        x, y, angle: 0, health: 50, maxHealth: 50,
+        state: "idle", type: 3, shootTimer: 999999, alertRange: 0, speed: 0, deathTimer: 0, muzzleFlash: 0,
+      });
+
+      let pi = 0;
+      const mkPatrol = (x: number, y: number): Enemy => ({
+        x, y, angle: (pi++ * 1.618) % (Math.PI * 2),
+        health: 40, maxHealth: 40,
+        state: "idle", type: pi % 3, shootTimer: 999999, alertRange: 0, speed: 0, deathTimer: 0, muzzleFlash: 0,
+      });
+
+      const sY = 12.45 * CELL;
+      [8.5, 10.5, 12.5, 14.5, 16.5].forEach(col => enemies.push(mkDummy(col * CELL, sY)));
+
+      const wX = 3.65 * CELL, eX = 21.35 * CELL;
+      [5.0, 8.5].forEach(row => {
+        enemies.push(mkDummy(wX, row * CELL));
+        enemies.push(mkDummy(eX, row * CELL));
+      });
+
+      [
+        [6.5, 22.5], [12.5, 22.5], [18.5, 23.5], [22.5, 24.5],
+        [5.5, 27.5], [11.5, 29.5], [17.5, 26.5], [21.5, 30.5],
+        [8.5, 33.5], [15.5, 32.5],
+      ].forEach(([col, row]) => enemies.push(mkPatrol(col * CELL, row * CELL)));
+
+      const pickups: Pickup[] = [
+        { x: 6.5 * CELL,  y: 3.5 * CELL,  type: "ammo",   taken: false },
+        { x: 19.5 * CELL, y: 3.5 * CELL,  type: "health", taken: false },
+        { x: 13.5 * CELL, y: 27.5 * CELL, type: "ammo",   taken: false },
+        { x: 13.5 * CELL, y: 31.5 * CELL, type: "health", taken: false },
+      ];
+
+      const rooms: Room[] = [
+        { x: 3, y: 2,  w: 20, h: 11, cx: 12, cy: 7  },
+        { x: 3, y: 20, w: 22, h: 15, cx: 13, cy: 27 },
+      ];
+
+      return { grid, rooms, enemies, pickups, spawn: { x: 12.5 * CELL, y: 4.5 * CELL, angle: Math.PI / 2 }, seed: 0 };
     }
 
     // ── Colors ─────────────────────────────────────────────────────────────────
@@ -179,10 +250,10 @@ export default function Hellzone() {
     const ENEMY_COLORS = ["#cc3300", "#993300", "#cc6600"];
 
     // ── Game State ─────────────────────────────────────────────────────────────
-    type GameData = ReturnType<typeof generateMap>;
-    type Enemy = GameData["enemies"][number];
-    type Pickup = GameData["pickups"][number];
-    type Player = { x: number; y: number; angle: number; health: number; ammo: number };
+    type Player = {
+      x: number; y: number; angle: number; health: number; ammo: number;
+      velX: number; velY: number; angVel: number;
+    };
 
     let map: Uint8Array[];
     let player: Player;
@@ -193,11 +264,65 @@ export default function Hellzone() {
     let level = 1, seed = 0;
     let gameState = "title";
     let messageTimer = 0;
-    let showMap = false;
+    let showFullMap = false;
     let flashTimer = 0;
     let shootCooldown = 0;
     let pointerLocked = false;
     const zBuffer = new Float32Array(NUM_RAYS);
+    let gunRecoil = 0;
+    let muzzleFlashTimer = 0;
+    let sprinting = false;
+    let capsLocked = false;
+    let hurtCooldown = 0;
+    let showHelp = false;
+    interface Impact { sx: number; sy: number; type: string; timer: number; maxTimer: number; }
+    const impacts: Impact[] = [];
+
+    // ── Sprites ─────────────────────────────────────────────────────────────────
+    const sprEnemy = [
+      new Sprite('/sprites/enemy-0.png'),
+      new Sprite('/sprites/enemy-1.png'),
+      new Sprite('/sprites/enemy-2.png'),
+    ];
+    const sprEnemyDead = new Sprite('/sprites/enemy-dead.png');
+    const sprTarget = new Sprite('/sprites/target-dummy.png');
+    const sprTargetDead = new Sprite('/sprites/target-dummy-dead.png');
+    const sprPickupHealth = new Sprite('/sprites/pickup-health.png');
+    const sprPickupAmmo = new Sprite('/sprites/pickup-ammo.png');
+    const sprGun = new Sprite('/sprites/gun-pistol.png');
+    const sprImpactWall = new Sprite('/sprites/impact-wall.png');
+    const sprImpactEnemy = new Sprite('/sprites/impact-enemy.png');
+
+    // ── Sound system ───────────────────────────────────────────────────────────
+    let audioCtx: AudioContext | null = null;
+    const soundBuffers = new Map<string, AudioBuffer>();
+
+    function initAudio() {
+      if (audioCtx) return;
+      try {
+        audioCtx = new AudioContext();
+        const names = ['intro','shoot','hit-wall','hit-enemy','hurt','death','level-complete','pickup','alert'];
+        for (const name of names) {
+          fetch(`/sounds/${name}.wav`)
+            .then(r => r.arrayBuffer())
+            .then(buf => audioCtx!.decodeAudioData(buf))
+            .then(decoded => { soundBuffers.set(name, decoded); })
+            .catch(() => {});
+        }
+      } catch { /* no audio available */ }
+    }
+
+    function playSound(name: string, volume = 1.0) {
+      if (!audioCtx || !soundBuffers.has(name)) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const src = audioCtx.createBufferSource();
+      src.buffer = soundBuffers.get(name)!;
+      const gain = audioCtx.createGain();
+      gain.gain.value = volume;
+      src.connect(gain);
+      gain.connect(audioCtx.destination);
+      src.start();
+    }
 
     // ── DOM element getters ────────────────────────────────────────────────────
     const q = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
@@ -209,6 +334,7 @@ export default function Hellzone() {
       q<HTMLElement>(".hz-game-container").style.display = s !== "title" ? "flex" : "none";
       q<HTMLElement>(".hz-death-screen").style.display   = s === "dead" ? "flex" : "none";
       q<HTMLElement>(".hz-level-clear").style.display    = s === "clear" ? "flex" : "none";
+      if (s === "clear") playSound('level-complete');
     }
 
     function quitToTos() {
@@ -223,6 +349,7 @@ export default function Hellzone() {
       player = null as unknown as Player;
       initLevel();
       setScreen("playing");
+      setTimeout(() => playSound('intro'), 200);
     }
 
     function nextLevel() {
@@ -233,7 +360,7 @@ export default function Hellzone() {
     }
 
     function initLevel() {
-      const data = generateMap(seed);
+      const data = level === 1 ? generateTrainingMap() : generateMap(seed);
       map = data.grid;
       enemies = data.enemies;
       pickups = data.pickups;
@@ -242,10 +369,14 @@ export default function Hellzone() {
         x: data.spawn.x, y: data.spawn.y, angle: data.spawn.angle,
         health: player ? Math.min(Math.max(player.health, 1), 100) : 100,
         ammo:   player ? Math.max(player.ammo, 10) : 50,
+        velX: 0, velY: 0, angVel: 0,
       };
       q("#hz-hud-level").textContent = String(level);
-      q("#hz-hud-seed").textContent = "SEED:" + seed;
-      if (level === 1) setTimeout(() => showMessage("TRAINING LEVEL — ENEMIES ARE STATIONARY"), 800);
+      q("#hz-hud-seed").textContent = level === 1 ? "TRAINING" : "SEED:" + seed;
+      if (level === 1) {
+        setTimeout(() => showMessage("ROOM A: SHOOT THE TARGETS"), 600);
+        setTimeout(() => showMessage("ROOM B: SOUTH HALLWAY — MOVING TARGETS"), 4000);
+      }
     }
 
     function handleEnter() {
@@ -310,6 +441,8 @@ export default function Hellzone() {
       }
 
       renderSprites();
+      drawImpacts();
+      drawGun();
 
       if (flashTimer > 0) {
         ctx.fillStyle = `rgba(200,0,0,${(flashTimer / 20) * 0.5})`;
@@ -317,12 +450,18 @@ export default function Hellzone() {
         flashTimer--;
       }
 
+      // Sprint indicator
+      ctx.fillStyle = "#c00";
+      ctx.font = "6px 'Share Tech Mono', monospace";
+      ctx.fillText(sprinting ? "FST" : "SLO", 4, SCREEN_H - 4);
+
       updateHUD();
-      if (showMap) renderMap();
+
+      if (showFullMap) renderFullMap();
     }
 
     function projectSprite(wx: number, wy: number) {
-      const dx = wx - player.x, dy = wy - player.y;
+      const dx = (wx - player.x) / CELL, dy = (wy - player.y) / CELL;
       const cosA = Math.cos(player.angle), sinA = Math.sin(player.angle);
       const camZ =  dx * cosA + dy * sinA;
       const camX = -dx * sinA + dy * cosA;
@@ -351,46 +490,160 @@ export default function Hellzone() {
     }
 
     function drawEnemySprite(e: Enemy) {
+      if (e.type === 3) { drawTargetSprite(e); return; }
       const proj = projectSprite(e.x, e.y);
       if (!proj) return;
       const { screenX, spriteH, spriteW, tz } = proj;
       const startX = Math.floor(screenX - spriteW / 2);
       const startY = Math.floor((SCREEN_H - spriteH) / 2);
-      const baseColor = ENEMY_COLORS[e.type];
-      const isDead = e.state === "dead";
-      for (let sx = 0; sx < spriteW; sx++) {
-        const px = startX + sx;
-        if (px < 0 || px >= SCREEN_W) continue;
-        if (tz >= zBuffer[px]) continue;
-        const u = sx / spriteW;
-        for (let sy = 0; sy < spriteH; sy++) {
-          const py = startY + sy;
-          if (py < 0 || py >= SCREEN_H) continue;
-          const v = sy / spriteH;
-          let draw = false;
-          let col = baseColor;
-          if (isDead) {
-            if (v > 0.8) { draw = true; col = "#660000"; }
-            else if (v > 0.7 && u > 0.3 && u < 0.7) { draw = true; col = "#440000"; }
-          } else {
-            if (u > 0.2 && u < 0.8 && v > 0.3 && v < 0.9) { draw = true; col = baseColor; }
-            if (u > 0.3 && u < 0.7 && v > 0.05 && v < 0.3) { draw = true; col = "#cc9966"; }
-            if (v > 0.1 && v < 0.2) {
-              if ((u > 0.35 && u < 0.42) || (u > 0.58 && u < 0.65)) { draw = true; col = "#ff0000"; }
+
+      // Center-column z-check
+      if (tz >= zBuffer[Math.max(0, Math.min(SCREEN_W-1, screenX))]) return;
+
+      const spr = e.state === 'dead' ? sprEnemyDead : (sprEnemy[e.type] ?? sprEnemy[0]);
+      if (spr.loaded) {
+        const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+        ctx.globalAlpha = fog * 0.85 + 0.15;
+        spr.draw(ctx, 0, startX, startY, spriteW, spriteH);
+        ctx.globalAlpha = 1;
+      } else {
+        // Fallback: procedural pixel loop
+        const baseColor = ENEMY_COLORS[e.type];
+        const isDead = e.state === "dead";
+        for (let sx = 0; sx < spriteW; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W) continue;
+          if (tz >= zBuffer[px]) continue;
+          const u = sx / spriteW;
+          for (let sy = 0; sy < spriteH; sy++) {
+            const py = startY + sy;
+            if (py < 0 || py >= SCREEN_H) continue;
+            const v = sy / spriteH;
+            let draw = false;
+            let col = baseColor;
+            if (isDead) {
+              if (v > 0.8) { draw = true; col = "#660000"; }
+              else if (v > 0.7 && u > 0.3 && u < 0.7) { draw = true; col = "#440000"; }
+            } else {
+              if (u > 0.2 && u < 0.8 && v > 0.3 && v < 0.9) { draw = true; col = baseColor; }
+              if (u > 0.3 && u < 0.7 && v > 0.05 && v < 0.3) { draw = true; col = "#cc9966"; }
+              if (v > 0.1 && v < 0.2) {
+                if ((u > 0.35 && u < 0.42) || (u > 0.58 && u < 0.65)) { draw = true; col = "#ff0000"; }
+              }
+              if (v < 0.05) {
+                const hp = e.health / e.maxHealth;
+                col = hp > 0.6 ? "#00ff00" : hp > 0.3 ? "#ffff00" : "#ff0000";
+                draw = u < hp * 0.6 + 0.2 && u > 0.2;
+              }
+              if (e.state === "chase" && v < 0.02) { draw = true; col = "#ffff00"; }
             }
-            if (v < 0.05) {
-              const hp = e.health / e.maxHealth;
-              col = hp > 0.6 ? "#00ff00" : hp > 0.3 ? "#ffff00" : "#ff0000";
-              draw = u < hp * 0.6 + 0.2 && u > 0.2;
+            if (draw) {
+              const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+              ctx.globalAlpha = fog * 0.85 + 0.15;
+              ctx.fillStyle = col;
+              ctx.fillRect(px, py, 1, 1);
+              ctx.globalAlpha = 1;
             }
-            if (e.state === "chase" && v < 0.02) { draw = true; col = "#ffff00"; }
           }
-          if (draw) {
-            const fog = Math.max(0, 1 - tz / MAX_DEPTH);
-            ctx.globalAlpha = fog * fog + 0.1;
-            ctx.fillStyle = col;
-            ctx.fillRect(px, py, 1, 1);
-            ctx.globalAlpha = 1;
+        }
+      }
+      // Enemy muzzle flash when they shoot
+      if (e.muzzleFlash > 0 && e.state !== "dead") {
+        const flashX = startX + Math.floor(spriteW * 0.15);
+        const flashY = startY + Math.floor(spriteH * 0.45);
+        const flashR = Math.max(2, Math.floor(spriteH * 0.15));
+        const falpha = (e.muzzleFlash / 8) * 0.9;
+        for (let fdy = -flashR; fdy <= flashR; fdy++) {
+          for (let fdx = -flashR; fdx <= flashR; fdx++) {
+            const fdist = Math.sqrt(fdx * fdx + fdy * fdy);
+            if (fdist > flashR) continue;
+            const fpx = flashX + fdx, fpy = flashY + fdy;
+            if (fpx < 0 || fpx >= SCREEN_W || fpy < 0 || fpy >= SCREEN_H) continue;
+            ctx.globalAlpha = falpha * (1 - fdist / flashR);
+            ctx.fillStyle = fdist < flashR * 0.4 ? "#ffffff" : "#ffff00";
+            ctx.fillRect(fpx, fpy, 1, 1);
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // ── Target dummy sprite (type 3) — bullseye poster ─────────────────────────
+    function drawTargetSprite(e: Enemy) {
+      const proj = projectSprite(e.x, e.y);
+      if (!proj) return;
+      const { screenX, spriteH, spriteW, tz } = proj;
+      const startX = Math.floor(screenX - spriteW / 2);
+      const startY = Math.floor((SCREEN_H - spriteH) / 2);
+      const hp = e.health / e.maxHealth;
+      const isDead = e.state === "dead";
+
+      // Center-column z-check
+      if (tz >= zBuffer[Math.max(0, Math.min(SCREEN_W-1, screenX))]) return;
+
+      const spr = isDead ? sprTargetDead : sprTarget;
+      if (spr.loaded) {
+        const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+        ctx.globalAlpha = fog * 0.85 + 0.15;
+        spr.draw(ctx, 0, startX, startY, spriteW, spriteH);
+        ctx.globalAlpha = 1;
+      } else {
+        // Fallback: procedural
+        for (let sx = 0; sx < spriteW; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W) continue;
+          if (tz >= zBuffer[px]) continue;
+          const u = sx / spriteW;
+
+          for (let sy = 0; sy < spriteH; sy++) {
+            const py = startY + sy;
+            if (py < 0 || py >= SCREEN_H) continue;
+            const v = sy / spriteH;
+
+            let col = "";
+            let draw = false;
+
+            if (isDead) {
+              if (v > 0.75 && u > 0.15 && u < 0.85) {
+                draw = true;
+                col = v > 0.9 ? "#3a1a08" : "#6B3010";
+              }
+            } else {
+              const cx2 = (u - 0.5) * 2;
+              const cy2 = (v - 0.5) * 2;
+              const r = Math.sqrt(cx2 * cx2 + cy2 * cy2);
+
+              if (r <= 1.0) {
+                draw = true;
+                if      (r < 0.15) col = "#ff2200";
+                else if (r < 0.35) col = "#f5f0e0";
+                else if (r < 0.55) col = "#cc1100";
+                else if (r < 0.75) col = "#e8e4d0";
+                else               col = "#c8b888";
+
+                if (hp < 0.75) {
+                  const n = Math.sin(u * 37.1 + v * 19.3) * Math.sin(u * 13.7 - v * 41.1);
+                  const noise = n * 0.5 + 0.5;
+                  if (noise < (0.75 - hp) * 0.55) col = "#0d0404";
+                }
+              }
+
+              if (v < 0.05 && u > 0.1 && u < 0.9) {
+                const frac = (u - 0.1) / 0.8;
+                draw = true;
+                col = frac < hp
+                  ? (hp > 0.6 ? "#22ff44" : hp > 0.3 ? "#ffaa00" : "#ff2200")
+                  : "#2a2a2a";
+              }
+            }
+
+            if (draw) {
+              const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+              ctx.globalAlpha = fog * 0.85 + 0.15;
+              ctx.fillStyle = col;
+              ctx.fillRect(px, py, 1, 1);
+              ctx.globalAlpha = 1;
+            }
           }
         }
       }
@@ -403,22 +656,122 @@ export default function Hellzone() {
       const size = Math.floor(spriteH * 0.4);
       const startX = Math.floor(screenX - size / 2);
       const startY = Math.floor(SCREEN_H / 2 + spriteH * 0.05);
-      const col = p.type === "health" ? "#00cc44" : "#ffaa00";
-      for (let sx = 0; sx < size; sx++) {
-        for (let sy = 0; sy < size; sy++) {
-          const px = startX + sx, py = startY + sy;
-          if (px < 0 || px >= SCREEN_W || py < 0 || py >= SCREEN_H) continue;
-          if (tz >= zBuffer[px]) continue;
-          const u = sx / size, v = sy / size;
-          const cx = Math.abs(u - 0.5) * 2, cy = Math.abs(v - 0.5) * 2;
-          if (cx * cx + cy * cy < 0.8) {
-            const fog = Math.max(0, 1 - tz / MAX_DEPTH);
-            ctx.globalAlpha = fog * fog + 0.1;
-            ctx.fillStyle = col;
-            ctx.fillRect(px, py, 1, 1);
-            ctx.globalAlpha = 1;
+
+      // Center-column z-check
+      if (tz >= zBuffer[Math.max(0, Math.min(SCREEN_W-1, screenX))]) return;
+
+      const spr = p.type === "health" ? sprPickupHealth : sprPickupAmmo;
+      if (spr.loaded) {
+        const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+        ctx.globalAlpha = fog * 0.85 + 0.15;
+        spr.draw(ctx, 0, startX, startY, size, size);
+        ctx.globalAlpha = 1;
+      } else {
+        // Fallback: procedural
+        const col = p.type === "health" ? "#00cc44" : "#ffaa00";
+        for (let sx = 0; sx < size; sx++) {
+          for (let sy = 0; sy < size; sy++) {
+            const px = startX + sx, py = startY + sy;
+            if (px < 0 || px >= SCREEN_W || py < 0 || py >= SCREEN_H) continue;
+            if (tz >= zBuffer[px]) continue;
+            const u = sx / size, v = sy / size;
+            const cx = Math.abs(u - 0.5) * 2, cy = Math.abs(v - 0.5) * 2;
+            if (cx * cx + cy * cy < 0.8) {
+              const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+              ctx.globalAlpha = fog * 0.85 + 0.15;
+              ctx.fillStyle = col;
+              ctx.fillRect(px, py, 1, 1);
+              ctx.globalAlpha = 1;
+            }
           }
         }
+      }
+    }
+
+    // ── Gun / Weapon ───────────────────────────────────────────────────────────
+    function drawGun() {
+      const recoil = Math.round(gunRecoil * 10);
+      const gw = 24, gh = 48;
+      const dx = Math.floor(SCREEN_W / 2) - gw / 2;
+      const dy = SCREEN_H - gh + 18 + recoil;
+
+      if (sprGun.loaded) {
+        sprGun.draw(ctx, 0, dx, dy, gw, gh);
+      } else {
+        // Fallback: procedural vertical gun
+        const cx = Math.floor(SCREEN_W / 2);
+        const cy = SCREEN_H + 4 + recoil;
+        // Barrel (vertical, pointing up)
+        ctx.fillStyle = "#777";
+        ctx.fillRect(cx - 3, cy - 40, 6, 30);
+        // Barrel tip/muzzle
+        ctx.fillStyle = "#555";
+        ctx.fillRect(cx - 4, cy - 42, 8, 4);
+        // Slide/body
+        ctx.fillStyle = "#666";
+        ctx.fillRect(cx - 12, cy - 16, 24, 16);
+        // Inner body
+        ctx.fillStyle = "#444";
+        ctx.fillRect(cx - 9, cy - 13, 18, 13);
+        // Grip
+        ctx.fillStyle = "#3a2a18";
+        ctx.fillRect(cx - 9, cy - 2, 18, 20);
+        // Grip texture
+        for (let i = 0; i < 3; i++) ctx.fillRect(cx - 7 + i * 5, cy, 2, 14);
+      }
+
+      if (muzzleFlashTimer > 0) drawMuzzleFlash(Math.floor(SCREEN_W / 2), dy + 2, muzzleFlashTimer);
+    }
+
+    function drawMuzzleFlash(cx: number, cy: number, t: number) {
+      const alpha = Math.min(1, t / 6);
+      const maxR = 9;
+      for (let fdy = -maxR; fdy <= maxR; fdy++) {
+        for (let fdx = -maxR; fdx <= maxR; fdx++) {
+          const r = Math.sqrt(fdx * fdx + fdy * fdy);
+          if (r > maxR) continue;
+          const ang = Math.atan2(fdy, fdx);
+          const star = Math.abs(Math.cos(ang * 4)) * 0.7 + 0.3;
+          if (r > maxR * star) continue;
+          const fpx = cx + fdx, fpy = cy + fdy;
+          if (fpx < 0 || fpx >= SCREEN_W || fpy < 0 || fpy >= SCREEN_H) continue;
+          const col = r < 2 ? "#ffffff" : r < 4 ? "#ffff88" : r < 7 ? "#ffaa00" : "#ff4400";
+          ctx.globalAlpha = alpha * (1 - r / maxR) * 0.95;
+          ctx.fillStyle = col;
+          ctx.fillRect(fpx, fpy, 1, 1);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawImpacts() {
+      for (let i = impacts.length - 1; i >= 0; i--) {
+        const imp = impacts[i];
+        imp.timer--;
+        if (imp.timer <= 0) { impacts.splice(i, 1); continue; }
+        const t = imp.timer / imp.maxTimer;
+        const spr = imp.type === 'wall' ? sprImpactWall : sprImpactEnemy;
+        const size = 16;
+        ctx.globalAlpha = t * 0.9;
+        if (spr.loaded) {
+          spr.draw(ctx, 0, imp.sx - size / 2, imp.sy - size / 2, size, size);
+        } else {
+          // Fallback: procedural circle
+          const r = Math.floor((1 - t) * 14 + 2);
+          const col = imp.type === "wall" ? "#888" : "#dd1111";
+          for (let idy = -r; idy <= r; idy++) {
+            for (let idx = -r; idx <= r; idx++) {
+              const dist = Math.sqrt(idx * idx + idy * idy);
+              if (dist > r) continue;
+              const ipx = imp.sx + idx, ipy = imp.sy + idy;
+              if (ipx < 0 || ipx >= SCREEN_W || ipy < 0 || ipy >= SCREEN_H) continue;
+              ctx.globalAlpha = t * (1 - dist / r) * 0.85;
+              ctx.fillStyle = col;
+              ctx.fillRect(ipx, ipy, 1, 1);
+            }
+          }
+        }
+        ctx.globalAlpha = 1;
       }
     }
 
@@ -460,6 +813,49 @@ export default function Hellzone() {
       mapCtx.stroke();
     }
 
+    // ── Full Map ───────────────────────────────────────────────────────────────
+    function renderFullMap() {
+      ctx.fillStyle = "rgba(0,0,0,0.92)";
+      ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+
+      const scale = Math.min((SCREEN_W - 8) / MAP_W, (SCREEN_H - 16) / MAP_H);
+      const offsetX = (SCREEN_W - MAP_W * scale) / 2;
+      const offsetY = (SCREEN_H - MAP_H * scale) / 2 + 6;
+
+      for (let y = 0; y < MAP_H; y++) {
+        for (let x = 0; x < MAP_W; x++) {
+          const tile = map[y][x];
+          if (tile === TILE_WALL) { ctx.fillStyle = "#3a1a00"; }
+          else if (tile === TILE_EXIT) { ctx.fillStyle = "#ffdd00"; }
+          else { ctx.fillStyle = "#110800"; }
+          ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+        }
+      }
+
+      // Enemies
+      for (const e of enemies) {
+        if (e.state === "dead") continue;
+        const ex = e.x / CELL, ey = e.y / CELL;
+        ctx.fillStyle = "#ff3300";
+        ctx.fillRect(offsetX + ex * scale - 1, offsetY + ey * scale - 1, 2, 2);
+      }
+
+      // Player
+      const px = player.x / CELL, py = player.y / CELL;
+      ctx.fillStyle = "#00ffff";
+      ctx.fillRect(offsetX + px * scale - 1.5, offsetY + py * scale - 1.5, 3, 3);
+      ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(offsetX + px * scale, offsetY + py * scale);
+      ctx.lineTo(offsetX + (px + Math.cos(player.angle) * 3) * scale, offsetY + (py + Math.sin(player.angle) * 3) * scale);
+      ctx.stroke();
+
+      // Label
+      ctx.fillStyle = "#c00";
+      ctx.font = "7px 'Share Tech Mono', monospace";
+      ctx.fillText("[ M ] CLOSE MAP", offsetX, offsetY - 3);
+    }
+
     // ── HUD ────────────────────────────────────────────────────────────────────
     function updateHUD() {
       const hHealth = q<HTMLElement>("#hz-hud-health");
@@ -490,7 +886,7 @@ export default function Hellzone() {
       if (hp < 0.5) { faceCtx.fillStyle = `rgba(200,0,0,${0.5 - hp})`; faceCtx.fillRect(5, 3, 14, 21); }
     }
 
-    // ── Player movement ────────────────────────────────────────────────────────
+    // ── Movement helpers ───────────────────────────────────────────────────────
     function canMove(x: number, y: number, margin: number) {
       const pts = [[x - margin, y - margin], [x + margin, y - margin], [x - margin, y + margin], [x + margin, y + margin]];
       for (const [cx, cy] of pts) {
@@ -501,29 +897,58 @@ export default function Hellzone() {
       return true;
     }
 
-    function movePlayer(dt: number) {
-      let dx = 0, dy = 0;
-      const spd = PLAYER_SPEED * dt * 60;
-      if (keys["KeyW"] || keys["ArrowUp"])   { dx += Math.cos(player.angle) * spd; dy += Math.sin(player.angle) * spd; }
-      if (keys["KeyS"] || keys["ArrowDown"]) { dx -= Math.cos(player.angle) * spd; dy -= Math.sin(player.angle) * spd; }
-      if (keys["KeyA"])  { dx += Math.cos(player.angle - Math.PI / 2) * spd; dy += Math.sin(player.angle - Math.PI / 2) * spd; }
-      if (keys["KeyD"])  { dx += Math.cos(player.angle + Math.PI / 2) * spd; dy += Math.sin(player.angle + Math.PI / 2) * spd; }
-      if (keys["ArrowLeft"])  player.angle -= TURN_SPEED;
-      if (keys["ArrowRight"]) player.angle += TURN_SPEED;
-      const nx = player.x + dx, ny = player.y + dy;
-      const margin = 10;
-      if (canMove(nx, player.y, margin)) player.x = nx;
-      if (canMove(player.x, ny, margin)) player.y = ny;
+    function approach(current: number, target: number, delta: number): number {
+      if (Math.abs(target - current) <= delta) return target;
+      return current + Math.sign(target - current) * delta;
+    }
 
+    function movePlayer(dt: number) {
+      const shifting = keys['ShiftLeft'] || keys['ShiftRight'];
+      sprinting = capsLocked ? !shifting : shifting;
+      const speedMult = sprinting ? SPRINT_MULT : 1.0;
+      const maxSpeed = PLAYER_SPEED * speedMult;
+      const maxAngSpeed = TURN_SPEED * speedMult * 60;
+
+      // Target velocity from input
+      let targetVX = 0, targetVY = 0;
+      if (keys['KeyW'] || keys['ArrowUp'])   { targetVX += Math.cos(player.angle) * maxSpeed; targetVY += Math.sin(player.angle) * maxSpeed; }
+      if (keys['KeyS'] || keys['ArrowDown']) { targetVX -= Math.cos(player.angle) * maxSpeed; targetVY -= Math.sin(player.angle) * maxSpeed; }
+      if (keys['KeyA']) { targetVX += Math.cos(player.angle - Math.PI/2) * maxSpeed; targetVY += Math.sin(player.angle - Math.PI/2) * maxSpeed; }
+      if (keys['KeyD']) { targetVX += Math.cos(player.angle + Math.PI/2) * maxSpeed; targetVY += Math.sin(player.angle + Math.PI/2) * maxSpeed; }
+
+      // Smooth velocity toward target
+      const accelStep = MOVE_ACCEL * dt;
+      player.velX = approach(player.velX, targetVX, accelStep);
+      player.velY = approach(player.velY, targetVY, accelStep);
+
+      // Apply movement with collision
+      const margin = 10;
+      const nx = player.x + player.velX, ny = player.y + player.velY;
+      if (canMove(nx, player.y, margin)) player.x = nx;
+      else player.velX = 0;
+      if (canMove(player.x, ny, margin)) player.y = ny;
+      else player.velY = 0;
+
+      // Turning inertia (arrow keys only; mouse is direct)
+      let targetAngVel = 0;
+      if (keys['ArrowLeft'])  targetAngVel = -maxAngSpeed;
+      if (keys['ArrowRight']) targetAngVel =  maxAngSpeed;
+      const turnStep = TURN_ACCEL * dt;
+      player.angVel = approach(player.angVel, targetAngVel, turnStep);
+      player.angle += player.angVel * dt;
+
+      // Pickups
       for (const p of pickups) {
         if (p.taken) continue;
         if (Math.hypot(p.x - player.x, p.y - player.y) < CELL * 0.5) {
           p.taken = true;
+          playSound('pickup');
           if (p.type === "health") { player.health = Math.min(100, player.health + 25); showMessage("+ HEALTH PACK"); }
           else { player.ammo = Math.min(99, player.ammo + 20); showMessage("+ AMMO CRATE"); }
         }
       }
 
+      // Exit tile
       const tileX = Math.floor(player.x / CELL), tileY = Math.floor(player.y / CELL);
       if (map[tileY] && map[tileY][tileX] === TILE_EXIT) setScreen("clear");
     }
@@ -547,8 +972,9 @@ export default function Hellzone() {
       }
       player.ammo--;
       shootCooldown = 12;
-      ctx.fillStyle = "rgba(255,200,0,0.6)";
-      ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+      gunRecoil = 1.0;
+      muzzleFlashTimer = 8;
+      playSound('shoot');
       let nearest: Enemy | null = null, nearDist = Infinity;
       for (const e of enemies) {
         if (e.state === "dead") continue;
@@ -566,19 +992,43 @@ export default function Hellzone() {
         const damage = 15 + Math.floor(Math.random() * 10);
         nearest.health -= damage;
         nearest.state = "chase";
+        const proj = projectSprite(nearest.x, nearest.y);
+        impacts.push({ sx: proj ? proj.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: "enemy", timer: 12, maxTimer: 12 });
+        playSound('hit-enemy');
         if (nearest.health <= 0) { nearest.state = "dead"; kills++; showMessage("ENEMY DOWN!"); }
+      } else {
+        impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: "wall", timer: 10, maxTimer: 10 });
+        playSound('hit-wall');
       }
     }
 
     // ── Enemy AI ───────────────────────────────────────────────────────────────
     function updateEnemies(dt: number) {
-      if (level === 1) return;
       for (const e of enemies) {
         if (e.state === "dead") continue;
+        if (e.type === 3) continue;
+
         const dx = player.x - e.x, dy = player.y - e.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (level === 1) {
+          e.x += Math.cos(e.angle) * 0.5;
+          e.y += Math.sin(e.angle) * 0.5;
+          if (Math.random() < 0.01) e.angle += (Math.random() - 0.5) * 1.5;
+          const tx = Math.floor(e.x / CELL), ty = Math.floor(e.y / CELL);
+          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || map[ty][tx] === TILE_WALL) {
+            e.x -= Math.cos(e.angle) * 0.5;
+            e.y -= Math.sin(e.angle) * 0.5;
+            e.angle += Math.PI / 2;
+          }
+          continue;
+        }
+
         if (e.state === "idle") {
-          if (dist < e.alertRange && hasLOS(e.x, e.y, player.x, player.y)) e.state = "chase";
+          if (dist < e.alertRange && hasLOS(e.x, e.y, player.x, player.y)) {
+            e.state = "chase";
+            playSound('alert');
+          }
           e.x += Math.cos(e.angle) * 0.3;
           e.y += Math.sin(e.angle) * 0.3;
           if (Math.random() < 0.01) e.angle += (Math.random() - 0.5) * 1.5;
@@ -605,14 +1055,21 @@ export default function Hellzone() {
             const tx3 = Math.floor(e.x / CELL), ty3 = Math.floor(ny2 / CELL);
             if (tx3 >= 0 && tx3 < MAP_W && ty3 >= 0 && ty3 < MAP_H && map[ty3][tx3] !== TILE_WALL) e.y = ny2;
           }
+          if (e.muzzleFlash > 0) e.muzzleFlash = Math.max(0, e.muzzleFlash - dt * 60);
           e.shootTimer -= dt * 60;
           if (e.shootTimer <= 0 && dist < 8 * CELL && hasLOS(e.x, e.y, player.x, player.y)) {
             const dmg = [8, 15, 5][e.type];
             player.health -= dmg + Math.random() * 5;
             flashTimer = 12;
+            e.muzzleFlash = 8;
             e.shootTimer = [80, 120, 50][e.type] + Math.random() * 60;
+            if (hurtCooldown <= 0) {
+              playSound('hurt');
+              hurtCooldown = 45;
+            }
             if (player.health <= 0) {
               player.health = 0;
+              playSound('death');
               const stats = q("#hz-death-stats");
               stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>AMMO REMAINING: ${player.ammo}`;
               setScreen("dead");
@@ -631,10 +1088,21 @@ export default function Hellzone() {
       messageTimer = 120;
     }
 
+    // ── Help overlay ───────────────────────────────────────────────────────────
+    function updateHelpOverlay() {
+      const el = root.querySelector<HTMLElement>(".hz-help-overlay");
+      if (el) el.style.display = showHelp ? "flex" : "none";
+    }
+
     // ── Input ──────────────────────────────────────────────────────────────────
     function handleKeyDown(e: KeyboardEvent) {
       keys[e.code] = true;
-      if (e.code === "KeyM") showMap = !showMap;
+      if (e.code === "KeyM") showFullMap = !showFullMap;
+      if (e.code === "CapsLock") capsLocked = !capsLocked;
+      if (e.code === "F1" || e.key === "?") {
+        showHelp = !showHelp;
+        updateHelpOverlay();
+      }
       if (e.code === "Enter") handleEnter();
       if (e.code === "Space" && gameState === "playing") shoot();
       if (e.code === "Escape") {
@@ -646,16 +1114,21 @@ export default function Hellzone() {
         }
         return;
       }
+      // Init audio on first key
+      initAudio();
       e.preventDefault();
     }
     function handleKeyUp(e: KeyboardEvent) { keys[e.code] = false; }
 
-    function handleMouseDown(_e: MouseEvent) {
+    function handleMouseDown(e: MouseEvent) {
+      initAudio();
       if (gameState === "playing") {
         if (!pointerLocked) canvas.requestPointerLock();
         else shoot();
       }
       if (gameState === "title") handleEnter();
+      // Left click also fires
+      if (e.button === 0 && pointerLocked && gameState === "playing") shoot();
     }
 
     function handleMouseMove(e: MouseEvent) {
@@ -687,8 +1160,8 @@ export default function Hellzone() {
     function bindFAB(sel: string, keyCode: string) {
       const el = root.querySelector<HTMLElement>(sel);
       if (!el) return;
-      const on  = (e: Event) => { e.preventDefault(); keys[keyCode] = true;  el.classList.add("pressed"); };
-      const off = (e: Event) => { e.preventDefault(); keys[keyCode] = false; el.classList.remove("pressed"); };
+      const on  = (ev: Event) => { ev.preventDefault(); keys[keyCode] = true;  el.classList.add("pressed"); };
+      const off = (ev: Event) => { ev.preventDefault(); keys[keyCode] = false; el.classList.remove("pressed"); };
       el.addEventListener("touchstart",  on,  { passive: false });
       el.addEventListener("touchend",    off, { passive: false });
       el.addEventListener("touchcancel", off, { passive: false });
@@ -709,8 +1182,8 @@ export default function Hellzone() {
 
     const fabShoot = root.querySelector<HTMLElement>(".hz-fab-shoot");
     if (fabShoot) {
-      const fireOn  = (e: Event) => { e.preventDefault(); fabShoot.classList.add("pressed");    if (gameState === "playing") shoot(); };
-      const fireOff = (e: Event) => { e.preventDefault(); fabShoot.classList.remove("pressed"); };
+      const fireOn  = (ev: Event) => { ev.preventDefault(); fabShoot.classList.add("pressed");    if (gameState === "playing") shoot(); };
+      const fireOff = (ev: Event) => { ev.preventDefault(); fabShoot.classList.remove("pressed"); };
       fabShoot.addEventListener("touchstart",  fireOn,  { passive: false });
       fabShoot.addEventListener("touchend",    fireOff, { passive: false });
       fabShoot.addEventListener("touchcancel", fireOff, { passive: false });
@@ -727,7 +1200,7 @@ export default function Hellzone() {
 
     const fabMap = root.querySelector<HTMLElement>(".hz-fab-map");
     if (fabMap) {
-      const toggle = (e: Event) => { e.preventDefault(); showMap = !showMap; fabMap.classList.toggle("pressed", showMap); };
+      const toggle = (ev: Event) => { ev.preventDefault(); showFullMap = !showFullMap; fabMap.classList.toggle("pressed", showFullMap); };
       fabMap.addEventListener("touchstart", toggle, { passive: false });
       fabMap.addEventListener("click", toggle);
       fabCleanups.push(() => { fabMap.removeEventListener("touchstart", toggle); fabMap.removeEventListener("click", toggle); });
@@ -735,8 +1208,8 @@ export default function Hellzone() {
 
     const fabEsc = root.querySelector<HTMLElement>(".hz-fab-esc");
     if (fabEsc) {
-      const doEsc = (e: Event) => {
-        e.preventDefault();
+      const doEsc = (ev: Event) => {
+        ev.preventDefault();
         if (gameState === "playing") {
           setScreen("title");
           if (document.pointerLockElement) document.exitPointerLock();
@@ -749,13 +1222,31 @@ export default function Hellzone() {
       fabCleanups.push(() => { fabEsc.removeEventListener("touchstart", doEsc); fabEsc.removeEventListener("click", doEsc); });
     }
 
+    // Minimap click/tap toggles full map
+    const minimapEl = minimapRef.current;
+    if (minimapEl) {
+      const toggleFullMap = (ev: Event) => { ev.preventDefault(); showFullMap = !showFullMap; };
+      minimapEl.addEventListener("click", toggleFullMap);
+      minimapEl.addEventListener("touchstart", toggleFullMap, { passive: false });
+      fabCleanups.push(() => {
+        minimapEl.removeEventListener("click", toggleFullMap);
+        minimapEl.removeEventListener("touchstart", toggleFullMap);
+      });
+    }
+
+    // Help button click
+    const helpBtn = root.querySelector<HTMLButtonElement>(".hz-help-btn");
+    if (helpBtn) {
+      const helpClick = () => { showHelp = !showHelp; updateHelpOverlay(); };
+      helpBtn.addEventListener("click", helpClick);
+      fabCleanups.push(() => helpBtn.removeEventListener("click", helpClick));
+    }
+
     function showTouchOverlay() {
       const overlay = root.querySelector<HTMLElement>(".hz-touch-overlay");
       const fsBtn = root.querySelector<HTMLElement>(".hz-btn-fullscreen");
-      const help = root.querySelector<HTMLElement>(".hz-controls-help");
       if (overlay) overlay.style.display = "block";
       if (fsBtn) fsBtn.style.display = "flex";
-      if (help) help.style.display = "none";
     }
     window.addEventListener("touchstart", showTouchOverlay, { once: true });
 
@@ -764,7 +1255,7 @@ export default function Hellzone() {
     const deathEl  = root.querySelector<HTMLElement>(".hz-death-screen")!;
     const clearEl  = root.querySelector<HTMLElement>(".hz-level-clear")!;
 
-    const tapEnter = (e: Event) => { e.preventDefault(); handleEnter(); };
+    const tapEnter = (ev: Event) => { ev.preventDefault(); handleEnter(); };
     titleEl.addEventListener("touchstart", tapEnter, { passive: false });
     deathEl.addEventListener("touchstart", tapEnter, { passive: false });
     clearEl.addEventListener("touchstart", tapEnter, { passive: false });
@@ -802,6 +1293,9 @@ export default function Hellzone() {
         movePlayer(dt);
         updateEnemies(dt);
         if (shootCooldown > 0) shootCooldown -= dt * 60;
+        if (gunRecoil > 0) gunRecoil = Math.max(0, gunRecoil - 0.15 * dt * 60);
+        if (muzzleFlashTimer > 0) muzzleFlashTimer = Math.max(0, muzzleFlashTimer - dt * 60);
+        if (hurtCooldown > 0) hurtCooldown -= dt * 60;
         if (messageTimer > 0) {
           messageTimer -= dt * 60;
           if (messageTimer <= 0) {
@@ -810,7 +1304,7 @@ export default function Hellzone() {
           }
         }
         render();
-        if (showMap) renderMap();
+        renderMap();
       }
       rafId = requestAnimationFrame(loop);
     }
@@ -876,6 +1370,22 @@ export default function Hellzone() {
             <canvas ref={canvasRef} className="hz-render-canvas" width={320} height={180} />
             <div className="hz-crosshair" />
             <div className="hz-message" />
+            {/* Help overlay (DOM layer over canvas) */}
+            <div className="hz-help-overlay">
+              <div className="hz-help-panel">
+                <div className="hz-help-title">CONTROLS</div>
+                <ul className="hz-help-list">
+                  <li><span>WASD / ARROWS</span><span>Move &amp; Strafe</span></li>
+                  <li><span>MOUSE / ↺↻</span><span>Turn</span></li>
+                  <li><span>SPACE / LMB / FIRE</span><span>Shoot</span></li>
+                  <li><span>M</span><span>Toggle full map</span></li>
+                  <li><span>SHIFT</span><span>Sprint</span></li>
+                  <li><span>CAPS LOCK</span><span>Toggle always-sprint</span></li>
+                  <li><span>F1 / ?</span><span>Toggle this help</span></li>
+                  <li><span>ESC</span><span>Menu</span></li>
+                </ul>
+              </div>
+            </div>
             <div className="hz-level-clear">
               <div className="hz-clear-title">LEVEL CLEAR!</div>
               <div className="hz-clear-sub">[ ENTER ] NEXT LEVEL</div>
@@ -906,14 +1416,13 @@ export default function Hellzone() {
               <div className="hz-hud-seed" id="hz-hud-seed"></div>
             </div>
           </div>
-          <div className="hz-controls-help">
-            WASD/ARROWS: MOVE &amp; TURN &nbsp; MOUSE: LOOK &nbsp; SPACE/LMB: FIRE &nbsp; M: MAP &nbsp; ESC: MENU
-          </div>
         </div>
       </div>
 
-      {/* Fullscreen */}
+      {/* Fullscreen button */}
       <button className="hz-btn-fullscreen" title="Fullscreen">⛶</button>
+      {/* Help button */}
+      <button className="hz-help-btn" title="Controls (F1 / ?)">?</button>
 
       {/* Touch overlay */}
       <div className="hz-touch-overlay">
