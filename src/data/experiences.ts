@@ -113,6 +113,13 @@ export const experiences: Experience[] = [
     path: "/hell",
   },
   {
+    id: "pool",
+    title: "8-Ball Pool",
+    description: "Top-down 8-ball pool. Aim with the mouse, drag back for power, apply English for spin. Play a friend or the computer.",
+    category: "game",
+    path: "/pool",
+  },
+  {
     id: "ns-art",
     title: "NS Art",
     description: "A retro paint program. Draw, spray, fill, and export your masterpiece as a PNG.",

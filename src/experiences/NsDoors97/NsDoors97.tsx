@@ -23,6 +23,7 @@ import InternetApp from "./InternetApp";
 import NsArt, { type NsArtHandle } from "../NsArt/NsArt";
 import WordWhirlwind from "../WordWhirlwind/WordWhirlwind";
 import TicTacToe from "../TicTacToe/TicTacToe";
+import Pool from "../Pool/Pool";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
@@ -48,6 +49,7 @@ type AppAction =
   | "placeholder"
   | "experience"
   | "screensavers"
+  | "pool"
   | "tictactoe"
   | "nomnom"
   | "wordwhirlwind"
@@ -78,6 +80,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "notebook":       { title: "Notebook",           icon: "📝", action: "notebook"      },
   "cards":          { title: "Cards",              icon: "🃏", action: "cards"         },
   "ns-art":         { title: "NS Art",             icon: "🎨", action: "nsart"         },
+  "pool":           { title: "8-Ball Pool",        icon: "🎱", action: "pool"          },
   "tic-tac-toe":    { title: "Tic-Tac-Toe",       icon: "✖️",  action: "tictactoe"     },
   "number-muncher": { title: "Nom Nom Numerals",   icon: "🔢", action: "nomnom"        },
   "word-whirlwind": { title: "Word Whirlwind",     icon: "🌪️", action: "wordwhirlwind" },
@@ -156,6 +159,7 @@ function loadSavedNotebookIcons(): DesktopIconEntry[] {
 type WindowContent =
   | { type: "app-launcher"; experience: Experience }
   | { type: "screensaver-settings" }
+  | { type: "pool" }
   | { type: "tictactoe" }
   | { type: "nomnom" }
   | { type: "word-whirlwind" }
@@ -478,6 +482,7 @@ export default function NsDoors97() {
         case "readme":       content = { type: "notebook", filePath: README_PATH, fileName: "README.txt", initialContent: DESKTOP_README }; width = 420; break;
         case "nsart":        content = { type: "nsart" };                width = 760; break;
         case "art-backup":   content = { type: "nsart-backup" };         width = 760; break;
+        case "pool":         content = { type: "pool" };                 width = 800; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "wordwhirlwind":content = { type: "word-whirlwind" };       width = 600; break;
@@ -727,6 +732,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "nsart-backup" && (
             <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
+          )}
+          {win.content.type === "pool" && (
+            <Pool onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "tictactoe" && (
             <TicTacToe
