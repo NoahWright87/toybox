@@ -29,8 +29,6 @@ interface ScreensaverAppProps {
   onCancel: () => void;
 }
 
-const INACTIVE_TABS = ["Background", "Appearance", "Settings"];
-
 // ── Shared input primitives ───────────────────────────────────────────────────
 
 function SliderInput({
@@ -254,11 +252,6 @@ export default function ScreensaverApp({
     <div className="ns-saver-app">
       {/* ── Tab bar ── */}
       <div className="ns-saver-app__tabs">
-        {INACTIVE_TABS.map((tab) => (
-          <button key={tab} className="ns-saver-app__tab" disabled>
-            {tab}
-          </button>
-        ))}
         <button className="ns-saver-app__tab ns-saver-app__tab--active">
           Screen Saver
         </button>

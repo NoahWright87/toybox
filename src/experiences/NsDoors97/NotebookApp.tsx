@@ -8,6 +8,7 @@ interface NotebookAppProps {
   filePath: string;
   fileName: string;
   initialContent: string;
+  onFileSaved?: (filePath: string, fileName: string) => void;
 }
 
 const STORAGE_PREFIX = "ns97_notebook_";
@@ -16,7 +17,7 @@ function storageKey(path: string) {
   return STORAGE_PREFIX + path;
 }
 
-export default function NotebookApp({ filePath, fileName, initialContent }: NotebookAppProps) {
+export default function NotebookApp({ filePath, fileName, initialContent, onFileSaved }: NotebookAppProps) {
   const { showDialog } = useOsDialog();
   const isNewFile = filePath === "(new file)";
 
@@ -59,7 +60,8 @@ export default function NotebookApp({ filePath, fileName, initialContent }: Note
     const now = new Date();
     setLastSaved(now.toLocaleTimeString());
     showDialog(`File saved.\n\n${fileName}`, { title: "Notebook", icon: "💾" });
-  }, [filePath, fileName, showDialog]);
+    onFileSaved?.(filePath, fileName);
+  }, [filePath, fileName, showDialog, onFileSaved]);
 
   const toggleWordWrap = useCallback(() => setWordWrap((w) => !w), []);
 

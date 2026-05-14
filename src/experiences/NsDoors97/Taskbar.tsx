@@ -1,6 +1,4 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { missingFeatureMessage } from "../../utils/missingFeatureMessage";
-import { useOsDialog } from "./OsDialog";
 import "./Taskbar.css";
 
 interface TaskbarWindowEntry {
@@ -18,6 +16,7 @@ interface TaskbarProps {
   onOpenSettings: (setting: "display" | "screensavers") => void;
   onOpenAbout: () => void;
   onExitToTos: () => void;
+  onOpenApp: (id: string) => void;
 }
 
 // ── Retro clock: real time, date shifted 30 years back ────────────────────────
@@ -97,20 +96,30 @@ function FullscreenButton() {
   );
 }
 
-// ── Start menu ────────────────────────────────────────────────────────────────
+// ── Menu item data ────────────────────────────────────────────────────────────
 
-const START_MENU_ITEMS = [
-  { id: "programs", icon: "📂", label: "Programs",          arrow: true  },
-  { id: "settings", icon: "⚙️",  label: "Settings",          arrow: true  },
-  { id: "about",    icon: "ℹ️",  label: "About NS Doors 97", arrow: false },
+const GAMES_ITEMS = [
+  { id: "cards",          icon: "🃏", label: "Cards"            },
+  { id: "tic-tac-toe",    icon: "✖️",  label: "Tic-Tac-Toe"     },
+  { id: "word-whirlwind", icon: "🌪️", label: "Word Whirlwind"  },
+  { id: "bomb-finder",    icon: "💣", label: "Bomb Finder"      },
+  { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
+  { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
+  { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
 ] as const;
+
+const TOOLS_ITEMS = [
+  { id: "notebook", icon: "📝", label: "Notebook" },
+  { id: "ns-art",   icon: "🎨", label: "NS Art"   },
+] as const;
+
+type OpenSubmenu = "games" | "tools" | "settings" | null;
 
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
-export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings, onOpenAbout, onExitToTos }: TaskbarProps) {
-  const { showDialog } = useOsDialog();
+export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings, onOpenAbout, onExitToTos, onOpenApp }: TaskbarProps) {
   const [startOpen, setStartOpen] = useState(false);
-  const [settingsSubOpen, setSettingsSubOpen] = useState(false);
+  const [openSubmenu, setOpenSubmenu] = useState<OpenSubmenu>(null);
   const startAreaRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -119,43 +128,47 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
     function handler(e: MouseEvent) {
       if (startAreaRef.current && !startAreaRef.current.contains(e.target as Node)) {
         setStartOpen(false);
+        setOpenSubmenu(null);
       }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [startOpen]);
 
-  const handlePlaceholder = useCallback(() => {
+  const close = useCallback(() => {
     setStartOpen(false);
-    showDialog(missingFeatureMessage());
-  }, [showDialog]);
+    setOpenSubmenu(null);
+  }, []);
 
   const handleOpenAbout = useCallback(() => {
-    setStartOpen(false);
+    close();
     onOpenAbout();
-  }, [onOpenAbout]);
+  }, [onOpenAbout, close]);
 
   const handleOpenScreensavers = useCallback(() => {
-    setStartOpen(false);
-    setSettingsSubOpen(false);
+    close();
     onOpenSettings("screensavers");
-  }, [onOpenSettings]);
+  }, [onOpenSettings, close]);
 
   const handleRestart = useCallback(() => {
-    setStartOpen(false);
+    close();
     onRestart();
-  }, [onRestart]);
+  }, [onRestart, close]);
 
   const handleOpenDisplay = useCallback(() => {
-    setStartOpen(false);
-    setSettingsSubOpen(false);
+    close();
     onOpenSettings("display");
-  }, [onOpenSettings]);
+  }, [onOpenSettings, close]);
 
   const handleExitToTos = useCallback(() => {
-    setStartOpen(false);
+    close();
     onExitToTos();
-  }, [onExitToTos]);
+  }, [onExitToTos, close]);
+
+  const handleOpenApp = useCallback((id: string) => {
+    close();
+    onOpenApp(id);
+  }, [onOpenApp, close]);
 
   return (
     <div className="ns-taskbar">
@@ -167,65 +180,132 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
               <span className="ns-start-menu__sidebar-text">NS DOORS 97</span>
             </div>
             <div className="ns-start-menu__items">
-              {START_MENU_ITEMS.map((item) => {
-                if (item.id === "settings") {
-                  return (
-                    <div
-                      key={item.id}
-                      className="ns-start-menu__item-wrapper"
-                      onMouseEnter={() => setSettingsSubOpen(true)}
-                      onMouseLeave={() => setSettingsSubOpen(false)}
-                    >
-                      <button className="ns-start-menu__item">
+
+              {/* Games */}
+              <div
+                className="ns-start-menu__item-wrapper"
+                onMouseEnter={() => setOpenSubmenu("games")}
+                onMouseLeave={() => setOpenSubmenu(null)}
+              >
+                <button className="ns-start-menu__item">
+                  <span className="ns-start-menu__item-icon">🎮</span>
+                  <span className="ns-start-menu__item-label">Games</span>
+                  <span className="ns-start-menu__item-arrow">▶</span>
+                </button>
+                {openSubmenu === "games" && (
+                  <div className="ns-start-submenu">
+                    {GAMES_ITEMS.map((item) => (
+                      <button
+                        key={item.id}
+                        className="ns-start-menu__item"
+                        onClick={() => handleOpenApp(item.id)}
+                      >
                         <span className="ns-start-menu__item-icon">{item.icon}</span>
                         <span className="ns-start-menu__item-label">{item.label}</span>
-                        <span className="ns-start-menu__item-arrow">▶</span>
                       </button>
-                      {settingsSubOpen && (
-                        <div className="ns-start-submenu">
-                          <button
-                            className="ns-start-menu__item"
-                            onClick={handleOpenDisplay}
-                          >
-                            <span className="ns-start-menu__item-icon">🖥️</span>
-                            <span className="ns-start-menu__item-label">Display...</span>
-                          </button>
-                          <button
-                            className="ns-start-menu__item"
-                            onClick={handleOpenScreensavers}
-                          >
-                            <span className="ns-start-menu__item-icon">💤</span>
-                            <span className="ns-start-menu__item-label">Screensavers...</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                return (
-                  <button
-                    key={item.id}
-                    className="ns-start-menu__item"
-                    onClick={item.id === "about" ? handleOpenAbout : (item.id === "programs" ? handlePlaceholder : handlePlaceholder)}
-                  >
-                    <span className="ns-start-menu__item-icon">{item.icon}</span>
-                    <span className="ns-start-menu__item-label">{item.label}</span>
-                    {item.arrow && <span className="ns-start-menu__item-arrow">▶</span>}
-                  </button>
-                );
-              })}
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Tools */}
+              <div
+                className="ns-start-menu__item-wrapper"
+                onMouseEnter={() => setOpenSubmenu("tools")}
+                onMouseLeave={() => setOpenSubmenu(null)}
+              >
+                <button className="ns-start-menu__item">
+                  <span className="ns-start-menu__item-icon">🔧</span>
+                  <span className="ns-start-menu__item-label">Tools</span>
+                  <span className="ns-start-menu__item-arrow">▶</span>
+                </button>
+                {openSubmenu === "tools" && (
+                  <div className="ns-start-submenu">
+                    {TOOLS_ITEMS.map((item) => (
+                      <button
+                        key={item.id}
+                        className="ns-start-menu__item"
+                        onClick={() => handleOpenApp(item.id)}
+                      >
+                        <span className="ns-start-menu__item-icon">{item.icon}</span>
+                        <span className="ns-start-menu__item-label">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Internet */}
+              <button
+                className="ns-start-menu__item"
+                onClick={() => handleOpenApp("internet")}
+                onMouseEnter={() => setOpenSubmenu(null)}
+              >
+                <span className="ns-start-menu__item-icon">🌐</span>
+                <span className="ns-start-menu__item-label">Internet</span>
+              </button>
+
+              {/* Settings */}
+              <div
+                className="ns-start-menu__item-wrapper"
+                onMouseEnter={() => setOpenSubmenu("settings")}
+                onMouseLeave={() => setOpenSubmenu(null)}
+              >
+                <button className="ns-start-menu__item">
+                  <span className="ns-start-menu__item-icon">⚙️</span>
+                  <span className="ns-start-menu__item-label">Settings</span>
+                  <span className="ns-start-menu__item-arrow">▶</span>
+                </button>
+                {openSubmenu === "settings" && (
+                  <div className="ns-start-submenu">
+                    <button
+                      className="ns-start-menu__item"
+                      onClick={handleOpenDisplay}
+                    >
+                      <span className="ns-start-menu__item-icon">🖥️</span>
+                      <span className="ns-start-menu__item-label">Display...</span>
+                    </button>
+                    <button
+                      className="ns-start-menu__item"
+                      onClick={handleOpenScreensavers}
+                    >
+                      <span className="ns-start-menu__item-icon">💤</span>
+                      <span className="ns-start-menu__item-label">Screensavers...</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* About */}
+              <button
+                className="ns-start-menu__item"
+                onClick={handleOpenAbout}
+                onMouseEnter={() => setOpenSubmenu(null)}
+              >
+                <span className="ns-start-menu__item-icon">ℹ️</span>
+                <span className="ns-start-menu__item-label">About NS Doors 97</span>
+              </button>
 
               <div className="ns-start-menu__divider" />
 
-              <button className="ns-start-menu__item" onClick={handleExitToTos}>
+              <button
+                className="ns-start-menu__item"
+                onClick={handleExitToTos}
+                onMouseEnter={() => setOpenSubmenu(null)}
+              >
                 <span className="ns-start-menu__item-icon ns-start-menu__item-icon--text">&gt;_</span>
                 <span className="ns-start-menu__item-label">Exit to NS-TOS...</span>
               </button>
 
-              <button className="ns-start-menu__item ns-start-menu__item--restart" onClick={handleRestart}>
+              <button
+                className="ns-start-menu__item ns-start-menu__item--restart"
+                onClick={handleRestart}
+                onMouseEnter={() => setOpenSubmenu(null)}
+              >
                 <span className="ns-start-menu__item-icon">🔄</span>
                 <span className="ns-start-menu__item-label">Restart...</span>
               </button>
+
             </div>
           </div>
         )}
