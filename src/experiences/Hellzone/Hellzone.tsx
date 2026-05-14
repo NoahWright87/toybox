@@ -335,6 +335,7 @@ export default function Hellzone() {
       q<HTMLElement>(".hz-death-screen").style.display   = s === "dead" ? "flex" : "none";
       q<HTMLElement>(".hz-level-clear").style.display    = s === "clear" ? "flex" : "none";
       if (s === "clear") playSound('level-complete');
+      if (s === "title") playSound('intro');
     }
 
     function quitToTos() {
@@ -349,7 +350,6 @@ export default function Hellzone() {
       player = null as unknown as Player;
       initLevel();
       setScreen("playing");
-      setTimeout(() => playSound('intro'), 200);
     }
 
     function nextLevel() {
@@ -472,6 +472,7 @@ export default function Hellzone() {
     }
 
     function renderSprites() {
+      ctx.imageSmoothingEnabled = false;
       const sprites: { type: string; obj: Enemy | Pickup; dist: number }[] = [];
       for (const e of enemies) {
         const dx = e.x - player.x, dy = e.y - player.y;
@@ -690,6 +691,7 @@ export default function Hellzone() {
 
     // ── Gun / Weapon ───────────────────────────────────────────────────────────
     function drawGun() {
+      ctx.imageSmoothingEnabled = false;
       const recoil = Math.round(gunRecoil * 10);
       const gw = 24, gh = 48;
       const dx = Math.floor(SCREEN_W / 2) - gw / 2;
@@ -1335,7 +1337,7 @@ export default function Hellzone() {
 
         {/* Title screen */}
         <div className="hz-title-screen">
-          <div className="hz-title-logo">HELLZONE</div>
+          <div className="hz-title-logo">HELL</div>
           <div className="hz-title-sub">P R O</div>
           <div className="hz-title-version">VERSION 0.3 SHAREWARE — 1 OF 3 EPISODES</div>
           <div className="hz-title-art">
@@ -1349,9 +1351,9 @@ export default function Hellzone() {
           <div className="hz-title-press">[ PRESS ENTER TO BEGIN ]</div>
           <div className="hz-title-quit">[ ESC ] QUIT TO NS-TOS</div>
           <div className="hz-title-register">
-            HELLZONE PRO IS SHAREWARE — COPY AND DISTRIBUTE FREELY<br />
-            <span>REGISTER THE FULL GAME FOR $29.99 — CALL 1-800-HELLZNE</span><br />
-            © 1994 BRIMSTONE SOFTWARE INC. — ALL RIGHTS RESERVED
+            HELL IS SHAREWARE — COPY AND DISTRIBUTE FREELY<br />
+            <span>REGISTER THE FULL GAME FOR $29.99 — CALL 1-800-HELL-EGO</span><br />
+            © 1994 EGO SOFTWARE INC. — ALL RIGHTS RESERVED
           </div>
         </div>
 

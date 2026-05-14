@@ -69,130 +69,130 @@ class Canvas {
   save(name) { writePng(this.w, this.h, this.data, join(OUT, name)); }
 }
 
-// ── Sprites ────────────────────────────────────────────────────────────────
+// ── Sprites (all dimensions doubled: 32x32→64x64, 24x48→48x96, 16x16→32x32)
 
-// Enemy type 0 (red grunt) - 32x32
+// Enemy type 0 (red grunt) - 64x64
 {
-  const c = new Canvas(32,32);
+  const c = new Canvas(64,64);
   // Body
-  c.rect(8,10,16,14,180,40,0);
+  c.rect(16,20,32,28,180,40,0);
   // Head
-  c.rect(10,4,12,10,200,120,80);
+  c.rect(20,8,24,20,200,120,80);
   // Eyes
-  c.rect(12,7,3,3,255,0,0); c.rect(17,7,3,3,255,0,0);
+  c.rect(24,14,6,6,255,0,0); c.rect(34,14,6,6,255,0,0);
   // Health bar base (green, 100%)
-  c.rect(4,1,24,2,0,200,0);
+  c.rect(8,2,48,4,0,200,0);
   c.save('enemy-0.png');
 }
 
-// Enemy type 1 (dark maroon sniper) - 32x32
+// Enemy type 1 (dark maroon sniper) - 64x64
 {
-  const c = new Canvas(32,32);
-  c.rect(9,10,14,14,130,30,30);
-  c.rect(11,4,10,10,160,90,60);
-  c.rect(13,7,2,3,255,80,0); c.rect(17,7,2,3,255,80,0);
-  c.rect(4,1,24,2,0,200,0);
+  const c = new Canvas(64,64);
+  c.rect(18,20,28,28,130,30,30);
+  c.rect(22,8,20,20,160,90,60);
+  c.rect(26,14,4,6,255,80,0); c.rect(34,14,4,6,255,80,0);
+  c.rect(8,2,48,4,0,200,0);
   c.save('enemy-1.png');
 }
 
-// Enemy type 2 (orange fast) - 32x32
+// Enemy type 2 (orange fast) - 64x64
 {
-  const c = new Canvas(32,32);
-  c.rect(7,12,18,12,200,100,0);
-  c.rect(10,5,12,10,220,140,80);
-  c.rect(12,8,3,3,255,200,0); c.rect(17,8,3,3,255,200,0);
-  c.rect(4,1,24,2,0,200,0);
+  const c = new Canvas(64,64);
+  c.rect(14,24,36,24,200,100,0);
+  c.rect(20,10,24,20,220,140,80);
+  c.rect(24,16,6,6,255,200,0); c.rect(34,16,6,6,255,200,0);
+  c.rect(8,2,48,4,0,200,0);
   c.save('enemy-2.png');
 }
 
-// Enemy dead (any type) - 32x32 — a crumpled heap
+// Enemy dead (any type) - 64x64 — a crumpled heap
 {
-  const c = new Canvas(32,32);
-  c.rect(4,20,24,8,100,30,0);
-  c.rect(6,24,20,4,70,20,0);
-  c.rect(12,18,8,6,140,60,20);
+  const c = new Canvas(64,64);
+  c.rect(8,40,48,16,100,30,0);
+  c.rect(12,48,40,8,70,20,0);
+  c.rect(24,36,16,12,140,60,20);
   c.save('enemy-dead.png');
 }
 
-// Target dummy (type 3) - 32x32 — bullseye poster
+// Target dummy (type 3) - 64x64 — bullseye poster
 {
-  const c = new Canvas(32,32);
+  const c = new Canvas(64,64);
   // Background poster
-  c.rect(2,2,28,28,200,180,140);
+  c.rect(4,4,56,56,200,180,140);
   // Bullseye rings
-  c.circle(16,16,12,200,180,140);
-  c.circle(16,16,10,220,50,30);
-  c.circle(16,16,7,240,230,200);
-  c.circle(16,16,4,220,50,30);
-  c.circle(16,16,2,255,30,10);
+  c.circle(32,32,24,200,180,140);
+  c.circle(32,32,20,220,50,30);
+  c.circle(32,32,14,240,230,200);
+  c.circle(32,32,8,220,50,30);
+  c.circle(32,32,4,255,30,10);
   // Health bar
-  c.rect(4,1,24,2,0,200,0);
+  c.rect(8,2,48,4,0,200,0);
   c.save('target-dummy.png');
 }
 
-// Target dummy dead - 32x32
+// Target dummy dead - 64x64
 {
-  const c = new Canvas(32,32);
-  c.rect(4,20,24,8,140,100,60);
-  c.rect(6,24,20,4,100,70,40);
+  const c = new Canvas(64,64);
+  c.rect(8,40,48,16,140,100,60);
+  c.rect(12,48,40,8,100,70,40);
   // Collapsed poster scraps
-  c.rect(8,16,12,6,180,160,120);
+  c.rect(16,32,24,12,180,160,120);
   c.save('target-dummy-dead.png');
 }
 
-// Health pickup - 32x32 — green cross
+// Health pickup - 64x64 — green cross
 {
-  const c = new Canvas(32,32);
-  c.circle(16,16,12,0,100,0,180);
-  c.rect(10,13,12,6,0,220,60);
-  c.rect(13,10,6,12,0,220,60);
+  const c = new Canvas(64,64);
+  c.circle(32,32,24,0,100,0,180);
+  c.rect(20,26,24,12,0,220,60);
+  c.rect(26,20,12,24,0,220,60);
   c.save('pickup-health.png');
 }
 
-// Ammo pickup - 32x32 — orange bullet cluster
+// Ammo pickup - 64x64 — orange bullet cluster
 {
-  const c = new Canvas(32,32);
-  c.circle(16,16,12,80,50,0,180);
-  c.rect(11,8,4,16,200,140,0);
-  c.rect(17,8,4,16,200,140,0);
-  c.rect(10,22,12,4,160,100,0);
+  const c = new Canvas(64,64);
+  c.circle(32,32,24,80,50,0,180);
+  c.rect(22,16,8,32,200,140,0);
+  c.rect(34,16,8,32,200,140,0);
+  c.rect(20,44,24,8,160,100,0);
   c.save('pickup-ammo.png');
 }
 
-// Gun sprite (top-down view) - 24x48
+// Gun sprite (top-down view) - 48x96
 {
-  const c = new Canvas(24,48);
+  const c = new Canvas(48,96);
   // Barrel
-  c.rect(9,2,6,24,110,110,110);
-  c.rect(10,0,4,4,80,80,80); // muzzle
+  c.rect(18,4,12,48,110,110,110);
+  c.rect(20,0,8,8,80,80,80); // muzzle
   // Body/slide
-  c.rect(4,22,16,14,90,90,90);
-  c.rect(6,24,12,10,60,60,60);
+  c.rect(8,44,32,28,90,90,90);
+  c.rect(12,48,24,20,60,60,60);
   // Grip
-  c.rect(6,34,12,14,50,35,20);
-  c.rect(7,35,10,12,35,22,10);
+  c.rect(12,68,24,28,50,35,20);
+  c.rect(14,70,20,24,35,22,10);
   // Grip texture
-  for(let i=0;i<3;i++) c.rect(7+i*3,36,2,10,25,15,5);
+  for(let i=0;i<3;i++) c.rect(14+i*6,72,4,20,25,15,5);
   c.save('gun-pistol.png');
 }
 
-// Impact: wall hit — 16x16 grey puff
+// Impact: wall hit — 32x32 grey puff
 {
-  const c = new Canvas(16,16);
-  c.circle(8,8,6,160,160,160,200);
-  c.circle(8,8,3,200,200,200,240);
-  c.circle(8,8,1,230,230,230,255);
+  const c = new Canvas(32,32);
+  c.circle(16,16,12,160,160,160,200);
+  c.circle(16,16,6,200,200,200,240);
+  c.circle(16,16,2,230,230,230,255);
   c.save('impact-wall.png');
 }
 
-// Impact: enemy hit — 16x16 red splat
+// Impact: enemy hit — 32x32 red splat
 {
-  const c = new Canvas(16,16);
-  c.circle(8,8,6,180,0,0,220);
-  c.circle(8,8,3,220,20,20,240);
-  c.circle(8,8,1,255,60,60,255);
+  const c = new Canvas(32,32);
+  c.circle(16,16,12,180,0,0,220);
+  c.circle(16,16,6,220,20,20,240);
+  c.circle(16,16,2,255,60,60,255);
   // spatter dots
-  [[3,3],[12,4],[4,12],[12,11],[2,8],[13,8]].forEach(([x,y]) => c.px(x,y,200,0,0,180));
+  [[6,6],[24,8],[8,24],[24,22],[4,16],[26,16],[10,4],[20,28]].forEach(([x,y]) => c.px(x,y,200,0,0,180));
   c.save('impact-enemy.png');
 }
 
