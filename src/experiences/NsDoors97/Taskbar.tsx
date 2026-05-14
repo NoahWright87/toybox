@@ -101,6 +101,7 @@ function FullscreenButton() {
 const GAMES_ITEMS = [
   { id: "cards",          icon: "🃏", label: "Cards"            },
   { id: "tic-tac-toe",    icon: "✖️",  label: "Tic-Tac-Toe"     },
+  { id: "pool",           icon: "🎱", label: "8-Ball Pool"      },
   { id: "word-whirlwind", icon: "🌪️", label: "Word Whirlwind"  },
   { id: "bomb-finder",    icon: "💣", label: "Bomb Finder"      },
   { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
