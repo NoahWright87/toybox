@@ -106,6 +106,13 @@ export const experiences: Experience[] = [
     path: "/ns-tos",
   },
   {
+    id: "hell",
+    title: "HELL",
+    description: "A 1994 shareware FPS. Procedural BSP maps, raycaster engine, 3 enemy types. © Ego Software Inc.",
+    category: "game",
+    path: "/hell",
+  },
+  {
     id: "ns-art",
     title: "NS Art",
     description: "A retro paint program. Draw, spray, fill, and export your masterpiece as a PNG.",

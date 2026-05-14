@@ -75,7 +75,8 @@ type DesktopIconAction =
   | "files"
   | "notebook"
   | "nsart"
-  | "art-backup";
+  | "art-backup"
+  | "readme";
 
 interface DesktopIconDef {
   id: string;
@@ -83,6 +84,38 @@ interface DesktopIconDef {
   icon: string;
   action: DesktopIconAction;
 }
+
+const DESKTOP_README = `IMPORTANT NOTE TO MYSELF
+=========================
+
+To play HELL.EXE you can NOT just
+double-click it. I know. I tried.
+It gives you a whole lecture.
+
+You have to go through the TOS
+(the scary black text screen).
+
+HOW TO DO IT (I keep forgetting):
+
+  1. Click Start
+  2. Programs
+  3. NS-TOS
+  4. Type this exactly:
+       cd Programs\\Games
+       HELL.EXE
+  5. Press Enter. That's it!!
+
+Gerald says I "should not have
+that game installed." Gerald has
+never beaten level 3. I have.
+
+DO NOT tell Gerald.
+
+                        - Noah
+
+P.S. If you get stuck in the text
+screen just type DOORS to come back.
+`;
 
 const STATIC_ICONS: DesktopIconDef[] = [
   { id: "my-doors",     title: "My Doors",     icon: "🖥️", action: "my-doors"     },
@@ -96,8 +129,13 @@ const STATIC_ICONS: DesktopIconDef[] = [
   { id: "art-backup",   title: "Backup.png",   icon: "🖼️", action: "art-backup"   },
 ];
 
+// Desktop icons shown on the right side (pinned notes, reminders, etc.)
+const STATIC_RIGHT_ICONS: DesktopIconDef[] = [
+  { id: "readme", title: "README.txt", icon: "📋", action: "readme" },
+];
+
 const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
-  .filter((e) => e.id !== "ns-doors-97" && e.id !== "ns-tos" && e.category !== "screensaver")
+  .filter((e) => e.id !== "ns-doors-97" && e.id !== "ns-tos" && e.id !== "hell" && e.category !== "screensaver")
   .map((e) => ({
     id: e.id,
     title: e.title,
@@ -112,7 +150,7 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     ) as DesktopIconAction,
   }));
 
-const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...EXPERIENCE_ICON_DEFS];
+const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...STATIC_RIGHT_ICONS, ...EXPERIENCE_ICON_DEFS];
 
 // ── Window content union ───────────────────────────────────────────────────
 
@@ -396,6 +434,7 @@ export default function NsDoors97() {
         case "internet":     content = { type: "internet" };             width = 640; break;
         case "files":        content = { type: "files" };                width = 600; break;
         case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
+        case "readme":       content = { type: "notebook", filePath: "C:\\Desktop\\README.txt", fileName: "README.txt", initialContent: DESKTOP_README }; width = 420; break;
         case "nsart":        content = { type: "nsart" };                width = 760; break;
         case "art-backup":  content = { type: "nsart-backup" };         width = 760; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
@@ -567,7 +606,22 @@ export default function NsDoors97() {
     <div className="ns-desktop" style={desktopStyle}>
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
       <div className="ns-desktop__icons">
-        {ALL_DESKTOP_ICONS.filter((def) => visibleIcons.has(def.id)).map((def) => (
+        {ALL_DESKTOP_ICONS
+          .filter((def) => !STATIC_RIGHT_ICONS.some((r) => r.id === def.id) && visibleIcons.has(def.id))
+          .map((def) => (
+            <DesktopIcon
+              key={def.id}
+              id={def.id}
+              title={def.title}
+              icon={def.icon}
+              onOpen={openWindow}
+            />
+          ))}
+      </div>
+
+      {/* ── Right-side pinned icons (README, notes, etc.) ── */}
+      <div className="ns-desktop__icons-right">
+        {STATIC_RIGHT_ICONS.filter((def) => visibleIcons.has(def.id)).map((def) => (
           <DesktopIcon
             key={def.id}
             id={def.id}

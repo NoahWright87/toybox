@@ -1,0 +1,533 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+.hellzone-root {
+  position: fixed;
+  inset: 0;
+  background: #0a0a0a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Share Tech Mono', monospace;
+  color: #c00;
+  overflow: hidden;
+}
+
+.hellzone-wrapper {
+  position: relative;
+  width: min(100vw, calc((100vh - 72px) * 16 / 9));
+  image-rendering: pixelated;
+}
+
+/* ── TITLE SCREEN ── */
+.hz-title-screen {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #c00;
+  position: relative;
+  overflow: hidden;
+}
+
+.hz-title-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,0,0,0.03) 2px, rgba(255,0,0,0.03) 4px);
+  pointer-events: none;
+}
+
+.hz-title-logo {
+  font-family: 'VT323', monospace;
+  font-size: 80px;
+  color: #ff2200;
+  text-shadow: 0 0 20px #ff2200, 0 0 40px #ff0000, 4px 4px 0 #600;
+  letter-spacing: 4px;
+  animation: hz-flicker 3s infinite;
+  line-height: 1;
+}
+
+.hz-title-sub {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: #888;
+  letter-spacing: 8px;
+  margin-top: 4px;
+}
+
+.hz-title-version {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #555;
+  margin-top: 8px;
+  letter-spacing: 2px;
+}
+
+.hz-title-art {
+  font-family: 'VT323', monospace;
+  font-size: 13px;
+  color: #400;
+  margin: 20px 0;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.hz-title-press {
+  font-family: 'VT323', monospace;
+  font-size: 32px;
+  color: #c00;
+  animation: hz-blink 1s step-end infinite;
+  margin-top: 10px;
+}
+
+.hz-title-quit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #444;
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+
+.hz-title-register {
+  position: absolute;
+  bottom: 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: #333;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.hz-title-register span { color: #666; }
+
+@keyframes hz-blink { 50% { opacity: 0; } }
+@keyframes hz-flicker {
+  0%,95%,100% { opacity: 1; }
+  96% { opacity: 0.8; }
+  97% { opacity: 1; }
+  98% { opacity: 0.6; }
+  99% { opacity: 1; }
+}
+
+/* ── DEATH SCREEN ── */
+.hz-death-screen {
+  display: none;
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #c00;
+  position: absolute;
+  top: 0; left: 0;
+}
+
+.hz-death-title {
+  font-family: 'VT323', monospace;
+  font-size: 96px;
+  color: #c00;
+  text-shadow: 0 0 30px #ff0000;
+  animation: hz-flicker 2s infinite;
+}
+
+.hz-death-sub {
+  font-family: 'VT323', monospace;
+  font-size: 32px;
+  color: #666;
+  margin-top: 8px;
+}
+
+.hz-death-stats {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: #444;
+  margin-top: 20px;
+  text-align: center;
+  line-height: 2;
+}
+
+.hz-death-press {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: #c00;
+  animation: hz-blink 1s step-end infinite;
+  margin-top: 24px;
+}
+
+.hz-death-quit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #444;
+  margin-top: 10px;
+}
+
+/* ── GAME CANVAS AREA ── */
+.hz-game-container {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+}
+
+.hz-render-canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16/9;
+  display: block;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+/* ── HUD ── */
+.hz-hud {
+  width: 100%;
+  height: 72px;
+  background: #111;
+  border-top: 3px solid #c00;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 10px;
+  position: relative;
+}
+
+.hz-hud-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.hz-hud-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: #600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.hz-hud-value {
+  font-family: 'VT323', monospace;
+  font-size: 44px;
+  color: #c00;
+  line-height: 1;
+  text-shadow: 0 0 10px #ff0000;
+  min-width: 60px;
+  text-align: center;
+}
+
+.hz-hud-value.low { color: #ff4400; animation: hz-blink 0.5s step-end infinite; }
+
+.hz-face-sprite {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+  border: 2px solid #333;
+  flex-shrink: 0;
+}
+
+.hz-hud-divider {
+  width: 2px;
+  height: 60px;
+  background: #c00;
+  opacity: 0.3;
+}
+
+.hz-level-info {
+  margin-left: auto;
+  text-align: right;
+}
+
+.hz-hud-level-num {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: #c00;
+  line-height: 1;
+}
+
+.hz-hud-seed {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  color: #333;
+  margin-top: 4px;
+}
+
+/* ── MINIMAP ── */
+.hz-minimap {
+  position: absolute;
+  top: 4px;
+  right: 120px;
+  width: 80px;
+  height: 80px;
+  image-rendering: pixelated;
+  opacity: 0.7;
+  border: 1px solid #333;
+}
+
+/* ── MESSAGES ── */
+.hz-message {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  color: #ff0;
+  text-shadow: 0 0 8px #ff0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+}
+
+/* ── CROSSHAIR ── */
+.hz-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+.hz-crosshair::before, .hz-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.7);
+}
+
+.hz-crosshair::before { width: 12px; height: 2px; top: 5px; left: 0; }
+.hz-crosshair::after { width: 2px; height: 12px; top: 0; left: 5px; }
+
+/* ── LEVEL CLEAR ── */
+.hz-level-clear {
+  display: none;
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.85);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.hz-clear-title {
+  font-family: 'VT323', monospace;
+  font-size: 72px;
+  color: #ff0;
+  text-shadow: 0 0 20px #ff0;
+}
+
+.hz-clear-sub {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: #888;
+  animation: hz-blink 1s step-end infinite;
+  margin-top: 12px;
+}
+
+.hz-clear-quit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #444;
+  margin-top: 10px;
+}
+
+/* ── HELP OVERLAY ── */
+.hz-help-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.hz-help-panel {
+  background: #0d0400;
+  border: 2px solid #c00;
+  padding: 12px 18px;
+  min-width: 220px;
+}
+
+.hz-help-title {
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  color: #c00;
+  margin-bottom: 8px;
+  text-align: center;
+  letter-spacing: 3px;
+}
+
+.hz-help-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  color: #888;
+  line-height: 1;
+}
+
+.hz-help-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  border-bottom: 1px solid #1a0800;
+}
+
+.hz-help-list li span:first-child {
+  color: #c00;
+  min-width: 90px;
+}
+
+/* ── HELP BUTTON ── */
+.hz-help-btn {
+  position: fixed;
+  top: 12px;
+  right: 124px;
+  width: 40px;
+  height: 36px;
+  z-index: 101;
+  pointer-events: all;
+  background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(200,0,0,0.35);
+  color: #c00;
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.hz-help-btn:active { background: rgba(200,0,0,0.3); }
+
+/* ── TOUCH CONTROLS ── */
+.hz-touch-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hz-fab {
+  position: fixed;
+  pointer-events: all;
+  background: rgba(160,0,0,0.18);
+  border: 2px solid rgba(200,0,0,0.45);
+  color: #c00;
+  font-family: 'VT323', monospace;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.05s, border-color 0.05s, box-shadow 0.05s;
+}
+
+.hz-fab.pressed {
+  background: rgba(220,0,0,0.45);
+  border-color: #ff2200;
+  color: #ff5533;
+  box-shadow: 0 0 10px rgba(255,0,0,0.4);
+}
+
+/* D-pad: bottom-left */
+.hz-fab-fwd  { width: 54px; height: 48px; left: 68px;  bottom: 108px; }
+.hz-fab-back { width: 54px; height: 48px; left: 68px;  bottom: 52px;  }
+.hz-fab-sl   { width: 60px; height: 48px; left: 4px;   bottom: 80px;  }
+.hz-fab-sr   { width: 60px; height: 48px; left: 130px; bottom: 80px;  }
+
+/* Turn */
+.hz-fab-tl { width: 54px; height: 44px; left: 200px; bottom: 80px; }
+.hz-fab-tr { width: 54px; height: 44px; left: 260px; bottom: 80px; }
+
+/* FIRE */
+.hz-fab-shoot {
+  width: 90px;
+  height: 90px;
+  right: 16px;
+  bottom: 60px;
+  border-radius: 50%;
+  font-size: 18px;
+  letter-spacing: 1px;
+  border-width: 3px;
+  background: rgba(180,0,0,0.22);
+  border-color: rgba(220,0,0,0.65);
+}
+.hz-fab-shoot.pressed {
+  background: rgba(255,0,0,0.5);
+  border-color: #ff0000;
+  box-shadow: 0 0 20px rgba(255,0,0,0.6);
+}
+
+/* MAP */
+.hz-fab-map {
+  width: 54px; height: 36px;
+  top: 12px; right: 12px;
+  font-size: 14px; letter-spacing: 1px;
+}
+
+/* ESC */
+.hz-fab-esc {
+  width: 54px; height: 36px;
+  top: 12px; left: 12px;
+  font-size: 14px; letter-spacing: 1px;
+}
+
+/* FULLSCREEN */
+.hz-btn-fullscreen {
+  position: fixed;
+  top: 12px;
+  right: 76px;
+  width: 40px;
+  height: 36px;
+  z-index: 101;
+  pointer-events: all;
+  background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(200,0,0,0.35);
+  color: #c00;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.hz-btn-fullscreen:active { background: rgba(200,0,0,0.3); }
+
+@media (hover: hover) and (pointer: fine) {
+  .hz-touch-overlay { display: none; }
+}
+
+@media (max-width: 640px) {
+  .hz-title-logo { font-size: clamp(40px, 12vw, 80px); }
+  .hz-title-sub { font-size: clamp(16px, 5vw, 28px); }
+  .hz-title-press { font-size: clamp(18px, 5vw, 32px); }
+  .hz-title-art { font-size: clamp(9px, 2.5vw, 13px); }
+  .hz-death-title { font-size: clamp(48px, 14vw, 96px); }
+  .hz-hud-value { font-size: 36px; }
+  .hz-minimap { right: 80px; width: 60px; height: 60px; }
+}

@@ -359,6 +359,26 @@ export default function NsToS() {
           break;
         }
 
+        case "HELL.EXE": {
+          addLines([
+            { text: "" },
+            { text: "HELL v0.3 — EGO SOFTWARE INC." },
+            { text: "Loading..." },
+            { text: "" },
+          ]);
+          setTimeout(() => navigate("/hell"), 900);
+          break;
+        }
+
+        case "HELL": {
+          addLines([
+            { text: `Bad command or file name - "${trimmed}"` },
+            { text: `Did you mean: HELL.EXE` },
+            { text: "" },
+          ]);
+          break;
+        }
+
         default: {
           addLines([
             { text: `Bad command or file name - "${trimmed}"` },
