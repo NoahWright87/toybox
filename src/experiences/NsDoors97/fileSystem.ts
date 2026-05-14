@@ -224,10 +224,10 @@ keyboard=*vkd
 MaxBPs=768
 `;
 
-const HELLZONE_README = `HELLZONE PRO v0.3 — SHAREWARE
-==============================
-© 1994 Brimstone Software Inc.
-1-800-HELLZNE  |  BBS: 614-555-0139
+const HELL_README = `HELL v0.3 — SHAREWARE
+======================
+© 1994 Ego Software Inc.
+1-800-HELL-EGO  |  BBS: 614-555-0139
 
 SYSTEM REQUIREMENTS:
   486 DX2/66 or faster
@@ -235,24 +235,30 @@ SYSTEM REQUIREMENTS:
   VGA 320x200, 256 colors
   Sound Blaster or compatible
 
+IMPORTANT: Must be launched from NS-TOS.
+  Type HELL.EXE at the C: prompt.
+  Double-clicking will NOT work.
+
 CONTROLS:
   Arrow keys or WASD — Move / Turn
   Space or Left Mouse — Fire
   M                  — Toggle map
+  Shift              — Sprint
+  F1 / ?             — Help
   Esc                — Return to title
 
 TO REGISTER THE FULL GAME ($29.99):
-  Call 1-800-HELLZNE or mail check/MO to:
-  Brimstone Software Inc.
+  Call 1-800-HELL-EGO or mail check/MO to:
+  Ego Software Inc.
   PO Box 1994, Columbus OH 43215
 
 Registration includes Episodes 2 and 3,
-cheat codes, and a Brimstone sticker.
+cheat codes, and an Ego Software sticker.
 
-WARNING: HELLZONE PRO contains extreme
-violence and demonic imagery. Not for
-children. Brimstone Software is not
-responsible for nightmares.
+WARNING: HELL contains extreme violence
+and demonic imagery. Not for children.
+Ego Software is not responsible for
+nightmares or sinful thoughts.
 `;
 
 const RECYCLE_DRAFT = `Draft letter - never sent
@@ -301,7 +307,7 @@ export const ROOT: FsFolder = {
           kind: "folder",
           name: "Games",
           children: [
-            { kind: "file", name: "HELL.EXE",            type: "exe", action: "hellzone"       },
+            { kind: "file", name: "HELL.EXE",            type: "exe", action: "tos-only"       },
             { kind: "file", name: "Tic-Tac-Toe.exe",    type: "exe", action: "tic-tac-toe"    },
             { kind: "file", name: "Word Whirlwind.exe",  type: "exe", action: "word-whirlwind" },
             { kind: "file", name: "Number Muncher.exe",  type: "exe", action: "number-muncher" },
@@ -383,11 +389,11 @@ export const ROOT: FsFolder = {
     },
     {
       kind: "folder",
-      name: "BRIMSTONE",
+      name: "EGO",
       children: [
-        { kind: "file", name: "HELL.EXE",    type: "exe",  action: "hellzone"             },
-        { kind: "file", name: "README.TXT",   type: "text", content: HELLZONE_README       },
-        { kind: "file", name: "INSTALL.BAT",  type: "bat",  content: "@ECHO OFF\nECHO HELLZONE PRO is already installed.\nECHO Type HELL to play.\n" },
+        { kind: "file", name: "HELL.EXE",    type: "exe",  action: "tos-only"         },
+        { kind: "file", name: "README.TXT",   type: "text", content: HELL_README       },
+        { kind: "file", name: "INSTALL.BAT",  type: "bat",  content: "@ECHO OFF\nECHO HELL is already installed.\nECHO Launch NS-TOS and type HELL.EXE to play.\n" },
       ],
     },
     {

@@ -23,6 +23,17 @@
   overflow-x: auto;
 }
 
+/* ── Right-side pinned icons ─────────────────────────────────────────────── */
+
+.ns-desktop__icons-right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* ── Branding watermark (bottom-right corner) ──────────────────────────────── */
 
 .ns-desktop__brand {

@@ -89,6 +89,13 @@ export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
         onOpenNotebook("(new file)", "Untitled.txt", "");
         return;
       }
+      if (file.action === "tos-only") {
+        showDialog(
+          "HELL.EXE must be launched from NS-TOS.\n\nOpen NS-TOS and type:\n  HELL.EXE\n\nDouble-clicking does not work.",
+          { title: "Cannot Run Program", icon: "⛔" }
+        );
+        return;
+      }
       // Screensavers and games open as experiences
       onOpenApp(file.action);
       return;
