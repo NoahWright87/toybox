@@ -664,14 +664,35 @@ export default function Pool({ onQuit }: PoolProps) {
   }, [gamePhase, syncUi, fireAI]);
 
   // ── Canvas events ──────────────────────────────────────────────────────────
-  const canvasXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const clientToCanvas = useCallback((clientX: number, clientY: number) => {
     const r = canvasRef.current!.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * CW / r.width, y: (e.clientY - r.top) * CH / r.height };
+    return { x: (clientX - r.left) * CW / r.width, y: (clientY - r.top) * CH / r.height };
   }, []);
 
-  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { x, y } = canvasXY(e);
-    const m  = mouseRef.current;
+  const canvasXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =>
+    clientToCanvas(e.clientX, e.clientY), [clientToCanvas]);
+
+  // Shared: start a shot drag (used by both mouse-down and touch-start).
+  // On touch there is no hover, so we set the aim angle from the contact point first.
+  const handlePointerDown = useCallback((x: number, y: number, fromTouch: boolean) => {
+    const m = mouseRef.current;
+    m.down = true; m.downX = x; m.downY = y;
+    const gs = gsRef.current;
+    if (!gs || gs.players[gs.turn].isAI) return;
+    if (gs.phase === 'aiming') {
+      if (fromTouch) {
+        // No hover on touch — set aim toward the tap point right now
+        const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
+        if (cb) gs.aimAngle = Math.atan2(y - cb.y, x - cb.x);
+      }
+      m.locked = true;
+      m.lockedAngle = gs.aimAngle;
+    }
+  }, []);
+
+  // Shared: update aim/power/inhand during a drag.
+  const handlePointerMove = useCallback((x: number, y: number) => {
+    const m = mouseRef.current;
     m.x = x; m.y = y;
     const gs = gsRef.current;
     if (!gs || gs.phase === 'moving' || gs.players[gs.turn].isAI) return;
@@ -694,16 +715,17 @@ export default function Pool({ onQuit }: PoolProps) {
         y: Math.max(PF_Y1 + BR, Math.min(PF_Y2 - BR, y)),
       };
     }
-  }, [canvasXY]);
+  }, []);
+
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = canvasXY(e);
+    handlePointerMove(x, y);
+  }, [canvasXY, handlePointerMove]);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x, y } = canvasXY(e);
-    const m = mouseRef.current;
-    m.down = true; m.downX = x; m.downY = y;
-    const gs = gsRef.current;
-    if (!gs || gs.players[gs.turn].isAI) return;
-    if (gs.phase === 'aiming') { m.locked = true; m.lockedAngle = gs.aimAngle; }
-  }, [canvasXY]);
+    handlePointerDown(x, y, false);
+  }, [canvasXY, handlePointerDown]);
 
   const onMouseUp = useCallback(() => {
     const m = mouseRef.current;
@@ -737,6 +759,28 @@ export default function Pool({ onQuit }: PoolProps) {
       }
     }
   }, [syncUi]);
+
+  // ── Touch events (mirrors pointer logic above) ────────────────────────────
+  const onTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    const t = e.touches[0];
+    if (!t) return;
+    const { x, y } = clientToCanvas(t.clientX, t.clientY);
+    handlePointerDown(x, y, true);
+  }, [clientToCanvas, handlePointerDown]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    const t = e.touches[0];
+    if (!t) return;
+    const { x, y } = clientToCanvas(t.clientX, t.clientY);
+    handlePointerMove(x, y);
+  }, [clientToCanvas, handlePointerMove]);
+
+  const onTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    // changedTouches[0] has the position of the lifted finger, but onMouseUp
+    // doesn't need position, so just forward the shared release logic.
+    void e;
+    onMouseUp();
+  }, [onMouseUp]);
 
   // ── English indicator ─────────────────────────────────────────────────────
   const onEnglishClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -831,6 +875,7 @@ export default function Pool({ onQuit }: PoolProps) {
           onMouseMove={onMouseMove} onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
           onMouseLeave={() => { mouseRef.current.down = false; mouseRef.current.locked = false; }}
+          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         />
         {uiPhase === 'over' && (
           <div className="pool-over">

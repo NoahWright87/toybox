@@ -148,6 +148,7 @@
   cursor: crosshair;
   max-width: 100%;
   height: auto;
+  touch-action: none; /* prevent scroll/zoom hijacking touch drags */
 }
 
 /* ── Game-over overlay ────────────────────────────────────────────────────── */
