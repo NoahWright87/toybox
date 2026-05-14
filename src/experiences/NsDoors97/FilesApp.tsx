@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useOsDialog } from "./OsDialog";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import {
   ROOT,
   type FsNode,
@@ -12,6 +14,7 @@ import "./FilesApp.css";
 interface FilesAppProps {
   onOpenApp: (appId: string) => void;
   onOpenNotebook: (path: string, fileName: string, content: string) => void;
+  onQuit?: () => void;
 }
 
 interface FolderItemProps {
@@ -50,8 +53,27 @@ function FolderItem({ node, onOpen }: FolderItemProps) {
   );
 }
 
-export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
+export default function FilesApp({ onOpenApp, onOpenNotebook, onQuit }: FilesAppProps) {
   const { showDialog } = useOsDialog();
+
+  const menus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "File",
+      items: [
+        ...(onQuit ? [{ label: "Exit", onClick: onQuit }] : [{ label: "(not implemented)", disabled: true as const }]),
+      ],
+    },
+    { label: "Edit", items: [{ label: "(not implemented)", disabled: true }] },
+    { label: "View", items: [{ label: "(not implemented)", disabled: true }] },
+    {
+      label: "Help",
+      items: [
+        { label: "About Files", onClick: () => showDialog("NS Doors 97 Files\nBrowse and open files on this computer.", { title: "About Files", icon: "ℹ️" }) },
+      ],
+    },
+  ], [showDialog, onQuit]);
+
+  useWindowMenus(menus);
 
   // Navigation stack: each entry is a FsFolder
   const [stack, setStack] = useState<FsFolder[]>([ROOT]);
@@ -117,19 +139,6 @@ export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
 
   return (
     <div className="nsf-window">
-      {/* ── Menu bar ── */}
-      <div className="nsf-menubar">
-        {["File", "Edit", "View", "Help"].map((m) => (
-          <button
-            key={m}
-            className="nsf-menubar__item"
-            onClick={() => showDialog("This menu is not yet implemented.", { title: m, icon: "ℹ️" })}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
-
       {/* ── Toolbar ── */}
       <div className="nsf-toolbar">
         <button
@@ -150,7 +159,7 @@ export default function FilesApp({ onOpenApp, onOpenNotebook }: FilesAppProps) {
         {current.children.length === 0 ? (
           <div className="nsf-empty">This folder is empty.</div>
         ) : (
-          current.children.map((node) => (
+          current.children.map((node: FsNode) => (
             <FolderItem key={node.name} node={node} onOpen={openNode} />
           ))
         )}

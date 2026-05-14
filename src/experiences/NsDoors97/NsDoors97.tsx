@@ -22,6 +22,7 @@ import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import NsArt, { type NsArtHandle } from "../NsArt/NsArt";
+import WordWhirlwind from "../WordWhirlwind/WordWhirlwind";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
@@ -66,6 +67,7 @@ type DesktopIconAction =
   | "screensavers"
   | "tictactoe"
   | "nomnom"
+  | "wordwhirlwind"
   | "bombfinder"
   | "duckhunt"
   | "cards"
@@ -141,11 +143,12 @@ const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
     title: e.title,
     icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
     action: (
-      e.id === "tic-tac-toe"     ? "tictactoe" :
-      e.id === "number-muncher"  ? "nomnom"    :
-      e.id === "bomb-finder"     ? "bombfinder":
-      e.id === "duck-hunt"       ? "duckhunt"  :
-      e.id === "ns-art"          ? "nsart"     :
+      e.id === "tic-tac-toe"     ? "tictactoe"     :
+      e.id === "number-muncher"  ? "nomnom"        :
+      e.id === "word-whirlwind"  ? "wordwhirlwind" :
+      e.id === "bomb-finder"     ? "bombfinder"    :
+      e.id === "duck-hunt"       ? "duckhunt"      :
+      e.id === "ns-art"          ? "nsart"         :
       "experience"
     ) as DesktopIconAction,
   }));
@@ -159,6 +162,7 @@ type WindowContent =
   | { type: "screensaver-settings" }
   | { type: "tictactoe" }
   | { type: "nomnom" }
+  | { type: "word-whirlwind" }
   | { type: "bombfinder" }
   | { type: "duckhunt" }
   | { type: "cards-launcher" }
@@ -180,6 +184,7 @@ interface OpenWindow {
   zIndex: number;
   defaultPosition: { x: number; y: number };
   width?: number;
+  minimized: boolean;
 }
 
 let windowSeq = 0;
@@ -362,10 +367,12 @@ export default function NsDoors97() {
           zIndex: maxZ,
           defaultPosition: { x: 100 + offset, y: 60 + offset },
           width: 400,
+          minimized: false,
         },
       ];
     });
   }, []);
+
 
   // ── Screensaver ──────────────────────────────────────────────────────────
   const [screensaverConfig, setScreensaverConfig] = useState<FullScreensaverConfig>(
@@ -438,7 +445,8 @@ export default function NsDoors97() {
         case "nsart":        content = { type: "nsart" };                width = 760; break;
         case "art-backup":  content = { type: "nsart-backup" };         width = 760; break;
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
-        case "nomnom":       content = { type: "nomnom" };               width = 700; break;
+        case "nomnom":         content = { type: "nomnom" };               width = 700; break;
+        case "wordwhirlwind":  content = { type: "word-whirlwind" };      width = 600; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
         case "cards":        content = { type: "cards-launcher" };       width = 320; break;
@@ -461,10 +469,19 @@ export default function NsDoors97() {
           zIndex: maxZ,
           defaultPosition: { x: 80 + offset, y: 48 + offset },
           width,
+          minimized: false,
         },
       ];
     });
   }, [showDialog]);
+
+  const openAbout = useCallback(() => {
+    openWindow("about");
+  }, [openWindow]);
+
+  const openScreensaverSettings = useCallback(() => {
+    openWindow("screensavers");
+  }, [openWindow]);
 
   const closeWindow = useCallback((id: string) => {
     setOpenWindows((prev) => prev.filter((w) => w.id !== id));
@@ -475,9 +492,16 @@ export default function NsDoors97() {
     maxZ++;
     const z = maxZ;
     setOpenWindows((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, zIndex: z } : w))
+      prev.map((w) => (w.id === id ? { ...w, zIndex: z, minimized: false } : w))
     );
     setActiveWindowId(id);
+  }, []);
+
+  const minimizeWindow = useCallback((id: string) => {
+    setOpenWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, minimized: true } : w))
+    );
+    setActiveWindowId((cur) => (cur === id ? null : cur));
   }, []);
 
   const openNotebook = useCallback(
@@ -503,6 +527,7 @@ export default function NsDoors97() {
             zIndex: maxZ,
             defaultPosition: { x: 100 + offset, y: 60 + offset },
             width: 560,
+            minimized: false,
           },
         ];
       });
@@ -553,6 +578,7 @@ export default function NsDoors97() {
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
             width: CARDS_GAME_WIDTHS[game],
+            minimized: false,
           },
         ];
       });
@@ -578,6 +604,7 @@ export default function NsDoors97() {
           zIndex: maxZ,
           defaultPosition: { x: 80 + offset, y: 48 + offset },
           width: 320,
+          minimized: false,
         },
       ];
     });
@@ -627,7 +654,7 @@ export default function NsDoors97() {
             id={def.id}
             title={def.title}
             icon={def.icon}
-            onOpen={openWindow}
+            onOpen={openWindow as (id: string) => void}
           />
         ))}
       </div>
@@ -648,7 +675,7 @@ export default function NsDoors97() {
       </div>
 
       {/* ── Open windows ── */}
-      {openWindows.map((win) => (
+      {(openWindows as OpenWindow[]).map((win) => (
         <Window
           key={win.id}
           id={win.id}
@@ -657,8 +684,10 @@ export default function NsDoors97() {
           zIndex={win.zIndex}
           defaultPosition={win.defaultPosition}
           width={win.width}
+          minimized={win.minimized}
           onClose={win.content.type === "cards-game" ? handleCardsGameClose : closeWindow}
           onFocus={focusWindow}
+          onShrink={minimizeWindow}
           onCloseRequested={
             (win.content.type === "nsart" || win.content.type === "nsart-backup")
               ? (_id, proceed) => {
@@ -690,23 +719,26 @@ export default function NsDoors97() {
               onBoardSizeChange={(size) =>
                 handleTttBoardSizeChange(win.id, size)
               }
+              onQuit={() => closeWindow(win.id)}
             />
           )}
-          {win.content.type === "nomnom" && <NumberMuncher />}
+          {win.content.type === "nomnom" && <NumberMuncher onQuit={() => closeWindow(win.id)} />}
+          {win.content.type === "word-whirlwind" && <WordWhirlwind onQuit={() => closeWindow(win.id)} />}
           {win.content.type === "duckhunt" && <DuckHunt />}
           {win.content.type === "cards-launcher" && (
             <CardsLauncher
               onLaunch={(game, settings) => handleCardsLaunch(win.id, game, settings)}
+              onQuit={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "cards-game" && win.content.game === "war" && (
-            <War settings={win.content.settings} />
+            <War settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "cards-game" && win.content.game === "blackjack" && (
-            <Blackjack settings={win.content.settings} />
+            <Blackjack settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "cards-game" && win.content.game === "pyramid" && (
-            <Pyramid settings={win.content.settings} />
+            <Pyramid settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "bombfinder" && (
             <BombFinder
@@ -742,6 +774,7 @@ export default function NsDoors97() {
             <FilesApp
               onOpenApp={openWindow}
               onOpenNotebook={openNotebook}
+              onQuit={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "notebook" && (
@@ -767,11 +800,15 @@ export default function NsDoors97() {
 
       {/* ── Taskbar ── */}
       <Taskbar
-        windows={openWindows.map((w) => ({ id: w.id, title: w.title, icon: w.icon }))}
+        windows={openWindows.map((w) => ({ id: w.id, title: w.title, icon: w.icon, minimized: w.minimized }))}
         activeWindowId={activeWindowId}
         onWindowFocus={focusWindow}
         onRestart={handleRestart}
-        onOpenSettings={(s) => { if (s === "display") openDisplaySettings(); }}
+        onOpenSettings={(s) => {
+          if (s === "display") openDisplaySettings();
+          else if (s === "screensavers") openScreensaverSettings();
+        }}
+        onOpenAbout={openAbout}
         onExitToTos={handleExitToTos}
       />
 

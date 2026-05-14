@@ -1,9 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import "./Cards.css";
 import "./War.css";
 import { PlayingCard } from "./PlayingCard";
 import type { Card, DeckSettings } from "./types";
 import { buildDeck, shuffle } from "./deckUtils";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { DeckModal } from "./DeckModal";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,10 +71,14 @@ function makeInitialState(settings: DeckSettings): WarState {
 
 interface WarProps {
   settings: DeckSettings;
+  onNewGame?: () => void;
+  onQuit?: () => void;
 }
 
-export default function War({ settings }: WarProps) {
+export default function War({ settings, onNewGame, onQuit }: WarProps) {
   const [state, setState] = useState<WarState>(() => makeInitialState(settings));
+  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [showDeckModal, setShowDeckModal] = useState(false);
 
   const autoPlay = settings.warAutoPlay;
   const speedMs = WAR_SPEED_MS[settings.warSpeed] ?? 900;
@@ -231,6 +238,22 @@ export default function War({ settings }: WarProps) {
     setState(makeInitialState(settings));
   }, [settings]);
 
+  // ── Menus ─────────────────────────────────────────────────────────────────
+
+  const warMenus = useMemo<MenuBarMenu[]>(() => {
+    const items: MenuBarMenu["items"] = [
+      { label: "Restart", onClick: newGame },
+      ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
+      ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
+    ];
+    return [
+      { label: "Game", items },
+      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+    ];
+  }, [newGame, onNewGame, onQuit]);
+
+  useWindowMenus(warMenus);
+
   // ── Auto-play ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -268,7 +291,7 @@ export default function War({ settings }: WarProps) {
 
   const { phase, playerCard, dealerCard, playerPile, dealerPile,
           warPlayerCards, warDealerCards, warPlayerFinal, warDealerFinal,
-          roundResult, gameResult, roundCount } = state;
+          roundResult, gameResult, roundCount } = state as WarState;
 
   const isWar = phase === "war-ready" || phase === "war-revealed";
 
@@ -291,6 +314,13 @@ export default function War({ settings }: WarProps) {
 
   return (
     <div className="war">
+      {showDeckModal && (
+        <DeckModal
+          cardBack={cardBack}
+          onSelect={setCardBack}
+          onClose={() => setShowDeckModal(false)}
+        />
+      )}
       {/* Scoreboard */}
       <div className="war__scoreboard">
         <span>Round {roundCount}</span>
@@ -305,7 +335,7 @@ export default function War({ settings }: WarProps) {
           <div className="war__side-label">You</div>
           <div className="war__pile-stack">
             {playerPile.length > 0
-              ? <PlayingCard card={playerPile[0]} faceDown backColor={settings.cardBack} />
+              ? <PlayingCard card={playerPile[0]} faceDown backColor={cardBack} />
               : <div className="playing-card--empty" />
             }
             <div className="war__pile-count">{playerPile.length} left</div>
@@ -313,7 +343,7 @@ export default function War({ settings }: WarProps) {
           {isWar && (
             <div className="war__war-cards">
               {warPlayerCards.map((c) => (
-                <PlayingCard key={c.id} card={c} faceDown backColor={settings.cardBack} />
+                <PlayingCard key={c.id} card={c} faceDown backColor={cardBack} />
               ))}
               {warPlayerFinal
                 ? <PlayingCard card={warPlayerFinal} />
@@ -338,7 +368,7 @@ export default function War({ settings }: WarProps) {
           <div className="war__side-label">Dealer</div>
           <div className="war__pile-stack">
             {dealerPile.length > 0
-              ? <PlayingCard card={dealerPile[0]} faceDown backColor={settings.cardBack} />
+              ? <PlayingCard card={dealerPile[0]} faceDown backColor={cardBack} />
               : <div className="playing-card--empty" />
             }
             <div className="war__pile-count">{dealerPile.length} left</div>
@@ -346,7 +376,7 @@ export default function War({ settings }: WarProps) {
           {isWar && (
             <div className="war__war-cards">
               {warDealerCards.map((c) => (
-                <PlayingCard key={c.id} card={c} faceDown backColor={settings.cardBack} />
+                <PlayingCard key={c.id} card={c} faceDown backColor={cardBack} />
               ))}
               {warDealerFinal && <PlayingCard card={warDealerFinal} />}
             </div>

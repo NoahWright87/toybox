@@ -163,9 +163,13 @@ NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
 
 **Use this instead:**
 ```
-npm run build 2>&1 | grep "error TS" | grep -v "TS2307\|TS2875\|TS7026\|TS7006\|TS7053\|TS2503\|TS2882"
+npm run build 2>&1 | grep "error TS" | grep -v "TS2307\|TS2875\|TS7026\|TS7006\|TS7053\|TS2503\|TS2882" | grep -v "TS2322.*key: "
 ```
-This filters out the pre-existing "Cannot find module 'react'" noise from the local environment (packages are installed on Netlify) and shows only real type errors. **The output must be empty for all files you changed.**
+This filters out two classes of local-environment noise:
+1. `TS2307` / `TS2875` / `TS7026` / `TS7006` / `TS7053` / `TS2503` / `TS2882` — "Cannot find module 'react'" and its downstream implicit-any cascade (packages are installed on Netlify).
+2. `TS2322` where the source type starts with `{ key:` — JSX `key` appearing as an excess property because `@types/react`'s `JSX.IntrinsicAttributes` (which marks `key` as a framework-managed attribute) is absent locally. React correctly strips `key` from JSX prop checks when its types are present.
+
+The output must be empty for all files you changed.
 
 1. Run the command above — verify no errors in any file you touched
 2. If errors appear, fix them and run again until passing

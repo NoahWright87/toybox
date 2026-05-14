@@ -16,6 +16,7 @@ import NsToSPage from "./pages/NsToSPage";
 import DuckHuntPage from "./pages/DuckHuntPage";
 import NsArtPage from "./pages/NsArtPage";
 import HellPage from "./pages/HellzonePage";
+import ComponentTestPage from "./pages/ComponentTestPage";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/duck-hunt" element={<DuckHuntPage />} />
         <Route path="/art" element={<NsArtPage />} />
         <Route path="/hell" element={<HellPage />} />
+        <Route path="/component-test" element={<ComponentTestPage />} />
       </Routes>
     </BrowserRouter>
   );

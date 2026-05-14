@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import MenuBar from "../../components/MenuBar/MenuBar";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./InternetApp.css";
 
@@ -177,14 +177,14 @@ export default function InternetApp() {
   const canForward = historyIdx < history.length - 1;
   const canStop = isLoading || isRevealing;
 
-  const browserMenus: MenuBarMenu[] = [
+  const browserMenus = useMemo<MenuBarMenu[]>(() => [
     {
       label: "Navigate",
       items: [
-        { label: "Back",    onClick: handleBack,              disabled: !canBack    },
-        { label: "Forward", onClick: handleForward,           disabled: !canForward },
-        { label: "Stop",    onClick: handleStop,              disabled: !canStop    },
-        { label: "Refresh", onClick: handleRefresh,           disabled: isHome      },
+        { label: "Back",    onClick: handleBack,    disabled: !canBack    },
+        { label: "Forward", onClick: handleForward, disabled: !canForward },
+        { label: "Stop",    onClick: handleStop,    disabled: !canStop    },
+        { label: "Refresh", onClick: handleRefresh, disabled: isHome      },
         { separator: true },
         { label: "Home",    onClick: () => navigateTo(HOME_URL) },
       ],
@@ -195,7 +195,9 @@ export default function InternetApp() {
         { label: "Turbo Mode", onClick: () => setTurboMode((t) => !t), checked: turboMode },
       ],
     },
-  ];
+  ], [handleBack, handleForward, handleStop, handleRefresh, canBack, canForward, canStop, isHome, navigateTo, turboMode]);
+
+  useWindowMenus(browserMenus);
 
   let statusText = "Done";
   if (isLoading) {
@@ -206,7 +208,6 @@ export default function InternetApp() {
 
   return (
     <div className="ns-internet">
-      <MenuBar menus={browserMenus} />
 
       <div className="ns-internet__toolbar">
         <span className="ns-internet__address-label">Address:</span>

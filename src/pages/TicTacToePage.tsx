@@ -1,7 +1,9 @@
+import { useNavigate } from "react-router-dom";
 import TicTacToe from "../experiences/TicTacToe/TicTacToe";
 import StandaloneWindow from "../components/StandaloneWindow/StandaloneWindow";
 
 export default function TicTacToePage() {
+  const navigate = useNavigate();
   return (
     <StandaloneWindow
       title="Tic-Tac-Toe"
@@ -24,7 +26,7 @@ export default function TicTacToePage() {
         </>
       }
     >
-      <TicTacToe />
+      <TicTacToe onQuit={() => navigate("/doors97", { state: { skipBoot: true } })} />
     </StandaloneWindow>
   );
 }

@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getAnagramsOf, getRandomWord, getWordDifficulty } from "../../utils/dictionary";
 import { computeHintReveals } from "../../utils/hints";
 import "./WordWhirlwind.css";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,33 @@ const DEFAULT_SETTINGS: Settings = {
   showHints: true,
   difficulty: "normal",
 };
+const EASY_SETTINGS: Settings = {
+  wordLength: 5,
+  timeLimit: 180,
+  mode: "standard",
+  showHints: true,
+  difficulty: "easy",
+};
+const NORMAL_SETTINGS: Settings = {
+  wordLength: 6,
+  timeLimit: 120,
+  mode: "standard",
+  showHints: true,
+  difficulty: "normal",
+};
+const HARD_SETTINGS: Settings = {
+  wordLength: 7,
+  timeLimit: 120,
+  mode: "standard",
+  showHints: false,
+  difficulty: "hard",
+};
+
+const MODE_HINTS: Record<GameMode, string> = {
+  freeplay: "Always advance — just find as many words as you can",
+  standard: "Find at least one full-length word to move on",
+  strict: "Find every valid word — good luck, you'll need it",
+};
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
@@ -87,17 +116,23 @@ function generatePuzzle(
   const minWords = Math.max(settings.wordLength * 2, 8);
   const maxDifficulty = DIFFICULTY_MAX_SCORE[settings.difficulty];
 
-  for (let pass = 0; pass < 2; pass++) {
-    const limit = pass === 0 ? 60 : 30;
-    for (let i = 0; i < limit; i++) {
-      const word = getRandomWord(settings.wordLength, maxDifficulty);
-      if (!word) return null;
-      const solutions = getAnagramsOf(word, 3).filter((w) => {
-        const diff = getWordDifficulty(w);
-        return maxDifficulty === undefined || diff <= maxDifficulty;
-      });
-      if (solutions.length >= (pass === 0 ? minWords : 1)) {
-        return { word, solutions: [...solutions].sort() };
+  // Try with requested difficulty first, then fall back to unconstrained
+  const diffLevels: (number | undefined)[] =
+    maxDifficulty !== undefined ? [maxDifficulty, undefined] : [undefined];
+
+  for (const maxDiff of diffLevels) {
+    for (let pass = 0; pass < 2; pass++) {
+      const limit = pass === 0 ? 60 : 30;
+      for (let i = 0; i < limit; i++) {
+        const word = getRandomWord(settings.wordLength, maxDiff);
+        if (!word) break;
+        const solutions = getAnagramsOf(word, 3).filter((w) => {
+          const diff = getWordDifficulty(w);
+          return maxDiff === undefined || diff <= maxDiff;
+        });
+        if (solutions.length >= (pass === 0 ? minWords : 1)) {
+          return { word, solutions: [...solutions].sort() };
+        }
       }
     }
   }
@@ -106,9 +141,6 @@ function generatePuzzle(
 
 // ── Hint helpers ───────────────────────────────────────────────────────────────
 
-/**
- * Wrapper that computes hint reveals for a group of words.
- */
 function computeGroupHints(
   words: string[],
   foundWords: Set<string>,
@@ -122,10 +154,6 @@ type DisplayItem =
   | { type: "unfound"; word: string; hintLetters: number }
   | { type: "ellipsis"; count: number };
 
-/**
- * Convert a sorted word list + found set into display items, collapsing
- * runs of 3+ consecutive found words to an ellipsis.
- */
 function buildGroupItems(
   words: string[],
   foundWords: Set<string>,
@@ -161,123 +189,130 @@ function buildGroupItems(
   return result;
 }
 
-// ── SetupScreen ────────────────────────────────────────────────────────────────
+// ── CustomSettingsModal ────────────────────────────────────────────────────────
 
-const MODE_HINTS: Record<GameMode, string> = {
-  freeplay: "Always advance — just find as many words as you can",
-  standard: "Find at least one full-length word to move on",
-  strict: "Find every valid word — good luck, you'll need it",
-};
-
-function SetupScreen({
-  onStart,
+function CustomSettingsModal({
+  currentSettings,
+  onApply,
+  onClose,
 }: {
-  onStart: (s: Settings) => void;
+  currentSettings: Settings;
+  onApply: (s: Settings) => void;
+  onClose: () => void;
 }) {
-  const [wordLength, setWordLength] = useState<WordLength>(6);
-  const [timeLimit, setTimeLimit] = useState<TimeLimit>(120);
-  const [mode, setMode] = useState<GameMode>("standard");
-  const [showHints, setShowHints] = useState(true);
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>("normal");
+  const [wordLength, setWordLength] = useState<WordLength>(currentSettings.wordLength);
+  const [timeLimit, setTimeLimit] = useState<TimeLimit>(currentSettings.timeLimit);
+  const [mode, setMode] = useState<GameMode>(currentSettings.mode);
+  const [showHints, setShowHints] = useState(currentSettings.showHints);
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>(currentSettings.difficulty);
 
   const timeLimitLabels: [TimeLimit, string][] = [
     [60, "1 min"],
     [120, "2 min"],
     [180, "3 min"],
     [300, "5 min"],
-    [null, "Unlimited"],
+    [null, "∞"],
   ];
 
   return (
-    <div className="ww-setup">
-      <h1 className="ww-setup__title">Word Whirlwind</h1>
-      <p className="ww-setup__subtitle">Unscramble letters · find every word</p>
+    <div className="ww-modal-overlay">
+      <div className="ww-modal">
+        <div className="ww-modal__titlebar">
+          <span className="ww-modal__title">Custom Settings</span>
+          <button className="ww-modal__close" onClick={onClose}>✕</button>
+        </div>
+        <div className="ww-modal__body">
+          <div className="ww-modal__row">
+            <span className="ww-modal__label">Word Length</span>
+            <div className="ww-modal__options">
+              {([5, 6, 7, 8] as WordLength[]).map((n) => (
+                <button
+                  key={n}
+                  className={`ww-modal__option${wordLength === n ? " ww-modal__option--active" : ""}`}
+                  onClick={() => setWordLength(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      <div className="ww-setup__section">
-        <div className="ww-setup__label">Word Length</div>
-        <div className="ww-setup__options">
-          {([5, 6, 7, 8] as WordLength[]).map((n) => (
-            <button
-              key={n}
-              className={`ww-setup__option${wordLength === n ? " ww-setup__option--active" : ""}`}
-              onClick={() => setWordLength(n)}
-            >
-              {n} letters
-            </button>
-          ))}
+          <div className="ww-modal__row">
+            <span className="ww-modal__label">Time Limit</span>
+            <div className="ww-modal__options">
+              {timeLimitLabels.map(([t, label]) => (
+                <button
+                  key={label}
+                  className={`ww-modal__option${timeLimit === t ? " ww-modal__option--active" : ""}`}
+                  onClick={() => setTimeLimit(t)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="ww-modal__row">
+            <span className="ww-modal__label">Game Mode</span>
+            <div className="ww-modal__options">
+              {(["freeplay", "standard", "strict"] as GameMode[]).map((m) => (
+                <button
+                  key={m}
+                  className={`ww-modal__option${mode === m ? " ww-modal__option--active" : ""}`}
+                  onClick={() => setMode(m)}
+                >
+                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="ww-modal__hint">{MODE_HINTS[mode]}</div>
+          </div>
+
+          <div className="ww-modal__row">
+            <span className="ww-modal__label">Hints</span>
+            <div className="ww-modal__options">
+              <button
+                className={`ww-modal__option${showHints ? " ww-modal__option--active" : ""}`}
+                onClick={() => setShowHints(true)}
+              >
+                On
+              </button>
+              <button
+                className={`ww-modal__option${!showHints ? " ww-modal__option--active" : ""}`}
+                onClick={() => setShowHints(false)}
+              >
+                Off
+              </button>
+            </div>
+          </div>
+
+          <div className="ww-modal__row">
+            <span className="ww-modal__label">Word Difficulty</span>
+            <div className="ww-modal__options">
+              {(["easy", "normal", "hard", "all"] as DifficultyLevel[]).map((d) => (
+                <button
+                  key={d}
+                  className={`ww-modal__option${difficulty === d ? " ww-modal__option--active" : ""}`}
+                  onClick={() => setDifficulty(d)}
+                >
+                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="ww-modal__footer">
+          <button
+            className="ww-modal__btn ww-modal__btn--ok"
+            onClick={() => onApply({ wordLength, timeLimit, mode, showHints, difficulty })}
+          >
+            OK
+          </button>
+          <button className="ww-modal__btn ww-modal__btn--cancel" onClick={onClose}>
+            Cancel
+          </button>
         </div>
       </div>
-
-      <div className="ww-setup__section">
-        <div className="ww-setup__label">Time Limit</div>
-        <div className="ww-setup__options">
-          {timeLimitLabels.map(([t, label]) => (
-            <button
-              key={label}
-              className={`ww-setup__option${timeLimit === t ? " ww-setup__option--active" : ""}`}
-              onClick={() => setTimeLimit(t)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="ww-setup__section">
-        <div className="ww-setup__label">Game Mode</div>
-        <div className="ww-setup__options">
-          {(["freeplay", "standard", "strict"] as GameMode[]).map((m) => (
-            <button
-              key={m}
-              className={`ww-setup__option${mode === m ? " ww-setup__option--active" : ""}`}
-              onClick={() => setMode(m)}
-            >
-              {m.charAt(0).toUpperCase() + m.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="ww-setup__hint">{MODE_HINTS[mode]}</div>
-      </div>
-
-      <div className="ww-setup__section">
-        <div className="ww-setup__label">Hints</div>
-        <div className="ww-setup__options">
-          {([true, false] as const).map((v) => (
-            <button
-              key={String(v)}
-              className={`ww-setup__option${showHints === v ? " ww-setup__option--active" : ""}`}
-              onClick={() => setShowHints(v)}
-            >
-              {v ? "On" : "Off"}
-            </button>
-          ))}
-        </div>
-        <div className="ww-setup__hint">Reveal letters from found-word neighbors</div>
-      </div>
-
-      <div className="ww-setup__section">
-        <div className="ww-setup__label">Word Difficulty</div>
-        <div className="ww-setup__options">
-          {(["easy", "normal", "hard", "all"] as DifficultyLevel[]).map((d) => (
-            <button
-              key={d}
-              className={`ww-setup__option${difficulty === d ? " ww-setup__option--active" : ""}`}
-              onClick={() => setDifficulty(d)}
-            >
-              {d.charAt(0).toUpperCase() + d.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="ww-setup__hint">Easy = common words, Hard = obscure words</div>
-      </div>
-
-      <button
-        className="ww-setup__start"
-        onClick={() => onStart({ wordLength, timeLimit, mode, showHints, difficulty })}
-      >
-        Play!
-      </button>
-
     </div>
   );
 }
@@ -538,14 +573,12 @@ function GameOverScreen({
   allWords,
   foundWords,
   onPlayAgain,
-  onSettings,
 }: {
   score: number;
   rounds: number;
   allWords: string[];
   foundWords: Set<string>;
   onPlayAgain: () => void;
-  onSettings: () => void;
 }) {
   return (
     <div className="ww-gameover">
@@ -559,12 +592,6 @@ function GameOverScreen({
         <button className="ww-setup__start" onClick={onPlayAgain}>
           Play Again
         </button>
-        <button
-          className="ww-setup__option ww-setup__option--standalone"
-          onClick={onSettings}
-        >
-          Change Settings
-        </button>
       </div>
     </div>
   );
@@ -572,9 +599,10 @@ function GameOverScreen({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function WordWhirlwind() {
+export default function WordWhirlwind({ onQuit }: { onQuit?: () => void } = {}) {
   const [phase, setPhase] = useState<GamePhase>("setup");
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [showCustomModal, setShowCustomModal] = useState(false);
 
   // Puzzle state
   const [puzzleWord, setPuzzleWord] = useState("");
@@ -744,6 +772,46 @@ export default function WordWhirlwind() {
     []
   );
 
+  // ── Auto-start on mount ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    startRound(DEFAULT_SETTINGS, 1, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Menus ─────────────────────────────────────────────────────────────────
+
+  const restartGame = useCallback(() => {
+    startRound(settingsRef.current, 1, 0);
+  }, [startRound]);
+
+  const applyPreset = useCallback((s: Settings) => {
+    setSettings(s);
+    startRound(s, 1, 0);
+  }, [startRound]);
+
+  const wwMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "Game",
+      items: [
+        { label: "Restart", onClick: restartGame },
+        ...(onQuit ? [{ separator: true as const }, { label: "Quit", onClick: onQuit }] : []),
+      ],
+    },
+    {
+      label: "Options",
+      items: [
+        { label: "Easy",   onClick: () => applyPreset(EASY_SETTINGS) },
+        { label: "Normal", onClick: () => applyPreset(NORMAL_SETTINGS) },
+        { label: "Hard",   onClick: () => applyPreset(HARD_SETTINGS) },
+        { separator: true as const },
+        { label: "Custom…", onClick: () => setShowCustomModal(true) },
+      ],
+    },
+  ], [restartGame, applyPreset, onQuit]);
+
+  useWindowMenus(wwMenus);
+
   // ── Timer ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -791,7 +859,6 @@ export default function WordWhirlwind() {
 
   // ── Submit word ───────────────────────────────────────────────────────────
 
-  // Reload the letters of `word` from the tile pool onto the board.
   const replayWord = useCallback((word: string) => {
     const allTiles = tilesRef.current;
     const newBoardIds: number[] = [];
@@ -942,7 +1009,6 @@ export default function WordWhirlwind() {
 
     function onKey(e: KeyboardEvent) {
       if (roundSummaryRef.current !== null) return;
-      // Don't intercept when typing in an input
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement
@@ -984,11 +1050,6 @@ export default function WordWhirlwind() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  function handleStart(s: Settings) {
-    setSettings(s);
-    startRound(s, 1, 0);
-  }
-
   function handleNextRound() {
     const s = settingsRef.current;
     const currentScore = scoreRef.current;
@@ -1010,37 +1071,36 @@ export default function WordWhirlwind() {
     }
   }
 
-  function handleQuit() {
-    if (timerIdRef.current) {
-      clearInterval(timerIdRef.current);
-      timerIdRef.current = null;
-    }
-    setPhase("setup");
-  }
-
   // ── Derived display values ────────────────────────────────────────────────
 
   const boardTileIdSet = new Set(boardTileIds);
-  // Filtered pool order (board tiles removed) — index = pool column
   const poolOrderFiltered = poolOrder.filter((id) => !boardTileIdSet.has(id));
   const poolColMap = new Map(poolOrderFiltered.map((id, col) => [id, col]));
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (phase === "setup") {
-    return <SetupScreen onStart={handleStart} />;
+    return null;
   }
 
   if (phase === "gameOver") {
     return (
-      <GameOverScreen
-        score={score}
-        rounds={round - 1}
-        allWords={allWords}
-        foundWords={foundWords}
-        onPlayAgain={() => startRound(settings, 1, 0)}
-        onSettings={() => setPhase("setup")}
-      />
+      <>
+        {showCustomModal && (
+          <CustomSettingsModal
+            currentSettings={settings}
+            onApply={(s) => { setSettings(s); startRound(s, 1, 0); setShowCustomModal(false); }}
+            onClose={() => setShowCustomModal(false)}
+          />
+        )}
+        <GameOverScreen
+          score={score}
+          rounds={round - 1}
+          allWords={allWords}
+          foundWords={foundWords}
+          onPlayAgain={() => startRound(settings, 1, 0)}
+        />
+      </>
     );
   }
 
@@ -1057,144 +1117,150 @@ export default function WordWhirlwind() {
       : "Strict";
 
   return (
-    <div className="ww-game">
-      {/* ── Game bar ── */}
-      <div className="ww-bar">
-        <div className="ww-bar__left">
-          <span className="ww-bar__round">Round {round}</span>
-          <span className="ww-bar__mode">{modeLabel}</span>
-        </div>
-        <div
-          className={`ww-bar__timer${timerWarning ? " ww-bar__timer--warn" : ""}${timerDanger ? " ww-bar__timer--danger" : ""}`}
-        >
-          {timeRemaining !== null ? formatTime(timeRemaining) : "∞"}
-        </div>
-        <div className="ww-bar__right">
-          <span className="ww-bar__score">{score.toLocaleString()}</span>
-          <button className="ww-bar__quit" onClick={handleQuit}>
-            Quit
-          </button>
-        </div>
-      </div>
-
-      {/* ── Input area ── */}
-      <div className="ww-input">
-        {/* Flash message */}
-        <div className="ww-flash-wrap">
-          {flash && (
-            <div
-              key={flash.key}
-              className={`ww-flash ww-flash--${flash.kind}`}
-            >
-              {flash.text}
-            </div>
-          )}
-        </div>
-
-        {/* Tile stage — board row on top, pool row below, tiles slide between them */}
-        <div
-          key={`stage-${round}`}
-          className="ww-stage"
-          style={{
-            width: `calc(${settings.wordLength} * (var(--ww-tile-w) + var(--ww-tile-gap)) - var(--ww-tile-gap))`,
-            height: `calc(var(--ww-tile-w) * 2 + var(--ww-stage-row-gap))`,
-          }}
-        >
-          {/* Static board slot outlines */}
-          {Array.from({ length: settings.wordLength }).map((_, i) => (
-            <div
-              key={`slot-${i}`}
-              className="ww-stage__slot"
-              style={{ left: `calc(${i} * (var(--ww-tile-w) + var(--ww-tile-gap)))` }}
-            />
-          ))}
-
-          {/* All tiles — absolutely positioned, slide on state change */}
-          {tiles.map((tile) => {
-            const boardIdx = boardTileIds.indexOf(tile.id);
-            const onBoard = boardIdx !== -1;
-            const col = onBoard ? boardIdx : (poolColMap.get(tile.id) ?? 0);
-            const top = onBoard
-              ? "0px"
-              : `calc(var(--ww-tile-w) + var(--ww-stage-row-gap))`;
-            return (
-              <button
-                key={tile.id}
-                className={`ww-tile${onBoard ? " ww-tile--board" : ""}`}
-                style={{ left: `calc(${col} * (var(--ww-tile-w) + var(--ww-tile-gap)))`, top }}
-                onClick={() =>
-                  onBoard
-                    ? removeTileFromBoard(tile.id)
-                    : addTileToBoard(tile.id)
-                }
-              >
-                {tile.letter.toUpperCase()}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Controls row */}
-        <div className="ww-controls">
-          <div className="ww-controls__left">
-            <button
-              className="ww-btn ww-btn--secondary"
-              onClick={scramble}
-              title="Space"
-            >
-              Scramble
-            </button>
-            <button
-              className="ww-btn ww-btn--secondary"
-              onClick={clearBoard}
-              title="Esc"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="ww-controls__right">
-            {advanceBtnVisible && (
-              <button
-                className="ww-btn ww-btn--advance"
-                onClick={handleAdvanceNow}
-              >
-                {settings.mode === "freeplay"
-                  ? "Next Round →"
-                  : "Submit Round →"}
-              </button>
-            )}
-            <button
-              className="ww-btn ww-btn--submit"
-              onClick={submitWord}
-              title="Enter"
-            >
-              Submit
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Word groups ── */}
-      <WordGroupsPanel
-        allWords={allWords}
-        foundWords={foundWords}
-        showHints={settings.showHints}
-        revealAll={roundSummary !== null}
-        revealedLetters={revealedLetters}
-        puzzleWord={puzzleWord}
-      />
-
-      {/* ── Round summary overlay ── */}
-      {roundSummary && (
-        <RoundSummaryOverlay
-          summary={roundSummary}
-          round={round}
-          totalScore={score}
-          allWords={allWords}
-          foundWords={foundWords}
-          onContinue={handleContinueAfterSummary}
+    <>
+      {showCustomModal && (
+        <CustomSettingsModal
+          currentSettings={settings}
+          onApply={(s) => { setSettings(s); startRound(s, 1, 0); setShowCustomModal(false); }}
+          onClose={() => setShowCustomModal(false)}
         />
       )}
-    </div>
+      <div className="ww-game">
+        {/* ── Game bar ── */}
+        <div className="ww-bar">
+          <div className="ww-bar__left">
+            <span className="ww-bar__round">Round {round}</span>
+            <span className="ww-bar__mode">{modeLabel}</span>
+          </div>
+          <div
+            className={`ww-bar__timer${timerWarning ? " ww-bar__timer--warn" : ""}${timerDanger ? " ww-bar__timer--danger" : ""}`}
+          >
+            {timeRemaining !== null ? formatTime(timeRemaining) : "∞"}
+          </div>
+          <div className="ww-bar__right">
+            <span className="ww-bar__score">{score.toLocaleString()}</span>
+          </div>
+        </div>
+
+        {/* ── Input area ── */}
+        <div className="ww-input">
+          {/* Flash message */}
+          <div className="ww-flash-wrap">
+            {flash && (
+              <div
+                key={flash.key}
+                className={`ww-flash ww-flash--${flash.kind}`}
+              >
+                {flash.text}
+              </div>
+            )}
+          </div>
+
+          {/* Tile stage */}
+          <div
+            key={`stage-${round}`}
+            className="ww-stage"
+            style={{
+              width: `calc(${settings.wordLength} * (var(--ww-tile-w) + var(--ww-tile-gap)) - var(--ww-tile-gap))`,
+              height: `calc(var(--ww-tile-w) * 2 + var(--ww-stage-row-gap))`,
+            }}
+          >
+            {/* Static board slot outlines */}
+            {Array.from({ length: settings.wordLength }).map((_, i) => (
+              <div
+                key={`slot-${i}`}
+                className="ww-stage__slot"
+                style={{ left: `calc(${i} * (var(--ww-tile-w) + var(--ww-tile-gap)))` }}
+              />
+            ))}
+
+            {/* All tiles — absolutely positioned, slide on state change */}
+            {tiles.map((tile) => {
+              const boardIdx = boardTileIds.indexOf(tile.id);
+              const onBoard = boardIdx !== -1;
+              const col = onBoard ? boardIdx : (poolColMap.get(tile.id) ?? 0);
+              const top = onBoard
+                ? "0px"
+                : `calc(var(--ww-tile-w) + var(--ww-stage-row-gap))`;
+              return (
+                <button
+                  key={tile.id}
+                  className={`ww-tile${onBoard ? " ww-tile--board" : ""}`}
+                  style={{ left: `calc(${col} * (var(--ww-tile-w) + var(--ww-tile-gap)))`, top }}
+                  onClick={() =>
+                    onBoard
+                      ? removeTileFromBoard(tile.id)
+                      : addTileToBoard(tile.id)
+                  }
+                >
+                  {tile.letter.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Controls row */}
+          <div className="ww-controls">
+            <div className="ww-controls__left">
+              <button
+                className="ww-btn ww-btn--secondary"
+                onClick={scramble}
+                title="Space"
+              >
+                Scramble
+              </button>
+              <button
+                className="ww-btn ww-btn--secondary"
+                onClick={clearBoard}
+                title="Esc"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="ww-controls__right">
+              {advanceBtnVisible && (
+                <button
+                  className="ww-btn ww-btn--advance"
+                  onClick={handleAdvanceNow}
+                >
+                  {settings.mode === "freeplay"
+                    ? "Next Round →"
+                    : "Submit Round →"}
+                </button>
+              )}
+              <button
+                className="ww-btn ww-btn--submit"
+                onClick={submitWord}
+                title="Enter"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Word groups ── */}
+        <WordGroupsPanel
+          allWords={allWords}
+          foundWords={foundWords}
+          showHints={settings.showHints}
+          revealAll={roundSummary !== null}
+          revealedLetters={revealedLetters}
+          puzzleWord={puzzleWord}
+        />
+
+        {/* ── Round summary overlay ── */}
+        {roundSummary && (
+          <RoundSummaryOverlay
+            summary={roundSummary}
+            round={round}
+            totalScore={score}
+            allWords={allWords}
+            foundWords={foundWords}
+            onContinue={handleContinueAfterSummary}
+          />
+        )}
+      </div>
+    </>
   );
 }

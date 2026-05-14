@@ -77,8 +77,6 @@ interface DisplayAppProps {
   onCancel: () => void;
 }
 
-const INACTIVE_TABS = ["Appearance", "Settings"];
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppProps) {
@@ -148,16 +146,6 @@ export default function DisplayApp({ settings, onApply, onCancel }: DisplayAppPr
 
   return (
     <div className="ns-display-app">
-      {/* Tab bar */}
-      <div className="ns-display-app__tabs">
-        <button className="ns-display-app__tab ns-display-app__tab--active">
-          Background
-        </button>
-        {INACTIVE_TABS.map((t) => (
-          <button key={t} className="ns-display-app__tab" disabled>{t}</button>
-        ))}
-      </div>
-
       <div className="ns-display-app__body">
         {/* CRT monitor preview */}
         <div className="ns-display-app__monitor-wrap">

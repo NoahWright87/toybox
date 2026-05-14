@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import "./Cards.css";
-import { PlayingCard } from "./PlayingCard";
 import {
   DEFAULT_DECK_SETTINGS,
-  CARD_BACK_COLORS,
   type CardsGame,
   type DeckSettings,
   type Suit,
   type WarSpeed,
 } from "./types";
 import { totalCards } from "./deckUtils";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { DeckModal } from "./DeckModal";
 
 const SUITS: { id: Suit; symbol: string; isRed: boolean }[] = [
   { id: "spades",   symbol: "♠", isRed: false },
@@ -19,20 +20,20 @@ const SUITS: { id: Suit; symbol: string; isRed: boolean }[] = [
 ];
 
 const WAR_SPEEDS: { value: WarSpeed; label: string }[] = [
-  { value: "slow",   label: "Slow (2s)"   },
+  { value: "slow",   label: "Slow (2s)"    },
   { value: "normal", label: "Normal (0.9s)" },
   { value: "fast",   label: "Fast (0.25s)" },
 ];
 
-const PREVIEW_CARD = { suit: "spades" as const, rank: "A" as const, id: "preview" };
-
 interface CardsLauncherProps {
   onLaunch: (game: CardsGame, settings: DeckSettings) => void;
+  onQuit?: () => void;
 }
 
-export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
+export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) {
   const [game, setGame] = useState<CardsGame>("war");
   const [settings, setSettings] = useState<DeckSettings>(DEFAULT_DECK_SETTINGS);
+  const [showDeckModal, setShowDeckModal] = useState(false);
 
   const toggleSuit = (suit: Suit) => {
     const active = settings.suits.includes(suit);
@@ -52,6 +53,21 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
 
   const count = totalCards(settings);
 
+  const launcherMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "Game",
+      items: [
+        ...(onQuit ? [{ label: "Exit", onClick: onQuit }] : [{ label: "(not implemented)", disabled: true as const }]),
+      ],
+    },
+    {
+      label: "Options",
+      items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }],
+    },
+  ], [onQuit]);
+
+  useWindowMenus(launcherMenus);
+
   return (
     <div className="cards-launcher">
       {/* Game picker */}
@@ -69,77 +85,52 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
         </select>
       </div>
 
-      <div className="cards-launcher__divider" />
+      {/* Per-game options */}
+      {(game === "war" || game === "blackjack") && (
+        <>
+          <div className="cards-launcher__divider" />
+          <div>
+            <div className="cards-launcher__section-title">Options:</div>
 
-      {/* Options */}
-      <div>
-        <div className="cards-launcher__section-title">Options:</div>
+            {/* Deck count — Blackjack only */}
+            {game === "blackjack" && (
+              <div className="cards-launcher__row">
+                <span className="cards-launcher__option-label">Number of Decks:</span>
+                <div className="cards-launcher__stepper">
+                  <button className="cards-launcher__step-btn" onClick={() => stepDecks(-1)} disabled={settings.numDecks <= 1}>−</button>
+                  <span className="cards-launcher__step-val">{settings.numDecks}</span>
+                  <button className="cards-launcher__step-btn" onClick={() => stepDecks(1)}  disabled={settings.numDecks >= 6}>+</button>
+                </div>
+              </div>
+            )}
 
-        {/* Deck count */}
-        <div className="cards-launcher__row">
-          <span className="cards-launcher__option-label">Number of Decks:</span>
-          <div className="cards-launcher__stepper">
-            <button className="cards-launcher__step-btn" onClick={() => stepDecks(-1)} disabled={settings.numDecks <= 1}>−</button>
-            <span className="cards-launcher__step-val">{settings.numDecks}</span>
-            <button className="cards-launcher__step-btn" onClick={() => stepDecks(1)}  disabled={settings.numDecks >= 6}>+</button>
+            {/* Suits — War only */}
+            {game === "war" && (
+              <div className="cards-launcher__row">
+                <span className="cards-launcher__option-label">Suits:</span>
+                <div className="cards-launcher__suits">
+                  {SUITS.map((s) => (
+                    <button
+                      key={s.id}
+                      className={[
+                        "cards-launcher__suit-btn",
+                        s.isRed ? "cards-launcher__suit-btn--red" : "cards-launcher__suit-btn--black",
+                        settings.suits.includes(s.id) ? "cards-launcher__suit-btn--on" : "",
+                      ].join(" ")}
+                      title={s.id}
+                      onClick={() => toggleSuit(s.id)}
+                    >
+                      {s.symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="cards-launcher__count">{count} card{count !== 1 ? "s" : ""} total</div>
           </div>
-        </div>
-
-        {/* Suits */}
-        <div className="cards-launcher__row">
-          <span className="cards-launcher__option-label">Suits:</span>
-          <div className="cards-launcher__suits">
-            {SUITS.map((s) => (
-              <button
-                key={s.id}
-                className={[
-                  "cards-launcher__suit-btn",
-                  s.isRed ? "cards-launcher__suit-btn--red" : "cards-launcher__suit-btn--black",
-                  settings.suits.includes(s.id) ? "cards-launcher__suit-btn--on" : "",
-                ].join(" ")}
-                title={s.id}
-                onClick={() => toggleSuit(s.id)}
-              >
-                {s.symbol}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Jokers */}
-        <div className="cards-launcher__row">
-          <span className="cards-launcher__option-label">Include Jokers:</span>
-          <label className="cards-launcher__checkbox-wrap">
-            <input
-              type="checkbox"
-              checked={settings.includeJokers}
-              onChange={(e) => setSettings((prev) => ({ ...prev, includeJokers: e.target.checked }))}
-            />
-            <span className="cards-launcher__checkbox-text">{settings.includeJokers ? "Yes" : "No"}</span>
-          </label>
-        </div>
-
-        {/* Card back color */}
-        <div className="cards-launcher__row" style={{ alignItems: "flex-start" }}>
-          <span className="cards-launcher__option-label" style={{ paddingTop: 4 }}>Card Back:</span>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div className="cards-launcher__swatches">
-              {CARD_BACK_COLORS.map((cb) => (
-                <button
-                  key={cb.color}
-                  className={["cards-launcher__swatch", settings.cardBack === cb.color ? "cards-launcher__swatch--selected" : ""].join(" ")}
-                  style={{ background: cb.color }}
-                  title={cb.label}
-                  onClick={() => setSettings((prev) => ({ ...prev, cardBack: cb.color }))}
-                />
-              ))}
-            </div>
-            <PlayingCard card={PREVIEW_CARD} faceDown backColor={settings.cardBack} />
-          </div>
-        </div>
-
-        <div className="cards-launcher__count">{count} card{count !== 1 ? "s" : ""} total</div>
-      </div>
+        </>
+      )}
 
       {/* War-specific settings */}
       {game === "war" && (
@@ -184,6 +175,14 @@ export default function CardsLauncher({ onLaunch }: CardsLauncherProps) {
       <button className="cards-launcher__launch-btn" onClick={() => onLaunch(game, settings)}>
         ▶ Launch
       </button>
+
+      {showDeckModal && (
+        <DeckModal
+          cardBack={settings.cardBack}
+          onSelect={(color) => setSettings((prev) => ({ ...prev, cardBack: color }))}
+          onClose={() => setShowDeckModal(false)}
+        />
+      )}
     </div>
   );
 }

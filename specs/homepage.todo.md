@@ -2,6 +2,11 @@
 
 ## Sooner
 
+- [#5](https://github.com/NoahWright87/toybox/issues/5) "About" page — brief explanation of the Toy Box project
+  - Short description: Noah's just-for-fun collection; the "for fun" corner of NoahWright.dev
+  - Link back to NoahWright.dev
+  - Minimal content — doesn't need to be a full page; could be an "About" window inside NS Doors 97 as well as a standalone route
+
 ## Later
 
 - Preserve room for "behind-the-scenes" / "director's cut" mode on individual experiences *(effort: XS)*

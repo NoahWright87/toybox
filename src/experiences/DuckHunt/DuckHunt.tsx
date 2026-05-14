@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./DuckHunt.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -554,6 +556,14 @@ export default function DuckHunt() {
   // Keep refs in sync with state for use inside the game loop / callbacks
   const phaseRef = useRef<GamePhase>("title");
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // ── Menus ─────────────────────────────────────────────────────────────────
+
+  const dhMenus = useMemo<MenuBarMenu[]>(() => [
+    { label: "Game", items: [{ label: "New Game", onClick: () => setPhase("title") }] },
+  ], []);
+
+  useWindowMenus(dhMenus);
 
   // ── High scores ────────────────────────────────────────────────────────────
 

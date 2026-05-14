@@ -1,5 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import TitleBar from "../Window/TitleBar";
+import MenuBar, { type MenuBarMenu } from "../MenuBar/MenuBar";
+import { WindowMenuContext } from "../Window/useWindowMenus";
 import "./StandaloneWindow.css";
 
 interface StandaloneWindowProps {
@@ -11,81 +14,70 @@ interface StandaloneWindowProps {
 
 export default function StandaloneWindow({ title, icon, helpContent, children }: StandaloneWindowProps) {
   const navigate = useNavigate();
-  const [openMenu, setOpenMenu] = useState<"file" | "help" | null>(null);
-  const menuBarRef = useRef<HTMLDivElement>(null);
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Dynamic menus registered by child apps via useWindowMenus
+  const [dynamicMenus, setDynamicMenus] = useState<MenuBarMenu[] | null>(null);
+  const dynamicMenusRef = useRef<MenuBarMenu[] | null>(null);
+  const registerMenus = useCallback((m: MenuBarMenu[]) => {
+    if (m !== dynamicMenusRef.current) {
+      dynamicMenusRef.current = m;
+      setDynamicMenus(m);
+    }
+  }, []);
 
   function exitToDoors() {
     navigate("/doors97", { state: { skipBoot: true } });
   }
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (menuBarRef.current && !menuBarRef.current.contains(e.target as Node)) {
-        setOpenMenu(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const fileMenu: MenuBarMenu = {
+    label: "File",
+    items: [{ label: "Exit to Doors", onClick: exitToDoors }],
+  };
+
+  const helpMenu: MenuBarMenu | null = helpContent
+    ? { label: "Help", items: [{ label: "Keyboard Shortcuts", onClick: () => setShowHelp(true) }] }
+    : null;
+
+  const menus: MenuBarMenu[] = [
+    fileMenu,
+    ...(dynamicMenus ?? []),
+    ...(helpMenu ? [helpMenu] : []),
+  ];
 
   return (
     <div className="standalone-page">
       <div className="standalone-window">
-        <div className="standalone-window__titlebar">
-          {icon && <span className="standalone-window__icon">{icon}</span>}
-          <span className="standalone-window__title">{title}</span>
-          <button
-            className="standalone-window__close"
-            onClick={exitToDoors}
-            aria-label="Exit to Doors"
-            title="Exit to Doors"
-          >
-            ✕
-          </button>
+        <TitleBar title={title} icon={icon} onClose={exitToDoors} />
+        <MenuBar menus={menus} />
+        <div className="standalone-window__content">
+          <WindowMenuContext.Provider value={registerMenus}>
+            {children}
+          </WindowMenuContext.Provider>
         </div>
 
-        <div className="standalone-window__menubar" ref={menuBarRef}>
-          <div className="standalone-window__menu">
-            <button
-              className={`standalone-window__menu-btn${openMenu === "file" ? " standalone-window__menu-btn--open" : ""}`}
-              onClick={() => setOpenMenu(openMenu === "file" ? null : "file")}
+        {showHelp && helpContent && (
+          <div className="standalone-help-overlay" onClick={() => setShowHelp(false)}>
+            <div
+              className="standalone-help-dialog"
+              onClick={(e) => e.stopPropagation()}
             >
-              File
-            </button>
-            {openMenu === "file" && (
-              <div className="standalone-window__dropdown">
+              <div className="standalone-help-dialog__titlebar">
+                <span>Keyboard Shortcuts</span>
                 <button
-                  className="standalone-window__dropdown-item"
-                  onClick={exitToDoors}
+                  className="standalone-help-dialog__close"
+                  onClick={() => setShowHelp(false)}
+                  aria-label="Close"
                 >
-                  Exit to Doors
+                  ✕
                 </button>
               </div>
-            )}
-          </div>
-
-          {helpContent && (
-            <div className="standalone-window__menu">
-              <button
-                className={`standalone-window__menu-btn${openMenu === "help" ? " standalone-window__menu-btn--open" : ""}`}
-                onClick={() => setOpenMenu(openMenu === "help" ? null : "help")}
-              >
-                Help
-              </button>
-              {openMenu === "help" && (
-                <div className="standalone-window__dropdown standalone-window__dropdown--help">
-                  <div className="standalone-window__help-content">
-                    {helpContent}
-                  </div>
-                </div>
-              )}
+              <div className="standalone-help-dialog__body">
+                {helpContent}
+              </div>
             </div>
-          )}
-        </div>
-
-        <div className="standalone-window__content">
-          {children}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

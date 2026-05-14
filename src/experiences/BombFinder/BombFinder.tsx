@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./BombFinder.css";
 
 export type Difficulty = "beginner" | "intermediate" | "expert";
@@ -396,24 +398,29 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
     [cancelLongPress]
   );
 
+  const bfMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "Game",
+      items: [
+        { label: "New Game", onClick: () => resetGame() },
+        { separator: true },
+        ...(["beginner", "intermediate", "expert"] as Difficulty[]).map((d) => ({
+          label: DIFFICULTIES[d].label,
+          checked: difficulty === d,
+          onClick: () => resetGame(d),
+        })),
+      ],
+    },
+  ], [difficulty, resetGame]);
+
+  useWindowMenus(bfMenus);
+
   const faceEmoji =
     status === "won" ? "😎" : status === "lost" ? "😵"
     : (facePressed || pressedCell || chordingCell) ? "😮" : "🙂";
 
   return (
     <div className="bomb-finder">
-      <div className="bomb-finder__toolbar">
-        {(Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => (
-          <button
-            key={d}
-            className={`bomb-finder__diff-btn${difficulty === d ? " bomb-finder__diff-btn--active" : ""}`}
-            onClick={() => resetGame(d)}
-          >
-            {DIFFICULTIES[d].label}
-          </button>
-        ))}
-      </div>
-
       <div className="bomb-finder__panel">
         <div className="bomb-finder__status-bar">
           <div className="bomb-finder__display">{fmt(minesLeft)}</div>

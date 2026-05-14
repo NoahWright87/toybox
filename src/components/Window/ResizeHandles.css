@@ -1,0 +1,23 @@
+.resize-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: absolute;
+  pointer-events: all;
+  z-index: 10;
+}
+
+/* Edge handles */
+.resize-handle--n  { top: -4px;    left: 12px;  right: 12px; height: 8px; cursor: n-resize;  }
+.resize-handle--s  { bottom: -4px; left: 12px;  right: 12px; height: 8px; cursor: s-resize;  }
+.resize-handle--e  { right: -4px;  top: 12px;   bottom: 12px; width: 8px; cursor: e-resize;  }
+.resize-handle--w  { left: -4px;   top: 12px;   bottom: 12px; width: 8px; cursor: w-resize;  }
+
+/* Corner handles (larger hit area) */
+.resize-handle--ne { top: -4px;    right: -4px;  width: 16px; height: 16px; cursor: ne-resize; }
+.resize-handle--se { bottom: -4px; right: -4px;  width: 16px; height: 16px; cursor: se-resize; }
+.resize-handle--sw { bottom: -4px; left: -4px;   width: 16px; height: 16px; cursor: sw-resize; }
+.resize-handle--nw { top: -4px;    left: -4px;   width: 16px; height: 16px; cursor: nw-resize; }

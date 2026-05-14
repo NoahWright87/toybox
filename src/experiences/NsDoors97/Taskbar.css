@@ -228,6 +228,14 @@
   color: #ffffff;
 }
 
+/* Minimized (Shrunk) windows: sunken border to indicate hidden state */
+.ns-taskbar__win-btn--minimized {
+  border-color: #330000 #ff9a44 #ff9a44 #330000;
+  background: #3a1800;
+  color: #cc8844;
+  font-style: italic;
+}
+
 .ns-taskbar__win-icon {
   font-size: 12px;
   flex-shrink: 0;

@@ -1,7 +1,9 @@
 import {
   useRef, useState, useEffect, useCallback,
-  useLayoutEffect, forwardRef, useImperativeHandle,
+  useLayoutEffect, forwardRef, useImperativeHandle, useMemo,
 } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -199,7 +201,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
   const [zoom,           setZoom]          = useState(1);
   const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 640, h: 480 });
-  const [showSizeMenu,   setShowSizeMenu]  = useState(false);
   const [status,         setStatus]        = useState("Ready");
   const [confirmState,   setConfirmState]  = useState<ConfirmState | null>(null);
   const [editingSwatchIdx, setEditingSwatchIdx] = useState<number | null>(null);
@@ -584,9 +585,34 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
   const handleSizeSelect = useCallback((preset: CanvasSize) => {
     setCanvasSize(preset);
-    setShowSizeMenu(false);
     setZoom(1);
   }, []);
+
+  const artMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "File",
+      items: [
+        { label: "New",        onClick: newCanvas },
+        { label: "Export PNG", onClick: exportPng },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        { label: "Undo", onClick: undo },
+      ],
+    },
+    {
+      label: "Format",
+      items: CANVAS_PRESETS.map((p) => ({
+        label: `${p.w}×${p.h}`,
+        checked: canvasSize.w === p.w && canvasSize.h === p.h,
+        onClick: () => handleSizeSelect(p),
+      })),
+    },
+  ], [newCanvas, exportPng, undo, canvasSize, handleSizeSelect]);
+
+  useWindowMenus(artMenus);
 
   const showFillMode = tool === "rect" || tool === "oval";
 
@@ -618,36 +644,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           </div>
         </div>
       )}
-
-      {/* ── Action bar ── */}
-      <div className="ns-art__actions">
-        <button className="ns-art__action-btn" onClick={newCanvas}  title="New">New</button>
-        <button className="ns-art__action-btn" onClick={exportPng}  title="Export as PNG">Export PNG</button>
-        <button className="ns-art__action-btn" onClick={undo}       title="Undo (Ctrl+Z)">Undo</button>
-        <div className="ns-art__action-sep" />
-        <div className="ns-art__size-picker">
-          <button
-            className="ns-art__action-btn"
-            onClick={() => setShowSizeMenu(s => !s)}
-            title="Change canvas size"
-          >
-            {canvasSize.w}×{canvasSize.h} ▾
-          </button>
-          {showSizeMenu && (
-            <div className="ns-art__size-menu">
-              {CANVAS_PRESETS.map(p => (
-                <button
-                  key={`${p.w}x${p.h}`}
-                  className={`ns-art__size-item${canvasSize.w===p.w && canvasSize.h===p.h ? " ns-art__size-item--active" : ""}`}
-                  onClick={() => handleSizeSelect(p)}
-                >
-                  {p.w}×{p.h}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* ── Workspace ── */}
       <div className="ns-art__workspace">

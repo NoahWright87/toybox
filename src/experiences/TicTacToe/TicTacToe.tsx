@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu, MenuBarItem } from "../../components/MenuBar/MenuBar";
 import "./TicTacToe.css";
 
 type Player = "X" | "O";
@@ -242,152 +244,30 @@ function getHardMove(
   return scored[0].pos;
 }
 
-// --- Setup Screen ---
+// --- Main Game ---
 
-function SetupScreen({
-  onStart,
-  onBoardSizeChange,
-}: {
-  onStart: (cfg: GameConfig) => void;
-  onBoardSizeChange?: (size: BoardSize) => void;
-}) {
-  const [variant, setVariant] = useState<GameVariant>("classic");
-  const [size, setSize] = useState<BoardSize>(3);
-  const [mode, setMode] = useState<GameMode>("ai");
-  const [difficulty, setDifficulty] = useState<AIDifficulty>("normal");
+const DEFAULT_TTT_CONFIG: GameConfig = { size: 3, mode: "ai", difficulty: "normal", variant: "classic" };
 
-  function handleSizeChange(s: BoardSize) {
-    setSize(s);
-    onBoardSizeChange?.(s);
-  }
-
-  const winHint =
-    size === 3
-      ? "Get 3 in a row to win"
-      : size === 5
-      ? "Get 4 in a row to win"
-      : "Get 5 in a row to win";
-
-  return (
-    <div className="ttt-setup">
-      <h1 className="ttt-setup__title">Tic-Tac-Toe</h1>
-
-      <div className="ttt-setup__section">
-        <div className="ttt-setup__label">Style</div>
-        <div className="ttt-setup__options">
-          <button
-            className={`ttt-setup__option${variant === "classic" ? " ttt-setup__option--active" : ""}`}
-            onClick={() => setVariant("classic")}
-          >
-            Classic
-          </button>
-          <button
-            className={`ttt-setup__option${variant === "dropIn" ? " ttt-setup__option--active" : ""}`}
-            onClick={() => setVariant("dropIn")}
-          >
-            Drop In
-          </button>
-        </div>
-        <div className="ttt-setup__hint">
-          {variant === "classic"
-            ? "Click any empty square"
-            : "Pieces fall to the bottom of the column"}
-        </div>
-      </div>
-
-      <div className="ttt-setup__section">
-        <div className="ttt-setup__label">Board Size</div>
-        <div className="ttt-setup__options">
-          {([3, 5, 7] as BoardSize[]).map((s) => (
-            <button
-              key={s}
-              className={`ttt-setup__option${size === s ? " ttt-setup__option--active" : ""}`}
-              onClick={() => handleSizeChange(s)}
-            >
-              {s}×{s}
-            </button>
-          ))}
-        </div>
-        <div className="ttt-setup__hint">{winHint}</div>
-      </div>
-
-      <div className="ttt-setup__section">
-        <div className="ttt-setup__label">Opponent</div>
-        <div className="ttt-setup__options">
-          <button
-            className={`ttt-setup__option${mode === "ai" ? " ttt-setup__option--active" : ""}`}
-            onClick={() => setMode("ai")}
-          >
-            vs Computer
-          </button>
-          <button
-            className={`ttt-setup__option${mode === "human" ? " ttt-setup__option--active" : ""}`}
-            onClick={() => setMode("human")}
-          >
-            vs Human
-          </button>
-        </div>
-      </div>
-
-      {mode === "ai" && (
-        <div className="ttt-setup__section">
-          <div className="ttt-setup__label">Difficulty</div>
-          <div className="ttt-setup__options">
-            <button
-              className={`ttt-setup__option${difficulty === "easy" ? " ttt-setup__option--active" : ""}`}
-              onClick={() => setDifficulty("easy")}
-            >
-              Easy
-            </button>
-            <button
-              className={`ttt-setup__option${difficulty === "normal" ? " ttt-setup__option--active" : ""}`}
-              onClick={() => setDifficulty("normal")}
-            >
-              Normal
-            </button>
-            <button
-              className={`ttt-setup__option${difficulty === "hard" ? " ttt-setup__option--active" : ""}`}
-              onClick={() => setDifficulty("hard")}
-            >
-              Hard
-            </button>
-          </div>
-          <div className="ttt-setup__hint">
-            {difficulty === "easy"
-              ? "Picks random squares"
-              : difficulty === "normal"
-              ? "Tries to win and block you"
-              : "Always picks the best move it can see"}
-          </div>
-        </div>
-      )}
-
-      <button
-        className="ttt-setup__start"
-        onClick={() =>
-          onStart({
-            variant,
-            size,
-            mode,
-            difficulty: mode === "ai" ? difficulty : "easy",
-          })
-        }
-      >
-        Start Game
-      </button>
-    </div>
-  );
+function loadTttConfig(): GameConfig {
+  try {
+    const saved = localStorage.getItem("ttt-config");
+    if (saved) return { ...DEFAULT_TTT_CONFIG, ...JSON.parse(saved) };
+  } catch {}
+  return DEFAULT_TTT_CONFIG;
 }
 
-// --- Main Game ---
+function saveTttConfig(cfg: GameConfig) {
+  try { localStorage.setItem("ttt-config", JSON.stringify(cfg)); } catch {}
+}
 
 interface TicTacToeProps {
   onBoardSizeChange?: (size: BoardSize) => void;
+  onQuit?: () => void;
 }
 
-export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
-  const [config, setConfig] = useState<GameConfig | null>(null);
-  const [board, setBoard] = useState<Cell[][]>([]);
+export default function TicTacToe({ onBoardSizeChange, onQuit }: TicTacToeProps = {}) {
+  const [config, setConfig] = useState<GameConfig>(loadTttConfig);
+  const [board, setBoard] = useState<Cell[][]>(() => createBoard(config.size));
   const [currentPlayer, setCurrentPlayer] = useState<Player>("X");
   const [winResult, setWinResult] = useState<{
     winner: Player;
@@ -429,9 +309,46 @@ export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
     onBoardSizeChange?.(cfg.size);
   }, [onBoardSizeChange]);
 
+  // Notify parent of initial board size on mount
+  useEffect(() => {
+    onBoardSizeChange?.(config.size);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const changeConfig = useCallback((newCfg: GameConfig) => {
+    saveTttConfig(newCfg);
+    startGame(newCfg);
+  }, [startGame]);
+
+  const tttMenus = useMemo<MenuBarMenu[]>(() => {
+    const items: MenuBarItem[] = [
+      { label: "New Game", onClick: () => startGame(config) },
+      { separator: true },
+      { label: "Classic", onClick: () => changeConfig({ ...config, variant: "classic" }), checked: config.variant === "classic" },
+      { label: "Drop In", onClick: () => changeConfig({ ...config, variant: "dropIn" }),  checked: config.variant === "dropIn"  },
+      { separator: true },
+      { label: "3×3", onClick: () => changeConfig({ ...config, size: 3 }), checked: config.size === 3 },
+      { label: "5×5", onClick: () => changeConfig({ ...config, size: 5 }), checked: config.size === 5 },
+      { label: "7×7", onClick: () => changeConfig({ ...config, size: 7 }), checked: config.size === 7 },
+      { separator: true },
+      { label: "vs Computer", onClick: () => changeConfig({ ...config, mode: "ai" }),    checked: config.mode === "ai"    },
+      { label: "vs Human",    onClick: () => changeConfig({ ...config, mode: "human" }), checked: config.mode === "human" },
+      ...(config.mode === "ai" ? [
+        { separator: true as const },
+        { label: "Easy",   onClick: () => changeConfig({ ...config, difficulty: "easy"   }), checked: config.difficulty === "easy"   },
+        { label: "Normal", onClick: () => changeConfig({ ...config, difficulty: "normal" }), checked: config.difficulty === "normal" },
+        { label: "Hard",   onClick: () => changeConfig({ ...config, difficulty: "hard"   }), checked: config.difficulty === "hard"   },
+      ] : []),
+      ...(onQuit ? [{ separator: true as const }, { label: "Quit", onClick: onQuit }] : []),
+    ];
+    return [{ label: "Game", items }];
+  }, [config, startGame, changeConfig, onQuit]);
+
+  useWindowMenus(tttMenus);
+
   const makeMove = useCallback(
     (r: number, c: number) => {
-      if (!config || winResult || isDraw || aiThinking) return;
+      if (winResult || isDraw || aiThinking) return;
 
       let targetR = r;
       if (config.variant === "dropIn") {
@@ -461,7 +378,6 @@ export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
   // AI turn
   useEffect(() => {
     if (
-      !config ||
       config.mode !== "ai" ||
       currentPlayer !== "O" ||
       winResult ||
@@ -518,17 +434,8 @@ export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (!config) {
-    return (
-      <SetupScreen
-        onStart={startGame}
-        onBoardSizeChange={onBoardSizeChange}
-      />
-    );
-  }
-
   const winCells = new Set(
-    winResult?.cells.map(([r, c]) => `${r}-${c}`) ?? []
+    winResult?.cells.map(([r, c]: [number, number]) => `${r}-${c}`) ?? []
   );
   const gameOver = !!(winResult || isDraw);
   const isAITurn =
@@ -669,12 +576,6 @@ export default function TicTacToe({ onBoardSizeChange }: TicTacToeProps = {}) {
         <div className="ttt__actions">
           <button className="ttt__btn" onClick={() => startGame(config)}>
             Play Again
-          </button>
-          <button
-            className="ttt__btn ttt__btn--secondary"
-            onClick={() => setConfig(null)}
-          >
-            Change Settings
           </button>
         </div>
       )}

@@ -7,6 +7,7 @@ interface TaskbarWindowEntry {
   id: string;
   title: string;
   icon?: string;
+  minimized?: boolean;
 }
 
 interface TaskbarProps {
@@ -14,7 +15,8 @@ interface TaskbarProps {
   activeWindowId: string | null;
   onWindowFocus: (id: string) => void;
   onRestart: () => void;
-  onOpenSettings: (setting: "display") => void;
+  onOpenSettings: (setting: "display" | "screensavers") => void;
+  onOpenAbout: () => void;
   onExitToTos: () => void;
 }
 
@@ -98,14 +100,14 @@ function FullscreenButton() {
 // ── Start menu ────────────────────────────────────────────────────────────────
 
 const START_MENU_ITEMS = [
-  { id: "programs", icon: "📂", label: "Programs",  arrow: true  },
-  { id: "settings", icon: "⚙️",  label: "Settings",  arrow: true  },
-  { id: "help",     icon: "❓",  label: "Help",       arrow: false },
+  { id: "programs", icon: "📂", label: "Programs",          arrow: true  },
+  { id: "settings", icon: "⚙️",  label: "Settings",          arrow: true  },
+  { id: "about",    icon: "ℹ️",  label: "About NS Doors 97", arrow: false },
 ] as const;
 
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
-export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings, onExitToTos }: TaskbarProps) {
+export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings, onOpenAbout, onExitToTos }: TaskbarProps) {
   const { showDialog } = useOsDialog();
   const [startOpen, setStartOpen] = useState(false);
   const [settingsSubOpen, setSettingsSubOpen] = useState(false);
@@ -127,6 +129,17 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
     setStartOpen(false);
     showDialog(missingFeatureMessage());
   }, [showDialog]);
+
+  const handleOpenAbout = useCallback(() => {
+    setStartOpen(false);
+    onOpenAbout();
+  }, [onOpenAbout]);
+
+  const handleOpenScreensavers = useCallback(() => {
+    setStartOpen(false);
+    setSettingsSubOpen(false);
+    onOpenSettings("screensavers");
+  }, [onOpenSettings]);
 
   const handleRestart = useCallback(() => {
     setStartOpen(false);
@@ -177,6 +190,13 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                             <span className="ns-start-menu__item-icon">🖥️</span>
                             <span className="ns-start-menu__item-label">Display...</span>
                           </button>
+                          <button
+                            className="ns-start-menu__item"
+                            onClick={handleOpenScreensavers}
+                          >
+                            <span className="ns-start-menu__item-icon">💤</span>
+                            <span className="ns-start-menu__item-label">Screensavers...</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -186,7 +206,7 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                   <button
                     key={item.id}
                     className="ns-start-menu__item"
-                    onClick={handlePlaceholder}
+                    onClick={item.id === "about" ? handleOpenAbout : (item.id === "programs" ? handlePlaceholder : handlePlaceholder)}
                   >
                     <span className="ns-start-menu__item-icon">{item.icon}</span>
                     <span className="ns-start-menu__item-label">{item.label}</span>
@@ -225,7 +245,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
         {windows.map((win) => (
           <button
             key={win.id}
-            className={`ns-taskbar__win-btn${activeWindowId === win.id ? " ns-taskbar__win-btn--active" : ""}`}
+            className={[
+              "ns-taskbar__win-btn",
+              activeWindowId === win.id ? "ns-taskbar__win-btn--active" : "",
+              win.minimized ? "ns-taskbar__win-btn--minimized" : "",
+            ].filter(Boolean).join(" ")}
             onClick={() => onWindowFocus(win.id)}
             title={win.title}
           >

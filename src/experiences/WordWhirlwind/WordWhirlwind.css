@@ -145,6 +145,172 @@
   transform: translateY(1px);
 }
 
+/* ── Custom Settings Modal ───────────────────────────────────────────────── */
+
+.ww-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ww-modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 340px;
+  max-width: 90vw;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.ww-modal__titlebar {
+  background: linear-gradient(to right, #cc4400, #880000);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  gap: 8px;
+}
+
+.ww-modal__title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #ffffff;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ww-modal__close {
+  width: 18px;
+  height: 18px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-size: 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ww-modal__close:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.ww-modal__body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ww-modal__row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ww-modal__label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #444;
+}
+
+.ww-modal__options {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ww-modal__option {
+  padding: 5px 10px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+}
+
+.ww-modal__option:hover {
+  background: #cccccc;
+}
+
+.ww-modal__option--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b8b8;
+  color: #cc4400;
+}
+
+.ww-modal__option--active:hover {
+  background: #b8b8b8;
+}
+
+.ww-modal__hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  color: #555;
+  min-height: 1.3em;
+}
+
+.ww-modal__footer {
+  border-top: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: #d4d0c8;
+}
+
+.ww-modal__btn {
+  padding: 5px 18px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+  min-width: 64px;
+}
+
+.ww-modal__btn:hover {
+  background: #cccccc;
+}
+
+.ww-modal__btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  transform: translateY(1px);
+}
+
+.ww-modal__btn--ok {
+  background: #ff6b00;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.ww-modal__btn--ok:hover {
+  background: #ff7a1a;
+}
+
+.ww-modal__btn--ok:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+}
+
 /* ── Game layout ──────────────────────────────────────────────────────────── */
 
 .ww-game {

@@ -9,17 +9,16 @@
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 107, 0, 0.15);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 52px); /* don't bleed under taskbar */
+  max-height: calc(100vh - 52px);
 }
 
-.ns-window__content {
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
-}
-
-/* Portrait / mobile: maximized, fills viewport above taskbar */
+/* Maximized (Embiggen): fixed position is set inline; just clear conflicting props */
 .ns-window--maximized {
+  max-height: none;
+}
+
+/* Portrait / mobile: full-screen above taskbar, no drag */
+.ns-window--portrait {
   position: fixed;
   top: 0;
   left: 0;
@@ -29,4 +28,102 @@
   border-left: none;
   border-right: none;
   border-top: none;
+}
+
+.ns-window__content {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── About dialog overlay ── */
+
+.ns-about-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 50;
+}
+
+.ns-about-dialog {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.35);
+  min-width: 240px;
+  max-width: 360px;
+}
+
+.ns-about-dialog__titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background: linear-gradient(90deg, #cc4400 0%, #ff6b00 50%, #cc4400 100%);
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  min-height: 24px;
+  gap: 8px;
+}
+
+.ns-about-dialog__close {
+  width: 18px;
+  height: 16px;
+  font-size: 9px;
+  font-family: monospace;
+  color: #ffffff;
+  background: #c84020;
+  border: 2px solid;
+  border-color: #ff8060 #660000 #660000 #ff8060;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ns-about-dialog__close:active {
+  border-color: #660000 #ff8060 #ff8060 #660000;
+  background: #a02010;
+}
+
+.ns-about-dialog__body {
+  padding: 12px 16px 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  line-height: 1.8;
+}
+
+.ns-about-dialog__body p {
+  margin: 0 0 8px 0;
+}
+
+.ns-about-dialog__footer {
+  padding: 6px 12px 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.ns-about-dialog__ok {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 5px 20px;
+  cursor: pointer;
+  min-width: 64px;
+}
+
+.ns-about-dialog__ok:active {
+  border-color: #808080 #ffffff #ffffff #808080;
 }

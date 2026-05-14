@@ -145,6 +145,11 @@
   color: #553322;
 }
 
+.nsnb-statusbar__unsaved {
+  color: #ffaa44;
+  animation: nb-blink 1.2s step-start infinite;
+}
+
 .nsnb-sunken {
   border: 2px solid;
   border-color: #330000 #ff9a44 #ff9a44 #330000;

@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from "react";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./NumberMuncher.css";
 
 type BoardSize = 5 | 6 | 7;
@@ -93,7 +95,7 @@ function countRemaining(grid: number[][], eaten: boolean[][], rule: ActiveRule):
   return remaining;
 }
 
-export default function NumberMuncher() {
+export default function NumberMuncher({ onQuit }: { onQuit?: () => void } = {}) {
   const [mathType, setMathType] = useState<MathTypeId>("multiples");
   const [boardSize, setBoardSize] = useState<BoardSize>(7);
   const [showHelp, setShowHelp] = useState(false);
@@ -143,6 +145,18 @@ export default function NumberMuncher() {
     setLevelComplete(false);
     setGameOver(false);
   }, []);
+
+  const nmMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "Game",
+      items: [
+        { label: "New Game", onClick: backToLauncher },
+        ...(onQuit ? [{ separator: true as const }, { label: "Quit", onClick: onQuit }] : []),
+      ],
+    },
+  ], [backToLauncher, onQuit]);
+
+  useWindowMenus(nmMenus);
 
   const moveBy = useCallback(
     (rowDelta: number, colDelta: number) => {
