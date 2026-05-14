@@ -17,7 +17,6 @@ import {
   type ScreensaverId,
 } from "./screensaverSettings";
 import AboutApp from "./AboutApp";
-import FolderApp from "./FolderApp";
 import FilesApp from "./FilesApp";
 import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
@@ -42,26 +41,10 @@ import {
 } from "./desktopSettings";
 import "./NsDoors97.css";
 
-// ── Icon / experience config ───────────────────────────────────────────────
+// ── App registry ───────────────────────────────────────────────────────────────
+// All apps that can be opened (whether via desktop icon or Open menu).
 
-const EXPERIENCE_ICONS: Record<string, string> = {
-  starfield:            "⭐",
-  fireworks:            "🎆",
-  "bouncing-shapes":    "🔷",
-  "scrolling-text":     "📜",
-  "bouncing-polygons":  "🔺",
-  "raining-emojis":     "🌧️",
-  "typing-racer":       "⌨️",
-  "number-muncher":     "🔢",
-  "tic-tac-toe":        "✖️",
-  "word-whirlwind":     "🌪️",
-  "bomb-finder":        "💣",
-  "duck-hunt":          "🎯",
-  "ns-doors-97":        "🚪",
-  "ns-art":             "🎨",
-};
-
-type DesktopIconAction =
+type AppAction =
   | "placeholder"
   | "experience"
   | "screensavers"
@@ -72,7 +55,6 @@ type DesktopIconAction =
   | "duckhunt"
   | "cards"
   | "about"
-  | "my-doors"
   | "internet"
   | "files"
   | "notebook"
@@ -80,12 +62,46 @@ type DesktopIconAction =
   | "art-backup"
   | "readme";
 
-interface DesktopIconDef {
+interface AppDef {
+  title: string;
+  icon: string;
+  action: AppAction;
+}
+
+const APP_REGISTRY: Record<string, AppDef> = {
+  "my-doors":       { title: "My Doors",          icon: "🖥️", action: "files"         },
+  "dumpster":       { title: "Dumpster",           icon: "🗑️", action: "placeholder"   },
+  "readme":         { title: "README.txt",         icon: "📋", action: "readme"        },
+  "about":          { title: "About NS Doors 97",  icon: "ℹ️",  action: "about"         },
+  "internet":       { title: "Internet",           icon: "🌐", action: "internet"      },
+  "screensavers":   { title: "Screensavers",       icon: "💤", action: "screensavers"  },
+  "notebook":       { title: "Notebook",           icon: "📝", action: "notebook"      },
+  "cards":          { title: "Cards",              icon: "🃏", action: "cards"         },
+  "ns-art":         { title: "NS Art",             icon: "🎨", action: "nsart"         },
+  "tic-tac-toe":    { title: "Tic-Tac-Toe",       icon: "✖️",  action: "tictactoe"     },
+  "number-muncher": { title: "Nom Nom Numerals",   icon: "🔢", action: "nomnom"        },
+  "word-whirlwind": { title: "Word Whirlwind",     icon: "🌪️", action: "wordwhirlwind" },
+  "bomb-finder":    { title: "Bomb Finder",        icon: "💣", action: "bombfinder"    },
+  "duck-hunt":      { title: "Duck & Learn",       icon: "🎯", action: "duckhunt"      },
+  "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"    },
+};
+
+// ── Desktop icon entries (subset actually shown on desktop) ───────────────────
+
+interface DesktopIconEntry {
   id: string;
   title: string;
   icon: string;
-  action: DesktopIconAction;
 }
+
+const STATIC_DESKTOP_ICONS: DesktopIconEntry[] = [
+  { id: "my-doors", title: "My Doors", icon: "🖥️" },
+  { id: "dumpster", title: "Dumpster", icon: "🗑️" },
+];
+
+const STATIC_RIGHT_ICONS: DesktopIconEntry[] = [
+  { id: "readme", title: "README.txt", icon: "📋" },
+];
 
 const DESKTOP_README = `IMPORTANT NOTE TO MYSELF
 =========================
@@ -119,41 +135,21 @@ P.S. If you get stuck in the text
 screen just type DOORS to come back.
 `;
 
-const STATIC_ICONS: DesktopIconDef[] = [
-  { id: "my-doors",     title: "My Doors",     icon: "🖥️", action: "my-doors"     },
-  { id: "files",        title: "My Files",     icon: "📁", action: "files"        },
-  { id: "notebook",     title: "Notebook",     icon: "📝", action: "notebook"     },
-  { id: "recycle-bin",  title: "Recycle Bin",  icon: "🗑️", action: "placeholder"  },
-  { id: "about",        title: "About NS Doors 97", icon: "ℹ️", action: "about"   },
-  { id: "internet",     title: "Internet",     icon: "🌐", action: "internet"     },
-  { id: "screensavers", title: "Screensavers", icon: "💤", action: "screensavers" },
-  { id: "cards",        title: "Cards",        icon: "🃏", action: "cards"        },
-  { id: "art-backup",   title: "Backup.png",   icon: "🖼️", action: "art-backup"   },
-];
+const NB_PREFIX = "ns97_notebook_";
+const README_PATH = "C:\\Desktop\\README.txt";
 
-// Desktop icons shown on the right side (pinned notes, reminders, etc.)
-const STATIC_RIGHT_ICONS: DesktopIconDef[] = [
-  { id: "readme", title: "README.txt", icon: "📋", action: "readme" },
-];
-
-const EXPERIENCE_ICON_DEFS: DesktopIconDef[] = experiences
-  .filter((e) => e.id !== "ns-doors-97" && e.id !== "ns-tos" && e.id !== "hell" && e.category !== "screensaver")
-  .map((e) => ({
-    id: e.id,
-    title: e.title,
-    icon: EXPERIENCE_ICONS[e.id] ?? "🖥️",
-    action: (
-      e.id === "tic-tac-toe"     ? "tictactoe"     :
-      e.id === "number-muncher"  ? "nomnom"        :
-      e.id === "word-whirlwind"  ? "wordwhirlwind" :
-      e.id === "bomb-finder"     ? "bombfinder"    :
-      e.id === "duck-hunt"       ? "duckhunt"      :
-      e.id === "ns-art"          ? "nsart"         :
-      "experience"
-    ) as DesktopIconAction,
-  }));
-
-const ALL_DESKTOP_ICONS = [...STATIC_ICONS, ...STATIC_RIGHT_ICONS, ...EXPERIENCE_ICON_DEFS];
+function loadSavedNotebookIcons(): DesktopIconEntry[] {
+  const entries: DesktopIconEntry[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(NB_PREFIX)) continue;
+    const filePath = key.slice(NB_PREFIX.length);
+    if (filePath === "(new file)" || filePath === README_PATH) continue;
+    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    entries.push({ id: `nb:${filePath}`, title: fileName, icon: "📝" });
+  }
+  return entries;
+}
 
 // ── Window content union ───────────────────────────────────────────────────
 
@@ -168,7 +164,6 @@ type WindowContent =
   | { type: "cards-launcher" }
   | { type: "cards-game"; game: CardsGame; settings: DeckSettings }
   | { type: "about" }
-  | { type: "my-doors" }
   | { type: "internet" }
   | { type: "files" }
   | { type: "notebook"; filePath: string; fileName: string; initialContent: string }
@@ -200,6 +195,10 @@ const BF_WINDOW_WIDTHS: Record<BfDifficulty, number> = {
 };
 
 // ── App Launcher card ──────────────────────────────────────────────────────
+
+const EXPERIENCE_ICONS: Record<string, string> = {
+  "typing-racer": "⌨️",
+};
 
 function AppLauncher({
   experience,
@@ -238,30 +237,27 @@ export default function NsDoors97() {
   const initialShouldBoot = !skipBoot && (fromTos || shouldShowBoot());
 
   const nsArtRef       = useRef<NsArtHandle>(null);
-  const nsArtBackupRef = useRef<NsArtHandle>(null);
-  const [hasArtBackup, setHasArtBackup] = useState(() =>
-    Boolean(localStorage.getItem("ns-art-backup"))
-  );
 
   const [showBoot, setShowBoot]             = useState(initialShouldBoot);
   const [shuttingDown, setShuttingDown]     = useState(false);
   const [desktopLoading, setDesktopLoading] = useState(false);
 
+  // Saved notebook files that appear on the desktop
+  const [savedNotebookIcons, setSavedNotebookIcons] = useState<DesktopIconEntry[]>(
+    () => loadSavedNotebookIcons()
+  );
+  const savedNotebookIconsRef = useRef(savedNotebookIcons);
+  useEffect(() => { savedNotebookIconsRef.current = savedNotebookIcons; }, [savedNotebookIcons]);
+
   // Icons start empty whenever there's a boot screen; all-visible otherwise.
-  // art-backup is excluded unless a saved backup exists.
   const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
     if (initialShouldBoot) return new Set<string>();
-    return new Set(
-      ALL_DESKTOP_ICONS.filter((d) => d.id !== "art-backup" || Boolean(localStorage.getItem("ns-art-backup"))).map((d) => d.id)
-    );
+    return new Set<string>([
+      ...STATIC_DESKTOP_ICONS.map((d) => d.id),
+      ...STATIC_RIGHT_ICONS.map((d) => d.id),
+      ...loadSavedNotebookIcons().map((d) => d.id),
+    ]);
   });
-
-  // Reveal the Backup.png icon whenever a backup is first saved
-  useEffect(() => {
-    if (hasArtBackup) {
-      setVisibleIcons((prev) => new Set<string>([...prev, "art-backup"]));
-    }
-  }, [hasArtBackup]);
 
   // Called when the boot screen finishes (both initial boot and after restart)
   const handleBootComplete = useCallback(() => {
@@ -302,12 +298,12 @@ export default function NsDoors97() {
       document.body.style.cursor = "";
 
       // Phase 2 — icons pop in one by one in random order
-      // art-backup only appears if a saved backup exists
-      const shuffled = [
-        ...ALL_DESKTOP_ICONS
-          .filter((d) => d.id !== "art-backup" || Boolean(localStorage.getItem("ns-art-backup")))
-          .map((d) => d.id),
+      const allIds = [
+        ...STATIC_DESKTOP_ICONS.map((d) => d.id),
+        ...STATIC_RIGHT_ICONS.map((d) => d.id),
+        ...savedNotebookIconsRef.current.map((d) => d.id),
       ];
+      const shuffled = [...allIds];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -378,7 +374,6 @@ export default function NsDoors97() {
   const [screensaverConfig, setScreensaverConfig] = useState<FullScreensaverConfig>(
     () => loadScreensaverConfig()
   );
-  // Active overlay: either auto-triggered (uses saved settings) or preview (uses unsaved settings)
   const [activeOverlay, setActiveOverlay] = useState<{
     id: ScreensaverId;
     settings: AllScreensaverSettings;
@@ -410,100 +405,6 @@ export default function NsDoors97() {
 
   // ── Window management ────────────────────────────────────────────────────
 
-  const openWindow = useCallback((id: string) => {
-    const iconDef = ALL_DESKTOP_ICONS.find((d) => d.id === id);
-    if (!iconDef) return;
-
-    if (iconDef.action === "placeholder") {
-      showDialog(missingFeatureMessage());
-      return;
-    }
-
-    setOpenWindows((prev) => {
-      if (prev.some((w) => w.id === id)) {
-        maxZ++;
-        const z = maxZ;
-        setActiveWindowId(id);
-        return prev.map((w) => (w.id === id ? { ...w, zIndex: z } : w));
-      }
-
-      const offset = (windowSeq % 8) * 32;
-      windowSeq++;
-      maxZ++;
-
-      let content: WindowContent;
-      let width: number | undefined;
-
-      switch (iconDef.action) {
-        case "screensavers": content = { type: "screensaver-settings" }; width = 440; break;
-        case "about":        content = { type: "about" };                width = 340; break;
-        case "my-doors":     content = { type: "my-doors" };             width = 440; break;
-        case "internet":     content = { type: "internet" };             width = 640; break;
-        case "files":        content = { type: "files" };                width = 600; break;
-        case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
-        case "readme":       content = { type: "notebook", filePath: "C:\\Desktop\\README.txt", fileName: "README.txt", initialContent: DESKTOP_README }; width = 420; break;
-        case "nsart":        content = { type: "nsart" };                width = 760; break;
-        case "art-backup":  content = { type: "nsart-backup" };         width = 760; break;
-        case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
-        case "nomnom":         content = { type: "nomnom" };               width = 700; break;
-        case "wordwhirlwind":  content = { type: "word-whirlwind" };      width = 600; break;
-        case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
-        case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
-        case "cards":        content = { type: "cards-launcher" };       width = 320; break;
-        case "experience": {
-          const experience = experiences.find((e) => e.id === id)!;
-          content = { type: "app-launcher", experience };
-          break;
-        }
-        default: return prev;
-      }
-
-      setActiveWindowId(id);
-      return [
-        ...prev,
-        {
-          id,
-          title: iconDef.title,
-          icon: iconDef.icon,
-          content,
-          zIndex: maxZ,
-          defaultPosition: { x: 80 + offset, y: 48 + offset },
-          width,
-          minimized: false,
-        },
-      ];
-    });
-  }, [showDialog]);
-
-  const openAbout = useCallback(() => {
-    openWindow("about");
-  }, [openWindow]);
-
-  const openScreensaverSettings = useCallback(() => {
-    openWindow("screensavers");
-  }, [openWindow]);
-
-  const closeWindow = useCallback((id: string) => {
-    setOpenWindows((prev) => prev.filter((w) => w.id !== id));
-    setActiveWindowId((cur) => (cur === id ? null : cur));
-  }, []);
-
-  const focusWindow = useCallback((id: string) => {
-    maxZ++;
-    const z = maxZ;
-    setOpenWindows((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, zIndex: z, minimized: false } : w))
-    );
-    setActiveWindowId(id);
-  }, []);
-
-  const minimizeWindow = useCallback((id: string) => {
-    setOpenWindows((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, minimized: true } : w))
-    );
-    setActiveWindowId((cur) => (cur === id ? null : cur));
-  }, []);
-
   const openNotebook = useCallback(
     (filePath: string, fileName: string, initialContent: string) => {
       const winId = `notebook:${filePath}`;
@@ -534,6 +435,119 @@ export default function NsDoors97() {
     },
     []
   );
+
+  const openWindow = useCallback((id: string) => {
+    // Notebook saved-file desktop icons use "nb:{filePath}" id format
+    if (id.startsWith("nb:")) {
+      const filePath = id.slice(3);
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      const savedContent = localStorage.getItem(`${NB_PREFIX}${filePath}`) ?? "";
+      openNotebook(filePath, fileName, savedContent);
+      return;
+    }
+
+    const appDef = APP_REGISTRY[id];
+    if (!appDef) return;
+
+    if (appDef.action === "placeholder") {
+      showDialog(missingFeatureMessage());
+      return;
+    }
+
+    setOpenWindows((prev) => {
+      if (prev.some((w) => w.id === id)) {
+        maxZ++;
+        const z = maxZ;
+        setActiveWindowId(id);
+        return prev.map((w) => (w.id === id ? { ...w, zIndex: z } : w));
+      }
+
+      const offset = (windowSeq % 8) * 32;
+      windowSeq++;
+      maxZ++;
+
+      let content: WindowContent;
+      let width: number | undefined;
+
+      switch (appDef.action) {
+        case "screensavers": content = { type: "screensaver-settings" }; width = 440; break;
+        case "about":        content = { type: "about" };                width = 340; break;
+        case "internet":     content = { type: "internet" };             width = 640; break;
+        case "files":        content = { type: "files" };                width = 600; break;
+        case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
+        case "readme":       content = { type: "notebook", filePath: README_PATH, fileName: "README.txt", initialContent: DESKTOP_README }; width = 420; break;
+        case "nsart":        content = { type: "nsart" };                width = 760; break;
+        case "art-backup":   content = { type: "nsart-backup" };         width = 760; break;
+        case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
+        case "nomnom":       content = { type: "nomnom" };               width = 700; break;
+        case "wordwhirlwind":content = { type: "word-whirlwind" };       width = 600; break;
+        case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
+        case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
+        case "cards":        content = { type: "cards-launcher" };       width = 320; break;
+        case "experience": {
+          const experience = experiences.find((e) => e.id === id)!;
+          content = { type: "app-launcher", experience };
+          break;
+        }
+        default: return prev;
+      }
+
+      setActiveWindowId(id);
+      return [
+        ...prev,
+        {
+          id,
+          title: appDef.title,
+          icon: appDef.icon,
+          content,
+          zIndex: maxZ,
+          defaultPosition: { x: 80 + offset, y: 48 + offset },
+          width,
+          minimized: false,
+        },
+      ];
+    });
+  }, [showDialog, openNotebook]);
+
+  const openAbout = useCallback(() => {
+    openWindow("about");
+  }, [openWindow]);
+
+  const openScreensaverSettings = useCallback(() => {
+    openWindow("screensavers");
+  }, [openWindow]);
+
+  const closeWindow = useCallback((id: string) => {
+    setOpenWindows((prev) => prev.filter((w) => w.id !== id));
+    setActiveWindowId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const focusWindow = useCallback((id: string) => {
+    maxZ++;
+    const z = maxZ;
+    setOpenWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, zIndex: z, minimized: false } : w))
+    );
+    setActiveWindowId(id);
+  }, []);
+
+  const minimizeWindow = useCallback((id: string) => {
+    setOpenWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, minimized: true } : w))
+    );
+    setActiveWindowId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  // When Notebook saves a file, add it to the desktop if not already there
+  const handleNotebookFileSaved = useCallback((filePath: string, fileName: string) => {
+    if (filePath === "(new file)" || filePath === README_PATH) return;
+    const newId = `nb:${filePath}`;
+    setSavedNotebookIcons((prev) => {
+      if (prev.some((d) => d.id === newId)) return prev;
+      return [...prev, { id: newId, title: fileName, icon: "📝" }];
+    });
+    setVisibleIcons((prev) => new Set<string>([...prev, newId]));
+  }, []);
 
   // Called by TicTacToe when board size changes — resize the window
   const handleTttBoardSizeChange = useCallback(
@@ -622,19 +636,20 @@ export default function NsDoors97() {
         backgroundPosition: "center",
         backgroundRepeat:   "no-repeat",
         backgroundColor:    "#000000",
-        // Prevent the browser from bilinear-scaling away the dithering pattern
         imageRendering:     "pixelated",
       };
     }
     return { background: getDesktopBackground(desktopSettings) };
   })();
 
+  const rightIcons = [...STATIC_RIGHT_ICONS, ...savedNotebookIcons];
+
   return (
     <div className="ns-desktop" style={desktopStyle}>
       {/* ── Icon grid (icons pop in one by one during boot) ── */}
       <div className="ns-desktop__icons">
-        {ALL_DESKTOP_ICONS
-          .filter((def) => !STATIC_RIGHT_ICONS.some((r) => r.id === def.id) && visibleIcons.has(def.id))
+        {STATIC_DESKTOP_ICONS
+          .filter((def) => visibleIcons.has(def.id))
           .map((def) => (
             <DesktopIcon
               key={def.id}
@@ -646,9 +661,9 @@ export default function NsDoors97() {
           ))}
       </div>
 
-      {/* ── Right-side pinned icons (README, notes, etc.) ── */}
+      {/* ── Right-side pinned icons (README, saved notebook files) ── */}
       <div className="ns-desktop__icons-right">
-        {STATIC_RIGHT_ICONS.filter((def) => visibleIcons.has(def.id)).map((def) => (
+        {rightIcons.filter((def) => visibleIcons.has(def.id)).map((def) => (
           <DesktopIcon
             key={def.id}
             id={def.id}
@@ -691,8 +706,7 @@ export default function NsDoors97() {
           onCloseRequested={
             (win.content.type === "nsart" || win.content.type === "nsart-backup")
               ? (_id, proceed) => {
-                  const r = win.content.type === "nsart" ? nsArtRef : nsArtBackupRef;
-                  if (r.current) { r.current.requestClose(proceed); } else { proceed(); }
+                  if (nsArtRef.current) { nsArtRef.current.requestClose(proceed); } else { proceed(); }
                 }
               : undefined
           }
@@ -709,10 +723,10 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nsart" && (
-            <NsArt ref={nsArtRef} onBackupSaved={() => setHasArtBackup(true)} />
+            <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
           )}
           {win.content.type === "nsart-backup" && (
-            <NsArt ref={nsArtBackupRef} onBackupSaved={() => setHasArtBackup(true)} />
+            <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
           )}
           {win.content.type === "tictactoe" && (
             <TicTacToe
@@ -764,9 +778,6 @@ export default function NsDoors97() {
           {win.content.type === "about" && (
             <AboutApp onClose={() => closeWindow(win.id)} />
           )}
-          {win.content.type === "my-doors" && (
-            <FolderApp onOpenExperience={openWindow} />
-          )}
           {win.content.type === "internet" && (
             <InternetApp />
           )}
@@ -782,6 +793,7 @@ export default function NsDoors97() {
               filePath={win.content.filePath}
               fileName={win.content.fileName}
               initialContent={win.content.initialContent}
+              onFileSaved={handleNotebookFileSaved}
             />
           )}
           {win.content.type === "desktop-display" && (
@@ -810,6 +822,7 @@ export default function NsDoors97() {
         }}
         onOpenAbout={openAbout}
         onExitToTos={handleExitToTos}
+        onOpenApp={openWindow}
       />
 
       {/* ── Screensaver overlay ── */}
