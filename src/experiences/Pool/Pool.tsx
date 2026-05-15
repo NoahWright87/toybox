@@ -1,4 +1,6 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useWindowMenus } from '../../components/Window/useWindowMenus';
+import type { MenuBarMenu } from '../../components/MenuBar/MenuBar';
 import './Pool.css';
 
 // ── Canvas dimensions ─────────────────────────────────────────────────────────
@@ -30,12 +32,12 @@ const MIN_SPEED  = 0.012;
 
 // ── Controls ──────────────────────────────────────────────────────────────────
 const MAX_VEL       = 22;
-// Aim / English lerp: rampedLerp() grows the lerp factor from 0 to max over ~25 frames,
-// giving a short acceleration ramp so a tap nudges and a hold travels — see CLAUDE.md.
 const AIM_LERP_MAX  = 0.18;
 const AIM_LERP_RAMP = 0.008;
 const ENG_LERP_MAX  = 0.15;
 const ENG_LERP_RAMP = 0.007;
+// English dot travel radius (px) for the 80px ball
+const ENG_DOT_SCALE = 30;
 
 // ── Key positions ─────────────────────────────────────────────────────────────
 const FOOT_X   = PF_X1 + PF_W * 0.75;
@@ -81,6 +83,7 @@ interface Ball {
   vx: number; vy: number;
   spinX: number; spinY: number;
   pocketed: boolean;
+  rotAngle: number;  // visual rolling angle, accumulated each frame
 }
 
 type Group  = 'solids' | 'stripes';
@@ -103,7 +106,7 @@ interface GState {
   foul: boolean;
   isBreak: boolean;
   pocketedThisTurn: number[];
-  sunkBalls: number[];  // all non-cue non-8 balls sunk this game
+  sunkBalls: number[];
   winner: 0 | 1 | null;
   msg: string;
   aimAngle: number;
@@ -118,6 +121,17 @@ interface MouseSt {
   down: boolean;
 }
 
+// State machine for the AI thinking/aiming/shooting animation
+interface AIThink {
+  stage: 'thinking' | 'aiming' | 'cocking';
+  targetAngle: number;
+  targetPower: number;
+  fakeAngles: number[];
+  fakeIdx: number;
+  stageStartTime: number;
+  stageDuration: number;
+}
+
 // ── Rack ─────────────────────────────────────────────────────────────────────
 function createBalls(): Ball[] {
   const dx = BR * Math.sqrt(3);
@@ -130,7 +144,7 @@ function createBalls(): Ball[] {
     [6, 13, 14, 7, 15],
   ];
   const balls: Ball[] = [
-    { num: 0, x: CUE_HOME.x, y: CUE_HOME.y, vx: 0, vy: 0, spinX: 0, spinY: 0, pocketed: false },
+    { num: 0, x: CUE_HOME.x, y: CUE_HOME.y, vx: 0, vy: 0, spinX: 0, spinY: 0, pocketed: false, rotAngle: 0 },
   ];
   rows.forEach((row, ri) => {
     row.forEach((num, ci) => {
@@ -138,7 +152,7 @@ function createBalls(): Ball[] {
         num,
         x: FOOT_X + ri * dx,
         y: FOOT_Y + (ci - (row.length - 1) / 2) * dy,
-        vx: 0, vy: 0, spinX: 0, spinY: 0, pocketed: false,
+        vx: 0, vy: 0, spinX: 0, spinY: 0, pocketed: false, rotAngle: 0,
       });
     });
   });
@@ -258,7 +272,6 @@ function processTurnEnd(gs: GState): GState {
   const currentGroup = players[turn].group;
   const oppTurn      = (1 - turn) as 0 | 1;
 
-  // Accumulate newly-sunk regular balls
   const newlySunk = pocketedThisTurn.filter(n => n !== 0 && n !== 8);
   const sunkBalls = [...gs.sunkBalls, ...newlySunk];
 
@@ -428,40 +441,77 @@ function ghostBallDist(balls: Ball[], cue: Ball, angle: number): number {
   return minD === Infinity ? 0 : minD;
 }
 
-function drawBall(ctx: CanvasRenderingContext2D, b: Ball): void {
+// General ball drawing at arbitrary position/radius with rolling rotation
+function drawBallScaled(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  num: number, rotAngle: number,
+): void {
   ctx.beginPath();
-  ctx.arc(b.x, b.y, BR, 0, Math.PI * 2);
+  ctx.arc(x, y, r, 0, Math.PI * 2);
 
-  if (b.num === 0) {
-    const g = ctx.createRadialGradient(b.x - 3, b.y - 4, 1, b.x, b.y, BR);
+  if (num === 0) {
+    const g = ctx.createRadialGradient(x - r * 0.28, y - r * 0.32, r * 0.06, x, y, r);
     g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#c8c8c8');
     ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = '#888'; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.strokeStyle = '#888'; ctx.lineWidth = r * 0.07; ctx.stroke();
     return;
   }
 
-  const color = BALL_CLR[b.num];
-  const stripe = b.num >= 9;
+  const color = BALL_CLR[num];
+  const stripe = num >= 9;
   if (stripe) {
     ctx.fillStyle = '#f0f0f0'; ctx.fill();
     ctx.save(); ctx.clip();
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotAngle);
     ctx.fillStyle = color;
-    ctx.fillRect(b.x - BR, b.y - BR * 0.52, BR * 2, BR * 1.04);
+    ctx.fillRect(-r, -r * 0.52, r * 2, r * 1.04);
+    ctx.restore();
     ctx.restore();
   } else {
-    const g = ctx.createRadialGradient(b.x - 3, b.y - 4, 1, b.x, b.y, BR);
+    const g = ctx.createRadialGradient(x - r * 0.28, y - r * 0.32, r * 0.06, x, y, r);
     g.addColorStop(0, liftColor(color, 45)); g.addColorStop(1, color);
     ctx.fillStyle = g; ctx.fill();
   }
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.arc(b.x, b.y, BR, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = r * 0.07;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
 
+  // Rotating shine dot (gives rolling feel)
+  const sx = x + Math.cos(rotAngle) * r * 0.5;
+  const sy = y + Math.sin(rotAngle) * r * 0.5;
+  const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.25);
+  sg.addColorStop(0, 'rgba(255,255,255,0.42)');
+  sg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  // Number (stays upright)
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(b.x, b.y, BR * 0.40, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r * 0.40, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#111';
-  ctx.font = `bold ${Math.round(BR * 0.62)}px sans-serif`;
+  ctx.font = `bold ${Math.round(r * 0.62)}px sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(String(b.num), b.x, b.y + 0.5);
+  ctx.fillText(String(num), x, y + 0.5);
+}
+
+function drawBall(ctx: CanvasRenderingContext2D, b: Ball): void {
+  drawBallScaled(ctx, b.x, b.y, BR, b.num, b.rotAngle);
+}
+
+// ── Mini ball icon for sunk-balls tray ────────────────────────────────────────
+function BallIcon({ num, size }: { num: number; size: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, size, size);
+    drawBallScaled(ctx, size / 2, size / 2, size / 2 - 1, num, Math.PI / 4);
+  }, [num, size]);
+  return <canvas ref={ref} width={size} height={size} style={{ display: 'block' }} />;
 }
 
 function drawStick(
@@ -518,9 +568,9 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: numbe
   }
 
   const cue = gs.balls.find(b => b.num === 0 && !b.pocketed);
-  const humanAiming = gs.phase === 'aiming' && cue && !gs.players[gs.turn].isAI;
+  const showAiming = gs.phase === 'aiming' && cue;
 
-  if (humanAiming && cue) {
+  if (showAiming && cue) {
     const angle = gs.aimAngle;
     const gd    = ghostBallDist(gs.balls, cue, angle);
     if (gd > 0) {
@@ -547,23 +597,21 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: numbe
     if (!b.pocketed) drawBall(ctx, b);
   }
 
-  if (humanAiming && cue) {
+  if (showAiming && cue) {
     drawStick(ctx, cue.x, cue.y, gs.aimAngle, shotPower, gs.players[gs.turn].color);
   }
 }
 
-// ── Ramped lerp ───────────────────────────────────────────────────────────────
-// Returns next lerp speed, growing from 0 toward max over several frames.
-// Use for aim and English controls so a tap nudges and a hold travels (see CLAUDE.md).
+// ── Ramped lerp — grows lerp factor from 0→max over ~25 frames.
+// Tap = small nudge; hold = value travels to target. See CLAUDE.md.
 function rampedLerp(current: number, ramp: number, max: number): number {
   return Math.min(max, current + ramp);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function getCircleNums(group: Group | null): number[] {
   if (group === 'solids')  return [1, 2, 3, 4, 5, 6, 7];
   if (group === 'stripes') return [9, 10, 11, 12, 13, 14, 15];
-  return [0, 0, 0, 0, 0, 0, 0]; // unassigned: 7 blanks
+  return [0, 0, 0, 0, 0, 0, 0];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -572,33 +620,29 @@ interface PoolProps {
 }
 
 export default function Pool({ onQuit }: PoolProps) {
-  const canvasRef   = useRef<HTMLCanvasElement>(null);
-  const gsRef       = useRef<GState | null>(null);
-  const rafRef      = useRef<number>(0);
-  const mouseRef    = useRef<MouseSt>({ x: CW / 2, y: CH / 2, down: false });
-  const firstHitRef = useRef<{ value: number | null }>({ value: null });
-  const aiTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const diffRef     = useRef<AIDiff>('normal');
-
-  // Aim lerp ramp state
-  const aimLerpRef  = useRef(0);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const gsRef        = useRef<GState | null>(null);
+  const rafRef       = useRef<number>(0);
+  const mouseRef     = useRef<MouseSt>({ x: CW / 2, y: CH / 2, down: false });
+  const firstHitRef  = useRef<{ value: number | null }>({ value: null });
+  const aiTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiThinkRef   = useRef<AIThink | null>(null);
+  const diffRef      = useRef<AIDiff>('normal');
+  const aimLerpRef   = useRef(0);
   const invertAimRef = useRef(false);
 
-  // English lerp state (all imperative — no React state needed for position)
+  // English (spin indicator) — imperative DOM updates for smooth RAF-driven lerp
   const engBallRef   = useRef<HTMLDivElement>(null);
   const engDotRef    = useRef<HTMLDivElement>(null);
   const engDownRef   = useRef(false);
   const engTargetRef = useRef({ x: 0, y: 0 });
   const engLerpRef   = useRef(0);
 
-  // Cue drag (shooting)
-  const cuePowerRef     = useRef(0);
-  const cueDraggingRef  = useRef(false);
-  const cueDragStartY   = useRef(0);
-  const cueDragAreaH    = useRef(120);
-
-  // Menu
-  const menuRef = useRef<HTMLDivElement>(null);
+  // Cue shooting drag
+  const cuePowerRef    = useRef(0);
+  const cueDraggingRef = useRef(false);
+  const cueDragStartY  = useRef(0);
+  const cueDragAreaH   = useRef(90);
 
   // ── React state ────────────────────────────────────────────────────────────
   const [gamePhase, setGamePhase] = useState<'setup' | 'playing'>('setup');
@@ -609,10 +653,8 @@ export default function Pool({ onQuit }: PoolProps) {
   const [p0color,   setP0color]   = useState(STICK_COLORS[0]);
   const [p1color,   setP1color]   = useState(STICK_COLORS[1]);
   const [invertAim, setInvertAim] = useState(false);
-  const [menuOpen,  setMenuOpen]  = useState<'game' | 'options' | null>(null);
   const [cuePower,  setCuePower]  = useState(0);
 
-  // Synced UI state (driven by game loop transitions)
   const [uiPhase,     setUiPhase]     = useState<Phase>('aiming');
   const [uiTurn,      setUiTurn]      = useState<0 | 1>(0);
   const [uiGroups,    setUiGroups]    = useState<[Group | null, Group | null]>([null, null]);
@@ -624,18 +666,6 @@ export default function Pool({ onQuit }: PoolProps) {
 
   useEffect(() => { diffRef.current = diff; }, [diff]);
   useEffect(() => { invertAimRef.current = invertAim; }, [invertAim]);
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return;
-    function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(null);
-      }
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
 
   const syncUi = useCallback((gs: GState) => {
     setUiPhase(gs.phase);
@@ -655,7 +685,7 @@ export default function Pool({ onQuit }: PoolProps) {
     }
   }, []);
 
-  // ── Fire shot ──────────────────────────────────────────────────────────────
+  // ── Fire shot at given power ──────────────────────────────────────────────
   const fireShot = useCallback((power: number) => {
     const gs = gsRef.current;
     if (!gs || gs.phase !== 'aiming' || gs.players[gs.turn].isAI) return;
@@ -675,31 +705,38 @@ export default function Pool({ onQuit }: PoolProps) {
     syncUi(gsRef.current);
   }, [syncUi, resetEngDot]);
 
+  // fireAI: sets up the AIThink animation state machine (no more direct setTimeout fire)
   const fireAI = useCallback(() => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     aiTimerRef.current = setTimeout(() => {
       const cur = gsRef.current;
       if (!cur || cur.phase !== 'aiming' || !cur.players[cur.turn].isAI) return;
       const shot = getAIShot(cur.balls, cur.turn, cur.players, diffRef.current);
-      const cb   = cur.balls.find(b => b.num === 0 && !b.pocketed);
-      if (!cb) return;
-      firstHitRef.current.value = null;
-      cb.vx = Math.cos(shot.angle) * shot.power * MAX_VEL;
-      cb.vy = Math.sin(shot.angle) * shot.power * MAX_VEL;
-      cb.spinX = 0; cb.spinY = 0;
-      const next: GState = {
-        ...cur, phase: 'moving', aimAngle: shot.angle,
-        pocketedThisTurn: [], firstBallHit: null, msg: '',
-        englishX: 0, englishY: 0,
+      const cue  = cur.balls.find(b => b.num === 0 && !b.pocketed);
+      if (!cue) return;
+
+      // Pick 2 nearby balls to "look at" before aiming
+      const fakeAngles = cur.balls
+        .filter(b => !b.pocketed && b.num !== 0)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 2)
+        .map(b => Math.atan2(b.y - cue.y, b.x - cue.x) + (Math.random() - 0.5) * 0.5);
+
+      aiThinkRef.current = {
+        stage: 'thinking',
+        targetAngle: shot.angle,
+        targetPower: shot.power,
+        fakeAngles,
+        fakeIdx: 0,
+        stageStartTime: performance.now(),
+        stageDuration: 350 + Math.random() * 250,
       };
-      gsRef.current = next;
-      resetEngDot();
-      syncUi(next);
-    }, 900);
-  }, [syncUi, resetEngDot]);
+    }, 300);
+  }, []);
 
   const startGame = useCallback((m: Mode, n0: string, n1: string, c0: string, c1: string) => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
+    aiThinkRef.current = null;
     const players: [Player, Player] = [
       { name: n0, group: null, isAI: false, color: c0 },
       { name: n1, group: null, isAI: m === 'hvai', color: c1 },
@@ -722,6 +759,24 @@ export default function Pool({ onQuit }: PoolProps) {
     syncUi(gs);
   }, [syncUi, resetEngDot]);
 
+  // ── Win95 menus via the standard OS window menu bar ───────────────────────
+  const menus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: 'Game',
+      items: [
+        { label: 'New Game...', onClick: () => setGamePhase('setup') },
+        ...(onQuit ? [{ separator: true as const }, { label: 'Exit', onClick: onQuit }] : []),
+      ],
+    },
+    {
+      label: 'Options',
+      items: [
+        { label: 'Invert Aim', checked: invertAim, onClick: () => setInvertAim(v => !v) },
+      ],
+    },
+  ], [invertAim, onQuit]);
+  useWindowMenus(menus);
+
   // ── Game loop ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (gamePhase !== 'playing') return;
@@ -733,12 +788,73 @@ export default function Pool({ onQuit }: PoolProps) {
     const tick = () => {
       const gs = gsRef.current;
       if (gs) {
-        // Aim lerp: rotates stick toward pointer while held (ramped speed)
+
+        // ── AI animation (driven by RAF, not setTimeout) ──────────────────
+        if (gs.players[gs.turn].isAI && gs.phase === 'aiming' && aiThinkRef.current) {
+          const ai = aiThinkRef.current;
+          const elapsed = performance.now() - ai.stageStartTime;
+
+          if (ai.stage === 'thinking') {
+            // Lerp toward a fake angle to simulate "looking at" other balls
+            const targetA = ai.fakeAngles[ai.fakeIdx] ?? ai.targetAngle;
+            let d = targetA - gs.aimAngle;
+            while (d > Math.PI)  d -= Math.PI * 2;
+            while (d < -Math.PI) d += Math.PI * 2;
+            gs.aimAngle += d * 0.09;
+            if (elapsed >= ai.stageDuration) {
+              ai.fakeIdx++;
+              ai.stageStartTime = performance.now();
+              if (ai.fakeIdx >= ai.fakeAngles.length) {
+                ai.stage = 'aiming';
+                ai.stageDuration = 600;
+              } else {
+                ai.stageDuration = 350 + Math.random() * 250;
+              }
+            }
+          } else if (ai.stage === 'aiming') {
+            // Settle on the actual shot angle
+            let d = ai.targetAngle - gs.aimAngle;
+            while (d > Math.PI)  d -= Math.PI * 2;
+            while (d < -Math.PI) d += Math.PI * 2;
+            gs.aimAngle += d * 0.12;
+            if (elapsed >= ai.stageDuration && Math.abs(d) < 0.04) {
+              ai.stage = 'cocking';
+              ai.stageStartTime = performance.now();
+              ai.stageDuration = 500;
+            }
+          } else {
+            // Cocking: animate cue pullback, then fire
+            const t = Math.min(1, elapsed / ai.stageDuration);
+            cuePowerRef.current = t * ai.targetPower;
+            setCuePower(cuePowerRef.current);
+            if (elapsed >= ai.stageDuration) {
+              const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
+              if (cb) {
+                firstHitRef.current.value = null;
+                cb.vx = Math.cos(ai.targetAngle) * ai.targetPower * MAX_VEL;
+                cb.vy = Math.sin(ai.targetAngle) * ai.targetPower * MAX_VEL;
+                cb.spinX = 0; cb.spinY = 0;
+                const next: GState = {
+                  ...gs, phase: 'moving', aimAngle: ai.targetAngle,
+                  pocketedThisTurn: [], firstBallHit: null, msg: '',
+                  englishX: 0, englishY: 0,
+                };
+                gsRef.current = next;
+                aiThinkRef.current = null;
+                cuePowerRef.current = 0;
+                setCuePower(0);
+                resetEngDot();
+                syncUi(next);
+              }
+            }
+          }
+        }
+
+        // ── Human aim lerp ────────────────────────────────────────────────
         if (gs.phase === 'aiming' && mouseRef.current.down && !gs.players[gs.turn].isAI) {
           const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
           if (cb) {
             const raw = Math.atan2(mouseRef.current.y - cb.y, mouseRef.current.x - cb.x);
-            // inverted: stick butt follows finger → aim points opposite
             const target = invertAimRef.current ? raw + Math.PI : raw;
             let d = target - gs.aimAngle;
             while (d > Math.PI)  d -= Math.PI * 2;
@@ -748,7 +864,7 @@ export default function Pool({ onQuit }: PoolProps) {
           }
         }
 
-        // English lerp: moves spin dot toward pointer while held (ramped speed)
+        // ── English lerp ──────────────────────────────────────────────────
         if (gs.phase === 'aiming' && engDownRef.current && !gs.players[gs.turn].isAI) {
           engLerpRef.current = rampedLerp(engLerpRef.current, ENG_LERP_RAMP, ENG_LERP_MAX);
           const t = engTargetRef.current;
@@ -757,14 +873,20 @@ export default function Pool({ onQuit }: PoolProps) {
           const mag = Math.hypot(gs.englishX, gs.englishY);
           if (mag > 1) { gs.englishX /= mag; gs.englishY /= mag; }
           if (engDotRef.current) {
-            engDotRef.current.style.left = `calc(50% + ${gs.englishX * 22}px)`;
-            engDotRef.current.style.top  = `calc(50% + ${-gs.englishY * 22}px)`;
+            engDotRef.current.style.left = `calc(50% + ${gs.englishX * ENG_DOT_SCALE}px)`;
+            engDotRef.current.style.top  = `calc(50% + ${-gs.englishY * ENG_DOT_SCALE}px)`;
           }
         }
 
+        // ── Physics ───────────────────────────────────────────────────────
         if (gs.phase === 'moving') {
           const sunk = stepBalls(gs.balls, firstHitRef.current);
-          if (sunk.length) gs.pocketedThisTurn = [...gs.pocketedThisTurn, ...sunk];
+          if (sunk.length) {
+            gs.pocketedThisTurn = [...gs.pocketedThisTurn, ...sunk];
+            // Update sunk-ball display immediately (don't wait for turn end)
+            const regular = sunk.filter(n => n !== 0 && n !== 8);
+            if (regular.length > 0) setUiSunkBalls(prev => [...prev, ...regular]);
+          }
           if (!anyMoving(gs.balls)) {
             const next = processTurnEnd({ ...gs, firstBallHit: firstHitRef.current.value });
             firstHitRef.current.value = null;
@@ -773,6 +895,17 @@ export default function Pool({ onQuit }: PoolProps) {
             if (next.phase === 'aiming' && next.players[next.turn].isAI) fireAI();
           }
         }
+
+        // ── Rolling rotation (visual only) ────────────────────────────────
+        for (const b of gs.balls) {
+          if (!b.pocketed) {
+            const speed = Math.hypot(b.vx, b.vy);
+            if (speed > MIN_SPEED) {
+              b.rotAngle = (b.rotAngle + speed * 0.14) % (Math.PI * 2);
+            }
+          }
+        }
+
         renderFrame(ctx, gsRef.current!, cuePowerRef.current);
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -782,9 +915,9 @@ export default function Pool({ onQuit }: PoolProps) {
       cancelAnimationFrame(rafRef.current);
       if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     };
-  }, [gamePhase, syncUi, fireAI]);
+  }, [gamePhase, syncUi, fireAI, resetEngDot]);
 
-  // ── Canvas events (aim + inhand placement) ────────────────────────────────
+  // ── Canvas pointer events ─────────────────────────────────────────────────
   const clientToCanvas = useCallback((clientX: number, clientY: number) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return { x: (clientX - r.left) * CW / r.width, y: (clientY - r.top) * CH / r.height };
@@ -794,9 +927,8 @@ export default function Pool({ onQuit }: PoolProps) {
     clientToCanvas(e.clientX, e.clientY), [clientToCanvas]);
 
   const handleCanvasDown = useCallback((x: number, y: number) => {
-    const m = mouseRef.current;
-    m.down = true; m.x = x; m.y = y;
-    aimLerpRef.current = 0; // reset ramp on each new touch
+    mouseRef.current.down = true; mouseRef.current.x = x; mouseRef.current.y = y;
+    aimLerpRef.current = 0;
     const gs = gsRef.current;
     if (gs?.phase === 'inhand') {
       gs.inHandPos = {
@@ -807,8 +939,7 @@ export default function Pool({ onQuit }: PoolProps) {
   }, []);
 
   const handleCanvasMove = useCallback((x: number, y: number) => {
-    const m = mouseRef.current;
-    m.x = x; m.y = y;
+    mouseRef.current.x = x; mouseRef.current.y = y;
     const gs = gsRef.current;
     if (gs?.phase === 'inhand') {
       gs.inHandPos = {
@@ -863,8 +994,8 @@ export default function Pool({ onQuit }: PoolProps) {
 
   const onEngPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    engDownRef.current  = true;
-    engLerpRef.current  = 0;
+    engDownRef.current   = true;
+    engLerpRef.current   = 0;
     engTargetRef.current = getEngPos(e.clientX, e.clientY, e.currentTarget);
   }, []);
 
@@ -903,10 +1034,8 @@ export default function Pool({ onQuit }: PoolProps) {
     if (power > 0.02) fireShot(power);
   }, [fireShot]);
 
-  // ── Derived values for render ─────────────────────────────────────────────
-  const gs = gsRef.current;
-  const isHumanTurn = gs && !gs.players[gs.turn].isAI;
-  const showControls = isHumanTurn && uiPhase === 'aiming';
+  // ── Derived values ────────────────────────────────────────────────────────
+  const isHumanTurn = gsRef.current && !gsRef.current.players[gsRef.current.turn].isAI;
   const p0Circles = getCircleNums(uiGroups[0]);
   const p1Circles = getCircleNums(uiGroups[1]);
 
@@ -924,13 +1053,8 @@ export default function Pool({ onQuit }: PoolProps) {
           <input className="pool-setup__inp" value={p0name} maxLength={16} onChange={e => setP0name(e.target.value)} />
           <div className="pool-setup__swatches">
             {STICK_COLORS.map(c => (
-              <button
-                key={c}
-                className={`pool-swatch${p0color === c ? ' pool-swatch--on' : ''}`}
-                style={{ background: c }}
-                onClick={() => setP0color(c)}
-                title={c}
-              />
+              <button key={c} className={`pool-swatch${p0color === c ? ' pool-swatch--on' : ''}`}
+                style={{ background: c }} onClick={() => setP0color(c)} />
             ))}
           </div>
 
@@ -940,13 +1064,8 @@ export default function Pool({ onQuit }: PoolProps) {
                 <input className="pool-setup__inp" value={p1name} maxLength={16} onChange={e => setP1name(e.target.value)} />
                 <div className="pool-setup__swatches">
                   {STICK_COLORS.map(c => (
-                    <button
-                      key={c}
-                      className={`pool-swatch${p1color === c ? ' pool-swatch--on' : ''}`}
-                      style={{ background: c }}
-                      onClick={() => setP1color(c)}
-                      title={c}
-                    />
+                    <button key={c} className={`pool-swatch${p1color === c ? ' pool-swatch--on' : ''}`}
+                      style={{ background: c }} onClick={() => setP1color(c)} />
                   ))}
                 </div>
               </>
@@ -972,58 +1091,17 @@ export default function Pool({ onQuit }: PoolProps) {
   }
 
   // ── Game screen ───────────────────────────────────────────────────────────
-  const hintText = uiPhase === 'inhand'
-    ? 'Drag cue ball · release to place'
-    : showControls
-    ? 'Tap/hold to aim · drag cue down to shoot'
-    : uiMsg;
-
   const activeName = (idx: 0 | 1) =>
     uiTurn === idx && uiPhase !== 'moving' && uiPhase !== 'over';
 
+  const hintText = uiPhase === 'inhand'
+    ? 'Drag cue ball · release to place'
+    : uiPhase === 'aiming' && isHumanTurn
+    ? 'Tap/hold to aim · drag cue down to shoot'
+    : uiMsg;
+
   return (
     <div className="pool-game">
-
-      {/* ── Win95 menu bar ── */}
-      <div className="pool-menubar" ref={menuRef}>
-        <div className="pool-menu-group">
-          <button
-            className={`pool-menu-btn${menuOpen === 'game' ? ' pool-menu-btn--open' : ''}`}
-            onClick={() => setMenuOpen(menuOpen === 'game' ? null : 'game')}
-          >
-            Game
-          </button>
-          {menuOpen === 'game' && (
-            <div className="pool-menu-dropdown">
-              <button className="pool-menu-opt" onClick={() => { setMenuOpen(null); setGamePhase('setup'); }}>
-                New Game...
-              </button>
-              {onQuit && <div className="pool-menu-divider" />}
-              {onQuit && (
-                <button className="pool-menu-opt" onClick={() => { setMenuOpen(null); onQuit(); }}>
-                  Exit
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="pool-menu-group">
-          <button
-            className={`pool-menu-btn${menuOpen === 'options' ? ' pool-menu-btn--open' : ''}`}
-            onClick={() => setMenuOpen(menuOpen === 'options' ? null : 'options')}
-          >
-            Options
-          </button>
-          {menuOpen === 'options' && (
-            <div className="pool-menu-dropdown">
-              <button className="pool-menu-opt" onClick={() => setInvertAim(v => !v)}>
-                {invertAim ? '☑' : '☐'} Invert Aim
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="pool-menubar__hint">{hintText}</div>
-      </div>
 
       {/* ── Canvas ── */}
       <div className="pool-canvas-wrap">
@@ -1056,20 +1134,22 @@ export default function Pool({ onQuit }: PoolProps) {
         {/* P1 side */}
         <div className="pool-player-side">
           <div className="pool-ball-tray">
-            {p0Circles.map((num, i) => (
-              <div
-                key={i}
-                className="pool-ball-circle"
-                style={num > 0 && uiSunkBalls.includes(num)
-                  ? { background: BALL_CLR[num], borderColor: '#444' }
-                  : {}}
-              />
-            ))}
+            {p0Circles.map((num, i) => {
+              const isSunk = num > 0 && uiSunkBalls.includes(num);
+              return (
+                <div
+                  key={isSunk ? `sunk-${num}` : `empty0-${i}`}
+                  className={`pool-ball-circle${isSunk ? ' pool-ball-circle--sunk' : ''}`}
+                >
+                  {isSunk && <BallIcon num={num} size={18} />}
+                </div>
+              );
+            })}
           </div>
 
-          {showControls && uiTurn === 0 && (
+          {uiPhase === 'aiming' && uiTurn === 0 && (
             <div
-              className="pool-side-cue"
+              className={`pool-side-cue${!isHumanTurn ? ' pool-side-cue--ai' : ''}`}
               onPointerDown={onCuePointerDown}
               onPointerMove={onCuePointerMove}
               onPointerUp={onCuePointerUp}
@@ -1079,7 +1159,7 @@ export default function Pool({ onQuit }: PoolProps) {
               <div
                 className="pool-side-cue__body"
                 style={{
-                  top: `${22 + cuePower * 70}px`,
+                  top: `${22 + cuePower * 60}px`,
                   background: `linear-gradient(to bottom, #e8d8a8 0%, ${liftColor(uiColors[0], 30)} 30%, ${uiColors[0]} 100%)`,
                 }}
               />
@@ -1105,6 +1185,7 @@ export default function Pool({ onQuit }: PoolProps) {
           >
             <div ref={engDotRef} className="pool-english__dot" />
           </div>
+          <div className="pool-hint">{hintText}</div>
         </div>
 
         {/* P2 side (mirrored) */}
@@ -1113,9 +1194,9 @@ export default function Pool({ onQuit }: PoolProps) {
             {uiNames[1]}
           </div>
 
-          {showControls && uiTurn === 1 && (
+          {uiPhase === 'aiming' && uiTurn === 1 && (
             <div
-              className="pool-side-cue"
+              className={`pool-side-cue${!isHumanTurn ? ' pool-side-cue--ai' : ''}`}
               onPointerDown={onCuePointerDown}
               onPointerMove={onCuePointerMove}
               onPointerUp={onCuePointerUp}
@@ -1125,7 +1206,7 @@ export default function Pool({ onQuit }: PoolProps) {
               <div
                 className="pool-side-cue__body"
                 style={{
-                  top: `${22 + cuePower * 70}px`,
+                  top: `${22 + cuePower * 60}px`,
                   background: `linear-gradient(to bottom, #e8d8a8 0%, ${liftColor(uiColors[1], 30)} 30%, ${uiColors[1]} 100%)`,
                 }}
               />
@@ -1133,15 +1214,17 @@ export default function Pool({ onQuit }: PoolProps) {
           )}
 
           <div className="pool-ball-tray pool-ball-tray--right">
-            {p1Circles.map((num, i) => (
-              <div
-                key={i}
-                className="pool-ball-circle"
-                style={num > 0 && uiSunkBalls.includes(num)
-                  ? { background: BALL_CLR[num], borderColor: '#444' }
-                  : {}}
-              />
-            ))}
+            {p1Circles.map((num, i) => {
+              const isSunk = num > 0 && uiSunkBalls.includes(num);
+              return (
+                <div
+                  key={isSunk ? `sunk-${num}` : `empty1-${i}`}
+                  className={`pool-ball-circle${isSunk ? ' pool-ball-circle--sunk' : ''}`}
+                >
+                  {isSunk && <BallIcon num={num} size={18} />}
+                </div>
+              );
+            })}
           </div>
         </div>
 
