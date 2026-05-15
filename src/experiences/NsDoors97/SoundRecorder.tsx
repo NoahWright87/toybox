@@ -55,6 +55,35 @@ async function idbListNames(): Promise<string[]> {
   });
 }
 
+// ── Draft (auto-save) helpers ─────────────────────────────────────────────────
+
+const DRAFT_KEY    = "__draft__";
+const LS_DRAFT_TS  = "ns97_sound_draft_ts";
+
+function saveDraftNow(samples: Float32Array, sr: number): void {
+  if (samples.length === 0) return;
+  localStorage.setItem(LS_DRAFT_TS, Date.now().toString());
+  idbSave(DRAFT_KEY, samples, sr).catch(() => {});
+}
+
+async function clearDraft(): Promise<void> {
+  localStorage.removeItem(LS_DRAFT_TS);
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(DRAFT_KEY);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+function draftTimestamp(): string {
+  const raw = localStorage.getItem(LS_DRAFT_TS);
+  if (!raw) return "unknown time";
+  const d = new Date(parseInt(raw, 10));
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 // ── localStorage: saved sound file names (for desktop icons) ──────────────────
 
 const LS_SOUNDS = "ns97_sound_names";
@@ -228,10 +257,12 @@ export default function SoundRecorder({
   const [statusMsg,   setStatusMsg]   = useState("Ready");
   const [displayPos,  setDisplayPos]  = useState(0);
   const [displayLen,  setDisplayLen]  = useState(0);
-  const [showOpenDlg,  setShowOpenDlg]  = useState(false);
-  const [openDlgFiles, setOpenDlgFiles] = useState<string[]>([]);
-  const [showSaveDlg,  setShowSaveDlg]  = useState(false);
-  const [saveDlgName,  setSaveDlgName]  = useState("Untitled.wav");
+  const [showOpenDlg,    setShowOpenDlg]    = useState(false);
+  const [openDlgFiles,   setOpenDlgFiles]   = useState<string[]>([]);
+  const [showSaveDlg,    setShowSaveDlg]    = useState(false);
+  const [saveDlgName,    setSaveDlgName]    = useState("Untitled.wav");
+  const [showRestoreDlg, setShowRestoreDlg] = useState(false);
+  const [draftTimeStr,   setDraftTimeStr]   = useState("");
 
   // Keep fileNameRef in sync so menu closures don't go stale
   useEffect(() => { fileNameRef.current = fileName; }, [fileName]);
@@ -367,20 +398,40 @@ export default function SoundRecorder({
     return () => obs.disconnect();
   }, [drawCanvas]);
 
-  // ── Load file on mount ────────────────────────────────────────────────────
+  // ── Load file on mount (or check for draft) ──────────────────────────────
 
   useEffect(() => {
-    if (!initFileName) return;
-    idbLoad(initFileName).then(result => {
-      if (!result) return;
-      samplesRef.current = result.samples;
-      srRef.current = result.sr;
-      playheadRef.current = 0;
-      setHasSamples(true);
-      setStatusMsg("File loaded");
-    }).catch(() => { setStatusMsg("Could not load file"); });
+    if (initFileName) {
+      // Opening a saved file — load it directly, ignore any draft
+      idbLoad(initFileName).then(result => {
+        if (!result) return;
+        samplesRef.current = result.samples;
+        srRef.current = result.sr;
+        playheadRef.current = 0;
+        setHasSamples(true);
+        setStatusMsg("File loaded");
+      }).catch(() => setStatusMsg("Could not load file"));
+    } else {
+      // Fresh session — check for an auto-saved draft
+      const ts = localStorage.getItem(LS_DRAFT_TS);
+      if (ts) {
+        setDraftTimeStr(draftTimestamp());
+        setShowRestoreDlg(true);
+      }
+    }
   // Run once on mount only
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Auto-save draft every 5 seconds ──────────────────────────────────────
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (samplesRef.current.length > 0) {
+        saveDraftNow(samplesRef.current, srRef.current);
+      }
+    }, 5000);
+    return () => clearInterval(id);
   }, []);
 
   // ── Playback ──────────────────────────────────────────────────────────────
@@ -431,6 +482,7 @@ export default function SoundRecorder({
     setIsRecording(false);
     setHasSamples(samplesRef.current.length > 0);
     setStatusMsg("Stopped");
+    saveDraftNow(samplesRef.current, srRef.current);
   }
 
   async function startRecord() {
@@ -534,6 +586,7 @@ export default function SoundRecorder({
     setHasSamples(false);
     setStatusMsg("New file");
     drawCanvas();
+    clearDraft().catch(() => {});
   }
 
   function handleOpenFile() {
@@ -591,6 +644,7 @@ export default function SoundRecorder({
       setHasSamples(true);
       setStatusMsg("File imported");
       drawCanvas();
+      saveDraftNow(mono, decoded.sampleRate);
     }).catch(() => setStatusMsg("Error importing file"));
     if (importInputRef.current) importInputRef.current.value = "";
   }
@@ -612,6 +666,7 @@ export default function SoundRecorder({
       setStatusMsg("Saved");
       onFileSaved?.(saveName);
       downloadWav(encodeWav(samplesRef.current, srRef.current), saveName);
+      clearDraft().catch(() => {});
     }).catch(() => setStatusMsg("Error saving"));
   }
 
@@ -625,6 +680,28 @@ export default function SoundRecorder({
     playheadRef.current = 0;
     setStatusMsg(`Applied: ${fx}`);
     drawCanvas();
+    saveDraftNow(samplesRef.current, srRef.current);
+  }
+
+  // ── Draft restore ─────────────────────────────────────────────────────────
+
+  function handleRestoreDraft() {
+    setShowRestoreDlg(false);
+    idbLoad(DRAFT_KEY).then(result => {
+      if (!result) { setStatusMsg("Draft not found"); return; }
+      samplesRef.current = result.samples;
+      srRef.current = result.sr;
+      playheadRef.current = 0;
+      setHasSamples(true);
+      setStatusMsg("Session restored");
+      drawCanvas();
+    }).catch(() => setStatusMsg("Could not restore draft"));
+  }
+
+  function handleDiscardDraft() {
+    setShowRestoreDlg(false);
+    clearDraft().catch(() => {});
+    setStatusMsg("Ready");
   }
 
   // ── Menus ─────────────────────────────────────────────────────────────────
@@ -736,6 +813,27 @@ export default function SoundRecorder({
         <span className="sr__filename">{fileName}</span>
         <span className="sr__msg">{statusMsg}</span>
       </div>
+
+      {/* Draft restore dialog */}
+      {showRestoreDlg && (
+        <div className="sr__overlay">
+          <div className="sr__dialog">
+            <div className="sr__dialog-title">Restore Session</div>
+            <div className="sr__dialog-body">
+              <label className="sr__label">
+                Unsaved work found from {draftTimeStr}.
+              </label>
+              <label className="sr__label" style={{ color: "#808080" }}>
+                Restore it?
+              </label>
+            </div>
+            <div className="sr__dialog-footer">
+              <button className="sr__btn" onClick={handleRestoreDraft}>Restore</button>
+              <button className="sr__btn" onClick={handleDiscardDraft}>Discard</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Open File dialog */}
       {showOpenDlg && (

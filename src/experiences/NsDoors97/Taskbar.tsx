@@ -110,8 +110,9 @@ const GAMES_ITEMS = [
 ] as const;
 
 const TOOLS_ITEMS = [
-  { id: "notebook", icon: "📝", label: "Notebook" },
-  { id: "ns-art",   icon: "🎨", label: "NS Art"   },
+  { id: "notebook",       icon: "📝", label: "Notebook"       },
+  { id: "ns-art",         icon: "🎨", label: "NS Art"          },
+  { id: "sound-recorder", icon: "🎙️", label: "Sound Recorder" },
 ] as const;
 
 type OpenSubmenu = "games" | "tools" | "settings" | null;

@@ -101,9 +101,8 @@ interface DesktopIconEntry {
 }
 
 const STATIC_DESKTOP_ICONS: DesktopIconEntry[] = [
-  { id: "my-doors",        title: "My Doors",       icon: "🖥️" },
-  { id: "dumpster",        title: "Dumpster",        icon: "🗑️" },
-  { id: "sound-recorder",  title: "Sound Recorder",  icon: "🎙️" },
+  { id: "my-doors",  title: "My Doors",  icon: "🖥️" },
+  { id: "dumpster",  title: "Dumpster",  icon: "🗑️" },
 ];
 
 const STATIC_RIGHT_ICONS: DesktopIconEntry[] = [
