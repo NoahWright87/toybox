@@ -55,6 +55,27 @@
 }
 .pool-setup__inp:focus { outline: none; border-color: #808080 #ffffff #ffffff #808080; }
 
+/* ── Stick color swatches ─────────────────────────────────────────────────── */
+.pool-setup__swatches {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pool-swatch {
+  width: 22px;
+  height: 22px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+.pool-swatch--on {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.5);
+}
+.pool-swatch:active { border-color: #808080 #ffffff #ffffff #808080; }
+
 .pool-setup__actions {
   display: flex;
   gap: 10px;
@@ -73,9 +94,7 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.pool-btn:active {
-  border-color: #808080 #ffffff #ffffff #808080;
-}
+.pool-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
 .pool-btn--on,
 .pool-btn--on:active {
   border-color: #808080 #ffffff #ffffff #808080;
@@ -86,67 +105,88 @@
   color: #fff;
   border-color: #ff9966 #662200 #662200 #ff9966;
 }
-.pool-btn--primary:active {
-  border-color: #662200 #ff9966 #ff9966 #662200;
-}
-.pool-btn--fullpower {
-  background: #228833;
-  color: #fff;
-  border-color: #88cc88 #114411 #114411 #88cc88;
-  font-size: 7px;
-  line-height: 1.6;
-  padding: 6px 8px;
-  flex-shrink: 0;
-}
-.pool-btn--fullpower:active {
-  border-color: #114411 #88cc88 #88cc88 #114411;
-}
+.pool-btn--primary:active { border-color: #662200 #ff9966 #ff9966 #662200; }
 
-/* ── Score bar ────────────────────────────────────────────────────────────── */
-.pool-bar {
+/* ── Win95 menu bar ───────────────────────────────────────────────────────── */
+.pool-menubar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   width: 760px;
   max-width: 100%;
   background: #c0c0c0;
-  border-bottom: 2px solid #808080;
-  padding: 4px 10px;
+  border-bottom: 1px solid #808080;
   box-sizing: border-box;
-  gap: 6px;
+  padding: 1px 2px;
+  gap: 0;
+  position: relative;
+  z-index: 10;
 }
 
-.pool-bar__player {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.pool-menu-group {
+  position: relative;
+}
+
+.pool-menu-btn {
+  font-family: "Press Start 2P", monospace;
   font-size: 7px;
-  opacity: 0.55;
-  transition: opacity 0.15s;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #000;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pool-menu-btn:hover,
+.pool-menu-btn--open {
+  background: #000080;
+  color: #fff;
+  border-color: transparent;
+}
+
+.pool-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 130px;
+  z-index: 100;
+  padding: 2px 0;
+}
+
+.pool-menu-opt {
+  display: block;
+  width: 100%;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 5px 16px;
+  background: transparent;
+  border: none;
+  color: #000;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.pool-menu-opt:hover { background: #000080; color: #fff; }
+
+.pool-menu-divider {
+  height: 1px;
+  background: #808080;
+  margin: 3px 4px;
+  box-shadow: 0 1px 0 #fff;
+}
+
+.pool-menubar__hint {
   flex: 1;
-}
-.pool-bar__player--right { flex-direction: row-reverse; }
-.pool-bar__player--active { opacity: 1; }
-
-.pool-bar__name {
-  font-size: 7px;
-  color: #cc4400;
-  max-width: 100px;
+  font-size: 6px;
+  color: #444;
+  text-align: right;
+  padding-right: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pool-bar__player--active .pool-bar__name { color: #cc4400; }
-
-.pool-bar__group { font-size: 6px; color: #444; }
-.pool-bar__count {
-  font-size: 10px;
-  color: #111;
-  min-width: 14px;
-  text-align: center;
-}
-
-.pool-bar__center { font-size: 18px; }
 
 /* ── Canvas ───────────────────────────────────────────────────────────────── */
 .pool-canvas-wrap {
@@ -160,7 +200,7 @@
   cursor: crosshair;
   max-width: 100%;
   height: auto;
-  touch-action: none; /* prevent scroll/zoom hijacking touch drags */
+  touch-action: none;
 }
 
 /* ── Game-over overlay ────────────────────────────────────────────────────── */
@@ -182,50 +222,123 @@
   align-items: center;
   gap: 14px;
 }
-.pool-over__title {
-  font-size: 11px;
-  color: #cc4400;
-  letter-spacing: 1px;
-}
-.pool-over__winner {
-  font-size: 10px;
-  color: #228833;
-}
-.pool-over__msg {
-  font-size: 7px;
-  color: #333;
-  text-align: center;
-  max-width: 280px;
-  line-height: 1.8;
-}
-.pool-over__btns { display: flex; gap: 10px; }
+.pool-over__title  { font-size: 11px; color: #cc4400; letter-spacing: 1px; }
+.pool-over__winner { font-size: 10px; color: #228833; }
+.pool-over__msg    { font-size: 7px; color: #333; text-align: center; max-width: 280px; line-height: 1.8; }
+.pool-over__btns   { display: flex; gap: 10px; }
 
-/* ── Controls bar ─────────────────────────────────────────────────────────── */
-.pool-ctrl {
+/* ── Bottom panel ─────────────────────────────────────────────────────────── */
+.pool-bottom {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
   width: 760px;
   max-width: 100%;
   background: #c0c0c0;
   border-top: 2px solid #808080;
-  padding: 6px 10px;
+  padding: 8px 10px;
   box-sizing: border-box;
+  gap: 8px;
+  min-height: 110px;
 }
 
-/* ── English indicator ────────────────────────────────────────────────────── */
-.pool-english {
+/* ── Player side areas ────────────────────────────────────────────────────── */
+.pool-player-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.pool-player-side--right {
+  flex-direction: row-reverse;
+}
+
+/* ── Player name ──────────────────────────────────────────────────────────── */
+.pool-player-name {
+  font-size: 7px;
+  color: #aaa;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.pool-player-name--active {
+  color: #111;
+}
+
+/* ── Ball tray (sunk ball circles) ───────────────────────────────────────── */
+.pool-ball-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pool-ball-circle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #808080;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+/* ── Side-view pool cue (shooting) ───────────────────────────────────────── */
+.pool-side-cue {
+  position: relative;
+  width: 56px;
+  height: 90px;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+  background: rgba(0,0,0,0.06);
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  flex-shrink: 0;
+}
+
+/* Small cue ball indicator at top of cue area */
+.pool-side-cue__ball {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fff, #c0c0c0);
+  border: 1px solid #888;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* The cue body — slides down as power increases */
+.pool-side-cue__body {
+  position: absolute;
+  left: calc(50% - 7px);
+  width: 14px;
+  height: 75px;
+  border-radius: 1px 1px 6px 6px;
+  pointer-events: none;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 100%, 0% 100%);
+}
+
+/* ── English / spin indicator ─────────────────────────────────────────────── */
+.pool-center {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
 }
+
 .pool-english__label {
   font-size: 5px;
   color: #444;
   letter-spacing: 0.5px;
 }
+
 .pool-english__ball {
   width: 56px;
   height: 56px;
@@ -236,7 +349,9 @@
   position: relative;
   cursor: crosshair;
   box-shadow: inset 1px 1px 3px rgba(0,0,0,0.25);
+  touch-action: none;
 }
+
 .pool-english__dot {
   position: absolute;
   width: 10px;
@@ -246,71 +361,6 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   box-shadow: 0 0 3px rgba(0,0,0,0.5);
-}
-.pool-english__rst {
-  font-size: 6px;
-  padding: 3px 6px;
-}
-
-/* ── Pinball power slider ─────────────────────────────────────────────────── */
-.pool-slider {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 80px;
-  max-width: 200px;
-}
-.pool-slider__label {
-  font-size: 5px;
-  color: #444;
-  letter-spacing: 0.5px;
-}
-.pool-slider__track {
-  position: relative;
-  height: 22px;
-  background: #888;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  cursor: pointer;
-  touch-action: none;
-  user-select: none;
-  overflow: visible;
-}
-.pool-slider__fill {
-  position: absolute;
-  top: 0; left: 0;
-  height: 100%;
-  background: linear-gradient(to right, #228833, #f5c400, #cc4400);
-  pointer-events: none;
-}
-.pool-slider__handle {
-  position: absolute;
-  top: -3px;
-  width: 14px;
-  height: calc(100% + 6px);
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  pointer-events: none;
-  transform: translateX(-50%);
-  z-index: 1;
-}
-.pool-slider--disabled .pool-slider__track {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* ── Hint text ────────────────────────────────────────────────────────────── */
-.pool-hint {
-  flex: 1;
-  font-size: 6px;
-  color: #333;
-  line-height: 1.7;
-}
-
-.pool-ctrl__btns {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
+  left: 50%;
+  top: 50%;
 }
