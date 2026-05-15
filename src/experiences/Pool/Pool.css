@@ -89,6 +89,18 @@
 .pool-btn--primary:active {
   border-color: #662200 #ff9966 #ff9966 #662200;
 }
+.pool-btn--fullpower {
+  background: #228833;
+  color: #fff;
+  border-color: #88cc88 #114411 #114411 #88cc88;
+  font-size: 7px;
+  line-height: 1.6;
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+.pool-btn--fullpower:active {
+  border-color: #114411 #88cc88 #88cc88 #114411;
+}
 
 /* ── Score bar ────────────────────────────────────────────────────────────── */
 .pool-bar {

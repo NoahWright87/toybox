@@ -29,8 +29,9 @@ const BALL_REST  = 0.95;
 const MIN_SPEED  = 0.012;
 
 // ── Shooting ──────────────────────────────────────────────────────────────────
-const MAX_DRAG_PX = 180;
-const MAX_VEL     = 22;
+const MAX_DRAG_PX   = 180;
+const MAX_VEL       = 22;
+const ROTATE_SENS   = 0.010; // radians per canvas-pixel of lateral drag
 
 // ── Key positions ─────────────────────────────────────────────────────────────
 const FOOT_X   = PF_X1 + PF_W * 0.75;
@@ -672,25 +673,25 @@ export default function Pool({ onQuit }: PoolProps) {
   const canvasXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =>
     clientToCanvas(e.clientX, e.clientY), [clientToCanvas]);
 
-  // Shared: start a shot drag (used by both mouse-down and touch-start).
-  // On touch there is no hover, so we set the aim angle from the contact point first.
-  const handlePointerDown = useCallback((x: number, y: number, fromTouch: boolean) => {
+  // Shared pointer-down: lock the current aim angle as the drag reference.
+  // Power resets to 0 so each drag starts fresh.
+  const handlePointerDown = useCallback((x: number, y: number) => {
     const m = mouseRef.current;
     m.down = true; m.downX = x; m.downY = y;
     const gs = gsRef.current;
     if (!gs || gs.players[gs.turn].isAI) return;
     if (gs.phase === 'aiming') {
-      if (fromTouch) {
-        // No hover on touch — set aim toward the tap point right now
-        const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
-        if (cb) gs.aimAngle = Math.atan2(y - cb.y, x - cb.x);
-      }
       m.locked = true;
       m.lockedAngle = gs.aimAngle;
+      gs.power = 0;
+      setDisplayPow(0);
     }
   }, []);
 
-  // Shared: update aim/power/inhand during a drag.
+  // Shared pointer-move: decompose drag displacement into two components:
+  //   • backward (along -aimAngle): sets power proportionally
+  //   • lateral  (perpendicular):   rotates aim angle proportionally
+  // This keeps the finger away from the aim line so the shot stays visible.
   const handlePointerMove = useCallback((x: number, y: number) => {
     const m = mouseRef.current;
     m.x = x; m.y = y;
@@ -698,17 +699,17 @@ export default function Pool({ onQuit }: PoolProps) {
     if (!gs || gs.phase === 'moving' || gs.players[gs.turn].isAI) return;
 
     if (gs.phase === 'aiming') {
-      const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
-      if (!cb) return;
-      if (m.down && m.locked) {
-        const pullDir = m.lockedAngle + Math.PI;
-        const pull = (x - m.downX) * Math.cos(pullDir) + (y - m.downY) * Math.sin(pullDir);
-        const pwr = Math.max(0, Math.min(1, pull / MAX_DRAG_PX));
-        gs.power = pwr;
-        setDisplayPow(pwr);
-      } else {
-        gs.aimAngle = Math.atan2(y - cb.y, x - cb.x);
-      }
+      if (!m.down || !m.locked) return;
+      const dx = x - m.downX;
+      const dy = y - m.downY;
+      const a  = m.lockedAngle;
+      // Backward component: displacement opposite to aim direction → power
+      const back = -dx * Math.cos(a) - dy * Math.sin(a);
+      gs.power = Math.max(0, Math.min(1, back / MAX_DRAG_PX));
+      setDisplayPow(gs.power);
+      // Lateral component: displacement perpendicular to aim → rotation
+      const lat = dx * Math.sin(a) - dy * Math.cos(a);
+      gs.aimAngle = a + lat * ROTATE_SENS;
     } else if (gs.phase === 'inhand') {
       gs.inHandPos = {
         x: Math.max(PF_X1 + BR, Math.min(PF_X2 - BR, x)),
@@ -724,7 +725,7 @@ export default function Pool({ onQuit }: PoolProps) {
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x, y } = canvasXY(e);
-    handlePointerDown(x, y, false);
+    handlePointerDown(x, y);
   }, [canvasXY, handlePointerDown]);
 
   const onMouseUp = useCallback(() => {
@@ -765,7 +766,7 @@ export default function Pool({ onQuit }: PoolProps) {
     const t = e.touches[0];
     if (!t) return;
     const { x, y } = clientToCanvas(t.clientX, t.clientY);
-    handlePointerDown(x, y, true);
+    handlePointerDown(x, y);
   }, [clientToCanvas, handlePointerDown]);
 
   const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -781,6 +782,26 @@ export default function Pool({ onQuit }: PoolProps) {
     void e;
     onMouseUp();
   }, [onMouseUp]);
+
+  // ── Full-power shot (escape hatch when near a cushion) ───────────────────
+  const fireFullPower = useCallback(() => {
+    const gs = gsRef.current;
+    if (!gs || gs.phase !== 'aiming' || gs.players[gs.turn].isAI) return;
+    const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
+    if (!cb) return;
+    firstHitRef.current.value = null;
+    cb.vx = Math.cos(gs.aimAngle) * MAX_VEL;
+    cb.vy = Math.sin(gs.aimAngle) * MAX_VEL;
+    cb.spinX = gs.englishX;
+    cb.spinY = gs.englishY;
+    gsRef.current = {
+      ...gs, phase: 'moving', power: 0,
+      pocketedThisTurn: [], firstBallHit: null, msg: '',
+      englishX: 0, englishY: 0,
+    };
+    setDisplayPow(0); setEnglishX(0); setEnglishY(0);
+    syncUi(gsRef.current);
+  }, [syncUi]);
 
   // ── English indicator ─────────────────────────────────────────────────────
   const onEnglishClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -846,9 +867,9 @@ export default function Pool({ onQuit }: PoolProps) {
     g === 'solids' ? '● solids' : g === 'stripes' ? '◑ stripes' : '?';
 
   const hintText = uiPhase === 'inhand'
-    ? 'Move mouse to place cue ball, then click'
+    ? 'Drag to place cue ball · tap/click to confirm'
     : uiPhase === 'aiming' && isHuman
-    ? 'Move mouse to aim · click & drag back for power · release to shoot'
+    ? 'Drag sideways to rotate · drag back for power · release to shoot'
     : '';
 
   return (
@@ -908,6 +929,12 @@ export default function Pool({ onQuit }: PoolProps) {
             <div className="pool-power__fill" style={{ width: `${displayPow * 100}%` }} />
           </div>
         </div>
+
+        {isHuman && uiPhase === 'aiming' && (
+          <button className="pool-btn pool-btn--fullpower" onClick={fireFullPower}>
+            FULL<br />POWER
+          </button>
+        )}
 
         <div className="pool-hint">{hintText || uiMsg}</div>
 
