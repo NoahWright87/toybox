@@ -252,30 +252,53 @@
   padding: 3px 6px;
 }
 
-/* ── Power meter ─────────────────────────────────────────────────────────── */
-.pool-power {
+/* ── Pinball power slider ─────────────────────────────────────────────────── */
+.pool-slider {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 80px;
+  max-width: 200px;
 }
-.pool-power__label {
+.pool-slider__label {
   font-size: 5px;
   color: #444;
   letter-spacing: 0.5px;
 }
-.pool-power__track {
-  width: 90px;
-  height: 14px;
+.pool-slider__track {
+  position: relative;
+  height: 22px;
   background: #888;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  overflow: visible;
 }
-.pool-power__fill {
+.pool-slider__fill {
+  position: absolute;
+  top: 0; left: 0;
   height: 100%;
   background: linear-gradient(to right, #228833, #f5c400, #cc4400);
-  transition: width 0.04s linear;
+  pointer-events: none;
+}
+.pool-slider__handle {
+  position: absolute;
+  top: -3px;
+  width: 14px;
+  height: calc(100% + 6px);
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+.pool-slider--disabled .pool-slider__track {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ── Hint text ────────────────────────────────────────────────────────────── */

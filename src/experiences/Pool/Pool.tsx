@@ -29,9 +29,8 @@ const BALL_REST  = 0.95;
 const MIN_SPEED  = 0.012;
 
 // ── Shooting ──────────────────────────────────────────────────────────────────
-const MAX_DRAG_PX   = 180;
-const MAX_VEL       = 22;
-const ROTATE_SENS   = 0.010; // radians per canvas-pixel of lateral drag
+const MAX_VEL  = 22;
+const AIM_LERP = 0.18; // fraction of angular diff to close per frame
 
 // ── Key positions ─────────────────────────────────────────────────────────────
 const FOOT_X   = PF_X1 + PF_W * 0.75;
@@ -90,7 +89,6 @@ interface GState {
   winner: 0 | 1 | null;
   msg: string;
   aimAngle: number;
-  power: number;
   englishX: number;
   englishY: number;
   inHandPos: { x: number; y: number };
@@ -99,8 +97,7 @@ interface GState {
 
 interface MouseSt {
   x: number; y: number;
-  down: boolean; downX: number; downY: number;
-  locked: boolean; lockedAngle: number;
+  down: boolean;
 }
 
 // ── Rack ─────────────────────────────────────────────────────────────────────
@@ -134,7 +131,6 @@ function createBalls(): Ball[] {
 function stepBalls(balls: Ball[], firstHit: { value: number | null }): number[] {
   const pocketed: number[] = [];
 
-  // Move + friction
   for (const b of balls) {
     if (b.pocketed) continue;
     b.x  += b.vx; b.y  += b.vy;
@@ -146,7 +142,6 @@ function stepBalls(balls: Ball[], firstHit: { value: number | null }): number[] 
     if (Math.abs(b.spinY) < 0.001) b.spinY = 0;
   }
 
-  // Ball-ball collisions
   for (let i = 0; i < balls.length; i++) {
     for (let j = i + 1; j < balls.length; j++) {
       const a = balls[i], b = balls[j];
@@ -173,7 +168,6 @@ function stepBalls(balls: Ball[], firstHit: { value: number | null }): number[] 
         a.vx += imp * nx; a.vy += imp * ny;
         b.vx -= imp * nx; b.vy -= imp * ny;
 
-        // English effect on cue ball
         if (a.num === 0 && (a.spinX !== 0 || a.spinY !== 0)) {
           const spd = Math.hypot(prevAvx, prevAvy);
           const ang = Math.atan2(prevAvy, prevAvx);
@@ -190,7 +184,6 @@ function stepBalls(balls: Ball[], firstHit: { value: number | null }): number[] 
     }
   }
 
-  // Pockets & cushions
   for (const b of balls) {
     if (b.pocketed) continue;
     let sunk = false;
@@ -247,16 +240,14 @@ function processTurnEnd(gs: GState): GState {
   const currentGroup  = players[turn].group;
   const oppTurn       = (1 - turn) as 0 | 1;
 
-  // Check illegal first contact
   if (!isBreak && !scratch && firstBallHit !== null) {
     const hitSolid  = firstBallHit >= 1 && firstBallHit <= 7;
     const hitStripe = firstBallHit >= 9 && firstBallHit <= 15;
-    if (currentGroup === 'solids'  && !hitSolid)   foul = true;
-    if (currentGroup === 'stripes' && !hitStripe)  foul = true;
+    if (currentGroup === 'solids'  && !hitSolid)  foul = true;
+    if (currentGroup === 'stripes' && !hitStripe) foul = true;
   }
-  if (firstBallHit === null && !isBreak) foul = true; // no ball touched
+  if (firstBallHit === null && !isBreak) foul = true;
 
-  // 8-ball sunk
   if (eight) {
     const activeMine = groupBalls(balls.filter(b => !b.pocketed), currentGroup);
     if (foul || scratch || activeMine.length > 0) {
@@ -267,7 +258,6 @@ function processTurnEnd(gs: GState): GState {
       msg: `${newPlayers[turn].name} wins! 🎱` };
   }
 
-  // Assign groups on first non-break ball sunk
   if (newPlayers[0].group === null && !isBreak) {
     const solidsIn  = pocketedThisTurn.some(n => n >= 1 && n <= 7);
     const stripesIn = pocketedThisTurn.some(n => n >= 9 && n <= 15);
@@ -282,7 +272,6 @@ function processTurnEnd(gs: GState): GState {
     }
   }
 
-  // Scratch → ball in hand
   if (scratch) {
     nextTurn = oppTurn;
     const cb = balls.find(b => b.num === 0);
@@ -295,7 +284,6 @@ function processTurnEnd(gs: GState): GState {
     };
   }
 
-  // Determine pocket-own / pocket-opp
   const myGroup = newPlayers[turn].group;
   const pocketedOwn = pocketedThisTurn.some(n => {
     if (n === 0 || n === 8) return false;
@@ -473,31 +461,27 @@ function drawStick(ctx: CanvasRenderingContext2D, cx: number, cy: number, angle:
   ctx.lineTo(tx + Math.cos(backAng) * 10, ty + Math.sin(backAng) * 10); ctx.stroke();
 }
 
-function renderFrame(ctx: CanvasRenderingContext2D, gs: GState): void {
+// shotPower drives stick pullback visually
+function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: number): void {
   ctx.clearRect(0, 0, CW, CH);
 
-  // Rail
   ctx.fillStyle = '#7a4010';
   ctx.fillRect(0, 0, CW, CH);
 
-  // Cushion
   ctx.fillStyle = '#1a6020';
   ctx.fillRect(RAIL_W, RAIL_W, CW - RAIL_W * 2, CH - RAIL_W * 2);
 
-  // Felt
   const felt = ctx.createLinearGradient(PF_X1, PF_Y1, PF_X2, PF_Y2);
   felt.addColorStop(0, '#1e7525'); felt.addColorStop(1, '#165a1c');
   ctx.fillStyle = felt;
   ctx.fillRect(PF_X1, PF_Y1, PF_W, PF_H);
 
-  // Guide lines
   ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(CW / 2, PF_Y1); ctx.lineTo(CW / 2, PF_Y2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(HEAD_X, PF_Y1); ctx.lineTo(HEAD_X, PF_Y2); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath(); ctx.arc(FOOT_X, FOOT_Y, 3, 0, Math.PI * 2); ctx.fill();
 
-  // Pockets
   for (const p of POCKETS) {
     const pg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, PR + 6);
     pg.addColorStop(0, 'rgba(0,0,0,0.9)'); pg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -510,7 +494,6 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState): void {
   const cue = gs.balls.find(b => b.num === 0 && !b.pocketed);
   const humanAiming = gs.phase === 'aiming' && cue && !gs.players[gs.turn].isAI;
 
-  // Aim aids
   if (humanAiming && cue) {
     const angle = gs.aimAngle;
     const gd    = ghostBallDist(gs.balls, cue, angle);
@@ -527,7 +510,6 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState): void {
     ctx.stroke(); ctx.setLineDash([]);
   }
 
-  // In-hand placement preview
   if (gs.phase === 'inhand') {
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath(); ctx.arc(gs.inHandPos.x, gs.inHandPos.y, BR, 0, Math.PI * 2); ctx.fill();
@@ -535,13 +517,17 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState): void {
     ctx.beginPath(); ctx.arc(gs.inHandPos.x, gs.inHandPos.y, BR, 0, Math.PI * 2); ctx.stroke();
   }
 
-  // Balls
   for (const b of gs.balls) {
     if (!b.pocketed) drawBall(ctx, b);
   }
 
-  // Cue stick
-  if (humanAiming && cue) drawStick(ctx, cue.x, cue.y, gs.aimAngle, gs.power);
+  if (humanAiming && cue) drawStick(ctx, cue.x, cue.y, gs.aimAngle, shotPower);
+}
+
+// ── Slider power helper ───────────────────────────────────────────────────────
+function calcSliderPower(clientX: number, track: HTMLElement): number {
+  const r = track.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (clientX - r.left) / r.width));
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -550,16 +536,17 @@ interface PoolProps {
 }
 
 export default function Pool({ onQuit }: PoolProps) {
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const gsRef      = useRef<GState | null>(null);
-  const rafRef     = useRef<number>(0);
-  const mouseRef   = useRef<MouseSt>({
-    x: CW / 2, y: CH / 2, down: false, downX: 0, downY: 0,
-    locked: false, lockedAngle: 0,
-  });
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const gsRef       = useRef<GState | null>(null);
+  const rafRef      = useRef<number>(0);
+  const mouseRef    = useRef<MouseSt>({ x: CW / 2, y: CH / 2, down: false });
   const firstHitRef = useRef<{ value: number | null }>({ value: null });
   const aiTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const diffRef     = useRef<AIDiff>('normal');
+
+  // Slider state (mutable ref drives RAF; React state drives display)
+  const sliderPowerRef    = useRef(0);
+  const sliderDraggingRef = useRef(false);
 
   const [gamePhase, setGamePhase] = useState<'setup' | 'playing'>('setup');
   const [mode,      setMode]      = useState<Mode>('hvh');
@@ -568,9 +555,8 @@ export default function Pool({ onQuit }: PoolProps) {
   const [p1name,    setP1name]    = useState('Player 2');
   const [englishX,  setEnglishX]  = useState(0);
   const [englishY,  setEnglishY]  = useState(0);
-  const [displayPow, setDisplayPow] = useState(0);
+  const [sliderPower, setSliderPower] = useState(0);
 
-  // UI overlay state
   const [uiPhase,  setUiPhase]  = useState<Phase>('aiming');
   const [uiTurn,   setUiTurn]   = useState<0 | 1>(0);
   const [uiGroups, setUiGroups] = useState<[Group | null, Group | null]>([null, null]);
@@ -589,6 +575,26 @@ export default function Pool({ onQuit }: PoolProps) {
     setUiNames([gs.players[0].name, gs.players[1].name]);
   }, []);
 
+  // ── Fire shot at given power ──────────────────────────────────────────────
+  const fireShot = useCallback((power: number) => {
+    const gs = gsRef.current;
+    if (!gs || gs.phase !== 'aiming' || gs.players[gs.turn].isAI) return;
+    const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
+    if (!cb) return;
+    firstHitRef.current.value = null;
+    cb.vx = Math.cos(gs.aimAngle) * power * MAX_VEL;
+    cb.vy = Math.sin(gs.aimAngle) * power * MAX_VEL;
+    cb.spinX = gs.englishX;
+    cb.spinY = gs.englishY;
+    gsRef.current = {
+      ...gs, phase: 'moving',
+      pocketedThisTurn: [], firstBallHit: null, msg: '',
+      englishX: 0, englishY: 0,
+    };
+    setEnglishX(0); setEnglishY(0);
+    syncUi(gsRef.current);
+  }, [syncUi]);
+
   const fireAI = useCallback(() => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     aiTimerRef.current = setTimeout(() => {
@@ -602,7 +608,7 @@ export default function Pool({ onQuit }: PoolProps) {
       cb.vy = Math.sin(shot.angle) * shot.power * MAX_VEL;
       cb.spinX = 0; cb.spinY = 0;
       const next: GState = {
-        ...cur, phase: 'moving', aimAngle: shot.angle, power: shot.power,
+        ...cur, phase: 'moving', aimAngle: shot.angle,
         pocketedThisTurn: [], firstBallHit: null, msg: '',
       };
       gsRef.current = next;
@@ -619,13 +625,15 @@ export default function Pool({ onQuit }: PoolProps) {
     const gs: GState = {
       balls: createBalls(), phase: 'aiming', turn: 0, players,
       isBreak: true, pocketedThisTurn: [], winner: null,
-      msg: `${n0}'s break!`, aimAngle: 0, power: 0,
+      msg: `${n0}'s break!`, aimAngle: 0,
       englishX: 0, englishY: 0, inHandPos: { ...CUE_HOME }, firstBallHit: null,
       foul: false,
     };
     gsRef.current = gs;
     firstHitRef.current.value = null;
-    setEnglishX(0); setEnglishY(0); setDisplayPow(0);
+    sliderPowerRef.current = 0;
+    setSliderPower(0);
+    setEnglishX(0); setEnglishY(0);
     setGamePhase('playing');
     syncUi(gs);
   }, [syncUi]);
@@ -641,6 +649,18 @@ export default function Pool({ onQuit }: PoolProps) {
     const tick = () => {
       const gs = gsRef.current;
       if (gs) {
+        // Lerp aim toward pointer while held — this is how the user aims
+        if (gs.phase === 'aiming' && mouseRef.current.down && !gs.players[gs.turn].isAI) {
+          const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
+          if (cb) {
+            const target = Math.atan2(mouseRef.current.y - cb.y, mouseRef.current.x - cb.x);
+            let d = target - gs.aimAngle;
+            while (d > Math.PI)  d -= Math.PI * 2;
+            while (d < -Math.PI) d += Math.PI * 2;
+            gs.aimAngle += d * AIM_LERP;
+          }
+        }
+
         if (gs.phase === 'moving') {
           const sunk = stepBalls(gs.balls, firstHitRef.current);
           if (sunk.length) gs.pocketedThisTurn = [...gs.pocketedThisTurn, ...sunk];
@@ -653,7 +673,7 @@ export default function Pool({ onQuit }: PoolProps) {
             if (next.phase === 'aiming' && next.players[next.turn].isAI) fireAI();
           }
         }
-        renderFrame(ctx, gsRef.current!);
+        renderFrame(ctx, gsRef.current!, sliderPowerRef.current);
       }
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -664,7 +684,7 @@ export default function Pool({ onQuit }: PoolProps) {
     };
   }, [gamePhase, syncUi, fireAI]);
 
-  // ── Canvas events ──────────────────────────────────────────────────────────
+  // ── Canvas pointer helpers ────────────────────────────────────────────────
   const clientToCanvas = useCallback((clientX: number, clientY: number) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return { x: (clientX - r.left) * CW / r.width, y: (clientY - r.top) * CH / r.height };
@@ -673,44 +693,12 @@ export default function Pool({ onQuit }: PoolProps) {
   const canvasXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =>
     clientToCanvas(e.clientX, e.clientY), [clientToCanvas]);
 
-  // Shared pointer-down: lock the current aim angle as the drag reference.
-  // Power resets to 0 so each drag starts fresh.
+  // Canvas down: record position, start inhand drag
   const handlePointerDown = useCallback((x: number, y: number) => {
     const m = mouseRef.current;
-    m.down = true; m.downX = x; m.downY = y;
+    m.down = true; m.x = x; m.y = y;
     const gs = gsRef.current;
-    if (!gs || gs.players[gs.turn].isAI) return;
-    if (gs.phase === 'aiming') {
-      m.locked = true;
-      m.lockedAngle = gs.aimAngle;
-      gs.power = 0;
-      setDisplayPow(0);
-    }
-  }, []);
-
-  // Shared pointer-move: decompose drag displacement into two components:
-  //   • backward (along -aimAngle): sets power proportionally
-  //   • lateral  (perpendicular):   rotates aim angle proportionally
-  // This keeps the finger away from the aim line so the shot stays visible.
-  const handlePointerMove = useCallback((x: number, y: number) => {
-    const m = mouseRef.current;
-    m.x = x; m.y = y;
-    const gs = gsRef.current;
-    if (!gs || gs.phase === 'moving' || gs.players[gs.turn].isAI) return;
-
-    if (gs.phase === 'aiming') {
-      if (!m.down || !m.locked) return;
-      const dx = x - m.downX;
-      const dy = y - m.downY;
-      const a  = m.lockedAngle;
-      // Backward component: displacement opposite to aim direction → power
-      const back = -dx * Math.cos(a) - dy * Math.sin(a);
-      gs.power = Math.max(0, Math.min(1, back / MAX_DRAG_PX));
-      setDisplayPow(gs.power);
-      // Lateral component: displacement perpendicular to aim → rotation
-      const lat = dx * Math.sin(a) - dy * Math.cos(a);
-      gs.aimAngle = a + lat * ROTATE_SENS;
-    } else if (gs.phase === 'inhand') {
+    if (gs?.phase === 'inhand') {
       gs.inHandPos = {
         x: Math.max(PF_X1 + BR, Math.min(PF_X2 - BR, x)),
         y: Math.max(PF_Y1 + BR, Math.min(PF_Y2 - BR, y)),
@@ -718,90 +706,85 @@ export default function Pool({ onQuit }: PoolProps) {
     }
   }, []);
 
-  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { x, y } = canvasXY(e);
-    handlePointerMove(x, y);
-  }, [canvasXY, handlePointerMove]);
-
-  const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { x, y } = canvasXY(e);
-    handlePointerDown(x, y);
-  }, [canvasXY, handlePointerDown]);
-
-  const onMouseUp = useCallback(() => {
+  // Canvas move: update tracked position + inhand drag
+  const handlePointerMove = useCallback((x: number, y: number) => {
     const m = mouseRef.current;
-    m.down = false; m.locked = false;
+    m.x = x; m.y = y;
     const gs = gsRef.current;
-    if (!gs || gs.players[gs.turn].isAI) return;
-
-    if (gs.phase === 'aiming' && gs.power > 0.02) {
-      const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
-      if (!cb) return;
-      firstHitRef.current.value = null;
-      cb.vx = Math.cos(gs.aimAngle) * gs.power * MAX_VEL;
-      cb.vy = Math.sin(gs.aimAngle) * gs.power * MAX_VEL;
-      cb.spinX = gs.englishX;
-      cb.spinY = gs.englishY;
-      gsRef.current = {
-        ...gs, phase: 'moving', power: 0,
-        pocketedThisTurn: [], firstBallHit: null, msg: '',
-        englishX: 0, englishY: 0,
+    if (gs?.phase === 'inhand') {
+      gs.inHandPos = {
+        x: Math.max(PF_X1 + BR, Math.min(PF_X2 - BR, x)),
+        y: Math.max(PF_Y1 + BR, Math.min(PF_Y2 - BR, y)),
       };
-      setDisplayPow(0); setEnglishX(0); setEnglishY(0);
-      syncUi(gsRef.current);
-    } else if (gs.phase === 'inhand') {
+    }
+  }, []);
+
+  // Canvas up: confirm inhand placement
+  const handlePointerUp = useCallback(() => {
+    mouseRef.current.down = false;
+    const gs = gsRef.current;
+    if (!gs) return;
+    if (gs.phase === 'inhand') {
       const pos = gs.inHandPos;
-      const ok  = !gs.balls.some(b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - pos.x, b.y - pos.y) < BR * 2 + 2);
+      const ok = !gs.balls.some(
+        b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - pos.x, b.y - pos.y) < BR * 2 + 2,
+      );
       if (ok) {
         const cb = gs.balls.find(b => b.num === 0);
         if (cb) { cb.pocketed = false; cb.x = pos.x; cb.y = pos.y; cb.vx = 0; cb.vy = 0; }
-        gsRef.current = { ...gs, phase: 'aiming', power: 0 };
+        gsRef.current = { ...gs, phase: 'aiming' };
         syncUi(gsRef.current);
       }
     }
   }, [syncUi]);
 
-  // ── Touch events (mirrors pointer logic above) ────────────────────────────
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = canvasXY(e); handlePointerMove(x, y);
+  }, [canvasXY, handlePointerMove]);
+
+  const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = canvasXY(e); handlePointerDown(x, y);
+  }, [canvasXY, handlePointerDown]);
+
   const onTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    const t = e.touches[0];
-    if (!t) return;
-    const { x, y } = clientToCanvas(t.clientX, t.clientY);
-    handlePointerDown(x, y);
+    const t = e.touches[0]; if (!t) return;
+    const { x, y } = clientToCanvas(t.clientX, t.clientY); handlePointerDown(x, y);
   }, [clientToCanvas, handlePointerDown]);
 
   const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    const t = e.touches[0];
-    if (!t) return;
-    const { x, y } = clientToCanvas(t.clientX, t.clientY);
-    handlePointerMove(x, y);
+    const t = e.touches[0]; if (!t) return;
+    const { x, y } = clientToCanvas(t.clientX, t.clientY); handlePointerMove(x, y);
   }, [clientToCanvas, handlePointerMove]);
 
-  const onTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    // changedTouches[0] has the position of the lifted finger, but onMouseUp
-    // doesn't need position, so just forward the shared release logic.
-    void e;
-    onMouseUp();
-  }, [onMouseUp]);
-
-  // ── Full-power shot (escape hatch when near a cushion) ───────────────────
-  const fireFullPower = useCallback(() => {
+  // ── Pinball slider events ─────────────────────────────────────────────────
+  const onSliderPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const gs = gsRef.current;
     if (!gs || gs.phase !== 'aiming' || gs.players[gs.turn].isAI) return;
-    const cb = gs.balls.find(b => b.num === 0 && !b.pocketed);
-    if (!cb) return;
-    firstHitRef.current.value = null;
-    cb.vx = Math.cos(gs.aimAngle) * MAX_VEL;
-    cb.vy = Math.sin(gs.aimAngle) * MAX_VEL;
-    cb.spinX = gs.englishX;
-    cb.spinY = gs.englishY;
-    gsRef.current = {
-      ...gs, phase: 'moving', power: 0,
-      pocketedThisTurn: [], firstBallHit: null, msg: '',
-      englishX: 0, englishY: 0,
-    };
-    setDisplayPow(0); setEnglishX(0); setEnglishY(0);
-    syncUi(gsRef.current);
-  }, [syncUi]);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    sliderDraggingRef.current = true;
+    const p = calcSliderPower(e.clientX, e.currentTarget);
+    sliderPowerRef.current = p;
+    setSliderPower(p);
+  }, []);
+
+  const onSliderPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!sliderDraggingRef.current) return;
+    const p = calcSliderPower(e.clientX, e.currentTarget);
+    sliderPowerRef.current = p;
+    setSliderPower(p);
+  }, []);
+
+  const onSliderPointerUp = useCallback(() => {
+    if (!sliderDraggingRef.current) return;
+    sliderDraggingRef.current = false;
+    const power = sliderPowerRef.current;
+    sliderPowerRef.current = 0;
+    setSliderPower(0);
+    if (power > 0.02) fireShot(power);
+  }, [fireShot]);
+
+  // ── Full-power button ─────────────────────────────────────────────────────
+  const fireFullPower = useCallback(() => { fireShot(1); }, [fireShot]);
 
   // ── English indicator ─────────────────────────────────────────────────────
   const onEnglishClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -821,14 +804,15 @@ export default function Pool({ onQuit }: PoolProps) {
     if (gsRef.current) { gsRef.current.englishX = 0; gsRef.current.englishY = 0; }
   }, []);
 
-  // ── Ball counts ────────────────────────────────────────────────────────────
+  // ── Derived display values ────────────────────────────────────────────────
   const gs = gsRef.current;
-  const alive = gs ? gs.balls.filter(b => !b.pocketed) : [];
+  const alive  = gs ? gs.balls.filter(b => !b.pocketed) : [];
   const p0Left = groupBalls(alive.filter(b => b.num !== 0 && b.num !== 8), uiGroups[0]).length;
   const p1Left = groupBalls(alive.filter(b => b.num !== 0 && b.num !== 8), uiGroups[1]).length;
   const isHuman = gs && !gs.players[gs.turn].isAI;
+  const sliderActive = isHuman && uiPhase === 'aiming';
 
-  // ── Setup screen ───────────────────────────────────────────────────────────
+  // ── Setup screen ──────────────────────────────────────────────────────────
   if (gamePhase === 'setup') {
     return (
       <div className="pool-setup">
@@ -862,14 +846,14 @@ export default function Pool({ onQuit }: PoolProps) {
     );
   }
 
-  // ── Game screen ────────────────────────────────────────────────────────────
+  // ── Game screen ───────────────────────────────────────────────────────────
   const groupLabel = (g: Group | null) =>
     g === 'solids' ? '● solids' : g === 'stripes' ? '◑ stripes' : '?';
 
   const hintText = uiPhase === 'inhand'
-    ? 'Drag to place cue ball · tap/click to confirm'
+    ? 'Drag cue ball · release to place'
     : uiPhase === 'aiming' && isHuman
-    ? 'Drag sideways to rotate · drag back for power · release to shoot'
+    ? 'Tap/hold to aim · drag slider to shoot'
     : '';
 
   return (
@@ -893,10 +877,13 @@ export default function Pool({ onQuit }: PoolProps) {
       <div className="pool-canvas-wrap">
         <canvas
           ref={canvasRef} width={CW} height={CH} className="pool-canvas"
-          onMouseMove={onMouseMove} onMouseDown={onMouseDown}
-          onMouseUp={onMouseUp}
-          onMouseLeave={() => { mouseRef.current.down = false; mouseRef.current.locked = false; }}
-          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+          onMouseMove={onMouseMove}
+          onMouseDown={onMouseDown}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={() => { mouseRef.current.down = false; }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={handlePointerUp}
         />
         {uiPhase === 'over' && (
           <div className="pool-over">
@@ -915,6 +902,7 @@ export default function Pool({ onQuit }: PoolProps) {
 
       {/* Controls */}
       <div className="pool-ctrl">
+        {/* English */}
         <div className="pool-english">
           <div className="pool-english__label">ENGLISH</div>
           <div className="pool-english__ball" onClick={onEnglishClick} title="Click to set spin">
@@ -923,13 +911,22 @@ export default function Pool({ onQuit }: PoolProps) {
           <button className="pool-btn pool-english__rst" onClick={resetEnglish}>Ctr</button>
         </div>
 
-        <div className="pool-power">
-          <div className="pool-power__label">POWER</div>
-          <div className="pool-power__track">
-            <div className="pool-power__fill" style={{ width: `${displayPow * 100}%` }} />
+        {/* Pinball slider */}
+        <div className={`pool-slider${sliderActive ? '' : ' pool-slider--disabled'}`}>
+          <div className="pool-slider__label">POWER — drag &amp; release</div>
+          <div
+            className="pool-slider__track"
+            onPointerDown={onSliderPointerDown}
+            onPointerMove={onSliderPointerMove}
+            onPointerUp={onSliderPointerUp}
+            onPointerCancel={onSliderPointerUp}
+          >
+            <div className="pool-slider__fill" style={{ width: `${sliderPower * 100}%` }} />
+            <div className="pool-slider__handle" style={{ left: `${sliderPower * 100}%` }} />
           </div>
         </div>
 
+        {/* Full power escape hatch */}
         {isHuman && uiPhase === 'aiming' && (
           <button className="pool-btn pool-btn--fullpower" onClick={fireFullPower}>
             FULL<br />POWER
