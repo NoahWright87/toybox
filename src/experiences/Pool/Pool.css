@@ -1,0 +1,310 @@
+/* ── Pool game wrapper ────────────────────────────────────────────────────── */
+.pool-setup,
+.pool-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+}
+
+/* ── Setup screen ─────────────────────────────────────────────────────────── */
+.pool-setup {
+  padding: 20px 24px 24px;
+  gap: 14px;
+  min-width: 340px;
+}
+
+.pool-setup__title {
+  font-size: 13px;
+  color: #cc4400;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.pool-setup__row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pool-setup__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.pool-setup__label {
+  font-size: 7px;
+  color: #333;
+  margin-top: 4px;
+}
+
+.pool-setup__inp {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 5px 8px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #222;
+  width: 100%;
+  box-sizing: border-box;
+}
+.pool-setup__inp:focus { outline: none; border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ── Stick color swatches ─────────────────────────────────────────────────── */
+.pool-setup__swatches {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pool-swatch {
+  width: 22px;
+  height: 22px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+.pool-swatch--on {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.5);
+}
+.pool-swatch:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+.pool-setup__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.pool-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 10px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #111;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pool-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+.pool-btn--on,
+.pool-btn--on:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #a0a0a0;
+}
+.pool-btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ff9966 #662200 #662200 #ff9966;
+}
+.pool-btn--primary:active { border-color: #662200 #ff9966 #ff9966 #662200; }
+
+/* ── Canvas ───────────────────────────────────────────────────────────────── */
+.pool-canvas-wrap {
+  position: relative;
+  border: 3px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.pool-canvas {
+  display: block;
+  cursor: crosshair;
+  max-width: 100%;
+  height: auto;
+  touch-action: none;
+}
+
+/* ── Game-over overlay ────────────────────────────────────────────────────── */
+.pool-over {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pool-over__box {
+  background: #c0c0c0;
+  border: 3px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.pool-over__title  { font-size: 11px; color: #cc4400; letter-spacing: 1px; }
+.pool-over__winner { font-size: 10px; color: #228833; }
+.pool-over__msg    { font-size: 7px; color: #333; text-align: center; max-width: 280px; line-height: 1.8; }
+.pool-over__btns   { display: flex; gap: 10px; }
+
+/* ── Bottom panel ─────────────────────────────────────────────────────────── */
+.pool-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 760px;
+  max-width: 100%;
+  background: #c0c0c0;
+  border-top: 2px solid #808080;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  gap: 8px;
+  min-height: 110px;
+}
+
+/* ── Player side areas ────────────────────────────────────────────────────── */
+.pool-player-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.pool-player-side--right {
+  flex-direction: row-reverse;
+}
+
+/* ── Player name ──────────────────────────────────────────────────────────── */
+.pool-player-name {
+  font-size: 7px;
+  color: #aaa;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.pool-player-name--active {
+  color: #111;
+}
+
+/* ── Ball tray (sunk ball circles) ───────────────────────────────────────── */
+.pool-ball-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pool-ball-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #808080;
+  background: transparent;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+@keyframes pool-ball-appear {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+.pool-ball-circle--sunk {
+  border: none;
+  animation: pool-ball-appear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Side-view pool cue (shooting) ───────────────────────────────────────── */
+.pool-side-cue--ai {
+  cursor: default;
+  pointer-events: none;
+}
+
+.pool-side-cue {
+  position: relative;
+  width: 56px;
+  height: 90px;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+  background: rgba(0,0,0,0.06);
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  flex-shrink: 0;
+}
+
+/* Small cue ball indicator at top of cue area */
+.pool-side-cue__ball {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fff, #c0c0c0);
+  border: 1px solid #888;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* The cue body — slides down as power increases */
+.pool-side-cue__body {
+  position: absolute;
+  left: calc(50% - 7px);
+  width: 14px;
+  height: 75px;
+  border-radius: 1px 1px 6px 6px;
+  pointer-events: none;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 100%, 0% 100%);
+}
+
+/* ── English / spin indicator ─────────────────────────────────────────────── */
+.pool-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.pool-english__label {
+  font-size: 5px;
+  color: #444;
+  letter-spacing: 0.5px;
+}
+
+.pool-english__ball {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 36%, #e8e8e8, #aaaaaa);
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  position: relative;
+  cursor: crosshair;
+  box-shadow: inset 1px 1px 3px rgba(0,0,0,0.25);
+  touch-action: none;
+}
+
+.pool-english__dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #cc4400;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 3px rgba(0,0,0,0.5);
+  left: 50%;
+  top: 50%;
+}
+
+/* ── Hint text below English ─────────────────────────────────────────────── */
+.pool-hint {
+  font-size: 5px;
+  color: #555;
+  text-align: center;
+  max-width: 120px;
+  line-height: 1.6;
+  min-height: 10px;
+}

@@ -538,6 +538,11 @@ export default function BootScreen({ onComplete, splashOnly = false }: BootScree
   return (
     <div className="boot-overlay">
 
+      {/* ── Skip footer — always visible from first frame ── */}
+      <button className="boot-skip-btn" onClick={doComplete}>
+        Press Backspace or tap to skip
+      </button>
+
       {/* ── BIOS terminal ── */}
       {phase === "bios" && (
         <div className="boot-bios">
@@ -608,8 +613,6 @@ export default function BootScreen({ onComplete, splashOnly = false }: BootScree
             </div>
             <div className="boot-splash__status">{splashMsg}</div>
           </div>
-
-          <div className="boot-splash__skip">Backspace to skip</div>
         </div>
       )}
 

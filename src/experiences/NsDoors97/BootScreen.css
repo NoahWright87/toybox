@@ -149,12 +149,31 @@
   min-height: 1.5em;
 }
 
-/* Backspace hint — bottom-right corner */
-.boot-splash__skip {
+/* Skip button — sticky bottom-right, visible from the first frame */
+.boot-skip-btn {
   position: fixed;
   bottom: 14px;
   right: 18px;
   font-family: "Courier New", Courier, monospace;
   font-size: 10px;
-  color: #2a2a2a;
+  color: #666;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  z-index: 10001;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: #444;
+}
+
+.boot-skip-btn:hover,
+.boot-skip-btn:focus-visible {
+  color: #ff9a44;
+  text-decoration-color: #ff9a44;
+  outline: none;
+}
+
+.boot-skip-btn:active {
+  color: #ffcc88;
 }

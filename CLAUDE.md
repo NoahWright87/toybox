@@ -137,6 +137,23 @@ Every standalone experience page follows this pattern:
 
 Starfield, Fireworks, and Bouncing Shapes intentionally keep their dark canvas backgrounds — they simulate old-school screensavers and look correct against black.
 
+## Reusable interaction patterns
+
+### Ramped lerp (tap-nudges, hold-travels)
+
+Many controls benefit from a lerp factor that starts near zero and accelerates toward a max over ~25 frames. A quick tap produces a small nudge; holding makes the value travel smoothly to the target. Use this for any "follow pointer" mechanic (aim rotation, spin dot, directional movement).
+
+```typescript
+// Call each frame while pointer is held; reset lerpRef.current = 0 on pointer-down.
+function rampedLerp(current: number, ramp: number, max: number): number {
+  return Math.min(max, current + ramp);
+}
+// Example constants: AIM_LERP_MAX = 0.18, AIM_LERP_RAMP = 0.008
+// value += (target - value) * rampedLerp(lerpRef.current, RAMP, MAX);
+```
+
+This pattern was first extracted while building the Pool game aim and English controls.
+
 ## Spec-driven development
 
 - Specs live in `specs/` and mirror the source tree.
@@ -145,6 +162,40 @@ Starfield, Fireworks, and Bouncing Shapes intentionally keep their dark canvas b
 - `specs/AGENTS.md` = writing conventions for specs.
 - Add a `specs/{name}.md` for every new experience.
 - See `AGENTS.md` (root) for the full workflow.
+
+### Window menus (useWindowMenus)
+
+Games and experiences embedded in NS Doors 97 windows (or opened as standalone pages via `StandaloneWindow`) should register their menus using the `useWindowMenus` hook — **not** by rendering a custom menu bar element. This integrates with the standard Win95 window chrome provided by `Window.tsx` and `StandaloneWindow.tsx`.
+
+```typescript
+import { useWindowMenus } from '../../components/Window/useWindowMenus';
+import type { MenuBarMenu } from '../../components/MenuBar/MenuBar';
+
+// Inside your component:
+const menus = useMemo<MenuBarMenu[]>(() => [
+  {
+    label: 'Game',
+    items: [
+      { label: 'New Game...', onClick: () => { /* ... */ } },
+      { separator: true },
+      { label: 'Exit', onClick: onQuit },
+    ],
+  },
+  {
+    label: 'Options',
+    items: [
+      { label: 'Sound', checked: soundOn, onClick: () => setSoundOn(v => !v) },
+    ],
+  },
+], [soundOn, onQuit]);
+useWindowMenus(menus);
+```
+
+Key points:
+- Pass a `useMemo`-ized array — reference equality prevents unnecessary re-renders.
+- `separator: true` items render a horizontal divider line.
+- `checked: true` renders a ✓ checkmark (use for toggleable options).
+- The hook is a no-op outside a window context, so the component is safe to render standalone.
 
 ## NS Doors 97 — key details
 
