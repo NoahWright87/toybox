@@ -27,6 +27,7 @@ import Pool from "../Pool/Pool";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import SoundRecorder, { lsGetSoundNames } from "./SoundRecorder";
+import MidiEditor from "../MidiEditor/MidiEditor";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -64,7 +65,8 @@ type AppAction =
   | "nsart"
   | "art-backup"
   | "readme"
-  | "sound-recorder";
+  | "sound-recorder"
+  | "midi-editor";
 
 interface AppDef {
   title: string;
@@ -90,6 +92,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "duck-hunt":      { title: "Duck & Learn",       icon: "🎯", action: "duckhunt"        },
   "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"      },
   "sound-recorder": { title: "Sound Recorder",     icon: "🎙️", action: "sound-recorder"  },
+  "midi-editor":    { title: "MIDI Editor",         icon: "🎹", action: "midi-editor"     },
 };
 
 // ── Desktop icon entries (subset actually shown on desktop) ───────────────────
@@ -181,7 +184,8 @@ type WindowContent =
   | { type: "desktop-display" }
   | { type: "nsart" }
   | { type: "nsart-backup" }
-  | { type: "sound-recorder"; fileName?: string };
+  | { type: "sound-recorder"; fileName?: string }
+  | { type: "midi-editor" };
 
 interface OpenWindow {
   id: string;
@@ -538,6 +542,7 @@ export default function NsDoors97() {
         case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
         case "cards":          content = { type: "cards-launcher" };                           width = 320; break;
         case "sound-recorder": content = { type: "sound-recorder" as const };                  width = 420; break;
+        case "midi-editor":    content = { type: "midi-editor" as const };                     width = 860; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -869,6 +874,9 @@ export default function NsDoors97() {
               onQuit={() => closeWindow(win.id)}
               onFileSaved={handleSoundFileSaved}
             />
+          )}
+          {win.content.type === "midi-editor" && (
+            <MidiEditor onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

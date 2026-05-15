@@ -1,0 +1,457 @@
+/* ── Root ──────────────────────────────────────────────────────────────────── */
+.me-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Transport ─────────────────────────────────────────────────────────────── */
+.me-transport {
+  flex-shrink: 0;
+  background: #c0c0c0;
+  border-bottom: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.me-transport__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.me-transport__group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.me-transport__sep {
+  width: 1px;
+  height: 16px;
+  background: #808080;
+  margin: 0 4px;
+}
+
+.me-label {
+  color: #000;
+  white-space: nowrap;
+}
+
+.me-label--dim {
+  color: #555;
+}
+
+/* Win95 buttons */
+.me-btn {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+  padding: 3px 6px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.me-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.me-btn--play {
+  background: #d4f0c0;
+  min-width: 28px;
+  font-size: 10px;
+}
+
+.me-btn--stop {
+  background: #f0d4c0;
+}
+
+.me-btn--sm {
+  padding: 2px 5px;
+  font-size: 8px;
+}
+
+.me-btn--new {
+  background: #d4d0c8;
+}
+
+.me-num-input {
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  width: 38px;
+  padding: 2px 3px;
+  text-align: center;
+}
+
+.me-num-input::-webkit-inner-spin-button,
+.me-num-input::-webkit-outer-spin-button {
+  display: none;
+}
+
+.me-select {
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+
+/* Track tab buttons */
+.me-track-btn {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+  padding: 3px 6px;
+  position: relative;
+}
+
+.me-track-btn::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--track-color);
+  margin-right: 4px;
+  border: 1px solid #000;
+  vertical-align: middle;
+}
+
+.me-track-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
+/* Mute buttons */
+.me-mute-btn {
+  background: var(--track-color);
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+  padding: 3px 5px;
+  min-width: 22px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.me-mute-btn--muted {
+  background: #808080;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #c0c0c0;
+  text-decoration: line-through;
+}
+
+/* ── Body layout ───────────────────────────────────────────────────────────── */
+.me-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.me-piano-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.me-section-label {
+  flex-shrink: 0;
+  background: #d4d0c8;
+  border-bottom: 1px solid #808080;
+  padding: 2px 6px;
+  font-size: 6px;
+  color: #444;
+  letter-spacing: 1px;
+}
+
+.me-piano-roll-wrap {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.me-divider {
+  flex-shrink: 0;
+  height: 4px;
+  background: #c0c0c0;
+  border-top: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.me-seq-section {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+}
+
+/* ── Piano Roll ────────────────────────────────────────────────────────────── */
+.me-piano-roll {
+  display: flex;
+  align-items: flex-start;
+  min-width: max-content;
+}
+
+.me-piano-keys {
+  flex-shrink: 0;
+  width: 42px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #d4d0c8;
+  border-right: 2px solid #808080;
+}
+
+.me-key {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 3px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+
+.me-key--white {
+  background: #f0f0e8;
+}
+
+.me-key--black {
+  background: #404040;
+}
+
+.me-key--white:hover {
+  background: #ffddaa;
+}
+
+.me-key--black:hover {
+  background: #664400;
+}
+
+.me-key__label {
+  font-size: 5px;
+  color: #666;
+  pointer-events: none;
+}
+
+.me-key--black .me-key__label {
+  color: #aaa;
+}
+
+/* Note grid */
+.me-note-grid-wrap {
+  overflow: visible;
+}
+
+.me-note-grid {
+  position: relative;
+}
+
+/* Step column overlays (for divider lines) */
+.me-step-col {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.me-step-col--beat {
+  border-left: 1px solid #b0b0b0;
+}
+
+.me-step-col--bar {
+  border-left: 2px solid #808080;
+}
+
+/* Note cells */
+.me-cell {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.me-cell--white {
+  background: #e8e4dc;
+}
+
+.me-cell--black {
+  background: #d0ccc4;
+}
+
+.me-cell--note {
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+
+.me-cell--white:hover:not(.me-cell--note) {
+  background: #ffe0b0;
+}
+
+.me-cell--black:hover:not(.me-cell--note) {
+  background: #d0a870;
+}
+
+/* Row divider (at each C note) */
+.me-row-divider {
+  position: absolute;
+  height: 2px;
+  background: #b0b0a0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Playhead */
+.me-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  background: rgba(255, 80, 0, 0.7);
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);
+}
+
+/* ── Step Sequencer ─────────────────────────────────────────────────────────── */
+.me-step-seq {
+  display: flex;
+  overflow-x: auto;
+  background: #c0c0c0;
+  border-top: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.me-step-seq__labels {
+  flex-shrink: 0;
+  width: 60px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #c0c0c0;
+  border-right: 2px solid #808080;
+}
+
+.me-step-seq__corner {
+  height: 28px;
+  border-bottom: 1px solid #808080;
+  background: #d4d0c8;
+}
+
+.me-drum-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+  font-size: 6px;
+  color: #000;
+  border-bottom: 1px solid #b0b0b0;
+  box-sizing: border-box;
+}
+
+.me-step-seq__grid-wrap {
+  overflow: visible;
+}
+
+.me-step-seq__grid {
+  position: relative;
+}
+
+/* Step indicator row */
+.me-seq-indicator-row {
+  height: 28px;
+  display: flex;
+  border-bottom: 1px solid #808080;
+  background: #d4d0c8;
+}
+
+.me-seq-step-num {
+  flex-shrink: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+}
+
+.me-seq-step-num--beat {
+  border-right: 1px solid #a0a0a0;
+}
+
+.me-seq-step-num--bar {
+  border-right: 2px solid #808080;
+}
+
+/* Button rows */
+.me-seq-row {
+  display: flex;
+}
+
+.me-seq-btn {
+  flex-shrink: 0;
+  border: 2px solid;
+  cursor: pointer;
+  box-sizing: border-box;
+  margin: 1px;
+  transition: background 0.05s;
+}
+
+.me-seq-btn--off {
+  background: #a8a8a8;
+  border-color: #d0d0d0 #606060 #606060 #d0d0d0;
+}
+
+.me-seq-btn--off.me-seq-btn--beat {
+  background: #b8b4a8;
+}
+
+.me-seq-btn--off.me-seq-btn--bar {
+  background: #c0bab0;
+}
+
+.me-seq-btn--on {
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.me-seq-btn--off:hover {
+  background: #c0b090;
+}
+
+/* Playhead */
+.me-seq-playhead {
+  position: absolute;
+  left: 0;
+  width: 2px;
+  background: rgba(255, 80, 0, 0.7);
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);
+}
