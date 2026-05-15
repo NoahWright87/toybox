@@ -26,6 +26,7 @@ import TicTacToe from "../TicTacToe/TicTacToe";
 import Pool from "../Pool/Pool";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
+import SoundRecorder, { lsGetSoundNames } from "./SoundRecorder";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -62,7 +63,8 @@ type AppAction =
   | "notebook"
   | "nsart"
   | "art-backup"
-  | "readme";
+  | "readme"
+  | "sound-recorder";
 
 interface AppDef {
   title: string;
@@ -85,8 +87,9 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "number-muncher": { title: "Nom Nom Numerals",   icon: "🔢", action: "nomnom"        },
   "word-whirlwind": { title: "Word Whirlwind",     icon: "🌪️", action: "wordwhirlwind" },
   "bomb-finder":    { title: "Bomb Finder",        icon: "💣", action: "bombfinder"    },
-  "duck-hunt":      { title: "Duck & Learn",       icon: "🎯", action: "duckhunt"      },
-  "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"    },
+  "duck-hunt":      { title: "Duck & Learn",       icon: "🎯", action: "duckhunt"        },
+  "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"      },
+  "sound-recorder": { title: "Sound Recorder",     icon: "🎙️", action: "sound-recorder"  },
 };
 
 // ── Desktop icon entries (subset actually shown on desktop) ───────────────────
@@ -98,8 +101,9 @@ interface DesktopIconEntry {
 }
 
 const STATIC_DESKTOP_ICONS: DesktopIconEntry[] = [
-  { id: "my-doors", title: "My Doors", icon: "🖥️" },
-  { id: "dumpster", title: "Dumpster", icon: "🗑️" },
+  { id: "my-doors",        title: "My Doors",       icon: "🖥️" },
+  { id: "dumpster",        title: "Dumpster",        icon: "🗑️" },
+  { id: "sound-recorder",  title: "Sound Recorder",  icon: "🎙️" },
 ];
 
 const STATIC_RIGHT_ICONS: DesktopIconEntry[] = [
@@ -154,6 +158,10 @@ function loadSavedNotebookIcons(): DesktopIconEntry[] {
   return entries;
 }
 
+function loadSavedSoundIcons(): DesktopIconEntry[] {
+  return lsGetSoundNames().map(name => ({ id: `sound:${name}`, title: name, icon: "🎵" }));
+}
+
 // ── Window content union ───────────────────────────────────────────────────
 
 type WindowContent =
@@ -173,7 +181,8 @@ type WindowContent =
   | { type: "notebook"; filePath: string; fileName: string; initialContent: string }
   | { type: "desktop-display" }
   | { type: "nsart" }
-  | { type: "nsart-backup" };
+  | { type: "nsart-backup" }
+  | { type: "sound-recorder"; fileName?: string };
 
 interface OpenWindow {
   id: string;
@@ -253,6 +262,13 @@ export default function NsDoors97() {
   const savedNotebookIconsRef = useRef(savedNotebookIcons);
   useEffect(() => { savedNotebookIconsRef.current = savedNotebookIcons; }, [savedNotebookIcons]);
 
+  // Saved sound files that appear on the desktop
+  const [savedSoundIcons, setSavedSoundIcons] = useState<DesktopIconEntry[]>(
+    () => loadSavedSoundIcons()
+  );
+  const savedSoundIconsRef = useRef(savedSoundIcons);
+  useEffect(() => { savedSoundIconsRef.current = savedSoundIcons; }, [savedSoundIcons]);
+
   // Icons start empty whenever there's a boot screen; all-visible otherwise.
   const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
     if (initialShouldBoot) return new Set<string>();
@@ -260,6 +276,7 @@ export default function NsDoors97() {
       ...STATIC_DESKTOP_ICONS.map((d) => d.id),
       ...STATIC_RIGHT_ICONS.map((d) => d.id),
       ...loadSavedNotebookIcons().map((d) => d.id),
+      ...loadSavedSoundIcons().map((d) => d.id),
     ]);
   });
 
@@ -306,6 +323,7 @@ export default function NsDoors97() {
         ...STATIC_DESKTOP_ICONS.map((d) => d.id),
         ...STATIC_RIGHT_ICONS.map((d) => d.id),
         ...savedNotebookIconsRef.current.map((d) => d.id),
+        ...savedSoundIconsRef.current.map((d) => d.id),
       ];
       const shuffled = [...allIds];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -441,6 +459,37 @@ export default function NsDoors97() {
   );
 
   const openWindow = useCallback((id: string) => {
+    // Sound file desktop icons use "sound:{fileName}" id format
+    if (id.startsWith("sound:")) {
+      const soundFileName = id.slice(6);
+      const winId = `sound-recorder:${soundFileName}`;
+      setOpenWindows((prev) => {
+        if (prev.some((w) => w.id === winId)) {
+          maxZ++;
+          setActiveWindowId(winId);
+          return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+        }
+        const offset = (windowSeq % 8) * 32;
+        windowSeq++;
+        maxZ++;
+        setActiveWindowId(winId);
+        return [
+          ...prev,
+          {
+            id: winId,
+            title: soundFileName,
+            icon: "🎵",
+            content: { type: "sound-recorder" as const, fileName: soundFileName },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 420,
+            minimized: false,
+          },
+        ];
+      });
+      return;
+    }
+
     // Notebook saved-file desktop icons use "nb:{filePath}" id format
     if (id.startsWith("nb:")) {
       const filePath = id.slice(3);
@@ -488,7 +537,8 @@ export default function NsDoors97() {
         case "wordwhirlwind":content = { type: "word-whirlwind" };       width = 600; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
-        case "cards":        content = { type: "cards-launcher" };       width = 320; break;
+        case "cards":          content = { type: "cards-launcher" };                           width = 320; break;
+        case "sound-recorder": content = { type: "sound-recorder" as const };                  width = 420; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -550,6 +600,16 @@ export default function NsDoors97() {
     setSavedNotebookIcons((prev) => {
       if (prev.some((d) => d.id === newId)) return prev;
       return [...prev, { id: newId, title: fileName, icon: "📝" }];
+    });
+    setVisibleIcons((prev) => new Set<string>([...prev, newId]));
+  }, []);
+
+  // Called by SoundRecorder when a file is saved — add its icon to the desktop
+  const handleSoundFileSaved = useCallback((name: string) => {
+    const newId = `sound:${name}`;
+    setSavedSoundIcons((prev) => {
+      if (prev.some((d) => d.id === newId)) return prev;
+      return [...prev, { id: newId, title: name, icon: "🎵" }];
     });
     setVisibleIcons((prev) => new Set<string>([...prev, newId]));
   }, []);
@@ -647,7 +707,7 @@ export default function NsDoors97() {
     return { background: getDesktopBackground(desktopSettings) };
   })();
 
-  const rightIcons = [...STATIC_RIGHT_ICONS, ...savedNotebookIcons];
+  const rightIcons = [...STATIC_RIGHT_ICONS, ...savedNotebookIcons, ...savedSoundIcons];
 
   return (
     <div className="ns-desktop" style={desktopStyle}>
@@ -802,6 +862,13 @@ export default function NsDoors97() {
               fileName={win.content.fileName}
               initialContent={win.content.initialContent}
               onFileSaved={handleNotebookFileSaved}
+            />
+          )}
+          {win.content.type === "sound-recorder" && (
+            <SoundRecorder
+              fileName={win.content.fileName}
+              onQuit={() => closeWindow(win.id)}
+              onFileSaved={handleSoundFileSaved}
             />
           )}
           {win.content.type === "desktop-display" && (
