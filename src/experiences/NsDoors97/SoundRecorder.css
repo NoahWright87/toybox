@@ -1,0 +1,211 @@
+/* Sound Recorder — Win95 style */
+
+.sr {
+  background: #c0c0c0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 320px;
+  user-select: none;
+  position: relative;
+  font-family: "Press Start 2P", monospace;
+}
+
+/* ── Waveform display ── */
+
+.sr__display {
+  background: #000;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080; /* sunken */
+  position: relative;
+  height: 100px;
+  overflow: hidden;
+}
+
+.sr__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.sr__rec-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  color: #ff2200;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  animation: sr-blink 0.7s step-end infinite;
+  pointer-events: none;
+}
+
+@keyframes sr-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Tape controls ── */
+
+.sr__controls {
+  display: flex;
+  gap: 4px;
+  padding: 4px 2px;
+  justify-content: center;
+}
+
+.sr__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000000;
+  padding: 7px 12px;
+  cursor: pointer;
+  min-width: 52px;
+  text-align: center;
+  line-height: 1;
+}
+
+.sr__btn:active:not(:disabled),
+.sr__btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 8px 11px 6px 13px;
+}
+
+.sr__btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+/* Play button — subtle highlight when playing */
+.sr__btn--play.sr__btn--active {
+  background: #d4d0c8;
+}
+
+/* Record button — red/orange accent */
+.sr__btn--rec {
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #cc0000;
+  min-width: 60px;
+}
+
+.sr__btn--rec.sr__btn--active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #ffe8cc;
+  padding: 8px 11px 6px 13px;
+}
+
+/* ── Status bar ── */
+
+.sr__status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 5px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffffff;
+  font-size: 6px;
+  color: #000;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sr__time     { flex: 0 0 auto; }
+.sr__filename { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+.sr__msg      { flex: 0 0 auto; color: #444; }
+
+/* ── Dialogs ── */
+
+.sr__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.sr__dialog {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 200px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sr__dialog-title {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 5px 8px;
+}
+
+.sr__dialog-list {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 6px;
+  background: #fff;
+}
+
+.sr__dialog-empty {
+  font-size: 6px;
+  color: #808080;
+  padding: 8px;
+  text-align: center;
+}
+
+.sr__dialog-item {
+  font-size: 7px;
+  padding: 4px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sr__dialog-item:hover {
+  background: #000080;
+  color: #ffffff;
+}
+
+.sr__dialog-body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sr__label {
+  font-size: 7px;
+}
+
+.sr__input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 3px 4px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sr__dialog-footer {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 4px 8px 8px;
+}
