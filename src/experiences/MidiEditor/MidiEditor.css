@@ -190,27 +190,46 @@
   letter-spacing: 1px;
 }
 
+/* Wrapper: passes height down into the piano roll */
 .me-piano-roll-wrap {
   flex: 1;
-  overflow: auto;
+  display: flex;
+  overflow: hidden;
   min-height: 0;
 }
 
-/* ── Piano Roll ────────────────────────────────────────────────────────────── */
+/* ── Piano Roll — split layout ─────────────────────────────────────────────── */
+/*
+  Row flex: [keys-col (fixed, 42px)] [grid-h-scroll (flex:1)]
+  keys-col:    piano keys (overflow:hidden, scroll-synced) + drum labels (fixed)
+  grid-h-scroll: overflows-x; inside: melodic grid (v-scroll, flex:1) + drum grid (fixed)
+  The drum section is always visible — no vertical scrolling required to reach it.
+*/
+
 .me-piano-roll {
+  flex: 1;
   display: flex;
-  align-items: flex-start;
-  min-width: max-content;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
 }
 
-.me-piano-keys {
+/* Left sidebar: always visible, never scrolls horizontally */
+.me-keys-col {
   flex-shrink: 0;
   width: 42px;
-  position: sticky;
-  left: 0;
-  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #d4d0c8;
   border-right: 2px solid #808080;
+}
+
+/* Piano keys area — overflow hidden; scrollTop driven by JS scroll-sync */
+.me-keys-scroll {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .me-key {
@@ -223,21 +242,10 @@
   box-sizing: border-box;
 }
 
-.me-key--white {
-  background: #f0f0e8;
-}
-
-.me-key--black {
-  background: #404040;
-}
-
-.me-key--white:hover {
-  background: #ffddaa;
-}
-
-.me-key--black:hover {
-  background: #664400;
-}
+.me-key--white { background: #f0f0e8; }
+.me-key--black { background: #404040; }
+.me-key--white:hover { background: #ffddaa; }
+.me-key--black:hover { background: #664400; }
 
 .me-key__label {
   font-size: 5px;
@@ -245,18 +253,17 @@
   pointer-events: none;
 }
 
-.me-key--black .me-key__label {
-  color: #aaa;
-}
+.me-key--black .me-key__label { color: #aaa; }
 
-/* Drum section separator in sidebar */
+/* Separator between piano keys and drum labels in sidebar */
 .me-drum-key-sep {
-  background: #606060;
   flex-shrink: 0;
+  background: #606060;
 }
 
 /* Drum row labels in sidebar */
 .me-drum-key {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -269,20 +276,43 @@
   cursor: pointer;
 }
 
-.me-drum-key:hover {
-  background: #c8beb6;
+.me-drum-key:hover { background: #c8beb6; }
+
+/* ── Grid area ─────────────────────────────────────────────────────────────── */
+
+/* Handles horizontal scroll for both melodic and drum grids */
+.me-grid-h-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-/* Note grid */
-.me-note-grid-wrap {
-  overflow: visible;
+/* Content container: min-width forces horizontal scroll; positioned for playhead */
+.me-grid-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
 }
 
+/* Melodic grid: takes all remaining vertical space, scrolls vertically */
+.me-melodic-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* Note grid canvas (melodic) */
 .me-note-grid {
   position: relative;
 }
 
-/* Step column overlays — three levels of prominence */
+/* Step column overlays */
 .me-step-col {
   position: absolute;
   top: 0;
@@ -290,64 +320,37 @@
   box-sizing: border-box;
 }
 
-/* Every 4th subdivision (only visible at 1/8 grid where stepsPerBeat=2) */
-.me-step-col--q4 {
-  border-left: 1px solid #c0bdb8;
-}
+.me-step-col--q4   { border-left: 1px solid #c0bdb8; }
+.me-step-col--beat { border-left: 2px solid #888880; background: rgba(0,0,0,0.025); }
+.me-step-col--bar  { border-left: 3px solid #484440; background: rgba(0,0,0,0.04); }
 
-/* Every beat (stepsPerBeat boundary) */
-.me-step-col--beat {
-  border-left: 2px solid #888880;
-  background: rgba(0, 0, 0, 0.025);
-}
-
-/* Every bar */
-.me-step-col--bar {
-  border-left: 3px solid #484440;
-  background: rgba(0, 0, 0, 0.04);
-}
-
-/* Note cells (background) */
+/* Melodic cells */
 .me-cell {
   position: absolute;
   box-sizing: border-box;
   cursor: crosshair;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  border-right: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  border-right: 1px solid rgba(0,0,0,0.05);
 }
 
-.me-cell--white {
-  background: #e8e4dc;
-}
+.me-cell--white { background: #e8e4dc; }
+.me-cell--black { background: #d0ccc4; }
+.me-cell--white:hover { background: #ffe0b0; }
+.me-cell--black:hover { background: #d0a870; }
 
-.me-cell--black {
-  background: #d0ccc4;
-}
-
-.me-cell--white:hover {
-  background: #ffe0b0;
-}
-
-.me-cell--black:hover {
-  background: #d0a870;
-}
-
-/* Note rectangles (spans durationSteps) */
+/* Note rectangles */
 .me-note-rect {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(0,0,0,0.45);
   border-radius: 1px;
   cursor: pointer;
   z-index: 2;
   overflow: hidden;
 }
 
-.me-note-rect:hover {
-  filter: brightness(1.15);
-}
+.me-note-rect:hover { filter: brightness(1.15); }
 
-/* Resize handle — rightmost 4px of note rect */
 .me-note-resize-handle {
   position: absolute;
   right: 0;
@@ -355,14 +358,12 @@
   bottom: 0;
   width: 4px;
   cursor: ew-resize;
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0,0,0,0.28);
 }
 
-.me-note-resize-handle:hover {
-  background: rgba(0, 0, 0, 0.5);
-}
+.me-note-resize-handle:hover { background: rgba(0,0,0,0.5); }
 
-/* Row divider (at each C note) */
+/* Octave divider at each C */
 .me-row-divider {
   position: absolute;
   height: 2px;
@@ -371,14 +372,18 @@
   z-index: 3;
 }
 
-/* ── Drum rows (unified grid) ───────────────────────────────────────────────── */
+/* ── Drum section ──────────────────────────────────────────────────────────── */
 
-/* Thick separator between melodic and drum sections */
+/* Thick separator between melodic and drum areas */
 .me-drum-section-sep {
-  position: absolute;
+  flex-shrink: 0;
   background: #606060;
-  pointer-events: none;
-  z-index: 4;
+}
+
+/* Drum grid: fixed height, always visible at bottom of grid area */
+.me-drum-grid {
+  flex-shrink: 0;
+  position: relative;
 }
 
 /* Drum step cells */
@@ -387,26 +392,16 @@
   box-sizing: border-box;
   cursor: crosshair;
   background: #ccc8c0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  border-right: 1px solid rgba(0,0,0,0.08);
 }
 
-.me-drum-cell--beat {
-  background: #c4c0b8;
-}
+.me-drum-cell--beat { background: #c4c0b8; }
+.me-drum-cell--bar  { background: #bcb8b0; }
+.me-drum-cell:hover { background: #d8c8a0; }
 
-.me-drum-cell--bar {
-  background: #bcb8b0;
-}
-
-.me-drum-cell:hover {
-  background: #d8c8a0;
-}
-
-/* Active drum cell — bubble rendered via ::after */
-.me-drum-cell--on {
-  cursor: pointer;
-}
+/* Active cell — filled bubble via ::after */
+.me-drum-cell--on { cursor: pointer; }
 
 .me-drum-cell--on::after {
   content: '';
@@ -414,17 +409,16 @@
   inset: 2px 1px;
   background: var(--drum-color, #c89000);
   border-radius: 3px;
-  border: 1px solid rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0,0,0,0.35);
 }
 
-.me-drum-cell--on:hover::after {
-  filter: brightness(1.15);
-}
+.me-drum-cell--on:hover::after { filter: brightness(1.15); }
 
-/* ── Piano roll playhead ────────────────────────────────────────────────────── */
+/* ── Playhead ──────────────────────────────────────────────────────────────── */
 .me-playhead {
   position: absolute;
   top: 0;
+  bottom: 0;
   left: 0;
   width: 2px;
   background: rgba(255, 80, 0, 0.75);
