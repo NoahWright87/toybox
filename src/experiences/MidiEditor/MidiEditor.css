@@ -420,6 +420,13 @@
   flex-shrink: 0;
 }
 
+/* In edit mode, give every touchable element its own touch-action:none so
+   mobile browsers don't intercept the pointer events for scrolling */
+.me-note-grid--edit .me-cell,
+.me-note-grid--edit .me-note-rect {
+  touch-action: none;
+}
+
 /* Step column markers */
 .me-step-col {
   position: absolute;
@@ -485,6 +492,10 @@
 .me-drum-grid {
   position: relative;
   flex-shrink: 0;
+}
+
+.me-drum-grid--edit .me-drum-cell {
+  touch-action: none;
 }
 
 .me-drum-cell {

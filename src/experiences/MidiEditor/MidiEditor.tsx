@@ -412,8 +412,8 @@ function MelodicGrid({
 
   return (
     <div
-      className="me-note-grid"
-      style={{ width: gridW, height: gridH, touchAction: editMode ? 'none' : 'auto' }}
+      className={`me-note-grid${editMode ? ' me-note-grid--edit' : ''}`}
+      style={{ width: gridW, height: gridH }}
     >
       {/* Step column markers */}
       {Array.from({ length: totalSteps }, (_, s) => {
@@ -530,7 +530,7 @@ function DrumGrid({
   }
 
   return (
-    <div className="me-drum-grid" style={{ width: gridW, height: gridH, touchAction: editMode ? 'none' : 'auto' }}>
+    <div className={`me-drum-grid${editMode ? ' me-drum-grid--edit' : ''}`} style={{ width: gridW, height: gridH }}>
       {/* Step columns */}
       {Array.from({ length: totalSteps }, (_, s) => {
         const isBar  = s % (stepsPerBeat * beatsPerBar) === 0;
@@ -719,7 +719,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const [pattern,     setPattern]     = useState<Pattern>(loadPattern);
   const [isPlaying,   setIsPlaying]   = useState(false);
   const [zoomIdx,     setZoomIdx]     = useState(loadZoomIdx);
-  const [editMode,    setEditMode]    = useState(false);
+  const [editMode,    setEditMode]    = useState(true);
   const [modalTid,    setModalTid]    = useState<string | null>(null);
   const [showSave,    setShowSave]    = useState(false);
   const [showLoad,    setShowLoad]    = useState(false);
