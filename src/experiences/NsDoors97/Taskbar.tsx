@@ -113,6 +113,7 @@ const TOOLS_ITEMS = [
   { id: "notebook",       icon: "📝", label: "Notebook"       },
   { id: "ns-art",         icon: "🎨", label: "NS Art"          },
   { id: "sound-recorder", icon: "🎙️", label: "Sound Recorder" },
+  { id: "midi-editor",    icon: "🎹", label: "MIDI Editor"    },
 ] as const;
 
 type OpenSubmenu = "games" | "tools" | "settings" | null;

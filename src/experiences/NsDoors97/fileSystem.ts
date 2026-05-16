@@ -321,10 +321,11 @@ export const ROOT: FsFolder = {
           kind: "folder",
           name: "Accessories",
           children: [
-            { kind: "file", name: "Notebook.exe",    type: "exe", action: "notebook"   },
-            { kind: "file", name: "Paint.exe",       type: "exe", action: "noop"       },
-            { kind: "file", name: "Calculator.exe",  type: "exe", action: "noop"       },
-            { kind: "file", name: "Clock.exe",       type: "exe", action: "noop"       },
+            { kind: "file", name: "Notebook.exe",     type: "exe", action: "notebook"      },
+            { kind: "file", name: "MIDI Editor.exe",  type: "exe", action: "midi-editor"  },
+            { kind: "file", name: "Paint.exe",        type: "exe", action: "noop"          },
+            { kind: "file", name: "Calculator.exe",   type: "exe", action: "noop"          },
+            { kind: "file", name: "Clock.exe",        type: "exe", action: "noop"          },
           ],
         },
         {
