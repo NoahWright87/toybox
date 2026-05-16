@@ -464,12 +464,13 @@
   right: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 16px;
   cursor: ew-resize;
-  background: rgba(0,0,0,0.28);
+  touch-action: none;
+  background: rgba(0,0,0,0.22);
 }
 
-.me-note-resize-handle:hover { background: rgba(0,0,0,0.5); }
+.me-note-resize-handle:hover { background: rgba(0,0,0,0.45); }
 
 /* Octave divider at each C */
 .me-row-divider {

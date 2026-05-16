@@ -281,6 +281,7 @@ interface TransportProps {
   pattern: Pattern;
   isPlaying: boolean;
   zoomIdx: number;
+  editMode: boolean;
   onPlay: () => void;
   onStop: () => void;
   onBpmChange: (bpm: number) => void;
@@ -292,12 +293,13 @@ interface TransportProps {
   onSave: () => void;
   onLoad: () => void;
   onDownload: () => void;
+  onToggleEditMode: () => void;
 }
 
 function Transport({
-  pattern, isPlaying, zoomIdx,
+  pattern, isPlaying, zoomIdx, editMode,
   onPlay, onStop, onBpmChange, onBarsChange, onStepsPerBeatChange,
-  onZoomIn, onZoomOut, onNew, onSave, onLoad, onDownload,
+  onZoomIn, onZoomOut, onNew, onSave, onLoad, onDownload, onToggleEditMode,
 }: TransportProps) {
   function nudge(delta: number) {
     onBpmChange(Math.max(40, Math.min(240, pattern.bpm + delta)));
@@ -309,6 +311,16 @@ function Transport({
         <button className={`me-btn me-btn--play${isPlaying ? ' me-btn--stop' : ''}`} onPointerDown={isPlaying ? onStop : onPlay}>
           {isPlaying ? '■' : '▶'}
         </button>
+
+        <button
+          className={`me-btn me-btn--sm${editMode ? ' me-btn--primary' : ''}`}
+          onPointerDown={onToggleEditMode}
+          title={editMode ? 'Draw mode active — tap to switch to scroll' : 'Scroll mode — tap to draw notes'}
+        >
+          {editMode ? 'DRAW' : 'SCROLL'}
+        </button>
+
+        <div className="me-transport__sep" />
 
         <div className="me-transport__group">
           <span className="me-label">BPM</span>
@@ -365,6 +377,7 @@ interface MelodicGridProps {
   beatsPerBar: number;
   stepW: number;
   rowH: number;
+  editMode: boolean;
   paintModeRef: React.MutableRefObject<PaintState>;
   onAddNote: (pitch: number, step: number) => void;
   onRemoveNote: (noteId: string) => void;
@@ -373,7 +386,7 @@ interface MelodicGridProps {
 }
 
 function MelodicGrid({
-  track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH,
+  track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH, editMode,
   paintModeRef, onAddNote, onRemoveNote, onStartResize, onPreviewPitch,
 }: MelodicGridProps) {
   const noteMap  = useMemo(() => buildNoteMap(track), [track]);
@@ -400,7 +413,7 @@ function MelodicGrid({
   return (
     <div
       className="me-note-grid"
-      style={{ width: gridW, height: gridH }}
+      style={{ width: gridW, height: gridH, touchAction: editMode ? 'none' : 'auto' }}
     >
       {/* Step column markers */}
       {Array.from({ length: totalSteps }, (_, s) => {
@@ -429,7 +442,7 @@ function MelodicGrid({
               data-pitch={pitch}
               data-step={step}
               data-track-id={track.id}
-              onPointerDown={e => { e.preventDefault(); cellDown(pitch, step); }}
+              {...(editMode ? { onPointerDown: (e: React.PointerEvent) => { e.preventDefault(); cellDown(pitch, step); } } : {})}
             />
           );
         });
@@ -451,11 +464,13 @@ function MelodicGrid({
             }}
             data-note-id={note.id}
             data-track-id={track.id}
-            onPointerDown={e => {
-              e.preventDefault(); e.stopPropagation();
-              paintModeRef.current = { action: 'remove', trackId: track.id };
-              onRemoveNote(note.id);
-            }}
+            {...(editMode ? {
+              onPointerDown: (e: React.PointerEvent) => {
+                e.preventDefault(); e.stopPropagation();
+                paintModeRef.current = { action: 'remove', trackId: track.id };
+                onRemoveNote(note.id);
+              },
+            } : {})}
           >
             <div
               className="me-note-resize-handle"
@@ -488,6 +503,7 @@ interface DrumGridProps {
   beatsPerBar: number;
   stepW: number;
   rowH: number;
+  editMode: boolean;
   paintModeRef: React.MutableRefObject<PaintState>;
   onAddNote: (pitch: number, step: number) => void;
   onRemoveNote: (noteId: string) => void;
@@ -495,7 +511,7 @@ interface DrumGridProps {
 }
 
 function DrumGrid({
-  track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH,
+  track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH, editMode,
   paintModeRef, onAddNote, onRemoveNote, onPreviewDrum,
 }: DrumGridProps) {
   const drumNoteMap = useMemo(() => buildNoteMap(track), [track]);
@@ -514,7 +530,7 @@ function DrumGrid({
   }
 
   return (
-    <div className="me-drum-grid" style={{ width: gridW, height: gridH }}>
+    <div className="me-drum-grid" style={{ width: gridW, height: gridH, touchAction: editMode ? 'none' : 'auto' }}>
       {/* Step columns */}
       {Array.from({ length: totalSteps }, (_, s) => {
         const isBar  = s % (stepsPerBeat * beatsPerBar) === 0;
@@ -549,7 +565,7 @@ function DrumGrid({
               data-step={step}
               data-track-id={track.id}
               data-note-id={existingId ?? ''}
-              onPointerDown={e => { e.preventDefault(); cellDown(pitch, step, existingId); }}
+              {...(editMode ? { onPointerDown: (e: React.PointerEvent) => { e.preventDefault(); cellDown(pitch, step, existingId); } } : {})}
             />
           );
         });
@@ -568,6 +584,7 @@ interface TrackSectionProps {
   stepW: number;
   rowH: number;
   canDelete: boolean;
+  editMode: boolean;
   paintModeRef: React.MutableRefObject<PaintState>;
   onToggleCollapse: () => void;
   onGear: () => void;
@@ -581,7 +598,7 @@ interface TrackSectionProps {
 }
 
 function TrackSection({
-  track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH, canDelete,
+  track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH, canDelete, editMode,
   paintModeRef, onToggleCollapse, onGear, onDelete, onMute,
   onAddNote, onRemoveNote, onStartResize, onPreviewPitch, onPreviewDrum,
 }: TrackSectionProps) {
@@ -667,6 +684,7 @@ function TrackSection({
                 beatsPerBar={beatsPerBar}
                 stepW={stepW}
                 rowH={rowH}
+                editMode={editMode}
                 paintModeRef={paintModeRef}
                 onAddNote={onAddNote}
                 onRemoveNote={onRemoveNote}
@@ -679,6 +697,7 @@ function TrackSection({
                 beatsPerBar={beatsPerBar}
                 stepW={stepW}
                 rowH={rowH}
+                editMode={editMode}
                 paintModeRef={paintModeRef}
                 onAddNote={onAddNote}
                 onRemoveNote={onRemoveNote}
@@ -700,6 +719,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const [pattern,     setPattern]     = useState<Pattern>(loadPattern);
   const [isPlaying,   setIsPlaying]   = useState(false);
   const [zoomIdx,     setZoomIdx]     = useState(loadZoomIdx);
+  const [editMode,    setEditMode]    = useState(false);
   const [modalTid,    setModalTid]    = useState<string | null>(null);
   const [showSave,    setShowSave]    = useState(false);
   const [showLoad,    setShowLoad]    = useState(false);
@@ -1041,6 +1061,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         pattern={pattern}
         isPlaying={isPlaying}
         zoomIdx={zoomIdx}
+        editMode={editMode}
         onPlay={startPlayback}
         onStop={stopPlayback}
         onBpmChange={bpm => setPattern(p => ({ ...p, bpm: Math.max(40, Math.min(240, bpm)) }))}
@@ -1052,6 +1073,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         onSave={() => setShowSave(true)}
         onLoad={() => setShowLoad(true)}
         onDownload={() => downloadJson(patternRef.current)}
+        onToggleEditMode={() => setEditMode(m => !m)}
       />
 
       {/* Main grid: single overflow:auto container */}
@@ -1085,6 +1107,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
               stepW={stepW}
               rowH={rowH}
               canDelete={pattern.tracks.length > 1}
+              editMode={editMode}
               paintModeRef={paintModeRef}
               onToggleCollapse={() => toggleCollapse(track.id)}
               onGear={() => setModalTid(track.id)}
