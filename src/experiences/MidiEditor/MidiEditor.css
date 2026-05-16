@@ -450,10 +450,10 @@
   box-sizing: border-box;
 }
 
-/* Drum piece picker dropdown */
+/* Drum piece picker dropdown — opens upward so it overlays the grid, not the next track */
 .me-drum-piece-menu {
   position: absolute;
-  top: 100%;
+  bottom: 100%;
   left: 0;
   z-index: 20;
   background: #c0c0c0;
