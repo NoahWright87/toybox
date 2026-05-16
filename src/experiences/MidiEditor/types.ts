@@ -53,9 +53,6 @@ export const PIANO_MAX = 83;
 export const STEP_W = 22;
 export const ROW_H = 14;
 export const KEY_W = 42;
-export const SEQ_BTN_W = 22;
-export const SEQ_BTN_H = 28;
-export const DRUM_LABEL_W = 60;
 
 let noteCounter = 0;
 export function makeNoteId(): string {

@@ -14,8 +14,6 @@ import {
   PIANO_MAX,
   STEP_W,
   ROW_H,
-  SEQ_BTN_W,
-  SEQ_BTN_H,
   isBlackPitch,
   pitchName,
   makeNoteId,
@@ -33,7 +31,13 @@ for (let p = PIANO_MAX; p >= PIANO_MIN; p--) PITCH_RANGE.push(p);
 const PITCH_TO_ROW = new Map<number, number>();
 PITCH_RANGE.forEach((p, i) => PITCH_TO_ROW.set(p, i));
 
-// Maps `${pitch},${step}` → noteId (including all cells spanned by the note)
+const DRUM_SEP_H = 5; // visual separator between melodic rows and drum rows
+const MELODIC_H = PITCH_RANGE.length * ROW_H;
+const DRUM_H = DRUM_TYPES.length * ROW_H;
+
+// Paint state: section prevents cross-contamination between melodic and drum drag
+type PaintState = { action: 'add' | 'remove'; section: 'melodic' | 'drum' } | null;
+
 function buildNoteMap(track: Track): Map<string, string> {
   const m = new Map<string, string>();
   track.notes.forEach(n => {
@@ -145,18 +149,8 @@ function Transport({
             {t.name}
           </button>
         ))}
-        <button
-          className="me-btn me-btn--sm"
-          onMouseDown={onAddTrack}
-          disabled={melodicTrackCount >= 10}
-          title="Add melodic track"
-        >+TRK</button>
-        <button
-          className="me-btn me-btn--sm"
-          onMouseDown={onRemoveTrack}
-          disabled={melodicTrackCount <= 1}
-          title="Remove active track"
-        >-TRK</button>
+        <button className="me-btn me-btn--sm" onMouseDown={onAddTrack} disabled={melodicTrackCount >= 10} title="Add track">+TRK</button>
+        <button className="me-btn me-btn--sm" onMouseDown={onRemoveTrack} disabled={melodicTrackCount <= 1} title="Remove active track">-TRK</button>
 
         <div className="me-transport__sep" />
 
@@ -173,7 +167,6 @@ function Transport({
         </select>
 
         <div className="me-transport__sep" />
-
         <span className="me-label me-label--dim">MUTE:</span>
         {pattern.tracks.map(t => (
           <button
@@ -191,23 +184,26 @@ function Transport({
   );
 }
 
-// ── Piano Roll ─────────────────────────────────────────────────────────────────
+// ── Unified Piano Roll + Drums grid ───────────────────────────────────────────
 
 interface PianoRollProps {
-  track: Track;
+  melodicTrack: Track;
+  drumTrack: Track;
   totalSteps: number;
   stepsPerBeat: number;
   beatsPerBar: number;
   playheadRef: React.RefObject<HTMLDivElement | null>;
-  paintModeRef: React.MutableRefObject<'add' | 'remove' | null>;
-  onAddNote: (pitch: number, step: number) => void;
-  onRemoveNote: (noteId: string) => void;
+  paintModeRef: React.MutableRefObject<PaintState>;
+  onAddNote: (trackId: string, pitch: number, step: number) => void;
+  onRemoveNote: (trackId: string, noteId: string) => void;
   onStartResize: (noteId: string, startX: number, origDuration: number, noteStartStep: number) => void;
   onPreviewPitch: (pitch: number) => void;
+  onPreviewDrum: (pitch: number) => void;
 }
 
 function PianoRoll({
-  track,
+  melodicTrack,
+  drumTrack,
   totalSteps,
   stepsPerBeat,
   beatsPerBar,
@@ -217,28 +213,34 @@ function PianoRoll({
   onRemoveNote,
   onStartResize,
   onPreviewPitch,
+  onPreviewDrum,
 }: PianoRollProps) {
-  const noteMap = useMemo(() => buildNoteMap(track), [track]);
-  const lastPaintedRef = useRef('');
+  const noteMap     = useMemo(() => buildNoteMap(melodicTrack), [melodicTrack]);
+  const drumNoteMap = useMemo(() => buildNoteMap(drumTrack),    [drumTrack]);
+
+  const lastPaintedRef      = useRef('');
   const lastPreviewPitchRef = useRef(-1);
 
-  const gridWidth = totalSteps * STEP_W;
-  const gridHeight = PITCH_RANGE.length * ROW_H;
+  const gridWidth  = totalSteps * STEP_W;
+  const gridHeight = MELODIC_H + DRUM_SEP_H + DRUM_H;
+
+  // ── Melodic cell handlers ──────────────────────────────────────────────────
 
   function handleCellDown(pitch: number, step: number) {
-    paintModeRef.current = 'add';
-    lastPaintedRef.current = `${pitch},${step}`;
+    paintModeRef.current = { action: 'add', section: 'melodic' };
+    lastPaintedRef.current      = `m:${pitch},${step}`;
     lastPreviewPitchRef.current = pitch;
-    onAddNote(pitch, step);
+    onAddNote(melodicTrack.id, pitch, step);
     onPreviewPitch(pitch);
   }
 
   function handleCellEnter(pitch: number, step: number) {
-    if (paintModeRef.current !== 'add') return;
-    const key = `${pitch},${step}`;
-    if (key === lastPaintedRef.current) return;
+    const pm = paintModeRef.current;
+    if (!pm || pm.section !== 'melodic' || pm.action !== 'add') return;
+    const key = `m:${pitch},${step}`;
+    if (key === lastPaintedRef.current || noteMap.has(`${pitch},${step}`)) return;
     lastPaintedRef.current = key;
-    onAddNote(pitch, step);
+    onAddNote(melodicTrack.id, pitch, step);
     if (pitch !== lastPreviewPitchRef.current) {
       lastPreviewPitchRef.current = pitch;
       onPreviewPitch(pitch);
@@ -248,34 +250,65 @@ function PianoRoll({
   function handleNoteDown(e: React.MouseEvent, note: Note, noteW: number) {
     e.stopPropagation();
     e.preventDefault();
-    const localX = e.nativeEvent.offsetX;
-    if (localX >= noteW - 6) {
-      // Resize handle
+    if (e.nativeEvent.offsetX >= noteW - 6) {
       paintModeRef.current = null;
       onStartResize(note.id, e.clientX, note.durationSteps, note.startStep);
     } else {
-      paintModeRef.current = 'remove';
+      paintModeRef.current = { action: 'remove', section: 'melodic' };
       lastPaintedRef.current = note.id;
-      onRemoveNote(note.id);
+      onRemoveNote(melodicTrack.id, note.id);
     }
   }
 
   function handleNoteEnter(note: Note) {
-    if (paintModeRef.current !== 'remove') return;
+    const pm = paintModeRef.current;
+    if (!pm || pm.section !== 'melodic' || pm.action !== 'remove') return;
     if (note.id === lastPaintedRef.current) return;
     lastPaintedRef.current = note.id;
-    onRemoveNote(note.id);
+    onRemoveNote(melodicTrack.id, note.id);
   }
 
-  const noteRects = useMemo(() =>
-    track.notes.filter(n => n.startStep < totalSteps),
-    [track.notes, totalSteps],
+  // ── Drum cell handlers ─────────────────────────────────────────────────────
+
+  function handleDrumDown(pitch: number, step: number, existingId: string | undefined) {
+    if (existingId) {
+      paintModeRef.current = { action: 'remove', section: 'drum' };
+      lastPaintedRef.current = existingId;
+      onRemoveNote(drumTrack.id, existingId);
+    } else {
+      paintModeRef.current = { action: 'add', section: 'drum' };
+      lastPaintedRef.current = `d:${pitch},${step}`;
+      onAddNote(drumTrack.id, pitch, step);
+      onPreviewDrum(pitch);
+    }
+  }
+
+  function handleDrumEnter(pitch: number, step: number, existingId: string | undefined) {
+    const pm = paintModeRef.current;
+    if (!pm || pm.section !== 'drum') return;
+    if (pm.action === 'add') {
+      const key = `d:${pitch},${step}`;
+      if (key === lastPaintedRef.current || existingId) return;
+      lastPaintedRef.current = key;
+      onAddNote(drumTrack.id, pitch, step);
+      onPreviewDrum(pitch);
+    } else {
+      if (!existingId || existingId === lastPaintedRef.current) return;
+      lastPaintedRef.current = existingId;
+      onRemoveNote(drumTrack.id, existingId);
+    }
+  }
+
+  const noteRects = useMemo(
+    () => melodicTrack.notes.filter(n => n.startStep < totalSteps),
+    [melodicTrack.notes, totalSteps],
   );
 
   return (
     <div className="me-piano-roll">
-      {/* Piano keys column */}
+      {/* ── Left sidebar: piano keys + drum labels ─────────────────────── */}
       <div className="me-piano-keys" style={{ height: gridHeight }}>
+        {/* Melodic piano keys */}
         {PITCH_RANGE.map(pitch => {
           const isBlack = isBlackPitch(pitch);
           const isC = pitch % 12 === 0;
@@ -291,13 +324,29 @@ function PianoRoll({
             </div>
           );
         })}
+
+        {/* Separator */}
+        <div className="me-drum-key-sep" style={{ height: DRUM_SEP_H }} />
+
+        {/* Drum row labels */}
+        {DRUM_TYPES.map((dt: DrumType) => (
+          <div
+            key={dt}
+            className="me-drum-key"
+            style={{ height: ROW_H }}
+            onMouseDown={() => onPreviewDrum(DRUM_PITCHES[dt])}
+            onMouseEnter={e => { if (e.buttons === 1) onPreviewDrum(DRUM_PITCHES[dt]); }}
+          >
+            {DRUM_LABELS[dt]}
+          </div>
+        ))}
       </div>
 
-      {/* Note grid */}
+      {/* ── Note grid ─────────────────────────────────────────────────────── */}
       <div className="me-note-grid-wrap">
         <div className="me-note-grid" style={{ width: gridWidth, height: gridHeight }}>
 
-          {/* Step column markers (beat / bar lines) */}
+          {/* Step column markers */}
           {Array.from({ length: totalSteps }, (_, s) => s).map(step => {
             const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
             const isBeat = !isBar && step % stepsPerBeat === 0;
@@ -311,7 +360,7 @@ function PianoRoll({
             );
           })}
 
-          {/* Background cells (only where no note occupies) */}
+          {/* Melodic background cells (empty spots only) */}
           {PITCH_RANGE.map((pitch, rowIdx) => {
             const isBlack = isBlackPitch(pitch);
             return Array.from({ length: totalSteps }, (_, step) => {
@@ -328,7 +377,7 @@ function PianoRoll({
             });
           })}
 
-          {/* Note rectangles */}
+          {/* Melodic note rectangles */}
           {noteRects.map(note => {
             const rowIdx = PITCH_TO_ROW.get(note.pitch);
             if (rowIdx === undefined) return null;
@@ -343,7 +392,7 @@ function PianoRoll({
                   top: rowIdx * ROW_H,
                   width: noteW,
                   height: ROW_H,
-                  background: track.color,
+                  background: melodicTrack.color,
                 }}
                 onMouseDown={e => handleNoteDown(e, note, noteW)}
                 onMouseEnter={() => handleNoteEnter(note)}
@@ -361,145 +410,51 @@ function PianoRoll({
             );
           })}
 
-          {/* Octave dividers (at each C) */}
+          {/* Octave dividers */}
           {PITCH_RANGE.map((pitch, rowIdx) =>
             pitch % 12 === 0 ? (
               <div key={`od-${pitch}`} className="me-row-divider" style={{ top: rowIdx * ROW_H, width: gridWidth }} />
             ) : null
           )}
 
-          {/* Playhead */}
+          {/* Drum section separator */}
+          <div
+            className="me-drum-section-sep"
+            style={{ top: MELODIC_H, width: gridWidth, height: DRUM_SEP_H }}
+          />
+
+          {/* Drum cells */}
+          {DRUM_TYPES.map((dt: DrumType, drumRowIdx) => {
+            const pitch  = DRUM_PITCHES[dt];
+            const rowTop = MELODIC_H + DRUM_SEP_H + drumRowIdx * ROW_H;
+            return Array.from({ length: totalSteps }, (_, step) => {
+              const cellKey    = `${pitch},${step}`;
+              const existingId = drumNoteMap.get(cellKey);
+              const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
+              const isBeat = !isBar && step % stepsPerBeat === 0;
+              return (
+                <div
+                  key={`drum-${dt}-${step}`}
+                  className={`me-drum-cell${existingId ? ' me-drum-cell--on' : ''}${isBar ? ' me-drum-cell--bar' : isBeat ? ' me-drum-cell--beat' : ''}`}
+                  style={{
+                    left: step * STEP_W,
+                    top: rowTop,
+                    width: STEP_W,
+                    height: ROW_H,
+                    ...((existingId ? { '--drum-color': drumTrack.color } : {}) as React.CSSProperties),
+                  }}
+                  onMouseDown={e => { e.preventDefault(); handleDrumDown(pitch, step, existingId); }}
+                  onMouseEnter={() => handleDrumEnter(pitch, step, existingId)}
+                />
+              );
+            });
+          })}
+
+          {/* Playhead — spans full height including drum rows */}
           <div
             className="me-playhead"
             ref={playheadRef as React.RefObject<HTMLDivElement>}
             style={{ height: gridHeight, display: 'none' }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Step Sequencer ─────────────────────────────────────────────────────────────
-
-interface StepSeqProps {
-  track: Track;
-  totalSteps: number;
-  stepsPerBeat: number;
-  beatsPerBar: number;
-  seqPlayheadRef: React.RefObject<HTMLDivElement | null>;
-  seqPaintModeRef: React.MutableRefObject<'add' | 'remove' | null>;
-  onAddDrumNote: (pitch: number, step: number) => void;
-  onRemoveDrumNote: (noteId: string) => void;
-  onPreviewDrum: (pitch: number) => void;
-}
-
-function StepSeq({
-  track,
-  totalSteps,
-  stepsPerBeat,
-  beatsPerBar,
-  seqPlayheadRef,
-  seqPaintModeRef,
-  onAddDrumNote,
-  onRemoveDrumNote,
-  onPreviewDrum,
-}: StepSeqProps) {
-  const drumNoteMap = useMemo(() => buildNoteMap(track), [track]);
-  const lastPaintedRef = useRef('');
-
-  const gridWidth = totalSteps * SEQ_BTN_W;
-  const gridHeight = DRUM_TYPES.length * SEQ_BTN_H;
-
-  function handleBtnDown(pitch: number, step: number) {
-    const key = `${pitch},${step}`;
-    const existingId = drumNoteMap.get(key);
-    if (existingId) {
-      seqPaintModeRef.current = 'remove';
-      lastPaintedRef.current = existingId;
-      onRemoveDrumNote(existingId);
-    } else {
-      seqPaintModeRef.current = 'add';
-      lastPaintedRef.current = key;
-      onAddDrumNote(pitch, step);
-      onPreviewDrum(pitch);
-    }
-  }
-
-  function handleBtnEnter(pitch: number, step: number) {
-    const key = `${pitch},${step}`;
-    if (seqPaintModeRef.current === 'add') {
-      if (key === lastPaintedRef.current || drumNoteMap.has(key)) return;
-      lastPaintedRef.current = key;
-      onAddDrumNote(pitch, step);
-      onPreviewDrum(pitch);
-    } else if (seqPaintModeRef.current === 'remove') {
-      const existingId = drumNoteMap.get(key);
-      if (!existingId || existingId === lastPaintedRef.current) return;
-      lastPaintedRef.current = existingId;
-      onRemoveDrumNote(existingId);
-    }
-  }
-
-  return (
-    <div className="me-step-seq">
-      <div className="me-step-seq__labels">
-        <div className="me-step-seq__corner" />
-        {DRUM_TYPES.map(dt => (
-          <div key={dt} className="me-drum-label" style={{ height: SEQ_BTN_H }}>
-            {DRUM_LABELS[dt]}
-          </div>
-        ))}
-      </div>
-
-      <div className="me-step-seq__grid-wrap">
-        <div className="me-step-seq__grid" style={{ width: gridWidth, height: gridHeight + SEQ_BTN_H }}>
-
-          {/* Step indicator row */}
-          <div className="me-seq-indicator-row" style={{ width: gridWidth }}>
-            {Array.from({ length: totalSteps }, (_, s) => s).map(step => {
-              const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
-              const isBeat = !isBar && step % stepsPerBeat === 0;
-              const isQ4   = !isBar && !isBeat && step % 4 === 0;
-              return (
-                <div
-                  key={step}
-                  className={`me-seq-step-num${isBar ? ' me-seq-step-num--bar' : isBeat ? ' me-seq-step-num--beat' : isQ4 ? ' me-seq-step-num--q4' : ''}`}
-                  style={{ width: SEQ_BTN_W }}
-                />
-              );
-            })}
-          </div>
-
-          {/* Button rows */}
-          {DRUM_TYPES.map((dt: DrumType) => {
-            const pitch = DRUM_PITCHES[dt];
-            return (
-              <div key={dt} className="me-seq-row" style={{ height: SEQ_BTN_H }}>
-                {Array.from({ length: totalSteps }, (_, step) => {
-                  const isOn   = drumNoteMap.has(`${pitch},${step}`);
-                  const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
-                  const isBeat = !isBar && step % stepsPerBeat === 0;
-                  const isQ4   = !isBar && !isBeat && step % 4 === 0;
-                  return (
-                    <button
-                      key={step}
-                      className={`me-seq-btn${isOn ? ' me-seq-btn--on' : ' me-seq-btn--off'}${isBar ? ' me-seq-btn--bar' : isBeat ? ' me-seq-btn--beat' : isQ4 ? ' me-seq-btn--q4' : ''}`}
-                      style={{ width: SEQ_BTN_W, height: SEQ_BTN_H, ...(isOn ? { background: track.color } : {}) }}
-                      onMouseDown={e => { e.preventDefault(); handleBtnDown(pitch, step); }}
-                      onMouseEnter={() => handleBtnEnter(pitch, step)}
-                    />
-                  );
-                })}
-              </div>
-            );
-          })}
-
-          {/* Playhead overlay */}
-          <div
-            className="me-seq-playhead"
-            ref={seqPlayheadRef as React.RefObject<HTMLDivElement>}
-            style={{ height: gridHeight, top: SEQ_BTN_H, display: 'none' }}
           />
         </div>
       </div>
@@ -522,16 +477,11 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   patternRef.current = pattern;
 
   const isPlayingRef = useRef(false);
-  const stepRef = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const playheadRef = useRef<HTMLDivElement | null>(null);
-  const seqPlayheadRef = useRef<HTMLDivElement | null>(null);
+  const stepRef      = useRef(0);
+  const timerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playheadRef  = useRef<HTMLDivElement | null>(null);
 
-  // Paint drag refs (cleared on global mouseup)
-  const paintModeRef = useRef(null) as React.MutableRefObject<'add' | 'remove' | null>;
-  const seqPaintModeRef = useRef(null) as React.MutableRefObject<'add' | 'remove' | null>;
-
-  // Resize drag refs
+  const paintModeRef  = useRef(null) as React.MutableRefObject<PaintState>;
   const resizeModeRef = useRef(false);
   const resizeStateRef = useRef<{
     noteId: string; trackId: string;
@@ -541,7 +491,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const activeTrackRef = useRef<Track | null>(null);
 
   const melodicTracks = useMemo(() => pattern.tracks.filter(t => !t.isDrum), [pattern.tracks]);
-  const drumTrack = useMemo(() => pattern.tracks.find(t => t.isDrum)!, [pattern.tracks]);
+  const drumTrack     = useMemo(() => pattern.tracks.find(t => t.isDrum)!,  [pattern.tracks]);
 
   const clampedIdx = Math.min(activeTrackIdx, melodicTracks.length - 1);
   const activeTrack = melodicTracks[clampedIdx] ?? melodicTracks[0];
@@ -559,15 +509,10 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       playheadRef.current.style.display = 'block';
       playheadRef.current.style.transform = `translateX(${step * STEP_W}px)`;
     }
-    if (seqPlayheadRef.current) {
-      seqPlayheadRef.current.style.display = 'block';
-      seqPlayheadRef.current.style.transform = `translateX(${step * SEQ_BTN_W}px)`;
-    }
   }
 
   function hidePlayhead() {
     if (playheadRef.current) playheadRef.current.style.display = 'none';
-    if (seqPlayheadRef.current) seqPlayheadRef.current.style.display = 'none';
   }
 
   const stopPlayback = useCallback(() => {
@@ -580,9 +525,9 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const tick = useCallback(() => {
     if (!isPlayingRef.current) return;
-    const pat = patternRef.current;
+    const pat   = patternRef.current;
     const total = pat.bars * pat.beatsPerBar * pat.stepsPerBeat;
-    const step = stepRef.current;
+    const step  = stepRef.current;
 
     movePlayhead(step);
 
@@ -611,28 +556,25 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   useEffect(() => () => { stopPlayback(); }, [stopPlayback]);
 
-  // ── Global mouse events (resize + clear paint mode) ───────────────────────────
+  // ── Global mouse events ───────────────────────────────────────────────────────
 
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
       if (!resizeModeRef.current || !resizeStateRef.current) return;
       const { noteId, trackId, startX, origDuration, noteStartStep } = resizeStateRef.current;
-      const deltaSteps = Math.round((e.clientX - startX) / STEP_W);
       const pat = patternRef.current;
       const maxDur = pat.bars * pat.beatsPerBar * pat.stepsPerBeat - noteStartStep;
-      const newDur = Math.max(1, Math.min(maxDur, origDuration + deltaSteps));
+      const newDur = Math.max(1, Math.min(maxDur, origDuration + Math.round((e.clientX - startX) / STEP_W)));
       setPattern(prev => ({
         ...prev,
         tracks: prev.tracks.map(t => t.id !== trackId ? t : {
-          ...t,
-          notes: t.notes.map(n => n.id !== noteId ? n : { ...n, durationSteps: newDur }),
+          ...t, notes: t.notes.map(n => n.id !== noteId ? n : { ...n, durationSteps: newDur }),
         }),
       }));
     }
 
     function handleMouseUp() {
-      paintModeRef.current = null;
-      seqPaintModeRef.current = null;
+      paintModeRef.current  = null;
       resizeModeRef.current = false;
       resizeStateRef.current = null;
     }
@@ -645,7 +587,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     };
   }, []);
 
-  // ── Spacebar play/pause ───────────────────────────────────────────────────────
+  // ── Spacebar ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -687,9 +629,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     resizeStateRef.current = {
       noteId,
       trackId: activeTrackRef.current?.id ?? '',
-      startX,
-      origDuration,
-      noteStartStep,
+      startX, origDuration, noteStartStep,
     };
   }, []);
 
@@ -719,9 +659,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         name: `Trk ${idx + 1}`,
         color: TRACK_COLORS[idx % TRACK_COLORS.length],
         waveform: 'sine',
-        notes: [],
-        muted: false,
-        isDrum: false,
+        notes: [], muted: false, isDrum: false,
       };
       return {
         ...prev,
@@ -745,8 +683,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     setPattern(createInitialPattern());
     setActiveTrackIdx(0);
   }, [stopPlayback]);
-
-  // ── Preview ───────────────────────────────────────────────────────────────────
 
   const previewPitch = useCallback((pitch: number) => {
     resumeAudio();
@@ -814,37 +750,20 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       />
 
       <div className="me-body">
-        <div className="me-piano-section">
-          <div className="me-section-label">PIANO ROLL — {activeTrack.name.toUpperCase()}</div>
-          <div className="me-piano-roll-wrap">
-            <PianoRoll
-              track={activeTrack}
-              totalSteps={totalSteps}
-              stepsPerBeat={pattern.stepsPerBeat}
-              beatsPerBar={pattern.beatsPerBar}
-              playheadRef={playheadRef}
-              paintModeRef={paintModeRef}
-              onAddNote={(pitch, step) => addNote(activeTrack.id, pitch, step)}
-              onRemoveNote={noteId => removeNote(activeTrack.id, noteId)}
-              onStartResize={startResizeNote}
-              onPreviewPitch={previewPitch}
-            />
-          </div>
-        </div>
-
-        <div className="me-divider" />
-
-        <div className="me-seq-section">
-          <div className="me-section-label">STEP SEQUENCER — DRUMS</div>
-          <StepSeq
-            track={drumTrack}
+        <div className="me-section-label">PIANO ROLL — {activeTrack.name.toUpperCase()}</div>
+        <div className="me-piano-roll-wrap">
+          <PianoRoll
+            melodicTrack={activeTrack}
+            drumTrack={drumTrack}
             totalSteps={totalSteps}
             stepsPerBeat={pattern.stepsPerBeat}
             beatsPerBar={pattern.beatsPerBar}
-            seqPlayheadRef={seqPlayheadRef}
-            seqPaintModeRef={seqPaintModeRef}
-            onAddDrumNote={(pitch, step) => addNote(drumTrack.id, pitch, step)}
-            onRemoveDrumNote={noteId => removeNote(drumTrack.id, noteId)}
+            playheadRef={playheadRef}
+            paintModeRef={paintModeRef}
+            onAddNote={addNote}
+            onRemoveNote={removeNote}
+            onStartResize={startResizeNote}
+            onPreviewPitch={previewPitch}
             onPreviewDrum={previewDrum}
           />
         </div>

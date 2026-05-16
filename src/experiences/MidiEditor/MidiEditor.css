@@ -180,14 +180,6 @@
   min-height: 0;
 }
 
-.me-piano-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-}
-
 .me-section-label {
   flex-shrink: 0;
   background: #d4d0c8;
@@ -202,21 +194,6 @@
   flex: 1;
   overflow: auto;
   min-height: 0;
-}
-
-.me-divider {
-  flex-shrink: 0;
-  height: 4px;
-  background: #c0c0c0;
-  border-top: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-}
-
-.me-seq-section {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: #c0c0c0;
 }
 
 /* ── Piano Roll ────────────────────────────────────────────────────────────── */
@@ -270,6 +247,30 @@
 
 .me-key--black .me-key__label {
   color: #aaa;
+}
+
+/* Drum section separator in sidebar */
+.me-drum-key-sep {
+  background: #606060;
+  flex-shrink: 0;
+}
+
+/* Drum row labels in sidebar */
+.me-drum-key {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 3px;
+  font-size: 5px;
+  color: #000;
+  background: #b8b0a8;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.me-drum-key:hover {
+  background: #c8beb6;
 }
 
 /* Note grid */
@@ -370,7 +371,57 @@
   z-index: 3;
 }
 
-/* Piano roll playhead */
+/* ── Drum rows (unified grid) ───────────────────────────────────────────────── */
+
+/* Thick separator between melodic and drum sections */
+.me-drum-section-sep {
+  position: absolute;
+  background: #606060;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* Drum step cells */
+.me-drum-cell {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: crosshair;
+  background: #ccc8c0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.me-drum-cell--beat {
+  background: #c4c0b8;
+}
+
+.me-drum-cell--bar {
+  background: #bcb8b0;
+}
+
+.me-drum-cell:hover {
+  background: #d8c8a0;
+}
+
+/* Active drum cell — bubble rendered via ::after */
+.me-drum-cell--on {
+  cursor: pointer;
+}
+
+.me-drum-cell--on::after {
+  content: '';
+  position: absolute;
+  inset: 2px 1px;
+  background: var(--drum-color, #c89000);
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+.me-drum-cell--on:hover::after {
+  filter: brightness(1.15);
+}
+
+/* ── Piano roll playhead ────────────────────────────────────────────────────── */
 .me-playhead {
   position: absolute;
   top: 0;
@@ -379,108 +430,5 @@
   background: rgba(255, 80, 0, 0.75);
   pointer-events: none;
   z-index: 10;
-  box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);
-}
-
-/* ── Step Sequencer ─────────────────────────────────────────────────────────── */
-.me-step-seq {
-  display: flex;
-  overflow-x: auto;
-  background: #c0c0c0;
-  border-top: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-}
-
-.me-step-seq__labels {
-  flex-shrink: 0;
-  width: 60px;
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: #c0c0c0;
-  border-right: 2px solid #808080;
-}
-
-.me-step-seq__corner {
-  height: 28px;
-  border-bottom: 1px solid #808080;
-  background: #d4d0c8;
-}
-
-.me-drum-label {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 4px;
-  font-size: 6px;
-  color: #000;
-  border-bottom: 1px solid #b0b0b0;
-  box-sizing: border-box;
-}
-
-.me-step-seq__grid-wrap {
-  overflow: visible;
-}
-
-.me-step-seq__grid {
-  position: relative;
-}
-
-/* Step indicator row */
-.me-seq-indicator-row {
-  height: 28px;
-  display: flex;
-  border-bottom: 1px solid #808080;
-  background: #d4d0c8;
-}
-
-.me-seq-step-num {
-  flex-shrink: 0;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
-  box-sizing: border-box;
-}
-
-.me-seq-step-num--q4   { border-right: 1px solid #b8b4ae; }
-.me-seq-step-num--beat { border-right: 2px solid #888880; }
-.me-seq-step-num--bar  { border-right: 3px solid #484440; }
-
-/* Button rows — NO margin so playhead aligns exactly */
-.me-seq-row {
-  display: flex;
-}
-
-.me-seq-btn {
-  flex-shrink: 0;
-  border: 2px solid;
-  cursor: pointer;
-  box-sizing: border-box;
-  margin: 0;
-}
-
-.me-seq-btn--off {
-  background: #a8a8a8;
-  border-color: #d0d0d0 #606060 #606060 #d0d0d0;
-}
-
-.me-seq-btn--off.me-seq-btn--q4   { background: #b0acaa; }
-.me-seq-btn--off.me-seq-btn--beat { background: #b8b2a8; }
-.me-seq-btn--off.me-seq-btn--bar  { background: #c0bab0; }
-
-.me-seq-btn--on {
-  border-color: #ffffff #808080 #808080 #ffffff;
-}
-
-.me-seq-btn--off:hover {
-  background: #c0b090;
-}
-
-/* Step sequencer playhead — sits on top of button rows */
-.me-seq-playhead {
-  position: absolute;
-  left: 0;
-  width: 2px;
-  background: rgba(255, 80, 0, 0.75);
-  pointer-events: none;
-  z-index: 5;
   box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);
 }
