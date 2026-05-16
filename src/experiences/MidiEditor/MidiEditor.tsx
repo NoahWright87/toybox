@@ -199,7 +199,7 @@ interface PianoRollProps {
   stepsPerBeat: number;
   beatsPerBar: number;
   playheadRef: React.RefObject<HTMLDivElement | null>;
-  paintModeRef: React.RefObject<'add' | 'remove' | null>;
+  paintModeRef: React.MutableRefObject<'add' | 'remove' | null>;
   onAddNote: (pitch: number, step: number) => void;
   onRemoveNote: (noteId: string) => void;
   onStartResize: (noteId: string, startX: number, origDuration: number, noteStartStep: number) => void;
@@ -388,7 +388,7 @@ interface StepSeqProps {
   stepsPerBeat: number;
   beatsPerBar: number;
   seqPlayheadRef: React.RefObject<HTMLDivElement | null>;
-  seqPaintModeRef: React.RefObject<'add' | 'remove' | null>;
+  seqPaintModeRef: React.MutableRefObject<'add' | 'remove' | null>;
   onAddDrumNote: (pitch: number, step: number) => void;
   onRemoveDrumNote: (noteId: string) => void;
   onPreviewDrum: (pitch: number) => void;
@@ -528,8 +528,8 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const seqPlayheadRef = useRef<HTMLDivElement | null>(null);
 
   // Paint drag refs (cleared on global mouseup)
-  const paintModeRef = useRef<'add' | 'remove' | null>(null);
-  const seqPaintModeRef = useRef<'add' | 'remove' | null>(null);
+  const paintModeRef = useRef(null) as React.MutableRefObject<'add' | 'remove' | null>;
+  const seqPaintModeRef = useRef(null) as React.MutableRefObject<'add' | 'remove' | null>;
 
   // Resize drag refs
   const resizeModeRef = useRef(false);
