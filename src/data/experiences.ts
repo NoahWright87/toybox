@@ -126,4 +126,11 @@ export const experiences: Experience[] = [
     category: "toy",
     path: "/art",
   },
+  {
+    id: "midi-editor",
+    title: "MIDI Editor",
+    description: "A retro piano roll and step sequencer. Draw melodies, program drums, and play them back.",
+    category: "toy",
+    path: "/midi-editor",
+  },
 ];
