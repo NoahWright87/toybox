@@ -1,5 +1,10 @@
 export type OscWaveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
 
+export const TRACK_COLORS = [
+  '#cc4400', '#5b2d8e', '#228833', '#c89000',
+  '#1a5fa8', '#a82080', '#607000', '#005a5a', '#804020', '#3a4080',
+] as const;
+
 export interface Note {
   id: string;
   pitch: number;

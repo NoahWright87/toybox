@@ -39,7 +39,7 @@
   width: 1px;
   height: 16px;
   background: #808080;
-  margin: 0 4px;
+  margin: 0 2px;
 }
 
 .me-label {
@@ -69,6 +69,11 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
+.me-btn:disabled {
+  color: #888;
+  cursor: default;
+}
+
 .me-btn--play {
   background: #d4f0c0;
   min-width: 28px;
@@ -80,8 +85,8 @@
 }
 
 .me-btn--sm {
-  padding: 2px 5px;
-  font-size: 8px;
+  padding: 2px 4px;
+  font-size: 7px;
 }
 
 .me-btn--new {
@@ -126,7 +131,6 @@
   font-size: 7px;
   cursor: pointer;
   padding: 3px 6px;
-  position: relative;
 }
 
 .me-track-btn::before {
@@ -277,7 +281,7 @@
   position: relative;
 }
 
-/* Step column overlays (for divider lines) */
+/* Step column overlays — three levels of prominence */
 .me-step-col {
   position: absolute;
   top: 0;
@@ -285,21 +289,30 @@
   box-sizing: border-box;
 }
 
+/* Every 4th subdivision (only visible at 1/8 grid where stepsPerBeat=2) */
+.me-step-col--q4 {
+  border-left: 1px solid #c0bdb8;
+}
+
+/* Every beat (stepsPerBeat boundary) */
 .me-step-col--beat {
-  border-left: 1px solid #b0b0b0;
+  border-left: 2px solid #888880;
+  background: rgba(0, 0, 0, 0.025);
 }
 
+/* Every bar */
 .me-step-col--bar {
-  border-left: 2px solid #808080;
+  border-left: 3px solid #484440;
+  background: rgba(0, 0, 0, 0.04);
 }
 
-/* Note cells */
+/* Note cells (background) */
 .me-cell {
   position: absolute;
   box-sizing: border-box;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: crosshair;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-right: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .me-cell--white {
@@ -310,17 +323,42 @@
   background: #d0ccc4;
 }
 
-.me-cell--note {
-  border: 1px solid rgba(0, 0, 0, 0.35);
-  z-index: 1;
-}
-
-.me-cell--white:hover:not(.me-cell--note) {
+.me-cell--white:hover {
   background: #ffe0b0;
 }
 
-.me-cell--black:hover:not(.me-cell--note) {
+.me-cell--black:hover {
   background: #d0a870;
+}
+
+/* Note rectangles (spans durationSteps) */
+.me-note-rect {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 1px;
+  cursor: pointer;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.me-note-rect:hover {
+  filter: brightness(1.15);
+}
+
+/* Resize handle — rightmost 4px of note rect */
+.me-note-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.me-note-resize-handle:hover {
+  background: rgba(0, 0, 0, 0.5);
 }
 
 /* Row divider (at each C note) */
@@ -329,16 +367,16 @@
   height: 2px;
   background: #b0b0a0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
-/* Playhead */
+/* Piano roll playhead */
 .me-playhead {
   position: absolute;
   top: 0;
   left: 0;
   width: 2px;
-  background: rgba(255, 80, 0, 0.7);
+  background: rgba(255, 80, 0, 0.75);
   pointer-events: none;
   z-index: 10;
   box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);
@@ -398,19 +436,15 @@
 
 .me-seq-step-num {
   flex-shrink: 0;
-  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
   box-sizing: border-box;
 }
 
-.me-seq-step-num--beat {
-  border-right: 1px solid #a0a0a0;
-}
+.me-seq-step-num--q4   { border-right: 1px solid #b8b4ae; }
+.me-seq-step-num--beat { border-right: 2px solid #888880; }
+.me-seq-step-num--bar  { border-right: 3px solid #484440; }
 
-.me-seq-step-num--bar {
-  border-right: 2px solid #808080;
-}
-
-/* Button rows */
+/* Button rows — NO margin so playhead aligns exactly */
 .me-seq-row {
   display: flex;
 }
@@ -420,8 +454,7 @@
   border: 2px solid;
   cursor: pointer;
   box-sizing: border-box;
-  margin: 1px;
-  transition: background 0.05s;
+  margin: 0;
 }
 
 .me-seq-btn--off {
@@ -429,13 +462,9 @@
   border-color: #d0d0d0 #606060 #606060 #d0d0d0;
 }
 
-.me-seq-btn--off.me-seq-btn--beat {
-  background: #b8b4a8;
-}
-
-.me-seq-btn--off.me-seq-btn--bar {
-  background: #c0bab0;
-}
+.me-seq-btn--off.me-seq-btn--q4   { background: #b0acaa; }
+.me-seq-btn--off.me-seq-btn--beat { background: #b8b2a8; }
+.me-seq-btn--off.me-seq-btn--bar  { background: #c0bab0; }
 
 .me-seq-btn--on {
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -445,12 +474,12 @@
   background: #c0b090;
 }
 
-/* Playhead */
+/* Step sequencer playhead — sits on top of button rows */
 .me-seq-playhead {
   position: absolute;
   left: 0;
   width: 2px;
-  background: rgba(255, 80, 0, 0.7);
+  background: rgba(255, 80, 0, 0.75);
   pointer-events: none;
   z-index: 5;
   box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);

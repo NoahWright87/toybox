@@ -6,6 +6,7 @@ import {
   type Track,
   type Note,
   type DrumType,
+  type OscWaveform,
   DRUM_TYPES,
   DRUM_LABELS,
   DRUM_PITCHES,
@@ -19,21 +20,28 @@ import {
   pitchName,
   makeNoteId,
   createInitialPattern,
+  TRACK_COLORS,
 } from './types';
 import { resumeAudio, playNote, playDrum } from './audio';
 import './MidiEditor.css';
 
+// ── Module-level constants ─────────────────────────────────────────────────────
+
 const PITCH_RANGE: number[] = [];
 for (let p = PIANO_MAX; p >= PIANO_MIN; p--) PITCH_RANGE.push(p);
 
-function buildNoteSet(track: Track): Set<string> {
-  const s = new Set<string>();
+const PITCH_TO_ROW = new Map<number, number>();
+PITCH_RANGE.forEach((p, i) => PITCH_TO_ROW.set(p, i));
+
+// Maps `${pitch},${step}` → noteId (including all cells spanned by the note)
+function buildNoteMap(track: Track): Map<string, string> {
+  const m = new Map<string, string>();
   track.notes.forEach(n => {
     for (let d = 0; d < n.durationSteps; d++) {
-      s.add(`${n.pitch},${n.startStep + d}`);
+      m.set(`${n.pitch},${n.startStep + d}`, n.id);
     }
   });
-  return s;
+  return m;
 }
 
 // ── Transport ──────────────────────────────────────────────────────────────────
@@ -42,6 +50,8 @@ interface TransportProps {
   pattern: Pattern;
   isPlaying: boolean;
   activeTrackIdx: number;
+  activeTrack: Track;
+  melodicTrackCount: number;
   onPlay: () => void;
   onStop: () => void;
   onBpmChange: (bpm: number) => void;
@@ -49,6 +59,9 @@ interface TransportProps {
   onStepsPerBeatChange: (spb: number) => void;
   onActiveTrackChange: (idx: number) => void;
   onMuteTrack: (trackId: string) => void;
+  onChangeWaveform: (trackId: string, waveform: OscWaveform) => void;
+  onAddTrack: () => void;
+  onRemoveTrack: () => void;
   onNewPattern: () => void;
 }
 
@@ -56,6 +69,8 @@ function Transport({
   pattern,
   isPlaying,
   activeTrackIdx,
+  activeTrack,
+  melodicTrackCount,
   onPlay,
   onStop,
   onBpmChange,
@@ -63,6 +78,9 @@ function Transport({
   onStepsPerBeatChange,
   onActiveTrackChange,
   onMuteTrack,
+  onChangeWaveform,
+  onAddTrack,
+  onRemoveTrack,
   onNewPattern,
 }: TransportProps) {
   const melodicTracks = pattern.tracks.filter(t => !t.isDrum);
@@ -97,34 +115,26 @@ function Transport({
 
         <div className="me-transport__group">
           <span className="me-label">BARS</span>
-          <select
-            className="me-select"
-            value={pattern.bars}
-            onChange={e => onBarsChange(Number(e.target.value))}
-          >
+          <select className="me-select" value={pattern.bars} onChange={e => onBarsChange(Number(e.target.value))}>
             {[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
 
         <div className="me-transport__group">
           <span className="me-label">GRID</span>
-          <select
-            className="me-select"
-            value={pattern.stepsPerBeat}
-            onChange={e => onStepsPerBeatChange(Number(e.target.value))}
-          >
+          <select className="me-select" value={pattern.stepsPerBeat} onChange={e => onStepsPerBeatChange(Number(e.target.value))}>
             <option value={2}>1/8</option>
             <option value={4}>1/16</option>
           </select>
         </div>
 
         <div className="me-transport__sep" />
-
         <button className="me-btn me-btn--new" onMouseDown={onNewPattern}>NEW</button>
+        <span className="me-label me-label--dim">SPACE=play</span>
       </div>
 
       <div className="me-transport__row">
-        <span className="me-label me-label--dim">PIANO ROLL:</span>
+        <span className="me-label me-label--dim">ROLL:</span>
         {melodicTracks.map((t, i) => (
           <button
             key={t.id}
@@ -135,6 +145,32 @@ function Transport({
             {t.name}
           </button>
         ))}
+        <button
+          className="me-btn me-btn--sm"
+          onMouseDown={onAddTrack}
+          disabled={melodicTrackCount >= 10}
+          title="Add melodic track"
+        >+TRK</button>
+        <button
+          className="me-btn me-btn--sm"
+          onMouseDown={onRemoveTrack}
+          disabled={melodicTrackCount <= 1}
+          title="Remove active track"
+        >-TRK</button>
+
+        <div className="me-transport__sep" />
+
+        <span className="me-label me-label--dim">WAVE:</span>
+        <select
+          className="me-select"
+          value={activeTrack.waveform}
+          onChange={e => onChangeWaveform(activeTrack.id, e.target.value as OscWaveform)}
+        >
+          <option value="sine">Sine</option>
+          <option value="triangle">Tri</option>
+          <option value="square">Sqr</option>
+          <option value="sawtooth">Saw</option>
+        </select>
 
         <div className="me-transport__sep" />
 
@@ -163,7 +199,10 @@ interface PianoRollProps {
   stepsPerBeat: number;
   beatsPerBar: number;
   playheadRef: React.RefObject<HTMLDivElement | null>;
-  onToggleNote: (pitch: number, step: number) => void;
+  paintModeRef: React.RefObject<'add' | 'remove' | null>;
+  onAddNote: (pitch: number, step: number) => void;
+  onRemoveNote: (noteId: string) => void;
+  onStartResize: (noteId: string, startX: number, origDuration: number, noteStartStep: number) => void;
   onPreviewPitch: (pitch: number) => void;
 }
 
@@ -173,13 +212,65 @@ function PianoRoll({
   stepsPerBeat,
   beatsPerBar,
   playheadRef,
-  onToggleNote,
+  paintModeRef,
+  onAddNote,
+  onRemoveNote,
+  onStartResize,
   onPreviewPitch,
 }: PianoRollProps) {
-  const noteSet = useMemo(() => buildNoteSet(track), [track]);
+  const noteMap = useMemo(() => buildNoteMap(track), [track]);
+  const lastPaintedRef = useRef('');
+  const lastPreviewPitchRef = useRef(-1);
 
   const gridWidth = totalSteps * STEP_W;
   const gridHeight = PITCH_RANGE.length * ROW_H;
+
+  function handleCellDown(pitch: number, step: number) {
+    paintModeRef.current = 'add';
+    lastPaintedRef.current = `${pitch},${step}`;
+    lastPreviewPitchRef.current = pitch;
+    onAddNote(pitch, step);
+    onPreviewPitch(pitch);
+  }
+
+  function handleCellEnter(pitch: number, step: number) {
+    if (paintModeRef.current !== 'add') return;
+    const key = `${pitch},${step}`;
+    if (key === lastPaintedRef.current) return;
+    lastPaintedRef.current = key;
+    onAddNote(pitch, step);
+    if (pitch !== lastPreviewPitchRef.current) {
+      lastPreviewPitchRef.current = pitch;
+      onPreviewPitch(pitch);
+    }
+  }
+
+  function handleNoteDown(e: React.MouseEvent, note: Note, noteW: number) {
+    e.stopPropagation();
+    e.preventDefault();
+    const localX = e.nativeEvent.offsetX;
+    if (localX >= noteW - 6) {
+      // Resize handle
+      paintModeRef.current = null;
+      onStartResize(note.id, e.clientX, note.durationSteps, note.startStep);
+    } else {
+      paintModeRef.current = 'remove';
+      lastPaintedRef.current = note.id;
+      onRemoveNote(note.id);
+    }
+  }
+
+  function handleNoteEnter(note: Note) {
+    if (paintModeRef.current !== 'remove') return;
+    if (note.id === lastPaintedRef.current) return;
+    lastPaintedRef.current = note.id;
+    onRemoveNote(note.id);
+  }
+
+  const noteRects = useMemo(() =>
+    track.notes.filter(n => n.startStep < totalSteps),
+    [track.notes, totalSteps],
+  );
 
   return (
     <div className="me-piano-roll">
@@ -193,7 +284,8 @@ function PianoRoll({
               key={pitch}
               className={`me-key ${isBlack ? 'me-key--black' : 'me-key--white'}`}
               style={{ height: ROW_H }}
-              onMouseDown={() => onPreviewPitch(pitch)}
+              onMouseDown={() => { onPreviewPitch(pitch); lastPreviewPitchRef.current = pitch; }}
+              onMouseEnter={e => { if (e.buttons === 1) { onPreviewPitch(pitch); lastPreviewPitchRef.current = pitch; } }}
             >
               {isC && <span className="me-key__label">{pitchName(pitch)}</span>}
             </div>
@@ -203,49 +295,76 @@ function PianoRoll({
 
       {/* Note grid */}
       <div className="me-note-grid-wrap">
-        <div
-          className="me-note-grid"
-          style={{ width: gridWidth, height: gridHeight }}
-        >
-          {/* Beat / bar dividers */}
-          {Array.from({ length: totalSteps }, (_, s) => s).map(step => (
-            <div
-              key={`div-${step}`}
-              className={`me-step-col ${step % (stepsPerBeat * beatsPerBar) === 0 ? 'me-step-col--bar' : step % stepsPerBeat === 0 ? 'me-step-col--beat' : ''}`}
-              style={{ left: step * STEP_W, width: STEP_W, height: gridHeight }}
-            />
-          ))}
+        <div className="me-note-grid" style={{ width: gridWidth, height: gridHeight }}>
 
-          {/* Note cells */}
+          {/* Step column markers (beat / bar lines) */}
+          {Array.from({ length: totalSteps }, (_, s) => s).map(step => {
+            const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
+            const isBeat = !isBar && step % stepsPerBeat === 0;
+            const isQ4   = !isBar && !isBeat && step % 4 === 0;
+            return (
+              <div
+                key={`col-${step}`}
+                className={`me-step-col${isBar ? ' me-step-col--bar' : isBeat ? ' me-step-col--beat' : isQ4 ? ' me-step-col--q4' : ''}`}
+                style={{ left: step * STEP_W, width: STEP_W, height: gridHeight }}
+              />
+            );
+          })}
+
+          {/* Background cells (only where no note occupies) */}
           {PITCH_RANGE.map((pitch, rowIdx) => {
             const isBlack = isBlackPitch(pitch);
             return Array.from({ length: totalSteps }, (_, step) => {
-              const hasNote = noteSet.has(`${pitch},${step}`);
+              if (noteMap.has(`${pitch},${step}`)) return null;
               return (
                 <div
-                  key={`${pitch}-${step}`}
-                  className={`me-cell ${isBlack ? 'me-cell--black' : 'me-cell--white'} ${hasNote ? 'me-cell--note' : ''}`}
-                  style={{
-                    left: step * STEP_W,
-                    top: rowIdx * ROW_H,
-                    width: STEP_W,
-                    height: ROW_H,
-                    ...(hasNote ? { background: track.color } : {}),
-                  }}
-                  onMouseDown={() => onToggleNote(pitch, step)}
+                  key={`bg-${pitch}-${step}`}
+                  className={`me-cell ${isBlack ? 'me-cell--black' : 'me-cell--white'}`}
+                  style={{ left: step * STEP_W, top: rowIdx * ROW_H, width: STEP_W, height: ROW_H }}
+                  onMouseDown={e => { e.preventDefault(); handleCellDown(pitch, step); }}
+                  onMouseEnter={() => handleCellEnter(pitch, step)}
                 />
               );
             });
           })}
 
-          {/* Horizontal dividers (pitch rows) */}
+          {/* Note rectangles */}
+          {noteRects.map(note => {
+            const rowIdx = PITCH_TO_ROW.get(note.pitch);
+            if (rowIdx === undefined) return null;
+            const displayDur = Math.min(note.durationSteps, totalSteps - note.startStep);
+            const noteW = displayDur * STEP_W;
+            return (
+              <div
+                key={note.id}
+                className="me-note-rect"
+                style={{
+                  left: note.startStep * STEP_W,
+                  top: rowIdx * ROW_H,
+                  width: noteW,
+                  height: ROW_H,
+                  background: track.color,
+                }}
+                onMouseDown={e => handleNoteDown(e, note, noteW)}
+                onMouseEnter={() => handleNoteEnter(note)}
+              >
+                <div
+                  className="me-note-resize-handle"
+                  onMouseDown={e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    paintModeRef.current = null;
+                    onStartResize(note.id, e.clientX, note.durationSteps, note.startStep);
+                  }}
+                />
+              </div>
+            );
+          })}
+
+          {/* Octave dividers (at each C) */}
           {PITCH_RANGE.map((pitch, rowIdx) =>
             pitch % 12 === 0 ? (
-              <div
-                key={`row-div-${pitch}`}
-                className="me-row-divider"
-                style={{ top: rowIdx * ROW_H, width: gridWidth }}
-              />
+              <div key={`od-${pitch}`} className="me-row-divider" style={{ top: rowIdx * ROW_H, width: gridWidth }} />
             ) : null
           )}
 
@@ -269,7 +388,10 @@ interface StepSeqProps {
   stepsPerBeat: number;
   beatsPerBar: number;
   seqPlayheadRef: React.RefObject<HTMLDivElement | null>;
-  onToggleNote: (pitch: number, step: number) => void;
+  seqPaintModeRef: React.RefObject<'add' | 'remove' | null>;
+  onAddDrumNote: (pitch: number, step: number) => void;
+  onRemoveDrumNote: (noteId: string) => void;
+  onPreviewDrum: (pitch: number) => void;
 }
 
 function StepSeq({
@@ -278,12 +400,46 @@ function StepSeq({
   stepsPerBeat,
   beatsPerBar,
   seqPlayheadRef,
-  onToggleNote,
+  seqPaintModeRef,
+  onAddDrumNote,
+  onRemoveDrumNote,
+  onPreviewDrum,
 }: StepSeqProps) {
-  const drumNoteSet = useMemo(() => buildNoteSet(track), [track]);
+  const drumNoteMap = useMemo(() => buildNoteMap(track), [track]);
+  const lastPaintedRef = useRef('');
 
   const gridWidth = totalSteps * SEQ_BTN_W;
   const gridHeight = DRUM_TYPES.length * SEQ_BTN_H;
+
+  function handleBtnDown(pitch: number, step: number) {
+    const key = `${pitch},${step}`;
+    const existingId = drumNoteMap.get(key);
+    if (existingId) {
+      seqPaintModeRef.current = 'remove';
+      lastPaintedRef.current = existingId;
+      onRemoveDrumNote(existingId);
+    } else {
+      seqPaintModeRef.current = 'add';
+      lastPaintedRef.current = key;
+      onAddDrumNote(pitch, step);
+      onPreviewDrum(pitch);
+    }
+  }
+
+  function handleBtnEnter(pitch: number, step: number) {
+    const key = `${pitch},${step}`;
+    if (seqPaintModeRef.current === 'add') {
+      if (key === lastPaintedRef.current || drumNoteMap.has(key)) return;
+      lastPaintedRef.current = key;
+      onAddDrumNote(pitch, step);
+      onPreviewDrum(pitch);
+    } else if (seqPaintModeRef.current === 'remove') {
+      const existingId = drumNoteMap.get(key);
+      if (!existingId || existingId === lastPaintedRef.current) return;
+      lastPaintedRef.current = existingId;
+      onRemoveDrumNote(existingId);
+    }
+  }
 
   return (
     <div className="me-step-seq">
@@ -298,34 +454,40 @@ function StepSeq({
 
       <div className="me-step-seq__grid-wrap">
         <div className="me-step-seq__grid" style={{ width: gridWidth, height: gridHeight + SEQ_BTN_H }}>
+
           {/* Step indicator row */}
           <div className="me-seq-indicator-row" style={{ width: gridWidth }}>
-            {Array.from({ length: totalSteps }, (_, s) => s).map(step => (
-              <div
-                key={step}
-                className={`me-seq-step-num ${step % (stepsPerBeat * beatsPerBar) === 0 ? 'me-seq-step-num--bar' : step % stepsPerBeat === 0 ? 'me-seq-step-num--beat' : ''}`}
-                style={{ width: SEQ_BTN_W }}
-              />
-            ))}
+            {Array.from({ length: totalSteps }, (_, s) => s).map(step => {
+              const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
+              const isBeat = !isBar && step % stepsPerBeat === 0;
+              const isQ4   = !isBar && !isBeat && step % 4 === 0;
+              return (
+                <div
+                  key={step}
+                  className={`me-seq-step-num${isBar ? ' me-seq-step-num--bar' : isBeat ? ' me-seq-step-num--beat' : isQ4 ? ' me-seq-step-num--q4' : ''}`}
+                  style={{ width: SEQ_BTN_W }}
+                />
+              );
+            })}
           </div>
 
           {/* Button rows */}
-          {DRUM_TYPES.map((dt: DrumType, rowIdx) => {
+          {DRUM_TYPES.map((dt: DrumType) => {
             const pitch = DRUM_PITCHES[dt];
             return (
               <div key={dt} className="me-seq-row" style={{ height: SEQ_BTN_H }}>
                 {Array.from({ length: totalSteps }, (_, step) => {
-                  const isOn = drumNoteSet.has(`${pitch},${step}`);
-                  const isBeat = step % stepsPerBeat === 0;
-                  const isBar = step % (stepsPerBeat * beatsPerBar) === 0;
+                  const isOn   = drumNoteMap.has(`${pitch},${step}`);
+                  const isBar  = step % (stepsPerBeat * beatsPerBar) === 0;
+                  const isBeat = !isBar && step % stepsPerBeat === 0;
+                  const isQ4   = !isBar && !isBeat && step % 4 === 0;
                   return (
                     <button
                       key={step}
-                      className={`me-seq-btn ${isOn ? 'me-seq-btn--on' : 'me-seq-btn--off'} ${isBeat ? 'me-seq-btn--beat' : ''} ${isBar ? 'me-seq-btn--bar' : ''}`}
+                      className={`me-seq-btn${isOn ? ' me-seq-btn--on' : ' me-seq-btn--off'}${isBar ? ' me-seq-btn--bar' : isBeat ? ' me-seq-btn--beat' : isQ4 ? ' me-seq-btn--q4' : ''}`}
                       style={{ width: SEQ_BTN_W, height: SEQ_BTN_H, ...(isOn ? { background: track.color } : {}) }}
-                      onMouseDown={() => onToggleNote(pitch, step)}
-                      data-row={rowIdx}
-                      data-step={step}
+                      onMouseDown={e => { e.preventDefault(); handleBtnDown(pitch, step); }}
+                      onMouseEnter={() => handleBtnEnter(pitch, step)}
                     />
                   );
                 })}
@@ -365,32 +527,41 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const playheadRef = useRef<HTMLDivElement | null>(null);
   const seqPlayheadRef = useRef<HTMLDivElement | null>(null);
 
-  const melodicTracks = useMemo(
-    () => pattern.tracks.filter(t => !t.isDrum),
-    [pattern.tracks],
-  );
-  const drumTrack = useMemo(
-    () => pattern.tracks.find(t => t.isDrum)!,
-    [pattern.tracks],
-  );
-  const activeTrack = melodicTracks[activeTrackIdx] ?? melodicTracks[0];
+  // Paint drag refs (cleared on global mouseup)
+  const paintModeRef = useRef<'add' | 'remove' | null>(null);
+  const seqPaintModeRef = useRef<'add' | 'remove' | null>(null);
+
+  // Resize drag refs
+  const resizeModeRef = useRef(false);
+  const resizeStateRef = useRef<{
+    noteId: string; trackId: string;
+    startX: number; origDuration: number; noteStartStep: number;
+  } | null>(null);
+
+  const activeTrackRef = useRef<Track | null>(null);
+
+  const melodicTracks = useMemo(() => pattern.tracks.filter(t => !t.isDrum), [pattern.tracks]);
+  const drumTrack = useMemo(() => pattern.tracks.find(t => t.isDrum)!, [pattern.tracks]);
+
+  const clampedIdx = Math.min(activeTrackIdx, melodicTracks.length - 1);
+  const activeTrack = melodicTracks[clampedIdx] ?? melodicTracks[0];
+  activeTrackRef.current = activeTrack;
 
   const totalSteps = useMemo(
     () => pattern.bars * pattern.beatsPerBar * pattern.stepsPerBeat,
     [pattern.bars, pattern.beatsPerBar, pattern.stepsPerBeat],
   );
 
-  // Move playhead refs — called from timer, no React state change
+  // ── Playback ─────────────────────────────────────────────────────────────────
+
   function movePlayhead(step: number) {
-    const x = step * STEP_W;
     if (playheadRef.current) {
       playheadRef.current.style.display = 'block';
-      playheadRef.current.style.transform = `translateX(${x}px)`;
+      playheadRef.current.style.transform = `translateX(${step * STEP_W}px)`;
     }
-    const sx = step * SEQ_BTN_W;
     if (seqPlayheadRef.current) {
       seqPlayheadRef.current.style.display = 'block';
-      seqPlayheadRef.current.style.transform = `translateX(${sx}px)`;
+      seqPlayheadRef.current.style.transform = `translateX(${step * SEQ_BTN_W}px)`;
     }
   }
 
@@ -401,10 +572,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const stopPlayback = useCallback(() => {
     isPlayingRef.current = false;
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    if (timerRef.current !== null) { clearTimeout(timerRef.current); timerRef.current = null; }
     stepRef.current = 0;
     setIsPlaying(false);
     hidePlayhead();
@@ -422,20 +590,15 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     pat.tracks.forEach(track => {
       if (track.muted) return;
       track.notes.forEach((note: Note) => {
-        if (note.startStep !== step) return;
-        if (note.startStep >= total) return;
+        if (note.startStep !== step || note.startStep >= total) return;
         const dur = note.durationSteps * stepDurSec * 0.85;
-        if (track.isDrum) {
-          playDrum(note.pitch, note.velocity);
-        } else {
-          playNote(note.pitch, note.velocity, dur, track.waveform);
-        }
+        if (track.isDrum) playDrum(note.pitch, note.velocity);
+        else playNote(note.pitch, note.velocity, dur, track.waveform);
       });
     });
 
     stepRef.current = (step + 1) % total;
-    const ms = (60_000 / pat.bpm) / pat.stepsPerBeat;
-    timerRef.current = setTimeout(tick, ms);
+    timerRef.current = setTimeout(tick, (60_000 / pat.bpm) / pat.stepsPerBeat);
   }, []);
 
   const startPlayback = useCallback(() => {
@@ -443,42 +606,139 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     isPlayingRef.current = true;
     stepRef.current = 0;
     setIsPlaying(true);
-    const ms = (60_000 / patternRef.current.bpm) / patternRef.current.stepsPerBeat;
-    timerRef.current = setTimeout(tick, ms);
+    timerRef.current = setTimeout(tick, (60_000 / patternRef.current.bpm) / patternRef.current.stepsPerBeat);
   }, [tick]);
 
-  // Clean up on unmount
   useEffect(() => () => { stopPlayback(); }, [stopPlayback]);
 
-  const toggleNote = useCallback((trackId: string, pitch: number, step: number) => {
+  // ── Global mouse events (resize + clear paint mode) ───────────────────────────
+
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!resizeModeRef.current || !resizeStateRef.current) return;
+      const { noteId, trackId, startX, origDuration, noteStartStep } = resizeStateRef.current;
+      const deltaSteps = Math.round((e.clientX - startX) / STEP_W);
+      const pat = patternRef.current;
+      const maxDur = pat.bars * pat.beatsPerBar * pat.stepsPerBeat - noteStartStep;
+      const newDur = Math.max(1, Math.min(maxDur, origDuration + deltaSteps));
+      setPattern(prev => ({
+        ...prev,
+        tracks: prev.tracks.map(t => t.id !== trackId ? t : {
+          ...t,
+          notes: t.notes.map(n => n.id !== noteId ? n : { ...n, durationSteps: newDur }),
+        }),
+      }));
+    }
+
+    function handleMouseUp() {
+      paintModeRef.current = null;
+      seqPaintModeRef.current = null;
+      resizeModeRef.current = false;
+      resizeStateRef.current = null;
+    }
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  // ── Spacebar play/pause ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.code !== 'Space') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+      if (isPlayingRef.current) stopPlayback(); else startPlayback();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [startPlayback, stopPlayback]);
+
+  // ── Note editing ──────────────────────────────────────────────────────────────
+
+  const addNote = useCallback((trackId: string, pitch: number, step: number) => {
     setPattern(prev => ({
       ...prev,
-      tracks: prev.tracks.map(track => {
-        if (track.id !== trackId) return track;
-        const existing = track.notes.find(n => n.startStep === step && n.pitch === pitch);
-        if (existing) {
-          return { ...track, notes: track.notes.filter(n => n.id !== existing.id) };
-        }
-        const newNote: Note = {
-          id: makeNoteId(),
-          pitch,
-          startStep: step,
-          durationSteps: 1,
-          velocity: 100,
-        };
-        return { ...track, notes: [...track.notes, newNote] };
+      tracks: prev.tracks.map(t => {
+        if (t.id !== trackId) return t;
+        if (t.notes.some(n => n.startStep === step && n.pitch === pitch)) return t;
+        const newNote: Note = { id: makeNoteId(), pitch, startStep: step, durationSteps: 1, velocity: 100 };
+        return { ...t, notes: [...t.notes, newNote] };
       }),
     }));
   }, []);
 
-  const muteTrack = useCallback((trackId: string) => {
+  const removeNote = useCallback((trackId: string, noteId: string) => {
     setPattern(prev => ({
       ...prev,
       tracks: prev.tracks.map(t =>
-        t.id === trackId ? { ...t, muted: !t.muted } : t
+        t.id !== trackId ? t : { ...t, notes: t.notes.filter(n => n.id !== noteId) }
       ),
     }));
   }, []);
+
+  const startResizeNote = useCallback((noteId: string, startX: number, origDuration: number, noteStartStep: number) => {
+    resizeModeRef.current = true;
+    resizeStateRef.current = {
+      noteId,
+      trackId: activeTrackRef.current?.id ?? '',
+      startX,
+      origDuration,
+      noteStartStep,
+    };
+  }, []);
+
+  // ── Track management ──────────────────────────────────────────────────────────
+
+  const muteTrack = useCallback((trackId: string) => {
+    setPattern(prev => ({
+      ...prev,
+      tracks: prev.tracks.map(t => t.id === trackId ? { ...t, muted: !t.muted } : t),
+    }));
+  }, []);
+
+  const changeWaveform = useCallback((trackId: string, waveform: OscWaveform) => {
+    setPattern(prev => ({
+      ...prev,
+      tracks: prev.tracks.map(t => t.id === trackId ? { ...t, waveform } : t),
+    }));
+  }, []);
+
+  const addTrack = useCallback(() => {
+    setPattern(prev => {
+      const melodic = prev.tracks.filter(t => !t.isDrum);
+      if (melodic.length >= 10) return prev;
+      const idx = melodic.length;
+      const newTrack: Track = {
+        id: `t${makeNoteId()}`,
+        name: `Trk ${idx + 1}`,
+        color: TRACK_COLORS[idx % TRACK_COLORS.length],
+        waveform: 'sine',
+        notes: [],
+        muted: false,
+        isDrum: false,
+      };
+      return {
+        ...prev,
+        tracks: [...prev.tracks.filter(t => !t.isDrum), newTrack, ...prev.tracks.filter(t => t.isDrum)],
+      };
+    });
+  }, []);
+
+  const removeActiveTrack = useCallback(() => {
+    setPattern(prev => {
+      const melodic = prev.tracks.filter(t => !t.isDrum);
+      if (melodic.length <= 1) return prev;
+      const toRemove = melodic[Math.min(activeTrackIdx, melodic.length - 1)];
+      return { ...prev, tracks: prev.tracks.filter(t => t.id !== toRemove.id) };
+    });
+    setActiveTrackIdx(prev => Math.max(0, prev - 1));
+  }, [activeTrackIdx]);
 
   const newPattern = useCallback(() => {
     stopPlayback();
@@ -486,12 +746,19 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     setActiveTrackIdx(0);
   }, [stopPlayback]);
 
+  // ── Preview ───────────────────────────────────────────────────────────────────
+
   const previewPitch = useCallback((pitch: number) => {
     resumeAudio();
-    playNote(pitch, 100, 0.4, activeTrack.waveform);
-  }, [activeTrack]);
+    playNote(pitch, 100, 0.35, activeTrackRef.current?.waveform ?? 'sine');
+  }, []);
 
-  // ── Window menus ─────────────────────────────────────────────────────────────
+  const previewDrum = useCallback((pitch: number) => {
+    resumeAudio();
+    playDrum(pitch, 100);
+  }, []);
+
+  // ── Window menus ──────────────────────────────────────────────────────────────
 
   const menus = useMemo<MenuBarMenu[]>(() => [
     {
@@ -515,11 +782,11 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       label: 'Track',
       items: melodicTracks.map((t, i) => ({
         label: t.name,
-        checked: i === activeTrackIdx,
+        checked: i === clampedIdx,
         onClick: () => setActiveTrackIdx(i),
       })),
     },
-  ], [isPlaying, startPlayback, stopPlayback, newPattern, onQuit, melodicTracks, activeTrackIdx]);
+  ], [isPlaying, startPlayback, stopPlayback, newPattern, onQuit, melodicTracks, clampedIdx]);
 
   useWindowMenus(menus);
 
@@ -530,14 +797,19 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       <Transport
         pattern={pattern}
         isPlaying={isPlaying}
-        activeTrackIdx={activeTrackIdx}
+        activeTrackIdx={clampedIdx}
+        activeTrack={activeTrack}
+        melodicTrackCount={melodicTracks.length}
         onPlay={startPlayback}
         onStop={stopPlayback}
         onBpmChange={bpm => setPattern(p => ({ ...p, bpm: Math.max(40, Math.min(240, bpm)) }))}
         onBarsChange={bars => { stopPlayback(); setPattern(p => ({ ...p, bars })); }}
-        onStepsPerBeatChange={stepsPerBeat => { stopPlayback(); setPattern(p => ({ ...p, stepsPerBeat })); }}
+        onStepsPerBeatChange={spb => { stopPlayback(); setPattern(p => ({ ...p, stepsPerBeat: spb })); }}
         onActiveTrackChange={setActiveTrackIdx}
         onMuteTrack={muteTrack}
+        onChangeWaveform={changeWaveform}
+        onAddTrack={addTrack}
+        onRemoveTrack={removeActiveTrack}
         onNewPattern={newPattern}
       />
 
@@ -551,7 +823,10 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
               stepsPerBeat={pattern.stepsPerBeat}
               beatsPerBar={pattern.beatsPerBar}
               playheadRef={playheadRef}
-              onToggleNote={(pitch, step) => toggleNote(activeTrack.id, pitch, step)}
+              paintModeRef={paintModeRef}
+              onAddNote={(pitch, step) => addNote(activeTrack.id, pitch, step)}
+              onRemoveNote={noteId => removeNote(activeTrack.id, noteId)}
+              onStartResize={startResizeNote}
               onPreviewPitch={previewPitch}
             />
           </div>
@@ -567,7 +842,10 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
             stepsPerBeat={pattern.stepsPerBeat}
             beatsPerBar={pattern.beatsPerBar}
             seqPlayheadRef={seqPlayheadRef}
-            onToggleNote={(pitch, step) => toggleNote(drumTrack.id, pitch, step)}
+            seqPaintModeRef={seqPaintModeRef}
+            onAddDrumNote={(pitch, step) => addNote(drumTrack.id, pitch, step)}
+            onRemoveDrumNote={noteId => removeNote(drumTrack.id, noteId)}
+            onPreviewDrum={previewDrum}
           />
         </div>
       </div>
