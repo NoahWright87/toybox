@@ -51,7 +51,7 @@
   color: #555;
 }
 
-/* Win95 buttons */
+/* ── Win95 buttons ─────────────────────────────────────────────────────────── */
 .me-btn {
   background: #c0c0c0;
   border: 2px solid;
@@ -93,6 +93,16 @@
   background: #d4d0c8;
 }
 
+.me-btn--primary {
+  background: #c0d8f0;
+  border-color: #ffffff #4060a0 #4060a0 #ffffff;
+}
+
+.me-btn--danger {
+  background: #f0c0c0;
+  border-color: #ffffff #a04040 #a04040 #ffffff;
+}
+
 .me-num-input {
   background: #ffffff;
   border: 2px solid;
@@ -121,45 +131,17 @@
   cursor: pointer;
 }
 
-/* Track tab buttons */
-.me-track-btn {
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  color: #000;
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  cursor: pointer;
-  padding: 3px 6px;
-}
-
-.me-track-btn::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--track-color);
-  margin-right: 4px;
-  border: 1px solid #000;
-  vertical-align: middle;
-}
-
-.me-track-btn--active {
-  border-color: #808080 #ffffff #ffffff #808080;
-  background: #d4d0c8;
-}
-
 /* Mute buttons */
 .me-mute-btn {
-  background: var(--track-color);
+  background: var(--tcolor, #c89000);
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
   color: #fff;
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
   cursor: pointer;
-  padding: 3px 5px;
-  min-width: 22px;
+  padding: 2px 4px;
+  min-width: 18px;
   text-align: center;
   text-shadow: 1px 1px 0 #000;
 }
@@ -171,67 +153,226 @@
   text-decoration: line-through;
 }
 
-/* ── Body layout ───────────────────────────────────────────────────────────── */
-.me-body {
+/* ── Main scrollable area (single 2D-sticky container) ─────────────────────── */
+.me-outer {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
   min-height: 0;
 }
 
-.me-section-label {
+/* Content column — position:relative anchors the absolute playhead */
+.me-inner {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ── Time ruler (sticky top) ───────────────────────────────────────────────── */
+.me-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
   flex-shrink: 0;
   background: #d4d0c8;
   border-bottom: 1px solid #808080;
-  padding: 2px 6px;
-  font-size: 6px;
-  color: #444;
-  letter-spacing: 1px;
 }
 
-/* Wrapper: passes height down into the piano roll */
-.me-piano-roll-wrap {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-}
-
-/* ── Piano Roll — split layout ─────────────────────────────────────────────── */
-/*
-  Row flex: [keys-col (fixed, 42px)] [grid-h-scroll (flex:1)]
-  keys-col:    piano keys (overflow:hidden, scroll-synced) + drum labels (fixed)
-  grid-h-scroll: overflows-x; inside: melodic grid (v-scroll, flex:1) + drum grid (fixed)
-  The drum section is always visible — no vertical scrolling required to reach it.
-*/
-
-.me-piano-roll {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  overflow: hidden;
-  min-height: 0;
-}
-
-/* Left sidebar: always visible, never scrolls horizontally */
-.me-keys-col {
+/* Corner cell: sticky in both axes (top + left) */
+.me-ruler-corner {
+  position: sticky;
+  left: 0;
+  z-index: 6;
   flex-shrink: 0;
-  width: 42px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
   background: #d4d0c8;
   border-right: 2px solid #808080;
 }
 
-/* Piano keys area — overflow hidden; scrollTop driven by JS scroll-sync */
-.me-keys-scroll {
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
+/* Ruler steps area — marks are absolutely positioned inside */
+.me-ruler-steps {
+  position: relative;
+  flex-shrink: 0;
 }
 
+.me-ruler-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 2px;
+  font-size: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.me-ruler-mark--bar {
+  border-left: 2px solid #484440;
+  color: #000;
+}
+
+.me-ruler-mark--beat {
+  border-left: 1px solid #888880;
+  color: #999;
+  font-size: 5px;
+}
+
+/* ── Track sections (accordion) ────────────────────────────────────────────── */
+.me-track-section {
+  flex-shrink: 0;
+  border-bottom: 1px solid #808080;
+}
+
+/* Header row: sticky-left controls + tinted fill */
+.me-track-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.me-track-header-left {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  background: #c0c0c0;
+  border-right: 2px solid #808080;
+  border-bottom: 1px solid #606060;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.me-track-header-fill {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
+}
+
+.me-track-collapse {
+  background: none;
+  border: 1px solid #808080;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  cursor: pointer;
+  padding: 1px 3px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.me-track-collapse:hover { background: #d4d0c8; }
+
+.me-track-color-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.4);
+}
+
+.me-track-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 6px;
+  color: #000;
+}
+
+.me-track-header-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.me-icon-btn {
+  background: none;
+  border: 1px solid #808080;
+  color: #000;
+  font-size: 8px;
+  cursor: pointer;
+  padding: 1px 3px;
+  line-height: 1;
+  font-family: monospace;
+}
+
+.me-icon-btn:hover { background: #d4d0c8; }
+
+.me-icon-btn--del { color: #a04040; }
+.me-icon-btn--del:hover { background: #f0c0c0; }
+
+/* Content row when track is expanded */
+.me-track-content {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+/* Left sidebar: sticky in both axes; holds color strip + piano/drum labels */
+.me-track-left {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  background: #d4d0c8;
+  border-right: 2px solid #808080;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Colored tint strip between edge and key labels */
+.me-track-color-strip {
+  flex: 1;
+  min-width: 0;
+}
+
+.me-track-keys-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Add-track footer row ──────────────────────────────────────────────────── */
+.me-add-track-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-top: 2px solid #808080;
+}
+
+.me-add-track-left {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  background: #c0c0c0;
+  border-right: 2px solid #808080;
+  box-sizing: border-box;
+}
+
+.me-add-track-fill {
+  flex-shrink: 0;
+  background: #d4d0c8;
+}
+
+/* ── Piano keys ────────────────────────────────────────────────────────────── */
 .me-key {
   display: flex;
   align-items: center;
@@ -240,6 +381,7 @@
   cursor: pointer;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .me-key--white { background: #f0f0e8; }
@@ -255,13 +397,7 @@
 
 .me-key--black .me-key__label { color: #aaa; }
 
-/* Separator between piano keys and drum labels in sidebar */
-.me-drum-key-sep {
-  flex-shrink: 0;
-  background: #606060;
-}
-
-/* Drum row labels in sidebar */
+/* Drum row labels */
 .me-drum-key {
   flex-shrink: 0;
   display: flex;
@@ -278,41 +414,13 @@
 
 .me-drum-key:hover { background: #c8beb6; }
 
-/* ── Grid area ─────────────────────────────────────────────────────────────── */
-
-/* Handles horizontal scroll for both melodic and drum grids */
-.me-grid-h-scroll {
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* Content container: min-width forces horizontal scroll; positioned for playhead */
-.me-grid-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  min-height: 0;
-}
-
-/* Melodic grid: takes all remaining vertical space, scrolls vertically */
-.me-melodic-scroll {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-}
-
-/* Note grid canvas (melodic) */
+/* ── Note grid ─────────────────────────────────────────────────────────────── */
 .me-note-grid {
   position: relative;
+  flex-shrink: 0;
 }
 
-/* Step column overlays */
+/* Step column markers */
 .me-step-col {
   position: absolute;
   top: 0;
@@ -372,21 +480,12 @@
   z-index: 3;
 }
 
-/* ── Drum section ──────────────────────────────────────────────────────────── */
-
-/* Thick separator between melodic and drum areas */
-.me-drum-section-sep {
-  flex-shrink: 0;
-  background: #606060;
-}
-
-/* Drum grid: fixed height, always visible at bottom of grid area */
+/* ── Drum grid ─────────────────────────────────────────────────────────────── */
 .me-drum-grid {
-  flex-shrink: 0;
   position: relative;
+  flex-shrink: 0;
 }
 
-/* Drum step cells */
 .me-drum-cell {
   position: absolute;
   box-sizing: border-box;
@@ -400,7 +499,6 @@
 .me-drum-cell--bar  { background: #bcb8b0; }
 .me-drum-cell:hover { background: #d8c8a0; }
 
-/* Active cell — filled bubble via ::after */
 .me-drum-cell--on { cursor: pointer; }
 
 .me-drum-cell--on::after {
@@ -426,3 +524,138 @@
   z-index: 10;
   box-shadow: 0 0 4px rgba(255, 80, 0, 0.5);
 }
+
+/* ── Modal overlays ────────────────────────────────────────────────────────── */
+.me-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.me-modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 240px;
+  max-width: 320px;
+  width: 90vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.me-modal__title {
+  background: linear-gradient(90deg, #cc4400, #884400);
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 4px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.me-modal__close {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  font-size: 7px;
+  cursor: pointer;
+  padding: 1px 4px;
+  font-family: "Press Start 2P", monospace;
+  line-height: 1;
+}
+
+.me-modal__body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.me-modal__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.me-modal__row--dim { opacity: 0.6; }
+
+.me-modal__footer {
+  padding: 6px 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  border-top: 1px solid #808080;
+  background: #d4d0c8;
+  flex-shrink: 0;
+}
+
+.me-text-input {
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 2px 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.me-color-swatches {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.me-color-swatch {
+  width: 16px;
+  height: 16px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.me-color-swatch--active {
+  border-color: #000 #000 #000 #000;
+  box-shadow: inset 0 0 0 1px #fff;
+}
+
+.me-slider {
+  flex: 1;
+  cursor: pointer;
+  accent-color: #cc4400;
+}
+
+/* ── Save / Load list ──────────────────────────────────────────────────────── */
+.me-save-list {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffffff;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.me-save-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 5px;
+  border-bottom: 1px solid #e0e0e0;
+  cursor: pointer;
+}
+
+.me-save-item:hover { background: #d4f0ff; }
+
+.me-save-item--load { cursor: default; }
+.me-save-item--load:hover { background: #f8f8f8; }

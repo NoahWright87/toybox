@@ -25,10 +25,11 @@ export function playNote(
   durationSec: number,
   waveform: OscWaveform,
   when?: number,
+  gain = 1,
 ): void {
   const c = getCtx();
   const t = when ?? c.currentTime;
-  const vol = (velocity / 127) * 0.22;
+  const vol = (velocity / 127) * 0.22 * Math.max(0, Math.min(1, gain));
 
   const osc = c.createOscillator();
   const env = c.createGain();
