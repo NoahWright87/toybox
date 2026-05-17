@@ -3,7 +3,7 @@
 .cr {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   padding: 12px 16px 16px;
   background: #c0c0c0;
@@ -17,48 +17,45 @@
 .cr__setup {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 14px;
   max-width: 420px;
-  text-align: center;
-  padding: 16px;
+  padding: 8px 0;
 }
 
 .cr__setup-title {
-  font-size: 14px;
+  font-size: 13px;
   color: #cc4400;
   letter-spacing: 2px;
   text-shadow: 2px 2px 0 #000;
+  align-self: center;
 }
 
 .cr__setup-desc {
   font-size: 7px;
-  line-height: 1.9;
+  line-height: 2;
   color: #333;
   margin: 0;
 }
 
 .cr__setup-start {
   color: #cc4400;
-  font-weight: bold;
 }
 
 .cr__setup-end {
   color: #5b2d8e;
-  font-weight: bold;
 }
 
 .cr__setup-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: center;
+  gap: 8px;
 }
 
 .cr__setup-label {
   font-size: 7px;
   color: #333;
+  min-width: 44px;
 }
 
 .cr__setup-options {
@@ -68,7 +65,7 @@
 
 .cr__setup-btn {
   font-family: "Press Start 2P", monospace;
-  font-size: 8px;
+  font-size: 7px;
   padding: 6px 10px;
   background: #c0c0c0;
   border: 2px solid;
@@ -94,6 +91,7 @@
   color: #fff;
   cursor: pointer;
   letter-spacing: 1px;
+  align-self: center;
 }
 
 .cr__start-btn:active {
@@ -106,13 +104,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  max-width: 480px;
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   padding: 6px 10px;
-  box-sizing: border-box;
 }
 
 .cr__lives {
@@ -139,15 +134,11 @@
 .cr__chain {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0;
-  width: 100%;
-  max-width: 480px;
+  align-items: flex-start;
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   padding: 10px 12px;
-  box-sizing: border-box;
   overflow-y: auto;
   max-height: 340px;
 }
@@ -155,23 +146,22 @@
 .cr__word-group {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  width: 100%;
+  align-items: flex-start;
 }
 
 .cr__word-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  justify-content: center;
 }
 
+/* Fixed-width tag column keeps all letter rows left-aligned */
 .cr__word-tag {
   font-size: 5px;
-  min-width: 36px;
+  width: 44px;
   text-align: right;
-  color: #808080;
+  flex-shrink: 0;
+  color: transparent; /* invisible for inner words */
   letter-spacing: 0.5px;
 }
 
@@ -202,45 +192,46 @@
   box-sizing: border-box;
 }
 
-/* Start word cells — orange theme */
+/* Start word — orange */
 .cr__cell--start {
   background: #ff6b00;
   border-color: #ffcc88 #664400 #664400 #ffcc88;
   color: #fff;
 }
 
-/* End word cells — purple theme */
+/* End word — purple */
 .cr__cell--end {
   background: #5b2d8e;
   border-color: #c080ff #2a1050 #2a1050 #c080ff;
   color: #fff;
 }
 
-/* Inner word cells (unrevealed) */
-.cr__cell--inner {
+/* Hidden inner cell — blank box */
+.cr__cell--hidden {
   background: #c0c0c0;
   border-color: #808080 #ffffff #ffffff #808080;
-  color: transparent; /* blank until revealed */
+  color: transparent;
 }
 
-/* Inner word connector cells (first/last letter — chain link, always shown) */
+/* Given first letter — shown via cascade, not guessed */
 .cr__cell--connector {
   background: #a0a098;
-  border-color: #606060 #d8d8d8 #d8d8d8 #606060;
-  color: #000;
+  border-color: #606060 #d0d0cc #d0d0cc #606060;
+  color: #111;
 }
 
-/* Inner word revealed cells (middle letters guessed correctly) */
-.cr__cell--revealed {
+/* Guessed letter — revealed by player */
+.cr__cell--guessed {
   background: #228833;
   border-color: #66cc88 #115522 #115522 #66cc88;
   color: #fff;
 }
 
+/* Arrow between word rows — indented to align under the letters */
 .cr__arrow {
   font-size: 10px;
   color: #808080;
-  padding: 2px 0;
+  padding: 1px 0 1px 50px; /* 44px tag + 6px gap */
   line-height: 1;
 }
 
@@ -251,11 +242,8 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  max-width: 480px;
   padding: 10px;
   border: 2px solid;
-  box-sizing: border-box;
 }
 
 .cr__result--won {
@@ -279,16 +267,14 @@
   color: #fff;
 }
 
-/* ── Alphabet keyboard ────────────────────────────────────────────────────── */
+/* ── On-screen keyboard ───────────────────────────────────────────────────── */
 
 .cr__keyboard {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   justify-content: center;
-  max-width: 480px;
-  width: 100%;
-  padding: 4px;
+  padding: 4px 0;
 }
 
 .cr__key {
