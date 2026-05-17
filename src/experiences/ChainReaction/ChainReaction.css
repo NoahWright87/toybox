@@ -19,8 +19,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 14px;
-  max-width: 420px;
-  padding: 8px 0;
+  padding: 4px 0;
 }
 
 .cr__setup-title {
@@ -38,13 +37,8 @@
   margin: 0;
 }
 
-.cr__setup-start {
-  color: #cc4400;
-}
-
-.cr__setup-end {
-  color: #5b2d8e;
-}
+.cr__start-text { color: #cc4400; }
+.cr__end-text   { color: #5b2d8e; }
 
 .cr__setup-row {
   display: flex;
@@ -72,7 +66,7 @@
   border-color: #ffffff #808080 #808080 #ffffff;
   cursor: pointer;
   color: #000;
-  min-width: 32px;
+  min-width: 36px;
 }
 
 .cr__setup-btn:active,
@@ -81,7 +75,9 @@
   background: #d4d0c8;
 }
 
-.cr__start-btn {
+/* ── Primary / big button ─────────────────────────────────────────────────── */
+
+.cr__primary-btn {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   padding: 10px 20px;
@@ -94,8 +90,28 @@
   align-self: center;
 }
 
-.cr__start-btn:active {
+.cr__primary-btn:active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+/* ── Won banner ───────────────────────────────────────────────────────────── */
+
+.cr__won-banner {
+  font-size: 11px;
+  color: #228833;
+  text-align: center;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+  padding: 6px 0;
+}
+
+.cr__won-stats {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  font-size: 7px;
+  color: #333;
+  padding: 4px 0 8px;
 }
 
 /* ── Status bar ───────────────────────────────────────────────────────────── */
@@ -103,30 +119,25 @@
 .cr__status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   padding: 6px 10px;
 }
 
-.cr__lives {
-  display: flex;
-  gap: 4px;
+.cr__status-item {
+  font-size: 7px;
+  color: #333;
 }
 
-.cr__life {
-  font-size: 10px;
-  color: #cc4400;
-}
-
-.cr__life--lost {
-  color: #808080;
-}
-
-.cr__score {
-  font-size: 8px;
+.cr__status-item strong {
   color: #000;
+}
+
+.cr__status-progress {
+  margin-left: auto;
+  color: #808080;
 }
 
 /* ── Chain display ────────────────────────────────────────────────────────── */
@@ -153,29 +164,33 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  border: 2px solid transparent;
+  padding: 1px 2px;
 }
 
-/* Fixed-width tag column keeps all letter rows left-aligned */
+/* Highlight the active word row */
+.cr__word-row--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c8c4bc;
+}
+
+/* Fixed-width label keeps all letter columns flush */
 .cr__word-tag {
   font-size: 5px;
   width: 44px;
   text-align: right;
   flex-shrink: 0;
-  color: transparent; /* invisible for inner words */
+  color: transparent;
   letter-spacing: 0.5px;
 }
 
-.cr__word-tag--start {
-  color: #cc4400;
-}
-
-.cr__word-tag--end {
-  color: #5b2d8e;
-}
+.cr__word-tag--start { color: #cc4400; }
+.cr__word-tag--end   { color: #5b2d8e; }
 
 .cr__letters {
   display: flex;
   gap: 3px;
+  align-items: center;
 }
 
 /* ── Letter cells ─────────────────────────────────────────────────────────── */
@@ -184,135 +199,147 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  font-size: 9px;
+  min-width: 28px;
+  height: 28px;
+  font-size: 8px;
   font-family: "Press Start 2P", monospace;
   border: 2px solid;
   box-sizing: border-box;
+  padding: 0 3px;
 }
 
-/* Start word — orange */
+/* START word — orange */
 .cr__cell--start {
   background: #ff6b00;
   border-color: #ffcc88 #664400 #664400 #ffcc88;
   color: #fff;
 }
 
-/* End word — purple */
+/* END word — purple */
 .cr__cell--end {
   background: #5b2d8e;
   border-color: #c080ff #2a1050 #2a1050 #c080ff;
   color: #fff;
 }
 
-/* Hidden inner cell — blank box */
-.cr__cell--hidden {
-  background: #c0c0c0;
-  border-color: #808080 #ffffff #ffffff #808080;
-  color: transparent;
+/* Solved inner word — green */
+.cr__cell--solved {
+  background: #228833;
+  border-color: #66cc88 #115522 #115522 #66cc88;
+  color: #fff;
 }
 
-/* Given first letter — shown via cascade, not guessed */
+/* Connector: given first letter (from previous word) */
 .cr__cell--connector {
   background: #a0a098;
   border-color: #606060 #d0d0cc #d0d0cc #606060;
   color: #111;
 }
 
-/* Guessed letter — revealed by player */
-.cr__cell--guessed {
-  background: #228833;
-  border-color: #66cc88 #115522 #115522 #66cc88;
+/* Leaked: revealed by a wrong guess */
+.cr__cell--leaked {
+  background: #b04400;
+  border-color: #d88844 #5c2200 #5c2200 #d88844;
   color: #fff;
 }
 
-/* Arrow between word rows — indented to align under the letters */
+/* Gap: unknown middle letters */
+.cr__cell--gap {
+  background: transparent;
+  border-color: transparent;
+  color: #808080;
+  font-size: 10px;
+  min-width: 18px;
+}
+
+/* Trailing: last letter given from END word */
+.cr__cell--trailing {
+  background: #3a1a5e;
+  border-color: #9060cc #1a0830 #1a0830 #9060cc;
+  color: #c8a0ff;
+}
+
+/* Future unknown placeholder */
+.cr__cell--unknown {
+  background: #c0c0c0;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #808080;
+  font-size: 8px;
+}
+
+/* Arrow between word rows */
 .cr__arrow {
   font-size: 10px;
   color: #808080;
-  padding: 1px 0 1px 50px; /* 44px tag + 6px gap */
+  padding: 1px 0 1px 50px; /* indent past the label column (44px + 6px gap) */
   line-height: 1;
 }
 
-/* ── Result banner ────────────────────────────────────────────────────────── */
+/* ── Input area ───────────────────────────────────────────────────────────── */
 
-.cr__result {
+.cr__input-area {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  background: #d4d0c8;
   border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px 12px;
 }
 
-.cr__result--won {
-  background: #228833;
-  border-color: #66cc88 #115522 #115522 #66cc88;
-}
-
-.cr__result--lost {
-  background: #882222;
-  border-color: #cc6666 #441111 #441111 #cc6666;
-}
-
-.cr__result-text {
-  font-size: 10px;
-  color: #fff;
-  letter-spacing: 1px;
-}
-
-.cr__result-score {
+.cr__input-hint {
   font-size: 7px;
-  color: #fff;
+  color: #333;
 }
 
-/* ── On-screen keyboard ───────────────────────────────────────────────────── */
+.cr__input-letter {
+  color: #cc4400;
+  font-size: 9px;
+}
 
-.cr__keyboard {
+.cr__input-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-  padding: 4px 0;
+  gap: 6px;
+  align-items: center;
 }
 
-.cr__key {
+.cr__input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  flex: 1;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
+  outline: none;
+  text-transform: lowercase;
+}
+
+.cr__input:focus {
+  border-color: #000080 #b0b0ff #b0b0ff #000080;
+}
+
+.cr__guess-btn {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
-  width: 30px;
-  height: 30px;
+  padding: 8px 12px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
   cursor: pointer;
   color: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  white-space: nowrap;
 }
 
-.cr__key:hover:not(:disabled) {
-  background: #d8d4cc;
-}
-
-.cr__key:active:not(:disabled) {
+.cr__guess-btn:active {
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
-.cr__key:disabled {
-  cursor: default;
+.cr__feedback {
+  font-size: 7px;
+  padding: 4px 0;
 }
 
-.cr__key--correct {
-  background: #228833;
-  border-color: #66cc88 #115522 #115522 #66cc88;
-  color: #fff;
-}
-
-.cr__key--wrong {
-  background: #808080;
-  border-color: #a0a0a0 #606060 #606060 #a0a0a0;
-  color: #c0c0c0;
-}
+.cr__feedback--wrong { color: #cc0000; }
+.cr__feedback--bad   { color: #886600; }
