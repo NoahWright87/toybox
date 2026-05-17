@@ -140,4 +140,11 @@ export const experiences: Experience[] = [
     category: "toy",
     path: "/midi-editor",
   },
+  {
+    id: "chain-reaction",
+    title: "Chain Reaction",
+    description: "Guess letters to reveal a chain of words linked end-to-end. Connect START to END before your lives run out.",
+    category: "game",
+    path: "/chain-reaction",
+  },
 ];

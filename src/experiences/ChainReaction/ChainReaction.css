@@ -1,0 +1,332 @@
+/* ── Container ────────────────────────────────────────────────────────────── */
+
+.cr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  background: #c0c0c0;
+  min-height: 100%;
+  font-family: "Press Start 2P", monospace;
+  box-sizing: border-box;
+}
+
+/* ── Setup screen ─────────────────────────────────────────────────────────── */
+
+.cr__setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 420px;
+  text-align: center;
+  padding: 16px;
+}
+
+.cr__setup-title {
+  font-size: 14px;
+  color: #cc4400;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.cr__setup-desc {
+  font-size: 7px;
+  line-height: 1.9;
+  color: #333;
+  margin: 0;
+}
+
+.cr__setup-start {
+  color: #cc4400;
+  font-weight: bold;
+}
+
+.cr__setup-end {
+  color: #5b2d8e;
+  font-weight: bold;
+}
+
+.cr__setup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cr__setup-label {
+  font-size: 7px;
+  color: #333;
+}
+
+.cr__setup-options {
+  display: flex;
+  gap: 4px;
+}
+
+.cr__setup-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 10px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+  min-width: 32px;
+}
+
+.cr__setup-btn:active,
+.cr__setup-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
+.cr__start-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 10px 20px;
+  background: #cc4400;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #fff;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+.cr__start-btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+/* ── Status bar ───────────────────────────────────────────────────────────── */
+
+.cr__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 480px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px 10px;
+  box-sizing: border-box;
+}
+
+.cr__lives {
+  display: flex;
+  gap: 4px;
+}
+
+.cr__life {
+  font-size: 10px;
+  color: #cc4400;
+}
+
+.cr__life--lost {
+  color: #808080;
+}
+
+.cr__score {
+  font-size: 8px;
+  color: #000;
+}
+
+/* ── Chain display ────────────────────────────────────────────────────────── */
+
+.cr__chain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 480px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  max-height: 340px;
+}
+
+.cr__word-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.cr__word-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+}
+
+.cr__word-tag {
+  font-size: 5px;
+  min-width: 36px;
+  text-align: right;
+  color: #808080;
+  letter-spacing: 0.5px;
+}
+
+.cr__word-tag--start {
+  color: #cc4400;
+}
+
+.cr__word-tag--end {
+  color: #5b2d8e;
+}
+
+.cr__letters {
+  display: flex;
+  gap: 3px;
+}
+
+/* ── Letter cells ─────────────────────────────────────────────────────────── */
+
+.cr__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 9px;
+  font-family: "Press Start 2P", monospace;
+  border: 2px solid;
+  box-sizing: border-box;
+}
+
+/* Start word cells — orange theme */
+.cr__cell--start {
+  background: #ff6b00;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #fff;
+}
+
+/* End word cells — purple theme */
+.cr__cell--end {
+  background: #5b2d8e;
+  border-color: #c080ff #2a1050 #2a1050 #c080ff;
+  color: #fff;
+}
+
+/* Inner word cells (unrevealed) */
+.cr__cell--inner {
+  background: #c0c0c0;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: transparent; /* blank until revealed */
+}
+
+/* Inner word connector cells (first/last letter — chain link, always shown) */
+.cr__cell--connector {
+  background: #a0a098;
+  border-color: #606060 #d8d8d8 #d8d8d8 #606060;
+  color: #000;
+}
+
+/* Inner word revealed cells (middle letters guessed correctly) */
+.cr__cell--revealed {
+  background: #228833;
+  border-color: #66cc88 #115522 #115522 #66cc88;
+  color: #fff;
+}
+
+.cr__arrow {
+  font-size: 10px;
+  color: #808080;
+  padding: 2px 0;
+  line-height: 1;
+}
+
+/* ── Result banner ────────────────────────────────────────────────────────── */
+
+.cr__result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+  padding: 10px;
+  border: 2px solid;
+  box-sizing: border-box;
+}
+
+.cr__result--won {
+  background: #228833;
+  border-color: #66cc88 #115522 #115522 #66cc88;
+}
+
+.cr__result--lost {
+  background: #882222;
+  border-color: #cc6666 #441111 #441111 #cc6666;
+}
+
+.cr__result-text {
+  font-size: 10px;
+  color: #fff;
+  letter-spacing: 1px;
+}
+
+.cr__result-score {
+  font-size: 7px;
+  color: #fff;
+}
+
+/* ── Alphabet keyboard ────────────────────────────────────────────────────── */
+
+.cr__keyboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  max-width: 480px;
+  width: 100%;
+  padding: 4px;
+}
+
+.cr__key {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  width: 30px;
+  height: 30px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.cr__key:hover:not(:disabled) {
+  background: #d8d4cc;
+}
+
+.cr__key:active:not(:disabled) {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.cr__key:disabled {
+  cursor: default;
+}
+
+.cr__key--correct {
+  background: #228833;
+  border-color: #66cc88 #115522 #115522 #66cc88;
+  color: #fff;
+}
+
+.cr__key--wrong {
+  background: #808080;
+  border-color: #a0a0a0 #606060 #606060 #a0a0a0;
+  color: #c0c0c0;
+}
