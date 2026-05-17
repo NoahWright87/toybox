@@ -127,6 +127,8 @@
   min-width: 150px;
   z-index: 9700;
   padding: 3px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .ns-start-menu__divider {
