@@ -208,21 +208,6 @@ export default function Words({ onQuit }: WordsProps) {
 
   return (
     <div className="words">
-      {/* Word length picker */}
-      <div className="words-length-bar">
-        <span className="words-len-label">Word size:</span>
-        {[4, 5, 6, 7, 8].map((n) => (
-          <button
-            key={n}
-            className={`words-len-btn${wordLength === n ? " words-len-btn--active" : ""}`}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => startNewGame(n)}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-
       {/* Message bar (error / win / lose) */}
       <div className="words-message-area">
         {message && (
@@ -296,32 +281,35 @@ export default function Words({ onQuit }: WordsProps) {
         })}
       </div>
 
-      {/* Action buttons — big and separate for easy tapping */}
+      {/* Action bar — Enter/Delete while playing, New Game when over */}
       <div className="words-actions">
-        <button
-          className="words-action-btn words-action-btn--back"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleKey("BACKSPACE")}
-        >
-          ⌫ Delete
-        </button>
-        <button
-          className="words-action-btn words-action-btn--enter"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleKey("ENTER")}
-        >
-          Enter ↵
-        </button>
-      </div>
-
-      {/* Post-game controls */}
-      {phase !== "playing" && (
-        <div className="words-controls">
-          <button className="words-btn words-btn--primary" onClick={() => startNewGame()}>
-            New Game
+        {phase === "playing" ? (
+          <>
+            <button
+              className="words-action-btn words-action-btn--back"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleKey("BACKSPACE")}
+            >
+              ⌫ Delete
+            </button>
+            <button
+              className="words-action-btn words-action-btn--enter"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleKey("ENTER")}
+            >
+              Enter ↵
+            </button>
+          </>
+        ) : (
+          <button
+            className="words-action-btn words-action-btn--new"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => startNewGame()}
+          >
+            New Game ↺
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

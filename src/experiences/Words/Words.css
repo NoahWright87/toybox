@@ -12,50 +12,6 @@
   user-select: none;
 }
 
-/* ── Word-length picker ───────────────────────────────────────────────────────── */
-
-.words-length-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: #d4d0c8;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  padding: 4px 8px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.words-len-label {
-  font-family: "Press Start 2P", monospace;
-  font-size: 6px;
-  color: #000;
-  margin-right: 4px;
-  white-space: nowrap;
-}
-
-.words-len-btn {
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 4px 8px;
-  cursor: pointer;
-  color: #000;
-  min-width: 28px;
-  line-height: 1;
-}
-
-.words-len-btn:active,
-.words-len-btn--active {
-  border-color: #808080 #ffffff #ffffff #808080;
-  background: #b0b0b0;
-}
-
-.words-len-btn--active {
-  color: #cc4400;
-}
 
 /* ── Message bar ─────────────────────────────────────────────────────────────── */
 
@@ -283,36 +239,15 @@
   background: #aa3300;
 }
 
-/* ── Post-game controls ──────────────────────────────────────────────────────── */
-
-.words-controls {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.words-btn {
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 6px 14px;
-  cursor: pointer;
-  color: #000;
-  line-height: 1;
-}
-
-.words-btn:active {
-  border-color: #808080 #ffffff #ffffff #808080;
-}
-
-.words-btn--primary {
-  background: #cc4400;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
+.words-action-btn--new {
+  flex: 1;
+  background: #228833;
+  border-color: #44aa55 #115522 #115522 #44aa55;
   color: #ffffff;
 }
 
-.words-btn--primary:active {
-  border-color: #664400 #ffcc88 #ffcc88 #664400;
+.words-action-btn--new:active {
+  border-color: #115522 #44aa55 #44aa55 #115522;
+  background: #1a6626;
 }
+
