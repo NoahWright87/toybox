@@ -19,6 +19,7 @@ import HellPage from "./pages/HellzonePage";
 import ComponentTestPage from "./pages/ComponentTestPage";
 import PoolPage from "./pages/PoolPage";
 import MidiEditorPage from "./pages/MidiEditorPage";
+import WordsPage from "./pages/WordsPage";
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/hell" element={<HellPage />} />
         <Route path="/pool" element={<PoolPage />} />
         <Route path="/midi-editor" element={<MidiEditorPage />} />
+        <Route path="/words" element={<WordsPage />} />
         <Route path="/component-test" element={<ComponentTestPage />} />
       </Routes>
     </BrowserRouter>

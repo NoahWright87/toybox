@@ -22,6 +22,7 @@ import NotebookApp from "./NotebookApp";
 import InternetApp from "./InternetApp";
 import NsArt, { type NsArtHandle } from "../NsArt/NsArt";
 import WordWhirlwind from "../WordWhirlwind/WordWhirlwind";
+import Words from "../Words/Words";
 import TicTacToe from "../TicTacToe/TicTacToe";
 import Pool from "../Pool/Pool";
 import DuckHunt from "../DuckHunt/DuckHunt";
@@ -55,6 +56,7 @@ type AppAction =
   | "tictactoe"
   | "nomnom"
   | "wordwhirlwind"
+  | "words"
   | "bombfinder"
   | "duckhunt"
   | "cards"
@@ -88,6 +90,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "tic-tac-toe":    { title: "Tic-Tac-Toe",       icon: "✖️",  action: "tictactoe"     },
   "number-muncher": { title: "Nom Nom Numerals",   icon: "🔢", action: "nomnom"        },
   "word-whirlwind": { title: "Word Whirlwind",     icon: "🌪️", action: "wordwhirlwind" },
+  "words":          { title: "WORDS",              icon: "🔤", action: "words"         },
   "bomb-finder":    { title: "Bomb Finder",        icon: "💣", action: "bombfinder"    },
   "duck-hunt":      { title: "Duck & Learn",       icon: "🎯", action: "duckhunt"        },
   "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"      },
@@ -173,6 +176,7 @@ type WindowContent =
   | { type: "tictactoe" }
   | { type: "nomnom" }
   | { type: "word-whirlwind" }
+  | { type: "words" }
   | { type: "bombfinder" }
   | { type: "duckhunt" }
   | { type: "cards-launcher" }
@@ -538,6 +542,7 @@ export default function NsDoors97() {
         case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
         case "nomnom":       content = { type: "nomnom" };               width = 700; break;
         case "wordwhirlwind":content = { type: "word-whirlwind" };       width = 600; break;
+        case "words":        content = { type: "words" };                width = 440; break;
         case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
         case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
         case "cards":          content = { type: "cards-launcher" };                           width = 320; break;
@@ -810,6 +815,7 @@ export default function NsDoors97() {
           )}
           {win.content.type === "nomnom" && <NumberMuncher onQuit={() => closeWindow(win.id)} />}
           {win.content.type === "word-whirlwind" && <WordWhirlwind onQuit={() => closeWindow(win.id)} />}
+          {win.content.type === "words" && <Words onQuit={() => closeWindow(win.id)} />}
           {win.content.type === "duckhunt" && <DuckHunt />}
           {win.content.type === "cards-launcher" && (
             <CardsLauncher
