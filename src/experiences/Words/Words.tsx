@@ -90,6 +90,7 @@ export default function Words({ onQuit }: WordsProps) {
   const [phase, setPhase] = useState<GamePhase>("playing");
   const [shakeRow, setShakeRow] = useState(false);
   const [message, setMessage] = useState("");
+  const [helpDialog, setHelpDialog] = useState<"instructions" | "about" | null>(null);
 
   // Best state seen for each letter (drives keyboard coloring)
   const letterStates = useMemo<Record<string, TileState>>(() => {
@@ -196,6 +197,13 @@ export default function Words({ onQuit }: WordsProps) {
           ...(onQuit
             ? ([{ separator: true }, { label: "Quit", onClick: onQuit }] as MenuBarMenu["items"])
             : []),
+        ],
+      },
+      {
+        label: "Help",
+        items: [
+          { label: "Instructions", onClick: () => setHelpDialog("instructions") },
+          { label: "About WORDS",  onClick: () => setHelpDialog("about") },
         ],
       },
     ],
@@ -310,6 +318,53 @@ export default function Words({ onQuit }: WordsProps) {
           </button>
         )}
       </div>
+
+      {/* Help dialogs */}
+      {helpDialog && (
+        <div className="words-dialog-overlay" onClick={() => setHelpDialog(null)}>
+          <div className="words-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="words-dialog__title">
+              {helpDialog === "instructions" ? "How to Play WORDS" : "About WORDS"}
+            </div>
+
+            <div className="words-dialog__body">
+              {helpDialog === "instructions" ? (
+                <>
+                  <p>Guess the hidden word in <strong>6 tries</strong>. Each guess must be a real word — press Enter to submit.</p>
+                  <p>After each guess the tiles show how close you were:</p>
+                  <div className="words-dialog__examples">
+                    <div className="words-dialog__example">
+                      <div className="words-tile words-tile--correct words-tile--sm">A</div>
+                      <span>Right letter, right spot</span>
+                    </div>
+                    <div className="words-dialog__example">
+                      <div className="words-tile words-tile--present words-tile--sm">B</div>
+                      <span>Right letter, wrong spot</span>
+                    </div>
+                    <div className="words-dialog__example">
+                      <div className="words-tile words-tile--absent words-tile--sm">C</div>
+                      <span>Not in the word at all</span>
+                    </div>
+                  </div>
+                  <p>The keyboard is shaded the same way so you can track which letters are still in play.</p>
+                  <p>Change word length (4–8 letters) any time via the <strong>Game</strong> menu. Longer words are harder!</p>
+                </>
+              ) : (
+                <>
+                  <p><strong>WORDS</strong> — a word-guessing game for NS Doors 97.</p>
+                  <p>Inspired by Lingo and Wordle. Built by Noahsoft™.</p>
+                  <p>Uses the ENABLE public-domain word list (filtered for family friendliness).</p>
+                  <p>Version 1.0  •  © 1996 Noahsoft Corp.</p>
+                </>
+              )}
+            </div>
+
+            <div className="words-dialog__footer">
+              <button className="words-dialog__ok" onClick={() => setHelpDialog(null)}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

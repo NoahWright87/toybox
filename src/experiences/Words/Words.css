@@ -251,3 +251,106 @@
   background: #1a6626;
 }
 
+/* ── Help dialog ─────────────────────────────────────────────────────────────── */
+
+.words-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.words-dialog {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 3px 3px 0 #000;
+  min-width: 280px;
+  max-width: 360px;
+  width: 90%;
+}
+
+.words-dialog__title {
+  background: linear-gradient(to right, #7b3dbe, #5b2d8e);
+  color: #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 7px 10px;
+  letter-spacing: 0.5px;
+}
+
+.words-dialog__body {
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.words-dialog__body p {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  line-height: 2;
+  margin: 0;
+  color: #000;
+}
+
+.words-dialog__body strong {
+  color: #cc4400;
+}
+
+.words-dialog__examples {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.words-dialog__example {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.words-dialog__example span {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  line-height: 1.7;
+}
+
+/* Fixed-size tiles used inside the dialog */
+.words-tile--sm {
+  width: 34px;
+  height: 34px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.words-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 12px;
+  border-top: 1px solid #808080;
+}
+
+.words-dialog__ok {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 7px 22px;
+  cursor: pointer;
+  color: #000;
+}
+
+.words-dialog__ok:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
