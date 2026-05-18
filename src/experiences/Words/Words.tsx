@@ -23,10 +23,12 @@ interface WordsProps {
 const MAX_GUESSES = 6;
 const DEFAULT_LENGTH = 5;
 
-const KEYBOARD_ROWS = [
-  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
-  ["ENTER", "Z", "X", "C", "V", "B", "N", "M", "⌫"],
+// Alphabetical layout — 7 per row so keys fill the container width
+const ALPHA_ROWS: string[][] = [
+  ["A", "B", "C", "D", "E", "F", "G"],
+  ["H", "I", "J", "K", "L", "M", "N"],
+  ["O", "P", "Q", "R", "S", "T", "U"],
+  ["V", "W", "X", "Y", "Z"],
 ];
 
 const WIN_MESSAGES = [
@@ -263,25 +265,53 @@ export default function Words({ onQuit }: WordsProps) {
         })}
       </div>
 
-      {/* On-screen keyboard */}
+      {/* On-screen keyboard — alphabetical, fills full width */}
       <div className="words-keyboard">
-        {KEYBOARD_ROWS.map((row, ri) => (
-          <div key={ri} className="words-keyboard__row">
-            {row.map((key) => {
-              const keyState = letterStates[key];
-              return (
-                <button
-                  key={key}
-                  className={`words-key${key === "ENTER" || key === "⌫" ? " words-key--wide" : ""}${keyState ? ` words-key--${keyState}` : ""}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handleKey(key)}
-                >
-                  {key}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+        {ALPHA_ROWS.map((row, ri) => {
+          const padBefore = Math.floor((7 - row.length) / 2);
+          const padAfter = 7 - row.length - padBefore;
+          return (
+            <div key={ri} className="words-keyboard__row">
+              {Array.from({ length: padBefore }, (_, i) => (
+                <div key={`pb${i}`} className="words-key-spacer" />
+              ))}
+              {row.map((key) => {
+                const keyState = letterStates[key];
+                return (
+                  <button
+                    key={key}
+                    className={`words-key${keyState ? ` words-key--${keyState}` : ""}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleKey(key)}
+                  >
+                    {key}
+                  </button>
+                );
+              })}
+              {Array.from({ length: padAfter }, (_, i) => (
+                <div key={`pa${i}`} className="words-key-spacer" />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Action buttons — big and separate for easy tapping */}
+      <div className="words-actions">
+        <button
+          className="words-action-btn words-action-btn--back"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => handleKey("BACKSPACE")}
+        >
+          ⌫ Delete
+        </button>
+        <button
+          className="words-action-btn words-action-btn--enter"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => handleKey("ENTER")}
+        >
+          Enter ↵
+        </button>
       </div>
 
       {/* Post-game controls */}

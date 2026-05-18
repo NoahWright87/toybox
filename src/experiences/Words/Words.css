@@ -177,42 +177,46 @@
 .words-keyboard {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 5px;
+  width: 100%;
   margin-top: 4px;
 }
 
+/* 7-column grid — keys stretch to fill available width */
 .words-keyboard__row {
-  display: flex;
-  gap: 4px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+  width: 100%;
+}
+
+/* Invisible spacer to centre short rows (e.g. V-Z) in the 7-column grid */
+.words-key-spacer {
+  /* intentionally empty */
 }
 
 .words-key {
   font-family: "Press Start 2P", monospace;
-  font-size: 6px;
+  font-size: 9px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
   color: #000;
-  min-width: 30px;
-  height: 34px;
-  padding: 2px 4px;
+  height: 52px;
+  width: 100%;
+  padding: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
   line-height: 1;
+  touch-action: manipulation;
 }
 
 .words-key:active {
   border-color: #808080 #ffffff #ffffff #808080;
-}
-
-.words-key--wide {
-  min-width: 48px;
-  font-size: 5px;
+  background: #b0b0b0;
 }
 
 .words-key--correct {
@@ -231,6 +235,52 @@
   background: #808080;
   border-color: #aaaaaa #404040 #404040 #aaaaaa;
   color: #d0d0d0;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────────────────── */
+
+.words-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.words-action-btn {
+  flex: 1;
+  height: 60px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  border: 2px solid;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1.4;
+  touch-action: manipulation;
+}
+
+.words-action-btn--back {
+  background: #c0c0c0;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+}
+
+.words-action-btn--back:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+
+.words-action-btn--enter {
+  background: #cc4400;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #ffffff;
+}
+
+.words-action-btn--enter:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #aa3300;
 }
 
 /* ── Post-game controls ──────────────────────────────────────────────────────── */
