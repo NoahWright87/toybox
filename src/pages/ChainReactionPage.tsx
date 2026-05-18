@@ -11,22 +11,16 @@ export default function ChainReactionPage() {
       helpContent={
         <>
           <ul>
-            <li>Guess letters to reveal the hidden words in the chain</li>
-            <li>Each word's <strong>last letter</strong> is the <strong>first letter</strong> of the next</li>
-            <li>The <strong>START</strong> and <strong>END</strong> words are always revealed</li>
-            <li>
-              Inner words show their <strong>first and last letters</strong> as chain
-              links — guess the hidden middle letters
-            </li>
-            <li>Correct guess: reveals that letter everywhere it appears</li>
-            <li>Wrong guess: costs a life (6 lives total)</li>
-            <li>Type letters on your keyboard or click the on-screen keys</li>
+            <li>Connect <strong>START</strong> to <strong>END</strong> through hidden words</li>
+            <li>Each pair of adjacent words forms a compound word or phrase</li>
+            <li>Click a <strong>frontier word</strong> (adjacent to a known word) to reveal a letter and guess</li>
+            <li>Fewer hints needed = more points</li>
+            <li>Score = total letters guessed ÷ total turns taken</li>
           </ul>
           <hr />
           <ul>
-            <li>
-              Use <strong>Game</strong> menu to start a new game or change chain length
-            </li>
+            <li>Use <strong>Game</strong> menu to start a new game or change chain length</li>
+            <li>Press <strong>Enter</strong> to submit a guess, <strong>Esc</strong> to cancel</li>
           </ul>
         </>
       }
