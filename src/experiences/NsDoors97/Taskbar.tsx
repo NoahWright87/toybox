@@ -103,6 +103,7 @@ const GAMES_ITEMS = [
   { id: "tic-tac-toe",    icon: "✖️",  label: "Tic-Tac-Toe"     },
   { id: "pool",           icon: "🎱", label: "8-Ball Pool"      },
   { id: "word-whirlwind", icon: "🌪️", label: "Word Whirlwind"  },
+  { id: "words",          icon: "🔤", label: "WORDS"            },
   { id: "bomb-finder",    icon: "💣", label: "Bomb Finder"      },
   { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
   { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },

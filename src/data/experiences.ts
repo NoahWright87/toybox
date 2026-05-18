@@ -78,6 +78,13 @@ export const experiences: Experience[] = [
     path: "/word-whirlwind",
   },
   {
+    id: "words",
+    title: "WORDS",
+    description: "Guess the hidden word in six tries. Pick your word length — 4 to 8 letters. Longer words are harder.",
+    category: "game",
+    path: "/words",
+  },
+  {
     id: "bomb-finder",
     title: "Bomb Finder",
     description: "Classic mine-sweeping puzzle. Flag the bombs, clear the field. Don't go boom.",
