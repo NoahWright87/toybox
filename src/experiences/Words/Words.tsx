@@ -276,7 +276,7 @@ export default function Words({ onQuit }: WordsProps) {
                 <div key={`pb${i}`} className="words-key-spacer" />
               ))}
               {row.map((key) => {
-                const keyState = letterStates[key];
+                const keyState = letterStates[key.toLowerCase()];
                 return (
                   <button
                     key={key}
