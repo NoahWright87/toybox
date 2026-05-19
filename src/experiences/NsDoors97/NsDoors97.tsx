@@ -29,6 +29,7 @@ import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import SoundRecorder, { lsGetSoundNames } from "./SoundRecorder";
 import MidiEditor from "../MidiEditor/MidiEditor";
+import ChainReaction from "../ChainReaction/ChainReaction";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -68,7 +69,8 @@ type AppAction =
   | "art-backup"
   | "readme"
   | "sound-recorder"
-  | "midi-editor";
+  | "midi-editor"
+  | "chain-reaction";
 
 interface AppDef {
   title: string;
@@ -96,6 +98,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"      },
   "sound-recorder": { title: "Sound Recorder",     icon: "🎙️", action: "sound-recorder"  },
   "midi-editor":    { title: "MIDI Editor",         icon: "🎹", action: "midi-editor"     },
+  "chain-reaction": { title: "Chain Reaction",      icon: "🔗", action: "chain-reaction"  },
 };
 
 // ── Desktop icon entries (subset actually shown on desktop) ───────────────────
@@ -189,7 +192,8 @@ type WindowContent =
   | { type: "nsart" }
   | { type: "nsart-backup" }
   | { type: "sound-recorder"; fileName?: string }
-  | { type: "midi-editor" };
+  | { type: "midi-editor" }
+  | { type: "chain-reaction" };
 
 interface OpenWindow {
   id: string;
@@ -548,6 +552,7 @@ export default function NsDoors97() {
         case "cards":          content = { type: "cards-launcher" };                           width = 320; break;
         case "sound-recorder": content = { type: "sound-recorder" as const };                  width = 420; break;
         case "midi-editor":    content = { type: "midi-editor" as const };                     width = 860; break;
+        case "chain-reaction": content = { type: "chain-reaction" as const };                  width = 540; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -883,6 +888,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "midi-editor" && (
             <MidiEditor onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "chain-reaction" && (
+            <ChainReaction onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

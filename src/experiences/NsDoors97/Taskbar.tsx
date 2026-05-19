@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import "./Taskbar.css";
 
 interface TaskbarWindowEntry {
@@ -108,6 +108,7 @@ const GAMES_ITEMS = [
   { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
   { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
   { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
+  { id: "chain-reaction", icon: "🔗", label: "Chain Reaction"   },
 ] as const;
 
 const TOOLS_ITEMS = [
@@ -125,6 +126,15 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
   const [startOpen, setStartOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<OpenSubmenu>(null);
   const startAreaRef = useRef<HTMLDivElement>(null);
+  const submenuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (openSubmenu !== null && submenuRef.current) {
+      const rect = submenuRef.current.getBoundingClientRect();
+      const available = window.innerHeight - rect.top - 48;
+      submenuRef.current.style.maxHeight = `${Math.max(120, available)}px`;
+    }
+  }, [openSubmenu]);
 
   // Close on outside click
   useEffect(() => {
@@ -197,7 +207,7 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                   <span className="ns-start-menu__item-arrow">▶</span>
                 </button>
                 {openSubmenu === "games" && (
-                  <div className="ns-start-submenu">
+                  <div className="ns-start-submenu" ref={submenuRef}>
                     {GAMES_ITEMS.map((item) => (
                       <button
                         key={item.id}
@@ -224,7 +234,7 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                   <span className="ns-start-menu__item-arrow">▶</span>
                 </button>
                 {openSubmenu === "tools" && (
-                  <div className="ns-start-submenu">
+                  <div className="ns-start-submenu" ref={submenuRef}>
                     {TOOLS_ITEMS.map((item) => (
                       <button
                         key={item.id}
@@ -261,7 +271,7 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                   <span className="ns-start-menu__item-arrow">▶</span>
                 </button>
                 {openSubmenu === "settings" && (
-                  <div className="ns-start-submenu">
+                  <div className="ns-start-submenu" ref={submenuRef}>
                     <button
                       className="ns-start-menu__item"
                       onClick={handleOpenDisplay}

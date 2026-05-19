@@ -19,6 +19,7 @@ const EXPERIENCE_ICONS: Record<string, string> = {
   "number-muncher": "🔢",
   "tic-tac-toe":    "✖️",
   "word-whirlwind": "🌪️",
+  "chain-reaction": "🔗",
 };
 
 // Derive unique categories in display order

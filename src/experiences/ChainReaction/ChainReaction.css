@@ -1,0 +1,547 @@
+/* ── Shared container ─────────────────────────────────────────────────────── */
+
+.cr {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 14px 16px;
+  background: #c0c0c0;
+  min-height: 100%;
+  font-family: "Press Start 2P", monospace;
+  box-sizing: border-box;
+}
+
+/* ── Setup screen ─────────────────────────────────────────────────────────── */
+
+.cr--setup {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.cr__setup-title {
+  font-size: 12px;
+  color: #cc4400;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+  align-self: center;
+}
+
+.cr__setup-desc {
+  font-size: 7px;
+  line-height: 2;
+  color: #333;
+  margin: 0;
+}
+
+.cr__setup-label {
+  font-size: 7px;
+  color: #333;
+}
+
+.cr__setup-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.cr__setup-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 8px 12px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+  text-align: left;
+  letter-spacing: 1px;
+}
+
+.cr__setup-btn:active,
+.cr__setup-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+  color: #cc4400;
+}
+
+.cr__setup-score {
+  font-size: 7px;
+  color: #228833;
+  align-self: center;
+}
+
+/* ── Primary / secondary buttons ─────────────────────────────────────────── */
+
+.cr__primary-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 10px 20px;
+  background: #cc4400;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #fff;
+  cursor: pointer;
+  letter-spacing: 1px;
+  align-self: center;
+}
+
+.cr__primary-btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+.cr__secondary-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 8px 16px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #333;
+  cursor: pointer;
+  letter-spacing: 1px;
+  align-self: center;
+}
+
+.cr__secondary-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* ── Status bar ───────────────────────────────────────────────────────────── */
+
+.cr__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 5px 10px;
+}
+
+.cr__status-item {
+  font-size: 7px;
+  color: #333;
+}
+
+.cr__status-item strong {
+  color: #000;
+}
+
+.cr__status-total {
+  font-size: 6px;
+  color: #808080;
+  margin-left: auto;
+}
+
+/* ── Chain display ────────────────────────────────────────────────────────── */
+
+.cr__chain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+.cr__word-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.cr__connector-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.cr__connector {
+  font-size: 10px;
+  color: #808080;
+  line-height: 1;
+}
+
+.cr__explain-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cr__explain-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.cr__explain-placeholder {
+  display: inline-block;
+  width: 22px;
+  flex-shrink: 0;
+}
+
+/* ── Word rows ────────────────────────────────────────────────────────────── */
+
+.cr__word-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 2px solid transparent;
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.cr__word-row--frontier {
+  font-family: "Press Start 2P", monospace;
+  cursor: pointer;
+  background: #c8c4bc;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  justify-content: flex-start;
+}
+
+.cr__word-row--frontier:hover {
+  background: #d8d4cc;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.cr__word-row--frontier:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b8b4ac;
+}
+
+.cr__word-row--locked {
+  opacity: 0.45;
+}
+
+.cr__word-label {
+  font-size: 5px;
+  width: 36px;
+  flex-shrink: 0;
+  color: #808080;
+  text-align: right;
+  letter-spacing: 0.5px;
+}
+
+.cr__frontier-arrow {
+  font-size: 7px;
+  color: #cc4400;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Letter cells ─────────────────────────────────────────────────────────── */
+
+.cr__cells {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cr__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  font-size: 7px;
+  font-family: "Press Start 2P", monospace;
+  border: 2px solid;
+  box-sizing: border-box;
+  padding: 0 2px;
+}
+
+.cr__cell--start {
+  background: #ff6b00;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #fff;
+}
+
+.cr__cell--end {
+  background: #5b2d8e;
+  border-color: #c080ff #2a1050 #2a1050 #c080ff;
+  color: #fff;
+}
+
+.cr__cell--solved {
+  background: #228833;
+  border-color: #66cc88 #115522 #115522 #66cc88;
+  color: #fff;
+}
+
+.cr__cell--hint {
+  background: #b06000;
+  border-color: #e8a840 #5a2c00 #5a2c00 #e8a840;
+  color: #fff;
+}
+
+.cr__cell--blank {
+  background: #a8a4a0;
+  border-color: #808080 #d0d0cc #d0d0cc #808080;
+  color: transparent;
+}
+
+/* ── Feedback ─────────────────────────────────────────────────────────────── */
+
+.cr__feedback {
+  font-size: 7px;
+  color: #cc0000;
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* ── Guess modal ──────────────────────────────────────────────────────────── */
+
+.cr__modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 10000;
+  padding: 8px 12px 0;
+  box-sizing: border-box;
+}
+
+@media (min-height: 500px) {
+  .cr__modal-overlay {
+    align-items: center;
+    padding: 0 12px;
+  }
+}
+
+.cr__modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.8);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 380px;
+  box-sizing: border-box;
+}
+
+.cr__modal-context {
+  display: flex;
+  justify-content: center;
+}
+
+.cr__modal-arrow {
+  font-size: 10px;
+  color: #808080;
+  line-height: 1;
+}
+
+.cr__modal-word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 8px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cr__modal-word .cr__cell {
+  min-width: 28px;
+  height: 28px;
+  font-size: 8px;
+}
+
+.cr__modal-hint-count {
+  font-size: 6px;
+  color: #808080;
+}
+
+.cr__modal-input-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.cr__modal-input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
+  outline: none;
+}
+
+.cr__modal-input:focus {
+  border-color: #000080 #b0b0ff #b0b0ff #000080;
+}
+
+.cr__modal-guess-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 6px 10px;
+  background: #cc4400;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cr__modal-guess-btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+.cr__modal-feedback {
+  font-size: 7px;
+  color: #cc0000;
+  text-align: center;
+}
+
+.cr__modal-cancel {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #808080;
+  color: #808080;
+  cursor: pointer;
+}
+
+.cr__modal-cancel:hover {
+  color: #333;
+  border-color: #333;
+}
+
+/* ── Won screen ───────────────────────────────────────────────────────────── */
+
+.cr--won {
+  align-items: center;
+  gap: 12px;
+}
+
+.cr__won-banner {
+  font-size: 11px;
+  color: #228833;
+  text-align: center;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+  padding: 4px 0;
+}
+
+.cr__won-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 7px;
+  color: #333;
+}
+
+.cr__won-chain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px 16px;
+  overflow-y: auto;
+  max-height: 320px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cr__won-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.cr__won-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+  gap: 2px;
+}
+
+.cr__won-pair-display {
+  font-size: 6px;
+  color: #cc4400;
+  letter-spacing: 1px;
+}
+
+.cr__won-pair-hint {
+  font-size: 5px;
+  color: #666;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ── Explanation modal ────────────────────────────────────────────────────── */
+
+.cr__modal--explain {
+  gap: 12px;
+}
+
+.cr__explain-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #cc4400;
+  letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.cr__explain-body {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #000;
+  text-align: center;
+  line-height: 1.6;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cr__won-total {
+  font-size: 7px;
+  color: #333;
+  text-align: center;
+}
+
+.cr__won-total strong {
+  color: #cc4400;
+}
+
+.cr__won-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}

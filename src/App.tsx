@@ -20,6 +20,7 @@ import ComponentTestPage from "./pages/ComponentTestPage";
 import PoolPage from "./pages/PoolPage";
 import MidiEditorPage from "./pages/MidiEditorPage";
 import WordsPage from "./pages/WordsPage";
+import ChainReactionPage from "./pages/ChainReactionPage";
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/midi-editor" element={<MidiEditorPage />} />
         <Route path="/words" element={<WordsPage />} />
         <Route path="/component-test" element={<ComponentTestPage />} />
+        <Route path="/chain-reaction" element={<ChainReactionPage />} />
       </Routes>
     </BrowserRouter>
   );
