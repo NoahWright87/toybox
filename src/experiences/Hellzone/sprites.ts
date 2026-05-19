@@ -38,6 +38,25 @@ export class Sprite {
     }
   }
 
+  /**
+   * Draw a single vertical 1px-wide column from frame `frameIdx` at normalized
+   * horizontal position `u` (0..1) into destination column (dx, dy, 1, dh).
+   * Used for textured wall columns and per-column sprite occlusion.
+   */
+  drawColumn(
+    ctx: CanvasRenderingContext2D,
+    frameIdx: number,
+    u: number,
+    dx: number, dy: number, dh: number,
+  ): void {
+    if (!this.img || !this.loaded || dh <= 0) return;
+    const f = this.frames.length > 0
+      ? this.frames[Math.floor(frameIdx) % this.frames.length]
+      : { x: 0, y: 0, w: this.img.naturalWidth, h: this.img.naturalHeight };
+    const srcX = f.x + Math.max(0, Math.min(f.w - 1, Math.floor(u * f.w)));
+    ctx.drawImage(this.img, srcX, f.y, 1, f.h, dx, dy, 1, dh);
+  }
+
   /** Number of animation frames (1 if no explicit frames defined). */
   get frameCount(): number {
     return this.frames.length || 1;

@@ -49,7 +49,7 @@ export default function Hellzone() {
 
     // ── BSP Map Generator ──────────────────────────────────────────────────────
     const MAP_W = 40, MAP_H = 40;
-    const TILE_EMPTY = 0, TILE_WALL = 1, TILE_EXIT = 3;
+    const TILE_EMPTY = 0, TILE_WALL = 1, TILE_LAVA = 2, TILE_EXIT = 3, TILE_WINDOW = 4;
 
     interface Room { x: number; y: number; w: number; h: number; cx: number; cy: number; }
     interface Enemy {
@@ -167,6 +167,26 @@ export default function Hellzone() {
         pickups.push({ x: (room.cx + 0.5) * CELL, y: (room.cy + 0.5) * CELL, type: rng() > 0.5 ? "health" : "ammo", taken: false });
       }
 
+      // Post-pass: ~25% of walls adjacent to open space become lava walls.
+      for (let py = 1; py < MAP_H - 1; py++) {
+        for (let px = 1; px < MAP_W - 1; px++) {
+          if (grid[py][px] !== TILE_WALL) continue;
+          const hasOpen = grid[py-1][px] === TILE_EMPTY || grid[py+1][px] === TILE_EMPTY
+                       || grid[py][px-1] === TILE_EMPTY || grid[py][px+1] === TILE_EMPTY;
+          if (hasOpen && rng() < 0.25) grid[py][px] = TILE_LAVA;
+        }
+      }
+
+      // Post-pass: thin walls (open space on both opposing sides) become iron-bar windows.
+      for (let py = 1; py < MAP_H - 1; py++) {
+        for (let px = 1; px < MAP_W - 1; px++) {
+          if (grid[py][px] !== TILE_WALL) continue;
+          const nsOpen = grid[py-1][px] === TILE_EMPTY && grid[py+1][px] === TILE_EMPTY;
+          const ewOpen = grid[py][px-1] === TILE_EMPTY && grid[py][px+1] === TILE_EMPTY;
+          if ((nsOpen || ewOpen) && rng() < 0.45) grid[py][px] = TILE_WINDOW;
+        }
+      }
+
       const spawn = { x: (rooms[0].cx + 0.5) * CELL, y: (rooms[0].cy + 0.5) * CELL, angle: 0 };
       return { grid, rooms, enemies, pickups, spawn, seed };
     }
@@ -239,11 +259,13 @@ export default function Hellzone() {
     }
 
     // ── Colors ─────────────────────────────────────────────────────────────────
+    // Used as fallback when texture sprites haven't loaded yet.
     const WALL_COLORS = [
       null,
-      { light: "#8B4513", dark: "#5C2D0A" },
-      { light: "#888", dark: "#444" },
-      { light: "#FFD700", dark: "#AA8800" },
+      { light: "#4a3020", dark: "#2e1d10" },  // rock (fallback)
+      { light: "#cc4400", dark: "#882200" },  // lava (fallback)
+      { light: "#FFD700", dark: "#AA8800" },  // exit
+      { light: "#333322", dark: "#1a1a11" },  // window bar (fallback)
     ];
     const FLOOR_COLOR = "#1a1008";
     const CEILING_COLOR = "#0a0a14";
@@ -279,6 +301,15 @@ export default function Hellzone() {
     const impacts: Impact[] = [];
 
     // ── Sprites ─────────────────────────────────────────────────────────────────
+    const sprWallRock = new Sprite('/sprites/wall-rock.png');
+    // Lava sheet: 2×2 grid of 4 frames, each 627×627 within a 1254×1254 image.
+    const sprWallLava = new Sprite('/sprites/wall-lava.png', [
+      { x: 0,   y: 0,   w: 627, h: 627 },
+      { x: 627, y: 0,   w: 627, h: 627 },
+      { x: 0,   y: 627, w: 627, h: 627 },
+      { x: 627, y: 627, w: 627, h: 627 },
+    ]);
+
     const sprEnemy = [
       new Sprite('/sprites/enemy-0.png'),
       new Sprite('/sprites/enemy-1.png'),
@@ -399,49 +430,101 @@ export default function Hellzone() {
       if (rayDirY < 0) { stepY = -1; sideDistY = (player.y / CELL - mapY) * deltaDistY; }
       else              { stepY =  1; sideDistY = (mapY + 1 - player.y / CELL) * deltaDistY; }
       let hit = false, side = 0, dist = 0, tile = 0;
+      let glassHit: { dist: number; side: number; wallX: number } | null = null;
       for (let i = 0; i < MAX_DEPTH * 2; i++) {
         if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
         else                        { sideDistY += deltaDistY; mapY += stepY; side = 1; }
         if (mapX < 0 || mapX >= MAP_W || mapY < 0 || mapY >= MAP_H) { dist = MAX_DEPTH; break; }
         tile = map[mapY][mapX];
-        if (tile === TILE_WALL || tile === TILE_EXIT) { hit = true; break; }
+        if (tile === TILE_WINDOW) {
+          if (!glassHit) {
+            // Record the glass hit but keep marching to find the solid wall behind it.
+            const gd = side === 0
+              ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
+              : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
+            let gwx = side === 0 ? player.y / CELL + gd * rayDirY : player.x / CELL + gd * rayDirX;
+            gwx -= Math.floor(gwx);
+            glassHit = { dist: Math.max(gd, 0.1), side, wallX: gwx };
+            continue;
+          }
+          // Second window layer acts as a solid wall.
+          hit = true; break;
+        }
+        if (tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) { hit = true; break; }
       }
+      let wallX = 0;
       if (hit) {
         dist = side === 0
           ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
           : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
+        let wx = side === 0 ? player.y / CELL + dist * rayDirY : player.x / CELL + dist * rayDirX;
+        wallX = wx - Math.floor(wx);
       } else {
         dist = MAX_DEPTH;
       }
-      return { dist: Math.max(dist, 0.1), side, tile, hit };
+      return { dist: Math.max(dist, 0.1), side, tile, hit, wallX, glassHit };
     }
 
     // ── Rendering ──────────────────────────────────────────────────────────────
     function render() {
+      ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = CEILING_COLOR;
       ctx.fillRect(0, 0, SCREEN_W, SCREEN_H / 2);
       ctx.fillStyle = FLOOR_COLOR;
       ctx.fillRect(0, SCREEN_H / 2, SCREEN_W, SCREEN_H / 2);
 
+      const lavaFrame = Math.floor(performance.now() / 250) % sprWallLava.frameCount;
+      const glassColumns: Array<{ x: number; wallH: number; top: number; wallX: number; perpDist: number; side: number }> = [];
+
       for (let x = 0; x < NUM_RAYS; x++) {
         const rayAngle = player.angle - HALF_FOV + (x / NUM_RAYS) * FOV;
-        const { dist, side, tile, hit } = castRay(rayAngle);
+        const { dist, side, tile, hit, wallX, glassHit } = castRay(rayAngle);
         const perpDist = dist * Math.cos(rayAngle - player.angle);
         zBuffer[x] = hit ? perpDist : MAX_DEPTH;
+
+        if (glassHit) {
+          const gPerp = glassHit.dist * Math.cos(rayAngle - player.angle);
+          const gWallH = (SCREEN_H / gPerp) * 0.8;
+          glassColumns.push({ x, wallH: gWallH, top: (SCREEN_H - gWallH) / 2, wallX: glassHit.wallX, perpDist: gPerp, side: glassHit.side });
+        }
+
         if (!hit) continue;
-        const wallH = Math.min(SCREEN_H, (SCREEN_H / perpDist) * 0.8);
+        const wallH = (SCREEN_H / perpDist) * 0.8;
         const top = (SCREEN_H - wallH) / 2;
-        const colors = WALL_COLORS[tile] || WALL_COLORS[1];
-        const color = side === 1 ? colors!.dark : colors!.light;
         const fog = Math.max(0, 1 - perpDist / MAX_DEPTH);
-        ctx.globalAlpha = fog * fog + 0.05;
-        ctx.fillStyle = color;
-        ctx.fillRect(x, top, 1, wallH);
+        const baseFog = fog * fog + 0.05;
+
+        if (tile === TILE_LAVA && sprWallLava.loaded) {
+          ctx.globalAlpha = baseFog;
+          sprWallLava.drawColumn(ctx, lavaFrame, wallX, x, top, wallH);
+        } else if (tile === TILE_WALL && sprWallRock.loaded) {
+          // Darken side-1 walls (y-aligned hits) for depth cue
+          ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
+          sprWallRock.drawColumn(ctx, 0, wallX, x, top, wallH);
+        } else {
+          const colors = WALL_COLORS[tile] || WALL_COLORS[1];
+          ctx.globalAlpha = baseFog;
+          ctx.fillStyle = side === 1 ? colors!.dark : colors!.light;
+          ctx.fillRect(x, top, 1, wallH);
+        }
         ctx.globalAlpha = 1;
       }
 
       renderSprites();
       drawImpacts();
+
+      // ── Iron-bar window overlay — drawn on top of sprites ──────────────────
+      for (const g of glassColumns) {
+        const fog = Math.max(0, 1 - g.perpDist / MAX_DEPTH);
+        const barPhase = (g.wallX * 6) % 1;
+        if (barPhase < 0.32) {
+          ctx.globalAlpha = fog * 0.92 + 0.08;
+          ctx.fillStyle = g.side === 1 ? "#1a0d06" : "#2a1a0a";
+          ctx.fillRect(g.x, g.top, 1, g.wallH);
+          ctx.globalAlpha = 1;
+        }
+      }
+
       drawGun();
 
       if (flashTimer > 0) {
@@ -498,14 +581,16 @@ export default function Hellzone() {
       const startX = Math.floor(screenX - spriteW / 2);
       const startY = Math.floor((SCREEN_H - spriteH) / 2);
 
-      // Center-column z-check
-      if (tz >= zBuffer[Math.max(0, Math.min(SCREEN_W-1, screenX))]) return;
-
       const spr = e.state === 'dead' ? sprEnemyDead : (sprEnemy[e.type] ?? sprEnemy[0]);
       if (spr.loaded) {
         const fog = Math.max(0, 1 - tz / MAX_DEPTH);
         ctx.globalAlpha = fog * 0.85 + 0.15;
-        spr.draw(ctx, 0, startX, startY, spriteW, spriteH);
+        for (let sx = 0; sx < spriteW; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W) continue;
+          if (tz >= zBuffer[px]) continue;
+          spr.drawColumn(ctx, 0, sx / spriteW, px, startY, spriteH);
+        }
         ctx.globalAlpha = 1;
       } else {
         // Fallback: procedural pixel loop
@@ -579,14 +664,16 @@ export default function Hellzone() {
       const hp = e.health / e.maxHealth;
       const isDead = e.state === "dead";
 
-      // Center-column z-check
-      if (tz >= zBuffer[Math.max(0, Math.min(SCREEN_W-1, screenX))]) return;
-
       const spr = isDead ? sprTargetDead : sprTarget;
       if (spr.loaded) {
         const fog = Math.max(0, 1 - tz / MAX_DEPTH);
         ctx.globalAlpha = fog * 0.85 + 0.15;
-        spr.draw(ctx, 0, startX, startY, spriteW, spriteH);
+        for (let sx = 0; sx < spriteW; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W) continue;
+          if (tz >= zBuffer[px]) continue;
+          spr.drawColumn(ctx, 0, sx / spriteW, px, startY, spriteH);
+        }
         ctx.globalAlpha = 1;
       } else {
         // Fallback: procedural
@@ -658,14 +745,16 @@ export default function Hellzone() {
       const startX = Math.floor(screenX - size / 2);
       const startY = Math.floor(SCREEN_H / 2 + spriteH * 0.05);
 
-      // Center-column z-check
-      if (tz >= zBuffer[Math.max(0, Math.min(SCREEN_W-1, screenX))]) return;
-
       const spr = p.type === "health" ? sprPickupHealth : sprPickupAmmo;
       if (spr.loaded) {
         const fog = Math.max(0, 1 - tz / MAX_DEPTH);
         ctx.globalAlpha = fog * 0.85 + 0.15;
-        spr.draw(ctx, 0, startX, startY, size, size);
+        for (let sx = 0; sx < size; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W) continue;
+          if (tz >= zBuffer[px]) continue;
+          spr.drawColumn(ctx, 0, sx / size, px, startY, size);
+        }
         ctx.globalAlpha = 1;
       } else {
         // Fallback: procedural
@@ -790,6 +879,8 @@ export default function Hellzone() {
           if (mx < 0 || mx >= MAP_W || my < 0 || my >= MAP_H) continue;
           const tile = map[my][mx];
           if (tile === TILE_WALL) mapCtx.fillStyle = "#555";
+          else if (tile === TILE_LAVA) mapCtx.fillStyle = "#882200";
+          else if (tile === TILE_WINDOW) mapCtx.fillStyle = "#2a2a1a";
           else if (tile === TILE_EXIT) mapCtx.fillStyle = "#ffdd00";
           else mapCtx.fillStyle = "#1a0a00";
           mapCtx.fillRect(x * MSCALE, y * MSCALE, MSCALE, MSCALE);
@@ -828,6 +919,8 @@ export default function Hellzone() {
         for (let x = 0; x < MAP_W; x++) {
           const tile = map[y][x];
           if (tile === TILE_WALL) { ctx.fillStyle = "#3a1a00"; }
+          else if (tile === TILE_LAVA) { ctx.fillStyle = "#661100"; }
+          else if (tile === TILE_WINDOW) { ctx.fillStyle = "#1a1a0d"; }
           else if (tile === TILE_EXIT) { ctx.fillStyle = "#ffdd00"; }
           else { ctx.fillStyle = "#110800"; }
           ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
@@ -894,10 +987,15 @@ export default function Hellzone() {
       for (const [cx, cy] of pts) {
         const tx = Math.floor(cx / CELL), ty = Math.floor(cy / CELL);
         if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return false;
-        if (map[ty][tx] === TILE_WALL) return false;
+        if (isSolid(map[ty][tx])) return false;
       }
       return true;
     }
+
+    // Lava and window bars are physically solid; only empty floor and exits are passable.
+    function isSolid(t: number) { return t === TILE_WALL || t === TILE_LAVA || t === TILE_WINDOW; }
+    // Windows are transparent to line-of-sight (enemies can see/shoot through bars).
+    function blocksLOS(t: number) { return t === TILE_WALL || t === TILE_LAVA; }
 
     function approach(current: number, target: number, delta: number): number {
       if (Math.abs(target - current) <= delta) return target;
@@ -962,7 +1060,7 @@ export default function Hellzone() {
         const tx = Math.floor((x0 + (x1 - x0) * t) / CELL);
         const ty = Math.floor((y0 + (y1 - y0) * t) / CELL);
         if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return false;
-        if (map[ty][tx] === TILE_WALL) return false;
+        if (blocksLOS(map[ty][tx])) return false;
       }
       return true;
     }
@@ -1018,7 +1116,7 @@ export default function Hellzone() {
           e.y += Math.sin(e.angle) * 0.5;
           if (Math.random() < 0.01) e.angle += (Math.random() - 0.5) * 1.5;
           const tx = Math.floor(e.x / CELL), ty = Math.floor(e.y / CELL);
-          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || map[ty][tx] === TILE_WALL) {
+          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || isSolid(map[ty][tx])) {
             e.x -= Math.cos(e.angle) * 0.5;
             e.y -= Math.sin(e.angle) * 0.5;
             e.angle += Math.PI / 2;
@@ -1035,7 +1133,7 @@ export default function Hellzone() {
           e.y += Math.sin(e.angle) * 0.3;
           if (Math.random() < 0.01) e.angle += (Math.random() - 0.5) * 1.5;
           const tx = Math.floor(e.x / CELL), ty = Math.floor(e.y / CELL);
-          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || map[ty][tx] === TILE_WALL) {
+          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || isSolid(map[ty][tx])) {
             e.x -= Math.cos(e.angle) * 0.3;
             e.y -= Math.sin(e.angle) * 0.3;
             e.angle += Math.PI / 2;
@@ -1047,15 +1145,15 @@ export default function Hellzone() {
           const nx = e.x + Math.cos(angleToPlayer) * spd;
           const ny = e.y + Math.sin(angleToPlayer) * spd;
           const tx = Math.floor(nx / CELL), ty = Math.floor(ny / CELL);
-          if (tx >= 0 && tx < MAP_W && ty >= 0 && ty < MAP_H && map[ty][tx] !== TILE_WALL) {
+          if (tx >= 0 && tx < MAP_W && ty >= 0 && ty < MAP_H && !isSolid(map[ty][tx])) {
             e.x = nx; e.y = ny;
           } else {
             const nx2 = e.x + Math.cos(angleToPlayer) * spd;
             const tx2 = Math.floor(nx2 / CELL), ty2 = Math.floor(e.y / CELL);
-            if (tx2 >= 0 && tx2 < MAP_W && ty2 >= 0 && ty2 < MAP_H && map[ty2][tx2] !== TILE_WALL) e.x = nx2;
+            if (tx2 >= 0 && tx2 < MAP_W && ty2 >= 0 && ty2 < MAP_H && !isSolid(map[ty2][tx2])) e.x = nx2;
             const ny2 = e.y + Math.sin(angleToPlayer) * spd;
             const tx3 = Math.floor(e.x / CELL), ty3 = Math.floor(ny2 / CELL);
-            if (tx3 >= 0 && tx3 < MAP_W && ty3 >= 0 && ty3 < MAP_H && map[ty3][tx3] !== TILE_WALL) e.y = ny2;
+            if (tx3 >= 0 && tx3 < MAP_W && ty3 >= 0 && ty3 < MAP_H && !isSolid(map[ty3][tx3])) e.y = ny2;
           }
           if (e.muzzleFlash > 0) e.muzzleFlash = Math.max(0, e.muzzleFlash - dt * 60);
           e.shootTimer -= dt * 60;
