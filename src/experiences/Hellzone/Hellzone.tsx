@@ -879,6 +879,8 @@ export default function Hellzone() {
           if (mx < 0 || mx >= MAP_W || my < 0 || my >= MAP_H) continue;
           const tile = map[my][mx];
           if (tile === TILE_WALL) mapCtx.fillStyle = "#555";
+          else if (tile === TILE_LAVA) mapCtx.fillStyle = "#882200";
+          else if (tile === TILE_WINDOW) mapCtx.fillStyle = "#2a2a1a";
           else if (tile === TILE_EXIT) mapCtx.fillStyle = "#ffdd00";
           else mapCtx.fillStyle = "#1a0a00";
           mapCtx.fillRect(x * MSCALE, y * MSCALE, MSCALE, MSCALE);
@@ -917,6 +919,8 @@ export default function Hellzone() {
         for (let x = 0; x < MAP_W; x++) {
           const tile = map[y][x];
           if (tile === TILE_WALL) { ctx.fillStyle = "#3a1a00"; }
+          else if (tile === TILE_LAVA) { ctx.fillStyle = "#661100"; }
+          else if (tile === TILE_WINDOW) { ctx.fillStyle = "#1a1a0d"; }
           else if (tile === TILE_EXIT) { ctx.fillStyle = "#ffdd00"; }
           else { ctx.fillStyle = "#110800"; }
           ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
@@ -983,10 +987,15 @@ export default function Hellzone() {
       for (const [cx, cy] of pts) {
         const tx = Math.floor(cx / CELL), ty = Math.floor(cy / CELL);
         if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return false;
-        if (map[ty][tx] === TILE_WALL) return false;
+        if (isSolid(map[ty][tx])) return false;
       }
       return true;
     }
+
+    // Lava and window bars are physically solid; only empty floor and exits are passable.
+    function isSolid(t: number) { return t === TILE_WALL || t === TILE_LAVA || t === TILE_WINDOW; }
+    // Windows are transparent to line-of-sight (enemies can see/shoot through bars).
+    function blocksLOS(t: number) { return t === TILE_WALL || t === TILE_LAVA; }
 
     function approach(current: number, target: number, delta: number): number {
       if (Math.abs(target - current) <= delta) return target;
@@ -1051,7 +1060,7 @@ export default function Hellzone() {
         const tx = Math.floor((x0 + (x1 - x0) * t) / CELL);
         const ty = Math.floor((y0 + (y1 - y0) * t) / CELL);
         if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return false;
-        if (map[ty][tx] === TILE_WALL) return false;
+        if (blocksLOS(map[ty][tx])) return false;
       }
       return true;
     }
@@ -1107,7 +1116,7 @@ export default function Hellzone() {
           e.y += Math.sin(e.angle) * 0.5;
           if (Math.random() < 0.01) e.angle += (Math.random() - 0.5) * 1.5;
           const tx = Math.floor(e.x / CELL), ty = Math.floor(e.y / CELL);
-          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || map[ty][tx] === TILE_WALL) {
+          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || isSolid(map[ty][tx])) {
             e.x -= Math.cos(e.angle) * 0.5;
             e.y -= Math.sin(e.angle) * 0.5;
             e.angle += Math.PI / 2;
@@ -1124,7 +1133,7 @@ export default function Hellzone() {
           e.y += Math.sin(e.angle) * 0.3;
           if (Math.random() < 0.01) e.angle += (Math.random() - 0.5) * 1.5;
           const tx = Math.floor(e.x / CELL), ty = Math.floor(e.y / CELL);
-          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || map[ty][tx] === TILE_WALL) {
+          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || isSolid(map[ty][tx])) {
             e.x -= Math.cos(e.angle) * 0.3;
             e.y -= Math.sin(e.angle) * 0.3;
             e.angle += Math.PI / 2;
@@ -1136,15 +1145,15 @@ export default function Hellzone() {
           const nx = e.x + Math.cos(angleToPlayer) * spd;
           const ny = e.y + Math.sin(angleToPlayer) * spd;
           const tx = Math.floor(nx / CELL), ty = Math.floor(ny / CELL);
-          if (tx >= 0 && tx < MAP_W && ty >= 0 && ty < MAP_H && map[ty][tx] !== TILE_WALL) {
+          if (tx >= 0 && tx < MAP_W && ty >= 0 && ty < MAP_H && !isSolid(map[ty][tx])) {
             e.x = nx; e.y = ny;
           } else {
             const nx2 = e.x + Math.cos(angleToPlayer) * spd;
             const tx2 = Math.floor(nx2 / CELL), ty2 = Math.floor(e.y / CELL);
-            if (tx2 >= 0 && tx2 < MAP_W && ty2 >= 0 && ty2 < MAP_H && map[ty2][tx2] !== TILE_WALL) e.x = nx2;
+            if (tx2 >= 0 && tx2 < MAP_W && ty2 >= 0 && ty2 < MAP_H && !isSolid(map[ty2][tx2])) e.x = nx2;
             const ny2 = e.y + Math.sin(angleToPlayer) * spd;
             const tx3 = Math.floor(e.x / CELL), ty3 = Math.floor(ny2 / CELL);
-            if (tx3 >= 0 && tx3 < MAP_W && ty3 >= 0 && ty3 < MAP_H && map[ty3][tx3] !== TILE_WALL) e.y = ny2;
+            if (tx3 >= 0 && tx3 < MAP_W && ty3 >= 0 && ty3 < MAP_H && !isSolid(map[ty3][tx3])) e.y = ny2;
           }
           if (e.muzzleFlash > 0) e.muzzleFlash = Math.max(0, e.muzzleFlash - dt * 60);
           e.shootTimer -= dt * 60;
