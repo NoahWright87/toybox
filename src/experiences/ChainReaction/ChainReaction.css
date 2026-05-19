@@ -156,11 +156,39 @@
   width: 100%;
 }
 
+.cr__connector-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
 .cr__connector {
   font-size: 10px;
   color: #808080;
   line-height: 1;
-  padding: 3px 0;
+}
+
+.cr__explain-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cr__explain-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.cr__explain-placeholder {
+  display: inline-block;
+  width: 22px;
+  flex-shrink: 0;
 }
 
 /* ── Word rows ────────────────────────────────────────────────────────────── */
@@ -470,6 +498,35 @@
   color: #666;
   text-align: center;
   line-height: 1.6;
+}
+
+/* ── Explanation modal ────────────────────────────────────────────────────── */
+
+.cr__modal--explain {
+  gap: 12px;
+}
+
+.cr__explain-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #cc4400;
+  letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.cr__explain-body {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #000;
+  text-align: center;
+  line-height: 1.6;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cr__won-total {
