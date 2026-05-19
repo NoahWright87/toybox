@@ -484,12 +484,12 @@ export default function Hellzone() {
 
         if (glassHit) {
           const gPerp = glassHit.dist * Math.cos(rayAngle - player.angle);
-          const gWallH = Math.min(SCREEN_H, (SCREEN_H / gPerp) * 0.8);
+          const gWallH = (SCREEN_H / gPerp) * 0.8;
           glassColumns.push({ x, wallH: gWallH, top: (SCREEN_H - gWallH) / 2, wallX: glassHit.wallX, perpDist: gPerp, side: glassHit.side });
         }
 
         if (!hit) continue;
-        const wallH = Math.min(SCREEN_H, (SCREEN_H / perpDist) * 0.8);
+        const wallH = (SCREEN_H / perpDist) * 0.8;
         const top = (SCREEN_H - wallH) / 2;
         const fog = Math.max(0, 1 - perpDist / MAX_DEPTH);
         const baseFog = fog * fog + 0.05;
