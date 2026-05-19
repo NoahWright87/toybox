@@ -236,6 +236,54 @@ The project enables `noUnusedLocals` and `noUnusedParameters`, so unused imports
 - Generic collections like `new Set(prev)` or `new Map(prev)` — always specify the type parameter explicitly: `new Set<string>(prev)`, `new Map<string, number>(prev)`.
 - Test files (`*.test.ts`) that use Node.js built-ins must be excluded from `tsconfig.app.json` via the `exclude` list, not just left in `src/`.
 
+## Chain Reaction — adding word pairs
+
+The game data lives in `src/experiences/ChainReaction/pairs.ts` as a flat list of directed pairs:
+
+```typescript
+{ a: "FIRE", b: "WORKS", explanation: "FIREWORKS — an explosive pyrotechnic display" }
+```
+
+`a + b` must form a real compound word or common two-word phrase (FIREWORKS, FAST FOOD, KING COBRA). Both `a` and `b` must be full words — no syllable fragments like `NING` or `ET`.
+
+### The graph health rule
+
+Every word that appears as `a` (a "source" word) should have **3 or more** different `b` targets. More importantly, the graph needs **bridge words** — words that appear as *both* `a` and `b` — so chains can keep growing past two hops. Dead ends (words that only appear as `b`) are acceptable as chain terminals, but a word that appears as `b` frequently should also appear as `a` with several outgoing edges.
+
+### How to add pairs
+
+1. **Prefer bridging over appending.** Before adding a new hub word, look for dead-end words that are already reachable from many places and give them outgoing edges pointing to existing hubs. A pair like `FALL → BACK` (FALLBACK) is worth ten `CAMP → FIRE` pairs because it extends chains that were previously stuck.
+
+2. **Target words with high incoming count but zero outgoing.** Run the analysis script (see below) and look at the "Dead ends" section. Words with `in=3+` that have `out=0` are the best candidates — they're already reachable, they just can't continue a chain.
+
+3. **Loop back to existing hubs.** The most valuable pairs are ones where `b` is already a word with many outgoing edges (BACK, GROUND, WATER, HAND, FIRE, BOOK, MARK, OVER, TIME, SHOP, DOWN, PLAY, DOOR, HOUSE, LAND, STONE, etc.). This creates new chain paths without requiring yet another dead-end word.
+
+4. **Avoid duplicate pairs.** The same `{ a, b }` combination must not appear twice. The analyzer will flag these under "ORPHAN STARTS" as repeated arrows.
+
+5. **Write a real explanation.** Format: `"COMPOUND — plain English description"`. Lead with the compound or phrase name, then a short definition. Keep it under ~100 characters.
+
+### Running the analysis script
+
+```bash
+node scripts/analyze-pairs.mjs
+```
+
+This reports:
+- **Dead ends** — words that only appear as `b` (chain stops here)
+- **Orphan starts** — words that only appear as `a` (nothing leads here; also reveals duplicates)
+- **Low outgoing (<3)** — sources that are hard to grow chains forward from
+- **Low incoming (<3)** — targets that are hard to reach via backward growth
+- **Generator simulation** — 200 random trials per chain length showing actual success rate and example chains
+
+**The generator simulation is the ground truth.** After adding pairs, the simulation must show 0% failure rate for Quick (4), Normal (6), and Long (8) chains. A non-zero failure rate means some seed words create dead ends the backward pass cannot escape.
+
+### Checklist before committing new pairs
+
+1. Run `node scripts/analyze-pairs.mjs` — check simulation shows 0 failures for all three lengths
+2. Scan the "ORPHAN STARTS" section for any word listed with duplicate arrows (indicates a duplicate pair)
+3. Verify every new `b` word either already exists as a hub OR you are also adding outgoing edges for it
+4. Run the TypeScript build check — `pairs.ts` is plain data but the build will catch syntax errors
+
 ## Known conventions
 
 - Commits reference the feature or PR (see git log for style)

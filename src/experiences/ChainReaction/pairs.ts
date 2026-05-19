@@ -1,11 +1,36 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Chain Reaction word-pair data
+//
+// HOW TO ADD PAIRS
+// ─────────────────────────────────────────────────────────────────────────────
+// Each pair { a, b } means a+b forms a compound word or common two-word phrase
+// (FIRE+WORKS = FIREWORKS, FAST+FOOD = FAST FOOD). Both must be full words.
+//
+// GRAPH HEALTH — the most important rule:
+//   Prefer adding pairs where `b` is an EXISTING HUB (a word already listed as
+//   `a` elsewhere with 3+ outgoing edges). This creates bridge words — nodes
+//   that appear as both `a` and `b` — so chains can keep growing past two hops.
+//
+//   Good: { a: "FALL", b: "BACK" }   — FALL is a dead end, BACK is a major hub
+//   Bad:  { a: "CAMP", b: "FIRE" }   — adds incoming to FIRE (already a hub),
+//                                       but CAMP becomes another orphan start
+//
+// BEFORE COMMITTING:
+//   1. Run:  node scripts/analyze-pairs.mjs
+//   2. The generator simulation must show 0 failures for all three chain lengths
+//   3. Check "ORPHAN STARTS" for duplicate arrows — same {a,b} listed twice
+//   4. Every new `b` word should either already be a hub OR you're also adding
+//      outgoing edges for it in this same batch
+//
+// See CLAUDE.md → "Chain Reaction — adding word pairs" for full guidance.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface Pair {
   a: string;
   b: string;
   explanation: string;
 }
 
-// Each word that appears as `a` should have 3+ different `b` values.
-// This ensures the bidirectional generator can always build chains of all lengths.
 export const PAIRS: Pair[] = [
   // FIRE hub (→ WORKS, SIDE, PLACE, MAN, TRUCK, ALARM)
   { a: "FIRE", b: "WORKS",    explanation: "FIREWORKS — an explosive pyrotechnic display" },
