@@ -557,7 +557,7 @@ export default function NsDoors97() {
         case "sound-recorder": content = { type: "sound-recorder" as const };                  width = 420; break;
         case "midi-editor":    content = { type: "midi-editor" as const };                     width = 860; break;
         case "chain-reaction": content = { type: "chain-reaction" as const };                  width = 540; break;
-        case "peg-solitaire":  content = { type: "peg-solitaire" as const };                   width = 320; break;
+        case "peg-solitaire":  content = { type: "peg-solitaire" as const };                   width = 430; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };

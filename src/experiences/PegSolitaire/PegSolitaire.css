@@ -1,4 +1,4 @@
-.peg-solitaire {
+.pegsol {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8,76 +8,109 @@
   min-height: 100%;
 }
 
-.peg-status {
+.pegsol__status {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
-  color: #000000;
+  color: #000;
   text-align: center;
   min-height: 16px;
-  padding: 4px 8px;
 }
 
-.peg-rating {
-  color: #cc4400;
-}
+.pegsol__rating { color: #cc4400; }
 
-.peg-board {
+/* Board container */
+.pegsol__board {
   position: relative;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
 }
 
-.peg-hole {
+.pegsol__board-img {
   position: absolute;
-  border-radius: 50%;
-  box-sizing: border-box;
-  border: 2px solid;
-  border-color: #606060 #d4d0c8 #d4d0c8 #606060;
-  background: #808080;
-  cursor: default;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  image-rendering: pixelated;
+  user-select: none;
 }
 
-.peg-hole--peg {
-  background: #cc4400;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
-  cursor: pointer;
-  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
-}
-
-.peg-hole--peg:hover {
-  filter: brightness(1.12);
-}
-
-.peg-hole--selected {
-  background: #5b2d8e;
-  border-color: #cc88ff #330066 #330066 #cc88ff;
-  cursor: pointer;
-  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
-}
-
-.peg-hole--landing {
-  background: #228833;
-  border-color: #88ff88 #006600 #006600 #88ff88;
-  cursor: pointer;
-  animation: peg-pulse 0.5s ease-in-out infinite alternate;
-}
-
-@keyframes peg-pulse {
-  from {
-    filter: brightness(1);
-  }
-  to {
-    filter: brightness(1.4);
-  }
-}
-
-.peg-controls {
+/* ── Spot ───────────────────────────────────────────────────────────────────── */
+.pegsol__spot {
+  position: absolute;
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
 }
 
-.peg-btn {
+/* Flying peg container – transitions position, no pointer events */
+.pegsol__spot--fly {
+  pointer-events: none;
+  z-index: 20;
+  transition: left 0.33s ease-in-out, top 0.33s ease-in-out;
+}
+
+/* ── Landing glow ───────────────────────────────────────────────────────────── */
+.pegsol__glow {
+  position: absolute;
+  width: 32px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255,200,50,0.9) 0%, rgba(255,140,0,0.5) 55%, transparent 100%);
+  animation: ps-glow 0.45s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes ps-glow {
+  from { opacity: 0.7; transform: scale(0.9); }
+  to   { opacity: 1.0; transform: scale(1.1); }
+}
+
+/* ── Peg sprite ─────────────────────────────────────────────────────────────── */
+/*
+ * The sprite is displayed with position: absolute, centred on the spot,
+ * then shifted upward by ELEV_SIT to look like it's sitting in the hole.
+ * Box-shadow Y is tuned to keep the cast shadow near the board surface
+ * regardless of elevation: shadow_Y ≈ elevation + 4.
+ */
+.pegsol__peg {
+  position: absolute;
+  image-rendering: pixelated;
+  /* sit 10 px above hole centre; cast shadow at 10+4=14 px below the peg */
+  transform: translate(-50%, calc(-50% - 10px));
+  box-shadow: 0 14px 7px rgba(0,0,0,0.45);
+  transition: transform 0.13s ease, box-shadow 0.13s ease;
+}
+
+/* Selected – lift 26 px; shadow at 26+4=30 */
+.pegsol__peg--sel {
+  transform: translate(-50%, calc(-50% - 26px));
+  box-shadow: 0 30px 10px rgba(0,0,0,0.35);
+}
+
+/* Flying – maximum lift 34 px; shadow at 34+4=38 */
+.pegsol__peg--fly {
+  transform: translate(-50%, calc(-50% - 34px));
+  box-shadow: 0 38px 12px rgba(0,0,0,0.28);
+}
+
+/* Jumped-over peg lifts and fades out */
+.pegsol__peg--gone {
+  animation: ps-vanish 0.42s ease-out forwards;
+}
+
+@keyframes ps-vanish {
+  0%   { transform: translate(-50%, calc(-50% - 10px)); opacity: 1;
+         box-shadow: 0 14px 7px rgba(0,0,0,0.45); }
+  55%  { transform: translate(-50%, calc(-50% - 30px)); opacity: 0.6;
+         box-shadow: 0 34px 10px rgba(0,0,0,0.25); }
+  100% { transform: translate(-50%, calc(-50% - 40px)); opacity: 0;
+         box-shadow: 0 44px 12px rgba(0,0,0,0.05); }
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────────── */
+.pegsol__controls { display: flex; gap: 8px; }
+
+.pegsol__btn {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   background: #c0c0c0;
@@ -85,10 +118,10 @@
   border-color: #ffffff #808080 #808080 #ffffff;
   padding: 6px 14px;
   cursor: pointer;
-  color: #000000;
+  color: #000;
   white-space: nowrap;
 }
 
-.peg-btn:active {
+.pegsol__btn:active {
   border-color: #808080 #ffffff #ffffff #808080;
 }
