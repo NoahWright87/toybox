@@ -147,4 +147,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/chain-reaction",
   },
+  {
+    id: "peg-solitaire",
+    title: "Peg Solitaire",
+    description: "The classic Cracker Barrel peg puzzle. Remove one peg, then jump over pegs to eliminate them. Can you end with just one?",
+    category: "game",
+    path: "/peg-solitaire",
+  },
 ];

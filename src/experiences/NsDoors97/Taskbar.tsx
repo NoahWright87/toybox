@@ -109,6 +109,7 @@ const GAMES_ITEMS = [
   { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
   { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
   { id: "chain-reaction", icon: "🔗", label: "Chain Reaction"   },
+  { id: "peg-solitaire",  icon: "🔴", label: "Peg Solitaire"    },
 ] as const;
 
 const TOOLS_ITEMS = [

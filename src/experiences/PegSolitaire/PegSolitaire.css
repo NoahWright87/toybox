@@ -1,0 +1,94 @@
+.peg-solitaire {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #c0c0c0;
+  min-height: 100%;
+}
+
+.peg-status {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #000000;
+  text-align: center;
+  min-height: 16px;
+  padding: 4px 8px;
+}
+
+.peg-rating {
+  color: #cc4400;
+}
+
+.peg-board {
+  position: relative;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.peg-hole {
+  position: absolute;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 2px solid;
+  border-color: #606060 #d4d0c8 #d4d0c8 #606060;
+  background: #808080;
+  cursor: default;
+}
+
+.peg-hole--peg {
+  background: #cc4400;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  cursor: pointer;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.peg-hole--peg:hover {
+  filter: brightness(1.12);
+}
+
+.peg-hole--selected {
+  background: #5b2d8e;
+  border-color: #cc88ff #330066 #330066 #cc88ff;
+  cursor: pointer;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.peg-hole--landing {
+  background: #228833;
+  border-color: #88ff88 #006600 #006600 #88ff88;
+  cursor: pointer;
+  animation: peg-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes peg-pulse {
+  from {
+    filter: brightness(1);
+  }
+  to {
+    filter: brightness(1.4);
+  }
+}
+
+.peg-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.peg-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: #000000;
+  white-space: nowrap;
+}
+
+.peg-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
