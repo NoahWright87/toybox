@@ -18,7 +18,7 @@
 
 .pegsol__rating { color: #cc4400; }
 
-/* Board container */
+/* Board container — transparent so keyed board image floats over win95 gray */
 .pegsol__board {
   position: relative;
 }
@@ -42,7 +42,7 @@
   justify-content: center;
 }
 
-/* Flying peg container – transitions position, no pointer events */
+/* Flying peg container */
 .pegsol__spot--fly {
   pointer-events: none;
   z-index: 20;
@@ -52,8 +52,8 @@
 /* ── Landing glow ───────────────────────────────────────────────────────────── */
 .pegsol__glow {
   position: absolute;
-  width: 32px;
-  height: 18px;
+  width: 36px;
+  height: 20px;
   border-radius: 50%;
   background: radial-gradient(ellipse, rgba(255,200,50,0.9) 0%, rgba(255,140,0,0.5) 55%, transparent 100%);
   animation: ps-glow 0.45s ease-in-out infinite alternate;
@@ -66,45 +66,39 @@
 }
 
 /* ── Peg sprite ─────────────────────────────────────────────────────────────── */
-/*
- * The sprite is displayed with position: absolute, centred on the spot,
- * then shifted upward by ELEV_SIT to look like it's sitting in the hole.
- * Box-shadow Y is tuned to keep the cast shadow near the board surface
- * regardless of elevation: shadow_Y ≈ elevation + 4.
- */
 .pegsol__peg {
   position: absolute;
   image-rendering: pixelated;
-  /* sit 10 px above hole centre; cast shadow at 10+4=14 px below the peg */
-  transform: translate(-50%, calc(-50% - 10px));
-  box-shadow: 0 14px 7px rgba(0,0,0,0.45);
+  /* Sit 12px above hole centre; cast shadow below */
+  transform: translate(-50%, calc(-50% - 12px));
+  box-shadow: 0 16px 8px rgba(0,0,0,0.40);
   transition: transform 0.13s ease, box-shadow 0.13s ease;
 }
 
-/* Selected – lift 26 px; shadow at 26+4=30 */
+/* Selected – lift 28px */
 .pegsol__peg--sel {
-  transform: translate(-50%, calc(-50% - 26px));
-  box-shadow: 0 30px 10px rgba(0,0,0,0.35);
+  transform: translate(-50%, calc(-50% - 28px));
+  box-shadow: 0 32px 10px rgba(0,0,0,0.30);
 }
 
-/* Flying – maximum lift 34 px; shadow at 34+4=38 */
+/* Flying – max lift 36px */
 .pegsol__peg--fly {
-  transform: translate(-50%, calc(-50% - 34px));
-  box-shadow: 0 38px 12px rgba(0,0,0,0.28);
+  transform: translate(-50%, calc(-50% - 36px));
+  box-shadow: 0 40px 12px rgba(0,0,0,0.22);
 }
 
-/* Jumped-over peg lifts and fades out */
+/* Jumped-over peg lifts and fades */
 .pegsol__peg--gone {
   animation: ps-vanish 0.42s ease-out forwards;
 }
 
 @keyframes ps-vanish {
-  0%   { transform: translate(-50%, calc(-50% - 10px)); opacity: 1;
-         box-shadow: 0 14px 7px rgba(0,0,0,0.45); }
-  55%  { transform: translate(-50%, calc(-50% - 30px)); opacity: 0.6;
-         box-shadow: 0 34px 10px rgba(0,0,0,0.25); }
-  100% { transform: translate(-50%, calc(-50% - 40px)); opacity: 0;
-         box-shadow: 0 44px 12px rgba(0,0,0,0.05); }
+  0%   { transform: translate(-50%, calc(-50% - 12px)); opacity: 1;
+         box-shadow: 0 16px 8px rgba(0,0,0,0.40); }
+  55%  { transform: translate(-50%, calc(-50% - 32px)); opacity: 0.6;
+         box-shadow: 0 36px 10px rgba(0,0,0,0.22); }
+  100% { transform: translate(-50%, calc(-50% - 44px)); opacity: 0;
+         box-shadow: 0 48px 12px rgba(0,0,0,0.05); }
 }
 
 /* ── Controls ───────────────────────────────────────────────────────────────── */
