@@ -35,7 +35,7 @@ const MIN_SPEED  = 0.012;
 // ── Controls ──────────────────────────────────────────────────────────────────
 const MAX_VEL       = 22;
 const AIM_LERP_MAX  = 0.18;
-const AIM_LERP_RAMP = 0.008;
+const AIM_LERP_RAMP = 0.004;
 const ENG_LERP_MAX  = 0.15;
 const ENG_LERP_RAMP = 0.007;
 const ENG_DOT_SCALE = 30;
@@ -1049,6 +1049,14 @@ export default function Pool({ onQuit }: PoolProps) {
     );
   })();
 
+  // ── Shared label maps (used on both setup screen and settings modal) ─────
+  const strictnessLabel: Record<Strictness, string> = {
+    strict: 'Strict', loose: 'Loose', generous: 'Generous',
+  };
+  const hintLabel: Record<HintLevel, string> = {
+    minimal: 'Minimal', normal: 'Normal', extra: 'Extra',
+  };
+
   // ── Setup screen ──────────────────────────────────────────────────────────
   if (gamePhase === 'setup') {
     const isAI0 = mode === 'aiai';
@@ -1100,6 +1108,26 @@ export default function Pool({ onQuit }: PoolProps) {
               </>
           }
         </div>
+        <div className="pool-setup__fields">
+          <label className="pool-setup__label">Pocket Size</label>
+          <div className="pool-setup__row">
+            {(['strict', 'loose', 'generous'] as Strictness[]).map(s => (
+              <button key={s} className={`pool-btn${strictness === s ? ' pool-btn--on' : ''}`}
+                onClick={() => setStrictness(s)}>
+                {strictnessLabel[s]}
+              </button>
+            ))}
+          </div>
+          <label className="pool-setup__label">Aim Hints</label>
+          <div className="pool-setup__row">
+            {(['minimal', 'normal', 'extra'] as HintLevel[]).map(h => (
+              <button key={h} className={`pool-btn${hintLevel === h ? ' pool-btn--on' : ''}`}
+                onClick={() => setHintLevel(h)}>
+                {hintLabel[h]}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="pool-setup__actions">
           <button
             className="pool-btn pool-btn--primary"
@@ -1125,13 +1153,6 @@ export default function Pool({ onQuit }: PoolProps) {
     : uiPhase === 'aiming' && isHumanTurn
     ? 'Tap/hold to aim · drag cue down to shoot'
     : uiMsg;
-
-  const strictnessLabel: Record<Strictness, string> = {
-    strict: 'Strict', loose: 'Loose', generous: 'Generous',
-  };
-  const hintLabel: Record<HintLevel, string> = {
-    minimal: 'Minimal', normal: 'Normal', extra: 'Extra',
-  };
 
   return (
     <div className="pool-game">
