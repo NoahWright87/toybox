@@ -135,14 +135,16 @@ interface Props { onQuit?: () => void }
 export default function PegSolitaire({ onQuit }: Props) {
   const boardSrc = useKeyedImage("/peg-solitaire/board.png");
 
-  const [board,   setBoard]   = useState<Board>(makeFullBoard);
-  const [colors,  setColors]  = useState<ColorMap>(makeColorMap);
-  const [phase,   setPhase]   = useState<Phase>("setup");
-  const [selected,setSelected]= useState<Pos | null>(null);
-  const [jump,    setJump]    = useState<JumpAnim | null>(null);
+  const [board,    setBoard]    = useState<Board>(makeFullBoard);
+  const [colors,   setColors]   = useState<ColorMap>(makeColorMap);
+  const [phase,    setPhase]    = useState<Phase>("setup");
+  const [selected, setSelected] = useState<Pos | null>(null);
+  const [jump,     setJump]     = useState<JumpAnim | null>(null);
+  const [removing, setRemoving] = useState<Pos | null>(null);  // first-peg removal anim
 
-  const boardRef  = useRef(board);
-  const colorsRef = useRef(colors);
+  const boardRef     = useRef(board);
+  const colorsRef    = useRef(colors);
+  const removeTimerRef = useRef(0);
   useEffect(() => { boardRef.current  = board;  }, [board]);
   useEffect(() => { colorsRef.current = colors; }, [colors]);
 
@@ -200,14 +202,21 @@ export default function PegSolitaire({ onQuit }: Props) {
 
   // ── Click handler ──────────────────────────────────────────────────────────
   const handleClick = useCallback((row: number, col: number) => {
-    if (jump) return;
+    if (jump || removing) return;
 
     if (phase === "setup") {
-      const nb = board.map(r => [...r]);
-      nb[row][col] = false;
-      const nc = colors.map(r => [...r]);
-      nc[row][col] = null;
-      setBoard(nb); setColors(nc); setPhase("playing");
+      // Animate the first peg out, then start the game
+      setRemoving({ row, col });
+      removeTimerRef.current = window.setTimeout(() => {
+        const nb = boardRef.current.map(r => [...r]);
+        nb[row][col] = false;
+        const nc = colorsRef.current.map(r => [...r]);
+        nc[row][col] = null;
+        setBoard(nb);
+        setColors(nc);
+        setPhase("playing");
+        setRemoving(null);
+      }, 480);
       return;
     }
 
@@ -228,8 +237,9 @@ export default function PegSolitaire({ onQuit }: Props) {
   }, [board, colors, phase, selected, landings, jump]);
 
   const newGame = useCallback(() => {
+    window.clearTimeout(removeTimerRef.current);
     setBoard(makeFullBoard()); setColors(makeColorMap());
-    setPhase("setup"); setSelected(null); setJump(null);
+    setPhase("setup"); setSelected(null); setJump(null); setRemoving(null);
   }, []);
 
   // ── Menus ──────────────────────────────────────────────────────────────────
@@ -272,7 +282,10 @@ export default function PegSolitaire({ onQuit }: Props) {
         {/* ── z=2: cast shadows (fixed at board surface, independent of peg lift) */}
         {board.map((row, r) =>
           row.map((hasPeg, c) => {
-            if (!hasPeg || posKey(r, c) === fromKey) return null;
+            const key = posKey(r, c);
+            if (!hasPeg || key === fromKey) return null;
+            const isRemoving = removing?.row === r && removing?.col === c;
+            if (isRemoving) return null;  // hide shadow during removal anim
             const { x, y } = holeCenter(r, c);
             const isSel = !jump && selected?.row === r && selected?.col === c;
             return (
@@ -297,13 +310,15 @@ export default function PegSolitaire({ onQuit }: Props) {
             const colorIdx = colors[r][c];
             if (colorIdx === null) return null;
 
+            const isRemoving = removing?.row === r && removing?.col === c;
             return (
               <div
                 key={`peg-${key}`}
                 className={[
                   "pegsol__peg",
-                  isSel          ? "pegsol__peg--sel"  : "",
-                  isOver && jump ? "pegsol__peg--gone" : "",
+                  isRemoving     ? "pegsol__peg--remove" : "",
+                  isSel          ? "pegsol__peg--sel"    : "",
+                  isOver && jump ? "pegsol__peg--gone"   : "",
                 ].filter(Boolean).join(" ")}
                 style={pegPos(x, y)}
               >
@@ -345,7 +360,7 @@ export default function PegSolitaire({ onQuit }: Props) {
                 }}
                 onClick={() => handleClick(r, c)}
               >
-                {isLand && <div className="pegsol__glow" />}
+                {isLand && <div className="pegsol__doughnut" />}
               </div>
             );
           })

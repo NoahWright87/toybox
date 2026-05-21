@@ -50,9 +50,9 @@
 }
 /* Peg lifted: shadow spreads and dims */
 .pegsol__shadow--sel {
-  width: 42px;
-  height: 14px;
-  opacity: 0.40;
+  width: 48px;
+  height: 16px;
+  opacity: 0.35;
 }
 
 /* ── Layer 2: Spot (hit area + glow only — no pegs inside) ──────────────────── */
@@ -72,19 +72,20 @@
   transition: left 0.33s ease-in-out, top 0.33s ease-in-out;
 }
 
-/* ── Landing glow ────────────────────────────────────────────────────────────── */
-.pegsol__glow {
+/* ── Landing indicator: static doughnut ring around the hole-rim ─────────────── */
+/*
+ * The hole-rim overlay is 30×24. The doughnut sits just outside it:
+ * 42×34 element with a 3px border leaves ~3px of gap around the dark oval.
+ * No animation — the ring is a quiet positional cue.
+ */
+.pegsol__doughnut {
   position: absolute;
-  width: 34px;
-  height: 18px;
+  width: 42px;
+  height: 34px;
+  border: 3px solid rgba(255, 160, 0, 0.85);
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(255,210,60,0.90) 0%, rgba(255,140,0,0.50) 55%, transparent 100%);
-  animation: ps-glow 0.45s ease-in-out infinite alternate;
+  box-shadow: 0 0 5px 1px rgba(255, 140, 0, 0.35);
   pointer-events: none;
-}
-@keyframes ps-glow {
-  from { opacity: 0.7; transform: scale(0.9); }
-  to   { opacity: 1.0; transform: scale(1.1); }
 }
 
 /* ── Peg wrapper ─────────────────────────────────────────────────────────────── */
@@ -98,18 +99,26 @@
   transition: transform 0.13s ease;
 }
 
-/* Selected – lift 14 px out of the hole */
-.pegsol__peg--sel { transform: translateY(-14px); }
+/* Selected – lift 22 px out of the hole */
+.pegsol__peg--sel { transform: translateY(-22px); }
 
-/* Flying – maximum lift 22 px */
-.pegsol__peg--fly { transform: translateY(-22px); }
+/* Flying – maximum lift 30 px */
+.pegsol__peg--fly { transform: translateY(-30px); }
 
 /* Jumped-over peg: lift + fade */
 .pegsol__peg--gone { animation: ps-vanish 0.42s ease-out forwards; }
 @keyframes ps-vanish {
   0%   { transform: translateY(0);     opacity: 1; }
-  55%  { transform: translateY(-18px); opacity: 0.5; }
-  100% { transform: translateY(-26px); opacity: 0; }
+  55%  { transform: translateY(-22px); opacity: 0.5; }
+  100% { transform: translateY(-32px); opacity: 0; }
+}
+
+/* First-peg removal: rises out of the hole then dissolves */
+.pegsol__peg--remove { animation: ps-remove 0.48s ease-out forwards; }
+@keyframes ps-remove {
+  0%   { transform: translateY(0);                    opacity: 1; }
+  30%  { transform: translateY(-30px);                opacity: 1; }
+  100% { transform: translateY(-54px) scale(0.25);   opacity: 0; }
 }
 
 /* ── Layer 3: Hole-rim overlay ───────────────────────────────────────────────── */
