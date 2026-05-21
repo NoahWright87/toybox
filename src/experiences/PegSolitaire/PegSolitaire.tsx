@@ -3,32 +3,6 @@ import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import "./PegSolitaire.css";
 
-// ── Board image: key out near-white background ────────────────────────────────
-function useKeyedImage(src: string): string {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = imageData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const lo = Math.min(d[i], d[i + 1], d[i + 2]);
-        const hi = Math.max(d[i], d[i + 1], d[i + 2]);
-        if (lo > 218 && hi - lo < 28) d[i + 3] = 0;
-      }
-      ctx.putImageData(imageData, 0, 0);
-      setUrl(canvas.toDataURL("image/png"));
-    };
-    img.src = src;
-  }, [src]);
-  return url;
-}
-
 // ── Hole positions (pixel-measured from the 1254×1254 board at 542px display) ─
 const HOLES: readonly (readonly [number, number])[][] = [
   [[271, 139]],
@@ -75,6 +49,99 @@ function PegSVG({ colorIdx }: { colorIdx: number }) {
       <ellipse cx="-5" cy="-35" rx="9" ry="4" fill={capLight} opacity="0.50" />
       {/* Specular dot */}
       <ellipse cx="-7" cy="-37" rx="4" ry="2" fill="white" opacity="0.22" />
+    </svg>
+  );
+}
+
+// ── SVG board ─────────────────────────────────────────────────────────────────
+const BRD_T:  readonly [number, number] = [271, 50];
+const BRD_BL: readonly [number, number] = [42,  450];
+const BRD_BR: readonly [number, number] = [500, 450];
+const BRD_DEPTH = 20;
+
+function BoardSVG() {
+  const pts = `${BRD_T[0]},${BRD_T[1]} ${BRD_BL[0]},${BRD_BL[1]} ${BRD_BR[0]},${BRD_BR[1]}`;
+  return (
+    <svg viewBox={`0 0 ${BOARD_W} ${BOARD_H}`} width={BOARD_W} height={BOARD_H}
+         xmlns="http://www.w3.org/2000/svg" className="pegsol__board-svg" aria-hidden>
+      <defs>
+        <clipPath id="brd-clip">
+          <polygon points={pts} />
+        </clipPath>
+        <linearGradient id="brd-wood" x1="271" y1="50" x2="271" y2="450"
+                        gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#e8aa58" />
+          <stop offset="45%"  stopColor="#c68030" />
+          <stop offset="100%" stopColor="#905018" />
+        </linearGradient>
+      </defs>
+
+      {/* Drop shadow */}
+      <polygon points={pts} fill="#000" opacity="0.28" transform="translate(8,14)" />
+
+      {/* Bottom depth face */}
+      <polygon
+        points={`${BRD_BL[0]},${BRD_BL[1]} ${BRD_BR[0]},${BRD_BR[1]} ${BRD_BR[0]},${BRD_BR[1] + BRD_DEPTH} ${BRD_BL[0]},${BRD_BL[1] + BRD_DEPTH}`}
+        fill="#5a2808"
+      />
+
+      {/* Main surface */}
+      <polygon points={pts} fill="url(#brd-wood)" />
+
+      {/* Wood grain */}
+      <g clipPath="url(#brd-clip)" stroke="#7a4010" strokeWidth="1.2" opacity="0.09">
+        {Array.from({ length: 30 }, (_, i) => (
+          <line key={i} x1="0" y1={BRD_T[1] + i * 14} x2={BOARD_W} y2={BRD_T[1] + i * 14} />
+        ))}
+      </g>
+
+      {/* Bevel highlight: left + right edges */}
+      <polyline
+        points={`${BRD_BL[0]},${BRD_BL[1]} ${BRD_T[0]},${BRD_T[1]} ${BRD_BR[0]},${BRD_BR[1]}`}
+        fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="4"
+        strokeLinecap="round" strokeLinejoin="round"
+      />
+      {/* Bevel shadow: bottom edge */}
+      <line x1={BRD_BL[0]} y1={BRD_BL[1]} x2={BRD_BR[0]} y2={BRD_BR[1]}
+            stroke="rgba(0,0,0,0.28)" strokeWidth="4" />
+
+      {/* Board outline */}
+      <polygon points={pts} fill="none" stroke="#2a0e00" strokeWidth="2.5" />
+
+      {/* Holes */}
+      {HOLES.map((rowHoles, r) =>
+        rowHoles.map(([hx, hy], c) => (
+          <g key={`bsvg-${r}-${c}`}>
+            <ellipse cx={hx} cy={hy + 4} rx={19} ry={12} fill="#000" opacity="0.38" />
+            <ellipse cx={hx} cy={hy}     rx={17} ry={13} fill="#2e0e00" />
+            <ellipse cx={hx} cy={hy}     rx={15} ry={12} fill="#0d0400" />
+            <ellipse cx={hx} cy={hy + 1} rx={9}  ry={7}  fill="#000" opacity="0.82" />
+          </g>
+        ))
+      )}
+    </svg>
+  );
+}
+
+// ── Spinning landing-target ring ───────────────────────────────────────────────
+function SpinRing() {
+  const r    = 22;
+  const sw   = 8;
+  const circ = 2 * Math.PI * r;
+  const seg  = circ / 8;
+  const da   = `${seg.toFixed(2)} ${seg.toFixed(2)}`;
+  const size = (r + sw) * 2;
+  return (
+    <svg
+      viewBox={`${-(r + sw)} ${-(r + sw)} ${size} ${size}`}
+      width={size}
+      height={size}
+      className="pegsol__spin-ring"
+    >
+      <circle r={r} fill="none" stroke="#dd1100" strokeWidth={sw}
+              strokeDasharray={da} />
+      <circle r={r} fill="none" stroke="#ffcc00" strokeWidth={sw}
+              strokeDasharray={da} strokeDashoffset={seg.toFixed(2)} />
     </svg>
   );
 }
@@ -133,8 +200,6 @@ function rating(n: number) {
 interface Props { onQuit?: () => void }
 
 export default function PegSolitaire({ onQuit }: Props) {
-  const boardSrc = useKeyedImage("/peg-solitaire/board.png");
-
   const [board,    setBoard]    = useState<Board>(makeFullBoard);
   const [colors,   setColors]   = useState<ColorMap>(makeColorMap);
   const [phase,    setPhase]    = useState<Phase>("setup");
@@ -274,10 +339,8 @@ export default function PegSolitaire({ onQuit }: Props) {
 
       <div className="pegsol__board" style={{ width: BOARD_W, height: BOARD_H }}>
 
-        {/* ── z=0: board image ─────────────────────────────────────────────── */}
-        {boardSrc && (
-          <img src={boardSrc} className="pegsol__board-img" alt="" aria-hidden draggable={false} />
-        )}
+        {/* ── z=0: board SVG ───────────────────────────────────────────────── */}
+        <BoardSVG />
 
         {/* ── z=2: cast shadows (fixed at board surface, independent of peg lift) */}
         {board.map((row, r) =>
@@ -360,7 +423,7 @@ export default function PegSolitaire({ onQuit }: Props) {
                 }}
                 onClick={() => handleClick(r, c)}
               >
-                {isLand && <div className="pegsol__doughnut" />}
+                {isLand && <SpinRing />}
               </div>
             );
           })
