@@ -1,4 +1,4 @@
-/* ── NS Art — MS Paint clone ─────────────────────────────────────────────── */
+/* ── NS Art — MS Paint clone with animation strips ───────────────────────── */
 
 .ns-art {
   display: flex;
@@ -11,78 +11,81 @@
   user-select: none;
 }
 
-/* ── Action bar ──────────────────────────────────────────────────────────── */
+/* ── Strip tab bar ───────────────────────────────────────────────────────── */
 
-.ns-art__actions {
+.ns-art__strip-bar {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 6px 0;
   background: #c0c0c0;
-  border-bottom: 1px solid #808080;
+  border-bottom: 2px solid #808080;
   flex-shrink: 0;
+  overflow-x: auto;
+  min-height: 28px;
 }
 
-.ns-art__action-btn {
+.ns-art__strip-tab {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
   background: #c0c0c0;
   border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 3px 6px;
+  border-bottom: none;
+  border-color: #ffffff #808080 transparent #ffffff;
+  padding: 4px 10px;
   cursor: pointer;
   white-space: nowrap;
-  color: #000;
-}
-
-.ns-art__action-btn:active {
-  border-color: #808080 #ffffff #ffffff #808080;
-}
-
-.ns-art__action-sep {
-  width: 1px;
-  height: 16px;
-  background: #808080;
-  margin: 0 2px;
-}
-
-/* Canvas size picker */
-.ns-art__size-picker {
+  color: #404040;
+  min-width: 48px;
+  text-align: center;
   position: relative;
+  bottom: -2px;
 }
 
-.ns-art__size-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 100;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  display: flex;
-  flex-direction: column;
-  min-width: 90px;
+.ns-art__strip-tab--active {
+  background: #d4d0c8;
+  color: #000;
+  border-color: #ffffff #808080 #d4d0c8 #ffffff;
+  z-index: 1;
 }
 
-.ns-art__size-item {
+.ns-art__strip-tab:hover:not(.ns-art__strip-tab--active) {
+  color: #000080;
+}
+
+.ns-art__strip-rename {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
+  background: #ffffff;
+  border: 1px solid #000080;
+  padding: 1px 3px;
+  color: #000;
+  width: 64px;
+  outline: none;
+}
+
+.ns-art__strip-add {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
   background: #c0c0c0;
-  border: none;
-  padding: 5px 8px;
-  text-align: left;
+  border: 2px solid;
+  border-bottom: none;
+  border-color: #ffffff #808080 transparent #ffffff;
+  padding: 2px 8px;
   cursor: pointer;
   color: #000;
-  white-space: nowrap;
+  align-self: flex-end;
+  position: relative;
+  bottom: -2px;
+  line-height: 1;
 }
 
-.ns-art__size-item:hover {
-  background: #000080;
-  color: #fff;
+.ns-art__strip-add:hover {
+  color: #cc4400;
 }
 
-.ns-art__size-item--active {
-  font-weight: bold;
+.ns-art__strip-add:active {
+  border-color: #808080 #ffffff transparent #808080;
 }
 
 /* ── Workspace ───────────────────────────────────────────────────────────── */
@@ -230,8 +233,7 @@
 
 .ns-art__canvas-wrap {
   display: inline-block;
-  position: relative; /* needed for overlay canvases */
-  /* checkerboard to show transparency */
+  position: relative;
   background-image:
     linear-gradient(45deg, #ccc 25%, transparent 25%),
     linear-gradient(-45deg, #ccc 25%, transparent 25%),
@@ -246,40 +248,37 @@
   display: block;
   cursor: crosshair;
   image-rendering: pixelated;
-  touch-action: none; /* prevent browser scroll/zoom so touch draws */
+  touch-action: none;
 }
 
-/* Onion skin + frame grid overlays — sit above the canvas, no pointer events */
-.ns-art__onion-overlay,
-.ns-art__grid-overlay {
+.ns-art__canvas--playing {
+  cursor: default;
+}
+
+/* Onion skin overlay */
+.ns-art__onion-overlay {
   position: absolute;
   top: 0;
   left: 0;
   pointer-events: none;
   image-rendering: pixelated;
-}
-
-.ns-art__onion-overlay {
   z-index: 1;
 }
 
-.ns-art__grid-overlay {
-  z-index: 2;
-}
-
-/* ── Frame navigator bar ─────────────────────────────────────────────────── */
+/* ── Frame navigator bar — always visible ────────────────────────────────── */
 
 .ns-art__frame-nav {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 3px 6px;
   background: #c0c0c0;
-  border-top: 1px solid #808080;
+  border-top: 2px solid #808080;
   border-bottom: 1px solid #808080;
   flex-shrink: 0;
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
+  flex-wrap: wrap;
 }
 
 .ns-art__frame-nav-btn {
@@ -292,6 +291,8 @@
   cursor: pointer;
   color: #000;
   line-height: 1;
+  min-width: 26px;
+  text-align: center;
 }
 
 .ns-art__frame-nav-btn:active {
@@ -303,25 +304,81 @@
   cursor: default;
 }
 
+.ns-art__frame-nav-btn--add {
+  font-size: 10px;
+  padding: 2px 7px;
+  color: #004400;
+}
+
+.ns-art__frame-nav-btn--play {
+  background: #004400;
+  color: #00ff44;
+  border-color: #88ff88 #002200 #002200 #88ff88;
+  padding: 3px 10px;
+}
+
+.ns-art__frame-nav-btn--play:disabled {
+  background: #808080;
+  color: #c0c0c0;
+  border-color: #c0c0c0 #404040 #404040 #c0c0c0;
+}
+
+.ns-art__frame-nav-btn--stop {
+  background: #440000;
+  color: #ff4444;
+  border-color: #ff8888 #220000 #220000 #ff8888;
+}
+
 .ns-art__frame-nav-label {
   color: #000080;
   white-space: nowrap;
+  min-width: 80px;
+  text-align: center;
 }
 
-.ns-art__frame-nav-pos {
-  color: #606060;
+.ns-art__frame-nav-sep {
+  width: 1px;
+  height: 14px;
+  background: #808080;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.ns-art__fps-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #000;
+  font-size: 6px;
+}
+
+.ns-art__fps-input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 2px 3px;
+  color: #000;
+  width: 34px;
+  text-align: center;
+}
+
+.ns-art__fps-input:focus {
+  outline: 2px solid #000080;
+  outline-offset: 1px;
+}
+
+.ns-art__frame-nav-onion {
+  color: #7b3dbe;
   font-size: 6px;
 }
 
 .ns-art__frame-nav-info {
   margin-left: auto;
-  color: #404040;
+  color: #606060;
   font-size: 6px;
   white-space: nowrap;
-}
-
-.ns-art__frame-nav-onion {
-  color: #7b3dbe;
 }
 
 /* ── Bottom bar ──────────────────────────────────────────────────────────── */
@@ -351,6 +408,7 @@
   height: 22px;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
 }
 
 .ns-art__swatch--secondary {
@@ -407,7 +465,7 @@
   border-color: #000 #ffffff #ffffff #000;
 }
 
-/* Transparent swatch — checkerboard */
+/* Transparent swatch */
 .ns-art__pal-swatch--transparent {
   background-image:
     linear-gradient(45deg, #ccc 25%, transparent 25%),
@@ -512,86 +570,4 @@
 
 .ns-art__dialog-btn--primary:active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
-}
-
-/* ── Form dialog variant (sprite sheet setup, go to frame) ───────────────── */
-
-.ns-art__dialog--form {
-  min-width: 280px;
-  max-width: 380px;
-}
-
-.ns-art__form-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.ns-art__form-label {
-  font-family: "Press Start 2P", monospace;
-  font-size: 6px;
-  color: #000;
-  width: 110px;
-  flex-shrink: 0;
-  line-height: 1.6;
-}
-
-.ns-art__form-input {
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  background: #ffffff;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  padding: 3px 5px;
-  color: #000;
-  width: 70px;
-  box-sizing: border-box;
-}
-
-.ns-art__form-input:focus {
-  outline: 2px solid #000080;
-  outline-offset: 1px;
-}
-
-.ns-art__form-preview {
-  font-family: "Press Start 2P", monospace;
-  font-size: 6px;
-  color: #000080;
-  margin-top: 10px;
-  padding: 5px 6px;
-  background: #d4d0c8;
-  border: 1px solid #808080;
-  line-height: 1.7;
-}
-
-/* ── Wide dialog variant (export) ────────────────────────────────────────── */
-
-.ns-art__dialog--wide {
-  min-width: 340px;
-  max-width: 460px;
-}
-
-.ns-art__export-hint {
-  font-family: "Press Start 2P", monospace;
-  font-size: 6px;
-  color: #404040;
-  margin-bottom: 8px;
-  line-height: 1.7;
-}
-
-.ns-art__export-textarea {
-  display: block;
-  width: 100%;
-  height: 160px;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 10px;
-  background: #ffffff;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  color: #000;
-  padding: 6px;
-  box-sizing: border-box;
-  resize: vertical;
-  cursor: text;
 }

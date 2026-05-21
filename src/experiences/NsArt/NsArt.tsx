@@ -15,30 +15,10 @@ interface CanvasSize { w: number; h: number }
 interface DialogButton { label: string; onClick: () => void; primary?: boolean }
 interface ConfirmState { title: string; message: string; buttons: DialogButton[] }
 
-interface SpriteSheet {
-  frameW: number;
-  frameH: number;
-  cols: number;
-  rows: number;
-  frameCount: number;
-}
-
 type OnionOpacity = 0.25 | 0.5 | 0.75;
 type OnionRange = 1 | 2;
 
-interface SsDialogState {
-  frameW: string;
-  frameH: string;
-  frameCount: string;
-  cols: string;
-}
-
-interface InputDialogState {
-  title: string;
-  prompt: string;
-  initial: string;
-  onConfirm: (val: string) => void;
-}
+interface Strip { name: string }
 
 export interface NsArtHandle {
   requestClose: (proceed: () => void) => void;
@@ -51,12 +31,10 @@ export interface NsArtProps {
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const DEFAULT_PALETTE: string[] = [
-  // Row 1 — dark / brand
   "#000000", "#7f7f7f", "#800000", "#cc4400",
   "#ff6b00", "#808000", "#005500", "#006060",
   "#000080", "#5b2d8e", "#7b3dbe", "#800080",
   "#8b4513", "#c0c0c0",
-  // Row 2 — bright / light
   "#ffffff", "#d4d0c8", "#ff4444", "#ff9933",
   "#ffdd00", "#00cc44", "#00cccc", "#4488ff",
   "#d0a0ff", "#ff44ff", "#ffcc88", "#aa66ff",
@@ -183,7 +161,7 @@ function strokeOval(
   const ry = Math.max(1, Math.abs(y1-y0)/2);
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
-  if ((mode === "filled" || mode === "both")) {
+  if (mode === "filled" || mode === "both") {
     applyColor(ctx, fillColor, size);
     ctx.fill();
   }
@@ -215,12 +193,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const canvasRef          = useRef<HTMLCanvasElement>(null);
   const canvasAreaRef      = useRef<HTMLDivElement>(null);
   const onionCanvasRef     = useRef<HTMLCanvasElement>(null);
-  const frameGridCanvasRef = useRef<HTMLCanvasElement>(null);
   const primaryPickerRef   = useRef<HTMLInputElement>(null);
   const secondaryPickerRef = useRef<HTMLInputElement>(null);
   const swatchPickerRef    = useRef<HTMLInputElement>(null);
-  const inputDlgRef        = useRef<HTMLInputElement>(null);
+  const stripRenameRef     = useRef<HTMLInputElement>(null);
 
+  // Drawing state
   const [tool,           setTool]          = useState<Tool>("pencil");
   const [palette,        setPalette]       = useState<string[]>(() => [...DEFAULT_PALETTE]);
   const [primaryColor,   setPrimaryColor]  = useState("#000000");
@@ -228,23 +206,25 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [brushSize,      setBrushSize]     = useState<BrushSize>(2);
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
   const [zoom,           setZoom]          = useState(1);
-  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 640, h: 480 });
-  const [clearCount,     setClearCount]    = useState(0);
+  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 320, h: 240 });
   const [status,         setStatus]        = useState("Ready");
   const [confirmState,   setConfirmState]  = useState<ConfirmState | null>(null);
   const [editingSwatchIdx, setEditingSwatchIdx] = useState<number | null>(null);
 
-  // ── Sprite sheet state ────────────────────────────────────────────────
-  const [spriteSheet,  setSpriteSheet]  = useState<SpriteSheet | null>(null);
-  const [currentFrame, setCurrentFrame] = useState(0);
-  const [onionSkin,    setOnionSkin]    = useState(true);
-  const [onionOpacity, setOnionOpacity] = useState<OnionOpacity>(0.5);
-  const [onionRange,   setOnionRange]   = useState<OnionRange>(1);
-  const [showFrameGrid,setShowFrameGrid]= useState(true);
-  const [ssDialog,     setSsDialog]     = useState<SsDialogState | null>(null);
-  const [inputDialog,  setInputDialog]  = useState<InputDialogState | null>(null);
-  const [exportDialog, setExportDialog] = useState<string | null>(null);
+  // Animation state
+  const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
+  const [currentStrip,  setCurrentStrip]  = useState(0);
+  const [currentFrame,  setCurrentFrame]  = useState(0);
+  const [frameCount,    setFrameCount]    = useState(1);
+  const [onionSkin,     setOnionSkin]     = useState(true);
+  const [onionOpacity,  setOnionOpacity]  = useState<OnionOpacity>(0.5);
+  const [onionRange,    setOnionRange]    = useState<OnionRange>(1);
+  const [isPlaying,     setIsPlaying]     = useState(false);
+  const [playFps,       setPlayFps]       = useState(8);
+  const [renamingStrip, setRenamingStrip] = useState<number | null>(null);
+  const [renameValue,   setRenameValue]   = useState("");
 
+  // Drawing refs
   const isDrawingRef        = useRef(false);
   const startRef            = useRef({ x: 0, y: 0 });
   const lastRef             = useRef({ x: 0, y: 0 });
@@ -257,24 +237,64 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
-  // Stable refs so drawing callbacks don't need them as deps
-  const spriteSheetRef      = useRef<SpriteSheet | null>(null);
-  const currentFrameRef     = useRef(0);
-  const renderOnionSkinRef  = useRef<() => void>(() => {});
-  const renderFrameGridRef  = useRef<() => void>(() => {});
+
+  // Animation refs (stable, avoid stale closures)
+  // framesDataRef[stripIdx][frameIdx] = ImageData | null  (null = blank white)
+  const framesDataRef    = useRef<(ImageData | null)[][]>([[null]]);
+  const currentStripRef  = useRef(0);
+  const currentFrameRef  = useRef(0);
+  const frameCountRef    = useRef(1);
+  const stripsRef        = useRef<Strip[]>([{ name: "Strip 1" }]);
+  const isPlayingRef     = useRef(false);
+  const playIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const renderOnionRef   = useRef<() => void>(() => {});
+  const saveFrameRef     = useRef<() => void>(() => {});
+  const loadFrameRef     = useRef<(s: number, f: number) => void>(() => {});
 
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
-  useEffect(() => { spriteSheetRef.current   = spriteSheet;   }, [spriteSheet]);
+  useEffect(() => { currentStripRef.current  = currentStrip;  }, [currentStrip]);
   useEffect(() => { currentFrameRef.current  = currentFrame;  }, [currentFrame]);
+  useEffect(() => { frameCountRef.current    = frameCount;    }, [frameCount]);
+  useEffect(() => { stripsRef.current        = strips;        }, [strips]);
+  useEffect(() => { isPlayingRef.current     = isPlaying;     }, [isPlaying]);
 
-  // ── Expose imperative handle for close confirmation ──────────────────
+  // ── Frame data helpers ─────────────────────────────────────────────────
 
-  const exportPng = useCallback(() => {
+  const saveCurrentFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    const si = currentStripRef.current;
+    const fi = currentFrameRef.current;
+    if (!framesDataRef.current[si]) framesDataRef.current[si] = [];
+    framesDataRef.current[si][fi] = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const loadFrame = useCallback((stripIdx: number, frameIdx: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    const data = framesDataRef.current[stripIdx]?.[frameIdx];
+    ctx.globalCompositeOperation = "source-over";
+    if (data) {
+      ctx.putImageData(data, 0, 0);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }, []);
+
+  useEffect(() => { saveFrameRef.current = saveCurrentFrame; }, [saveCurrentFrame]);
+  useEffect(() => { loadFrameRef.current = loadFrame;        }, [loadFrame]);
+
+  // ── Expose imperative handle ───────────────────────────────────────────
+
+  const exportCurrentFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
-    a.download = "ns-art.png";
+    a.download = `ns-art-s${currentStripRef.current + 1}-f${currentFrameRef.current + 1}.png`;
     a.click();
     isDirtyRef.current = false;
   }, []);
@@ -286,18 +306,18 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           title: "NS Art",
           message: "Your artwork has unsaved changes.",
           buttons: [
-            { label: "Save PNG", primary: true, onClick: () => { exportPng(); proceed(); setConfirmState(null); } },
-            { label: "Close without saving",   onClick: () => { proceed();    setConfirmState(null); } },
-            { label: "Cancel",                 onClick: () => setConfirmState(null) },
+            { label: "Export PNG", primary: true, onClick: () => { exportCurrentFrame(); proceed(); setConfirmState(null); } },
+            { label: "Close without saving",      onClick: () => { proceed(); setConfirmState(null); } },
+            { label: "Cancel",                    onClick: () => setConfirmState(null) },
           ],
         });
       } else {
         proceed();
       }
     },
-  }), [exportPng]);
+  }), [exportCurrentFrame]);
 
-  // ── Auto-size canvas to fit available space on mount ─────────────────
+  // ── Auto-size canvas to fit space on mount ─────────────────────────────
 
   useLayoutEffect(() => {
     const el = canvasAreaRef.current;
@@ -311,7 +331,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     setCanvasSize(best);
   }, []);
 
-  // ── Initialise canvas to white when size changes or forced ───────────
+  // ── Init canvas to white when size changes ─────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -321,9 +341,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     undoRef.current = [];
     isDirtyRef.current = false;
-  }, [canvasSize, clearCount]);
+  }, [canvasSize]);
 
-  // ── Load backup from localStorage after first canvas init ────────────
+  // ── Load backup from localStorage once on mount ────────────────────────
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -339,9 +359,23 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       img.src = backup;
     }, 80);
     return () => clearTimeout(t);
-  }, []); // once on mount
+  }, []);
 
-  // ── Undo stack ────────────────────────────────────────────────────────
+  // ── Auto-save current frame to localStorage ────────────────────────────
+
+  const scheduleAutoSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      try {
+        localStorage.setItem(LS_KEY, canvas.toDataURL("image/png"));
+        onBackupSavedRef.current?.();
+      } catch { /* storage full */ }
+    }, 2000);
+  }, []);
+
+  // ── Undo ──────────────────────────────────────────────────────────────
 
   const pushUndo = useCallback(() => {
     const canvas = canvasRef.current;
@@ -358,119 +392,50 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     undoRef.current = undoRef.current.slice(0, -1);
     canvas.getContext("2d")!.putImageData(prev, 0, 0);
     isDirtyRef.current = true;
-    renderOnionSkinRef.current();
+    renderOnionRef.current();
   }, []);
 
-  // ── Auto-save to localStorage (debounced 2 s) ─────────────────────────
+  // ── Navigation ────────────────────────────────────────────────────────
 
-  const scheduleAutoSave = useCallback(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      try {
-        localStorage.setItem(LS_KEY, canvas.toDataURL("image/png"));
-        onBackupSavedRef.current?.();
-      } catch { /* storage full */ }
-    }, 2000);
+  const navigateTo = useCallback((stripIdx: number, frameIdx: number) => {
+    saveFrameRef.current();
+    const clampedStrip = Math.max(0, Math.min(stripsRef.current.length - 1, stripIdx));
+    const clampedFrame = Math.max(0, Math.min(frameCountRef.current - 1, frameIdx));
+    currentStripRef.current = clampedStrip;
+    currentFrameRef.current = clampedFrame;
+    setCurrentStrip(clampedStrip);
+    setCurrentFrame(clampedFrame);
+    loadFrameRef.current(clampedStrip, clampedFrame);
+    undoRef.current = [];
+    renderOnionRef.current();
   }, []);
 
-  // ── New canvas ────────────────────────────────────────────────────────
-
-  const newCanvas = useCallback(() => {
-    if (isDirtyRef.current) {
-      setConfirmState({
-        title: "NS Art — New",
-        message: "Clear the canvas? This cannot be undone.",
-        buttons: [
-          { label: "Clear", primary: true, onClick: () => {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            pushUndo();
-            const ctx = canvas.getContext("2d")!;
-            ctx.globalCompositeOperation = "source-over";
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            isDirtyRef.current = false;
-            renderOnionSkinRef.current();
-            setConfirmState(null);
-          }},
-          { label: "Cancel", onClick: () => setConfirmState(null) },
-        ],
-      });
-    } else {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d")!;
-      ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      renderOnionSkinRef.current();
-    }
-  }, [pushUndo]);
-
-  // ── Sprite sheet: scroll viewport to center a frame ──────────────────
-
-  const scrollToFrame = useCallback((frameIdx: number, ss: SpriteSheet, zoomLevel: number) => {
-    const area = canvasAreaRef.current;
-    if (!area) return;
-    const col = frameIdx % ss.cols;
-    const row = Math.floor(frameIdx / ss.cols);
-    const PADDING = 8;
-    const frameLeft = PADDING + col * ss.frameW * zoomLevel;
-    const frameTop  = PADDING + row * ss.frameH * zoomLevel;
-    const scrollX = frameLeft - (area.clientWidth  - ss.frameW * zoomLevel) / 2;
-    const scrollY = frameTop  - (area.clientHeight - ss.frameH * zoomLevel) / 2;
-    area.scrollTo({ left: Math.max(0, scrollX), top: Math.max(0, scrollY), behavior: "smooth" });
-  }, []);
-
-  // ── Sprite sheet: navigate frames ────────────────────────────────────
-
-  const goToFrame = useCallback((idx: number) => {
-    const ss = spriteSheetRef.current;
-    if (!ss) return;
-    const clamped = Math.max(0, Math.min(ss.frameCount - 1, idx));
-    setCurrentFrame(clamped);
-    currentFrameRef.current = clamped;
-    scrollToFrame(clamped, ss, zoom);
-  }, [scrollToFrame, zoom]);
-
-  // ── Sprite sheet: onion skin rendering ───────────────────────────────
+  // ── Onion skin ────────────────────────────────────────────────────────
 
   const renderOnionSkin = useCallback(() => {
     const onionCanvas = onionCanvasRef.current;
-    const mainCanvas  = canvasRef.current;
-    if (!onionCanvas || !mainCanvas) return;
+    if (!onionCanvas) return;
     const ctx = onionCanvas.getContext("2d")!;
     ctx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
 
-    const ss = spriteSheetRef.current;
-    if (!ss || !onionSkin) return;
+    if (!onionSkin || isPlayingRef.current) return;
 
-    const { frameW, frameH, cols, frameCount } = ss;
-    const cf    = currentFrameRef.current;
-    const mainCtx = mainCanvas.getContext("2d")!;
-    const curCol  = cf % cols;
-    const curRow  = Math.floor(cf / cols);
-    const destX   = curCol * frameW;
-    const destY   = curRow * frameH;
-
-    const tmpCanvas = document.createElement("canvas");
-    tmpCanvas.width  = frameW;
-    tmpCanvas.height = frameH;
-    const tmpCtx = tmpCanvas.getContext("2d")!;
+    const strip = currentStripRef.current;
+    const frame = currentFrameRef.current;
+    const fc    = frameCountRef.current;
+    const fw    = onionCanvas.width;
+    const fh    = onionCanvas.height;
 
     for (let delta = -onionRange; delta <= onionRange; delta++) {
       if (delta === 0) continue;
-      const targetFrame = cf + delta;
-      if (targetFrame < 0 || targetFrame >= frameCount) continue;
+      const targetFrame = frame + delta;
+      if (targetFrame < 0 || targetFrame >= fc) continue;
 
-      const srcCol = targetFrame % cols;
-      const srcRow = Math.floor(targetFrame / cols);
-      const frameData = mainCtx.getImageData(srcCol * frameW, srcRow * frameH, frameW, frameH);
-      const d = frameData.data;
+      const data = framesDataRef.current[strip]?.[targetFrame];
+      if (!data) continue;
 
-      // Previous frames → red tint; next frames → blue/teal tint
+      const tinted = new ImageData(new Uint8ClampedArray(data.data), fw, fh);
+      const d = tinted.data;
       if (delta < 0) {
         for (let i = 0; i < d.length; i += 4) {
           d[i+1] = Math.floor(d[i+1] * 0.15);
@@ -483,141 +448,228 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         }
       }
 
-      tmpCtx.putImageData(frameData, 0, 0);
+      const tmp = document.createElement("canvas");
+      tmp.width = fw; tmp.height = fh;
+      tmp.getContext("2d")!.putImageData(tinted, 0, 0);
       const fade = onionRange > 1 ? (onionRange - Math.abs(delta) + 1) / onionRange : 1;
       ctx.globalAlpha = onionOpacity * fade;
-      ctx.drawImage(tmpCanvas, destX, destY);
+      ctx.drawImage(tmp, 0, 0);
     }
     ctx.globalAlpha = 1;
   }, [onionSkin, onionOpacity, onionRange]);
 
-  // ── Sprite sheet: frame grid overlay ─────────────────────────────────
-
-  const renderFrameGrid = useCallback(() => {
-    const gridCanvas = frameGridCanvasRef.current;
-    if (!gridCanvas) return;
-    const ctx = gridCanvas.getContext("2d")!;
-    ctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-
-    const ss = spriteSheetRef.current;
-    if (!ss || !showFrameGrid) return;
-
-    const { frameW, frameH, cols, rows } = ss;
-    const cf     = currentFrameRef.current;
-    const curCol = cf % cols;
-    const curRow = Math.floor(cf / cols);
-
-    // Frame boundary lines
-    ctx.strokeStyle = "rgba(200,0,200,0.35)";
-    ctx.lineWidth   = 1;
-    for (let c = 1; c < cols; c++) {
-      ctx.beginPath();
-      ctx.moveTo(c * frameW, 0);
-      ctx.lineTo(c * frameW, rows * frameH);
-      ctx.stroke();
-    }
-    for (let r = 1; r < rows; r++) {
-      ctx.beginPath();
-      ctx.moveTo(0, r * frameH);
-      ctx.lineTo(cols * frameW, r * frameH);
-      ctx.stroke();
-    }
-
-    // Active frame highlight
-    ctx.strokeStyle = "rgba(255,160,0,0.85)";
-    ctx.lineWidth   = 2;
-    ctx.strokeRect(
-      curCol * frameW + 1,
-      curRow * frameH + 1,
-      frameW - 2,
-      frameH - 2,
-    );
-  }, [showFrameGrid]);
-
-  // Keep stable refs up to date
-  useEffect(() => { renderOnionSkinRef.current = renderOnionSkin; }, [renderOnionSkin]);
-  useEffect(() => { renderFrameGridRef.current = renderFrameGrid; }, [renderFrameGrid]);
-
-  // Re-render overlays when relevant state changes
+  useEffect(() => { renderOnionRef.current = renderOnionSkin; }, [renderOnionSkin]);
   useEffect(() => { renderOnionSkin(); }, [renderOnionSkin]);
-  useEffect(() => { renderFrameGrid(); }, [renderFrameGrid]);
 
-  // Scroll to the active frame whenever it changes
-  useEffect(() => {
-    const ss = spriteSheetRef.current;
-    if (ss) scrollToFrame(currentFrame, ss, zoom);
-  }, [currentFrame, zoom, scrollToFrame]);
+  // ── Play / Stop ───────────────────────────────────────────────────────
 
-  // ── Sprite sheet: setup dialog ────────────────────────────────────────
+  const stopPlay = useCallback(() => {
+    if (playIntervalRef.current) {
+      clearInterval(playIntervalRef.current);
+      playIntervalRef.current = null;
+    }
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    renderOnionRef.current();
+  }, []);
 
-  const openSsDialog = useCallback(() => {
-    const ss = spriteSheet;
-    setSsDialog({
-      frameW:     ss ? String(ss.frameW)     : "32",
-      frameH:     ss ? String(ss.frameH)     : "32",
-      frameCount: ss ? String(ss.frameCount) : "8",
-      cols:       ss ? String(ss.cols)       : "4",
-    });
-  }, [spriteSheet]);
+  const startPlay = useCallback(() => {
+    saveFrameRef.current();
+    setIsPlaying(true);
+    isPlayingRef.current = true;
+    playIntervalRef.current = setInterval(() => {
+      const next = (currentFrameRef.current + 1) % frameCountRef.current;
+      currentFrameRef.current = next;
+      setCurrentFrame(next);
+      loadFrameRef.current(currentStripRef.current, next);
+    }, Math.max(16, Math.round(1000 / playFps)));
+  }, [playFps]);
 
-  const confirmSsDialog = useCallback(() => {
-    if (!ssDialog) return;
-    const frameW     = Math.max(1, Math.min(512, parseInt(ssDialog.frameW)     || 32));
-    const frameH     = Math.max(1, Math.min(512, parseInt(ssDialog.frameH)     || 32));
-    const frameCount = Math.max(1, Math.min(256, parseInt(ssDialog.frameCount) || 8));
-    const cols       = Math.max(1, Math.min(frameCount, parseInt(ssDialog.cols) || 4));
-    const rows       = Math.ceil(frameCount / cols);
-    const newSs: SpriteSheet = { frameW, frameH, cols, rows, frameCount };
-    const autoZoom: number   = frameW <= 32 && frameH <= 32 ? 4 : frameW <= 64 && frameH <= 64 ? 2 : 1;
+  useEffect(() => () => {
+    if (playIntervalRef.current) clearInterval(playIntervalRef.current);
+  }, []);
 
-    const doSetup = () => {
-      setSpriteSheet(newSs);
-      spriteSheetRef.current   = newSs;
+  // ── Frame / Strip management ───────────────────────────────────────────
+
+  const addFrame = useCallback(() => {
+    if (isPlayingRef.current) return;
+    saveFrameRef.current();
+    const newIdx   = frameCountRef.current;
+    const newCount = frameCountRef.current + 1;
+    for (const row of framesDataRef.current) row.push(null);
+    frameCountRef.current  = newCount;
+    currentFrameRef.current = newIdx;
+    setFrameCount(newCount);
+    setCurrentFrame(newIdx);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d")!;
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    undoRef.current = [];
+    isDirtyRef.current = true;
+    renderOnionRef.current();
+  }, []);
+
+  const deleteFrame = useCallback(() => {
+    if (isPlayingRef.current || frameCountRef.current <= 1) return;
+    const frame    = currentFrameRef.current;
+    for (const row of framesDataRef.current) row.splice(frame, 1);
+    const newCount = frameCountRef.current - 1;
+    const newFrame = Math.min(frame, newCount - 1);
+    frameCountRef.current  = newCount;
+    currentFrameRef.current = newFrame;
+    setFrameCount(newCount);
+    setCurrentFrame(newFrame);
+    loadFrameRef.current(currentStripRef.current, newFrame);
+    undoRef.current = [];
+    isDirtyRef.current = true;
+    renderOnionRef.current();
+  }, []);
+
+  const addStrip = useCallback(() => {
+    if (isPlayingRef.current) return;
+    saveFrameRef.current();
+    const newIdx   = stripsRef.current.length;
+    const newStrip: Strip = { name: `Strip ${newIdx + 1}` };
+    const newRow: (ImageData | null)[] = new Array<ImageData | null>(frameCountRef.current).fill(null);
+    framesDataRef.current.push(newRow);
+    const newStrips = [...stripsRef.current, newStrip];
+    stripsRef.current = newStrips;
+    setStrips(newStrips);
+    currentStripRef.current  = newIdx;
+    currentFrameRef.current  = 0;
+    setCurrentStrip(newIdx);
+    setCurrentFrame(0);
+    loadFrameRef.current(newIdx, 0);
+    undoRef.current = [];
+    isDirtyRef.current = true;
+    renderOnionRef.current();
+  }, []);
+
+  const deleteStrip = useCallback(() => {
+    if (isPlayingRef.current || stripsRef.current.length <= 1) return;
+    const strip     = currentStripRef.current;
+    framesDataRef.current.splice(strip, 1);
+    const newStrips = stripsRef.current.filter((_, i) => i !== strip);
+    const newIdx    = Math.min(strip, newStrips.length - 1);
+    stripsRef.current = newStrips;
+    setStrips(newStrips);
+    currentStripRef.current = newIdx;
+    setCurrentStrip(newIdx);
+    loadFrameRef.current(newIdx, currentFrameRef.current);
+    undoRef.current = [];
+    isDirtyRef.current = true;
+    renderOnionRef.current();
+  }, []);
+
+  // ── New ───────────────────────────────────────────────────────────────
+
+  const newCanvas = useCallback(() => {
+    const doNew = () => {
+      framesDataRef.current   = [[null]];
+      const fresh             = [{ name: "Strip 1" }];
+      stripsRef.current       = fresh;
+      frameCountRef.current   = 1;
+      currentStripRef.current = 0;
+      currentFrameRef.current = 0;
+      setStrips(fresh);
+      setFrameCount(1);
+      setCurrentStrip(0);
       setCurrentFrame(0);
-      currentFrameRef.current  = 0;
-      setCanvasSize({ w: cols * frameW, h: rows * frameH });
-      setClearCount(c => c + 1);
-      setZoom(autoZoom);
-      setSsDialog(null);
+      undoRef.current = [];
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d")!;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      isDirtyRef.current = false;
+      renderOnionRef.current();
     };
 
-    if (spriteSheet) {
-      // Editing existing sheet — warn about canvas clear
+    if (isDirtyRef.current) {
       setConfirmState({
-        title: "Edit Sprite Sheet",
-        message: "Changing settings will clear the canvas. Continue?",
+        title: "NS Art — New",
+        message: "Clear all frames? This cannot be undone.",
         buttons: [
-          { label: "Continue", primary: true, onClick: () => { doSetup(); setConfirmState(null); } },
-          { label: "Cancel",                  onClick: () => setConfirmState(null) },
-        ],
-      });
-    } else if (isDirtyRef.current) {
-      setConfirmState({
-        title: "New Sprite Sheet",
-        message: "This will clear the canvas. Save your work first?",
-        buttons: [
-          { label: "Export PNG first", primary: true, onClick: () => { exportPng(); doSetup(); setConfirmState(null); } },
-          { label: "Clear & Continue",                onClick: () => { doSetup();             setConfirmState(null); } },
-          { label: "Cancel",                          onClick: () => setConfirmState(null) },
+          { label: "Clear All", primary: true, onClick: () => { doNew(); setConfirmState(null); } },
+          { label: "Cancel",                   onClick: () => setConfirmState(null) },
         ],
       });
     } else {
-      doSetup();
+      doNew();
     }
-  }, [ssDialog, spriteSheet, exportPng]);
+  }, []);
 
-  // ── Sprite sheet: export frame data ──────────────────────────────────
+  // ── Canvas size picker ─────────────────────────────────────────────────
 
-  const exportFrameData = useCallback(() => {
-    const ss = spriteSheetRef.current;
-    if (!ss) return;
-    const frames = [];
-    for (let i = 0; i < ss.frameCount; i++) {
-      const col = i % ss.cols;
-      const row = Math.floor(i / ss.cols);
-      frames.push({ x: col * ss.frameW, y: row * ss.frameH, w: ss.frameW, h: ss.frameH });
+  const handleSizeSelect = useCallback((preset: CanvasSize) => {
+    const doResize = () => {
+      const numStrips = framesDataRef.current.length;
+      const numFrames = frameCountRef.current;
+      for (let s = 0; s < numStrips; s++) {
+        framesDataRef.current[s] = new Array<ImageData | null>(numFrames).fill(null);
+      }
+      setCanvasSize(preset);
+      setZoom(1);
+      undoRef.current = [];
+      isDirtyRef.current = false;
+    };
+
+    if (preset.w === canvasSize.w && preset.h === canvasSize.h) return;
+
+    if (isDirtyRef.current || frameCount > 1 || strips.length > 1) {
+      setConfirmState({
+        title: "Change Frame Size",
+        message: "This will clear all frames. Continue?",
+        buttons: [
+          { label: "Continue", primary: true, onClick: () => { doResize(); setConfirmState(null); } },
+          { label: "Cancel",                  onClick: () => setConfirmState(null) },
+        ],
+      });
+    } else {
+      doResize();
     }
-    setExportDialog(JSON.stringify(frames, null, 2));
+  }, [canvasSize, frameCount, strips.length]);
+
+  // ── Export ────────────────────────────────────────────────────────────
+
+  const exportSpriteSheet = useCallback(() => {
+    saveFrameRef.current();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const fw        = canvas.width;
+    const fh        = canvas.height;
+    const numStrips = framesDataRef.current.length;
+    const numFrames = frameCountRef.current;
+
+    const sheet = document.createElement("canvas");
+    sheet.width  = fw * numFrames;
+    sheet.height = fh * numStrips;
+    const ctx = sheet.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, sheet.width, sheet.height);
+
+    for (let s = 0; s < numStrips; s++) {
+      for (let f = 0; f < numFrames; f++) {
+        const data = framesDataRef.current[s]?.[f];
+        if (data) {
+          const tmp = document.createElement("canvas");
+          tmp.width = fw; tmp.height = fh;
+          tmp.getContext("2d")!.putImageData(data, 0, 0);
+          ctx.drawImage(tmp, f * fw, s * fh);
+        }
+      }
+    }
+
+    const a = document.createElement("a");
+    a.href     = sheet.toDataURL("image/png");
+    a.download = "sprite-sheet.png";
+    a.click();
   }, []);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -625,21 +677,18 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
-      if (e.altKey && e.key === "ArrowLeft")  { e.preventDefault(); goToFrame(currentFrameRef.current - 1); }
-      if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); goToFrame(currentFrameRef.current + 1); }
+      if (e.altKey && e.key === "ArrowLeft")  { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current - 1); }
+      if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current + 1); }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [undo, goToFrame]);
+  }, [undo, navigateTo]);
 
-  // ── beforeunload guard when dirty (standalone) ────────────────────────
+  // ── beforeunload guard ────────────────────────────────────────────────
 
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (isDirtyRef.current) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
+      if (isDirtyRef.current) { e.preventDefault(); e.returnValue = ""; }
     }
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
@@ -664,12 +713,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     if (secondaryColor === oldColor) setSecondaryColor(newColor);
   }
 
-  // ── Shared drawing core ───────────────────────────────────────────────
+  // ── Drawing core ──────────────────────────────────────────────────────
 
   const startDrawing = useCallback((x: number, y: number, isSecondary: boolean) => {
+    if (isPlayingRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx   = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d")!;
 
     if (tool === "zoom") {
       if (isSecondary) {
@@ -687,7 +737,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       floodFill(ctx, x, y, strokeColor);
       isDirtyRef.current = true;
       scheduleAutoSave();
-      renderOnionSkinRef.current();
+      renderOnionRef.current();
       return;
     }
 
@@ -716,7 +766,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         doSpray(canvasRef.current, lastRef.current.x, lastRef.current.y, cc, cs);
       }, 50);
     } else {
-      // line / rect / oval — save snapshot for preview
       pushUndo();
       snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
@@ -726,10 +775,10 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     if (!isDrawingRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx      = canvas.getContext("2d")!;
-    const color    = activeColorRef.current;
-    const fillCol  = activeFillColorRef.current;
-    const size     = activeSizeRef.current;
+    const ctx     = canvas.getContext("2d")!;
+    const color   = activeColorRef.current;
+    const fillCol = activeFillColorRef.current;
+    const size    = activeSizeRef.current;
 
     if (tool === "pencil" || tool === "brush") {
       strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size);
@@ -770,10 +819,10 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
     isDirtyRef.current = true;
     scheduleAutoSave();
-    renderOnionSkinRef.current();
+    renderOnionRef.current();
   }, [tool, fillMode, scheduleAutoSave]);
 
-  // ── Mouse handlers ────────────────────────────────────────────────────
+  // ── Mouse / Touch handlers ────────────────────────────────────────────
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -793,16 +842,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const rect = canvas.getBoundingClientRect();
     const ax = Math.floor((e.clientX - rect.left) / zoom);
     const ay = Math.floor((e.clientY - rect.top)  / zoom);
-    // In sprite-sheet mode show frame-relative coordinates
-    const ss = spriteSheetRef.current;
-    if (ss) {
-      const cf  = currentFrameRef.current;
-      const fx  = ax - (cf % ss.cols) * ss.frameW;
-      const fy  = ay - Math.floor(cf / ss.cols) * ss.frameH;
-      setStatus(`${fx}, ${fy}`);
-    } else {
-      setStatus(`${ax}, ${ay}`);
-    }
+    setStatus(`${ax}, ${ay}`);
     continueDrawing(ax, ay);
   }, [continueDrawing, zoom]);
 
@@ -820,8 +860,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     setStatus("Ready");
     onMouseUp(e);
   }, [onMouseUp]);
-
-  // ── Touch handlers ────────────────────────────────────────────────────
 
   const onTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 0 || !canvasRef.current) return;
@@ -855,94 +893,75 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     setStatus("Ready");
   }, [endDrawing, zoom]);
 
-  // ── Canvas size picker (exits sprite-sheet mode) ──────────────────────
-
-  const handleSizeSelect = useCallback((preset: CanvasSize) => {
-    setSpriteSheet(null);
-    spriteSheetRef.current  = null;
-    setCurrentFrame(0);
-    currentFrameRef.current = 0;
-    setCanvasSize(preset);
-    setZoom(1);
-  }, []);
-
   // ── Menu bar ──────────────────────────────────────────────────────────
 
-  const artMenus = useMemo<MenuBarMenu[]>(() => {
-    const ssItems: MenuBarMenu["items"] = spriteSheet
-      ? [
-          { label: "New Sprite Sheet...", onClick: openSsDialog },
-          { label: "Edit Settings...",    onClick: openSsDialog },
-          { separator: true },
-          { label: "Previous Frame  Alt+←", onClick: () => goToFrame(currentFrame - 1) },
-          { label: "Next Frame  Alt+→",     onClick: () => goToFrame(currentFrame + 1) },
-          { label: "Go to Frame...", onClick: () =>
-            setInputDialog({
-              title: "Go to Frame",
-              prompt: `Frame number (1–${spriteSheet.frameCount}):`,
-              initial: String(currentFrame + 1),
-              onConfirm: (val) => { const n = parseInt(val); if (!isNaN(n)) goToFrame(n - 1); },
-            })
-          },
-          { separator: true },
-          { label: "Onion Skin",      checked: onionSkin,         onClick: () => setOnionSkin(v => !v) },
-          { label: "Opacity 25%",     checked: onionOpacity===0.25, onClick: () => setOnionOpacity(0.25) },
-          { label: "Opacity 50%",     checked: onionOpacity===0.5,  onClick: () => setOnionOpacity(0.5)  },
-          { label: "Opacity 75%",     checked: onionOpacity===0.75, onClick: () => setOnionOpacity(0.75) },
-          { label: "Range: 1 Frame",  checked: onionRange===1,      onClick: () => setOnionRange(1) },
-          { label: "Range: 2 Frames", checked: onionRange===2,      onClick: () => setOnionRange(2) },
-          { separator: true },
-          { label: "Show Frame Grid", checked: showFrameGrid, onClick: () => setShowFrameGrid(v => !v) },
-          { separator: true },
-          { label: "Export Frame Data...", onClick: exportFrameData },
-          { separator: true },
-          { label: "Exit Sprite Sheet Mode", onClick: () => {
-            setSpriteSheet(null);
-            spriteSheetRef.current = null;
-            setCurrentFrame(0);
-            currentFrameRef.current = 0;
-          }},
-        ]
-      : [
-          { label: "New Sprite Sheet...", onClick: openSsDialog },
-        ];
-
-    return [
-      {
-        label: "File",
-        items: [
-          { label: "New",        onClick: newCanvas },
-          { label: "Export PNG", onClick: exportPng },
-        ],
-      },
-      {
-        label: "Edit",
-        items: [
-          { label: "Undo", onClick: undo },
-        ],
-      },
-      {
-        label: "Format",
-        items: CANVAS_PRESETS.map((p) => ({
-          label: `${p.w}×${p.h}`,
-          checked: !spriteSheet && canvasSize.w === p.w && canvasSize.h === p.h,
-          onClick: () => handleSizeSelect(p),
-        })),
-      },
-      {
-        label: "Sprite Sheet",
-        items: ssItems,
-      },
-    ];
-  }, [
-    newCanvas, exportPng, undo, canvasSize, handleSizeSelect,
-    spriteSheet, currentFrame, onionSkin, onionOpacity, onionRange, showFrameGrid,
-    goToFrame, openSsDialog, exportFrameData,
+  const artMenus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "File",
+      items: [
+        { label: "New", onClick: newCanvas },
+        { separator: true },
+        { label: "Export Current Frame", onClick: exportCurrentFrame },
+        { label: "Export Sprite Sheet PNG", onClick: exportSpriteSheet },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        { label: "Undo  Ctrl+Z", onClick: undo },
+      ],
+    },
+    {
+      label: "Format",
+      items: CANVAS_PRESETS.map(p => ({
+        label:   `${p.w}×${p.h}`,
+        checked: canvasSize.w === p.w && canvasSize.h === p.h,
+        onClick: () => handleSizeSelect(p),
+      })),
+    },
+    {
+      label: "Animation",
+      items: [
+        { label: "Add Frame",    onClick: addFrame },
+        { label: "Delete Frame", onClick: deleteFrame, disabled: frameCount <= 1 },
+        { separator: true },
+        { label: "Add Strip",    onClick: addStrip },
+        { label: "Delete Strip", onClick: deleteStrip, disabled: strips.length <= 1 },
+        { label: "Rename Strip...", onClick: () => {
+          setRenamingStrip(currentStrip);
+          setRenameValue(strips[currentStrip]?.name ?? "");
+          setTimeout(() => stripRenameRef.current?.focus(), 30);
+        }},
+        { separator: true },
+        { label: "Onion Skin",      checked: onionSkin,            onClick: () => setOnionSkin(v => !v) },
+        { label: "Opacity 25%",     checked: onionOpacity === 0.25, onClick: () => setOnionOpacity(0.25) },
+        { label: "Opacity 50%",     checked: onionOpacity === 0.5,  onClick: () => setOnionOpacity(0.5)  },
+        { label: "Opacity 75%",     checked: onionOpacity === 0.75, onClick: () => setOnionOpacity(0.75) },
+        { label: "Range: 1 Frame",  checked: onionRange === 1,      onClick: () => setOnionRange(1) },
+        { label: "Range: 2 Frames", checked: onionRange === 2,      onClick: () => setOnionRange(2) },
+      ],
+    },
+  ], [
+    newCanvas, exportCurrentFrame, exportSpriteSheet, undo,
+    canvasSize, handleSizeSelect,
+    addFrame, deleteFrame, frameCount,
+    addStrip, deleteStrip, strips, currentStrip,
+    onionSkin, onionOpacity, onionRange,
   ]);
 
   useWindowMenus(artMenus);
 
   const showFillMode = tool === "rect" || tool === "oval";
+
+  // ── Rename strip helpers ──────────────────────────────────────────────
+
+  const commitRename = useCallback(() => {
+    if (renamingStrip === null) return;
+    const trimmed = renameValue.trim() || `Strip ${renamingStrip + 1}`;
+    setStrips(prev => prev.map((s, i) => i === renamingStrip ? { ...s, name: trimmed } : s));
+    stripsRef.current = stripsRef.current.map((s, i) => i === renamingStrip ? { ...s, name: trimmed } : s);
+    setRenamingStrip(null);
+  }, [renamingStrip, renameValue]);
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -973,159 +992,40 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         </div>
       )}
 
-      {/* ── Sprite sheet setup dialog ── */}
-      {ssDialog && (
-        <div className="ns-art__overlay">
-          <div className="ns-art__dialog ns-art__dialog--form">
-            <div className="ns-art__dialog-titlebar">
-              <span className="ns-art__dialog-icon">🎨</span>
-              <span>{spriteSheet ? "Edit Sprite Sheet" : "New Sprite Sheet"}</span>
-            </div>
-            <div className="ns-art__dialog-body">
-              <div className="ns-art__form-row">
-                <label className="ns-art__form-label">Frame width (px)</label>
-                <input
-                  className="ns-art__form-input"
-                  type="number" min="1" max="512"
-                  value={ssDialog.frameW}
-                  onChange={e => { const v = e.target.value; setSsDialog(d => d ? { ...d, frameW: v } : null); }}
-                />
-              </div>
-              <div className="ns-art__form-row">
-                <label className="ns-art__form-label">Frame height (px)</label>
-                <input
-                  className="ns-art__form-input"
-                  type="number" min="1" max="512"
-                  value={ssDialog.frameH}
-                  onChange={e => { const v = e.target.value; setSsDialog(d => d ? { ...d, frameH: v } : null); }}
-                />
-              </div>
-              <div className="ns-art__form-row">
-                <label className="ns-art__form-label">Frame count</label>
-                <input
-                  className="ns-art__form-input"
-                  type="number" min="1" max="256"
-                  value={ssDialog.frameCount}
-                  onChange={e => { const v = e.target.value; setSsDialog(d => d ? { ...d, frameCount: v } : null); }}
-                />
-              </div>
-              <div className="ns-art__form-row">
-                <label className="ns-art__form-label">Columns per row</label>
-                <input
-                  className="ns-art__form-input"
-                  type="number" min="1" max="64"
-                  value={ssDialog.cols}
-                  onChange={e => { const v = e.target.value; setSsDialog(d => d ? { ...d, cols: v } : null); }}
-                />
-              </div>
-              {(() => {
-                const fw  = Math.max(1, parseInt(ssDialog.frameW)     || 32);
-                const fh  = Math.max(1, parseInt(ssDialog.frameH)     || 32);
-                const fc  = Math.max(1, parseInt(ssDialog.frameCount) || 8);
-                const c   = Math.max(1, Math.min(fc, parseInt(ssDialog.cols) || 4));
-                const r   = Math.ceil(fc / c);
-                return (
-                  <div className="ns-art__form-preview">
-                    Sheet: {c * fw} × {r * fh} px &nbsp;({c} col × {r} row)
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="ns-art__dialog-btns">
-              <button
-                className="ns-art__dialog-btn ns-art__dialog-btn--primary"
-                onClick={confirmSsDialog}
-              >
-                {spriteSheet ? "Apply" : "Create"}
-              </button>
-              <button
-                className="ns-art__dialog-btn"
-                onClick={() => setSsDialog(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Go to Frame / input dialog ── */}
-      {inputDialog && (
-        <div className="ns-art__overlay">
-          <div className="ns-art__dialog ns-art__dialog--form">
-            <div className="ns-art__dialog-titlebar">
-              <span>{inputDialog.title}</span>
-            </div>
-            <div className="ns-art__dialog-body">
-              <div className="ns-art__form-row">
-                <label className="ns-art__form-label">{inputDialog.prompt}</label>
-                <input
-                  ref={inputDlgRef}
-                  className="ns-art__form-input"
-                  type="number"
-                  defaultValue={inputDialog.initial}
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === "Enter") {
-                      inputDialog.onConfirm(inputDlgRef.current?.value ?? "");
-                      setInputDialog(null);
-                    }
-                    if (e.key === "Escape") setInputDialog(null);
-                  }}
-                />
-              </div>
-            </div>
-            <div className="ns-art__dialog-btns">
-              <button
-                className="ns-art__dialog-btn ns-art__dialog-btn--primary"
-                onClick={() => {
-                  inputDialog.onConfirm(inputDlgRef.current?.value ?? "");
-                  setInputDialog(null);
+      {/* ── Strip tab bar ── */}
+      <div className="ns-art__strip-bar">
+        {strips.map((strip, i) => (
+          <div
+            key={i}
+            className={`ns-art__strip-tab${currentStrip === i ? " ns-art__strip-tab--active" : ""}`}
+            onClick={() => { if (renamingStrip !== i) navigateTo(i, currentFrame); }}
+            onDoubleClick={() => {
+              setRenamingStrip(i);
+              setRenameValue(strip.name);
+              setTimeout(() => stripRenameRef.current?.focus(), 20);
+            }}
+            title={`${strip.name}  (double-click to rename)`}
+          >
+            {renamingStrip === i ? (
+              <input
+                ref={stripRenameRef}
+                className="ns-art__strip-rename"
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={e => {
+                  if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
+                  if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
                 }}
-              >
-                Go
-              </button>
-              <button className="ns-art__dialog-btn" onClick={() => setInputDialog(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Export frame data dialog ── */}
-      {exportDialog !== null && (
-        <div className="ns-art__overlay">
-          <div className="ns-art__dialog ns-art__dialog--wide">
-            <div className="ns-art__dialog-titlebar">
-              <span className="ns-art__dialog-icon">📋</span>
-              <span>Frame Data — FrameRect[]</span>
-            </div>
-            <div className="ns-art__dialog-body">
-              <div className="ns-art__export-hint">
-                Paste into your Sprite constructor:
-              </div>
-              <textarea
-                className="ns-art__export-textarea"
-                readOnly
-                value={exportDialog}
-                onClick={e => (e.target as HTMLTextAreaElement).select()}
+                onClick={e => e.stopPropagation()}
               />
-            </div>
-            <div className="ns-art__dialog-btns">
-              <button
-                className="ns-art__dialog-btn ns-art__dialog-btn--primary"
-                onClick={() => { navigator.clipboard.writeText(exportDialog); }}
-              >
-                Copy
-              </button>
-              <button className="ns-art__dialog-btn" onClick={() => setExportDialog(null)}>
-                Close
-              </button>
-            </div>
+            ) : (
+              strip.name
+            )}
           </div>
-        </div>
-      )}
+        ))}
+        <button className="ns-art__strip-add" onClick={addStrip} title="Add strip">+</button>
+      </div>
 
       {/* ── Workspace ── */}
       <div className="ns-art__workspace">
@@ -1194,7 +1094,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           >
             <canvas
               ref={canvasRef}
-              className="ns-art__canvas"
+              className={`ns-art__canvas${isPlaying ? " ns-art__canvas--playing" : ""}`}
               width={canvasSize.w}
               height={canvasSize.h}
               style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
@@ -1207,69 +1107,82 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               onTouchEnd={onTouchEnd}
               onContextMenu={e => e.preventDefault()}
             />
-            {/* Onion skin ghost overlay */}
-            {spriteSheet && (
-              <canvas
-                ref={onionCanvasRef}
-                className="ns-art__onion-overlay"
-                width={canvasSize.w}
-                height={canvasSize.h}
-                style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
-              />
-            )}
-            {/* Frame boundary grid overlay */}
-            {spriteSheet && (
-              <canvas
-                ref={frameGridCanvasRef}
-                className="ns-art__grid-overlay"
-                width={canvasSize.w}
-                height={canvasSize.h}
-                style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
-              />
-            )}
+            {/* Onion skin overlay */}
+            <canvas
+              ref={onionCanvasRef}
+              className="ns-art__onion-overlay"
+              width={canvasSize.w}
+              height={canvasSize.h}
+              style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
+            />
           </div>
         </div>
       </div>
 
-      {/* ── Frame navigator (sprite sheet mode only) ── */}
-      {spriteSheet && (
-        <div className="ns-art__frame-nav">
-          <button
-            className="ns-art__frame-nav-btn"
-            onClick={() => goToFrame(currentFrame - 1)}
-            disabled={currentFrame === 0}
-            title="Previous frame (Alt+←)"
-          >
-            ◀
-          </button>
-          <span className="ns-art__frame-nav-label">
-            Frame&nbsp;{currentFrame + 1}&nbsp;/&nbsp;{spriteSheet.frameCount}
-            &nbsp;&nbsp;
-            <span className="ns-art__frame-nav-pos">
-              col&nbsp;{(currentFrame % spriteSheet.cols) + 1},
-              row&nbsp;{Math.floor(currentFrame / spriteSheet.cols) + 1}
-            </span>
-          </span>
-          <button
-            className="ns-art__frame-nav-btn"
-            onClick={() => goToFrame(currentFrame + 1)}
-            disabled={currentFrame === spriteSheet.frameCount - 1}
-            title="Next frame (Alt+→)"
-          >
-            ▶
-          </button>
-          <span className="ns-art__frame-nav-info">
-            {spriteSheet.frameW}×{spriteSheet.frameH}px
-            &nbsp;·&nbsp;{spriteSheet.cols}×{spriteSheet.rows}
-            {onionSkin && <span className="ns-art__frame-nav-onion"> · onion</span>}
-          </span>
-        </div>
-      )}
+      {/* ── Frame nav bar — always visible ── */}
+      <div className="ns-art__frame-nav">
+        <button
+          className="ns-art__frame-nav-btn"
+          onClick={() => navigateTo(currentStrip, currentFrame - 1)}
+          disabled={isPlaying || currentFrame === 0}
+          title="Previous frame (Alt+←)"
+        >◀</button>
+
+        <span className="ns-art__frame-nav-label">
+          Frame&nbsp;{currentFrame + 1}&nbsp;/&nbsp;{frameCount}
+        </span>
+
+        <button
+          className="ns-art__frame-nav-btn"
+          onClick={() => navigateTo(currentStrip, currentFrame + 1)}
+          disabled={isPlaying || currentFrame === frameCount - 1}
+          title="Next frame (Alt+→)"
+        >▶</button>
+
+        <button
+          className="ns-art__frame-nav-btn ns-art__frame-nav-btn--add"
+          onClick={addFrame}
+          disabled={isPlaying}
+          title="Add frame"
+        >+</button>
+
+        <div className="ns-art__frame-nav-sep" />
+
+        <button
+          className={`ns-art__frame-nav-btn ns-art__frame-nav-btn--play${isPlaying ? " ns-art__frame-nav-btn--stop" : ""}`}
+          onClick={isPlaying ? stopPlay : startPlay}
+          disabled={frameCount < 2}
+          title={isPlaying ? "Stop playback" : "Play animation"}
+        >{isPlaying ? "■" : "▶"}</button>
+
+        <label className="ns-art__fps-label">
+          fps
+          <input
+            className="ns-art__fps-input"
+            type="number"
+            min="1"
+            max="60"
+            value={playFps}
+            onChange={e => {
+              const v = parseInt(e.target.value);
+              if (!isNaN(v) && v >= 1 && v <= 60) setPlayFps(v);
+            }}
+          />
+        </label>
+
+        {onionSkin && !isPlaying && (
+          <span className="ns-art__frame-nav-onion">· onion</span>
+        )}
+
+        <span className="ns-art__frame-nav-info">
+          {canvasSize.w}×{canvasSize.h}
+        </span>
+      </div>
 
       {/* ── Bottom: color pickers + palette + status ── */}
       <div className="ns-art__bottom">
 
-        {/* Primary / secondary swatches — click to open color picker */}
+        {/* Primary / secondary swatches */}
         <div className="ns-art__swatch-box">
           <div
             className="ns-art__swatch ns-art__swatch--secondary"
@@ -1285,7 +1198,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
             title="Primary color — outlines & freehand, left-click palette to change"
             onClick={() => primaryPickerRef.current?.click()}
           />
-          {/* Hidden native color inputs */}
           <input
             ref={primaryPickerRef}
             type="color"
@@ -1302,7 +1214,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           />
         </div>
 
-        {/* Palette — left-click=primary, right-click=secondary, double-click=edit slot */}
+        {/* Palette */}
         <div className="ns-art__palette">
           {palette.map((color, i) => (
             <button
@@ -1315,14 +1227,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               onDoubleClick={() => openSwatchEditor(i)}
             />
           ))}
-          {/* Transparent swatch */}
           <button
             className={`ns-art__pal-swatch ns-art__pal-swatch--transparent${primaryColor === "transparent" ? " ns-art__pal-swatch--pri" : ""}${secondaryColor === "transparent" ? " ns-art__pal-swatch--sec" : ""}`}
             title="Transparent / erases to alpha"
             onClick={() => setPrimaryColor("transparent")}
             onContextMenu={e => { e.preventDefault(); setSecondaryColor("transparent"); }}
           />
-          {/* Hidden input for swatch editing */}
           <input
             ref={swatchPickerRef}
             type="color"
