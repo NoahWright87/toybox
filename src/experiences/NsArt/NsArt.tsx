@@ -20,6 +20,14 @@ type OnionRange = 1 | 2;
 
 interface Strip { name: string }
 
+interface PendingRestore {
+  strips: Strip[];
+  frames: (ImageData | null)[][];
+  frameCount: number;
+  frameW: number;
+  frameH: number;
+}
+
 export interface NsArtHandle {
   requestClose: (proceed: () => void) => void;
 }
@@ -247,9 +255,11 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const stripsRef        = useRef<Strip[]>([{ name: "Strip 1" }]);
   const isPlayingRef     = useRef(false);
   const playIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const renderOnionRef   = useRef<() => void>(() => {});
-  const saveFrameRef     = useRef<() => void>(() => {});
-  const loadFrameRef     = useRef<(s: number, f: number) => void>(() => {});
+  const renderOnionRef      = useRef<() => void>(() => {});
+  const saveFrameRef        = useRef<() => void>(() => {});
+  const loadFrameRef        = useRef<(s: number, f: number) => void>(() => {});
+  const scheduleAutoSaveRef = useRef<() => void>(() => {});
+  const pendingRestoreRef   = useRef<PendingRestore | null>(null);
 
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
   useEffect(() => { currentStripRef.current  = currentStrip;  }, [currentStrip]);
@@ -341,39 +351,132 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     undoRef.current = [];
     isDirtyRef.current = false;
+
+    // Apply a pending full-restore if sizes now match
+    const pending = pendingRestoreRef.current;
+    if (pending && pending.frameW === canvas.width && pending.frameH === canvas.height) {
+      pendingRestoreRef.current = null;
+      framesDataRef.current      = pending.frames;
+      stripsRef.current          = pending.strips;
+      frameCountRef.current      = pending.frameCount;
+      currentStripRef.current    = 0;
+      currentFrameRef.current    = 0;
+      setStrips(pending.strips);
+      setFrameCount(pending.frameCount);
+      setCurrentStrip(0);
+      setCurrentFrame(0);
+      const first = pending.frames[0]?.[0];
+      if (first) ctx.putImageData(first, 0, 0);
+      isDirtyRef.current = false;
+    }
   }, [canvasSize]);
 
-  // ── Load backup from localStorage once on mount ────────────────────────
+  // ── Load full backup from localStorage once on mount ──────────────────
 
   useEffect(() => {
     const t = setTimeout(() => {
-      const backup = localStorage.getItem(LS_KEY);
-      if (!backup || !canvasRef.current) return;
-      const img = new Image();
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        isDirtyRef.current = false;
-      };
-      img.src = backup;
-    }, 80);
-    return () => clearTimeout(t);
-  }, []);
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw || !canvasRef.current) return;
+      try {
+        const backup = JSON.parse(raw);
+        if (backup.version !== 2) return; // ignore old single-frame format
+        const { frameW, frameH, strips: savedStrips, frames: savedUrls } = backup;
+        if (!Array.isArray(savedStrips) || !Array.isArray(savedUrls)) return;
+        const fc = (savedUrls[0] as unknown[])?.length ?? 1;
 
-  // ── Auto-save current frame to localStorage ────────────────────────────
+        const loadImg = (url: string | null, w: number, h: number): Promise<ImageData | null> => {
+          if (!url) return Promise.resolve(null);
+          return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+              const tmp = document.createElement("canvas");
+              tmp.width = w; tmp.height = h;
+              tmp.getContext("2d")!.drawImage(img, 0, 0);
+              resolve(tmp.getContext("2d")!.getImageData(0, 0, w, h));
+            };
+            img.onerror = () => resolve(null);
+            img.src = url;
+          });
+        };
+
+        Promise.all(
+          (savedUrls as (string | null)[][]).map(strip =>
+            Promise.all(strip.map(url => loadImg(url, frameW, frameH)))
+          )
+        ).then(allFrames => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const pending: PendingRestore = {
+            strips: savedStrips as Strip[],
+            frames: allFrames,
+            frameCount: fc,
+            frameW,
+            frameH,
+          };
+          if (canvas.width === frameW && canvas.height === frameH) {
+            // Sizes match — apply now
+            framesDataRef.current   = pending.frames;
+            stripsRef.current       = pending.strips;
+            frameCountRef.current   = pending.frameCount;
+            currentStripRef.current = 0;
+            currentFrameRef.current = 0;
+            setStrips(pending.strips);
+            setFrameCount(pending.frameCount);
+            setCurrentStrip(0);
+            setCurrentFrame(0);
+            const first = pending.frames[0]?.[0];
+            const ctx = canvas.getContext("2d")!;
+            if (first) ctx.putImageData(first, 0, 0);
+            else { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+            isDirtyRef.current = false;
+            renderOnionRef.current();
+          } else {
+            // Sizes differ — trigger resize; canvasSize effect will apply restore
+            pendingRestoreRef.current = pending;
+            setCanvasSize({ w: frameW, h: frameH });
+          }
+        });
+      } catch { /* corrupt backup — ignore */ }
+    }, 100);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-save all frames to localStorage ──────────────────────────────
 
   const scheduleAutoSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
+      saveFrameRef.current(); // ensure current frame is flushed to store
+
+      const fw = canvas.width, fh = canvas.height;
+      const tmp = document.createElement("canvas");
+      tmp.width = fw; tmp.height = fh;
+      const tmpCtx = tmp.getContext("2d")!;
+
+      const framesUrls: (string | null)[][] = framesDataRef.current.map(strip =>
+        strip.map(frame => {
+          if (!frame) return null;
+          tmpCtx.putImageData(frame, 0, 0);
+          return tmp.toDataURL("image/png");
+        })
+      );
+
       try {
-        localStorage.setItem(LS_KEY, canvas.toDataURL("image/png"));
+        localStorage.setItem(LS_KEY, JSON.stringify({
+          version: 2,
+          frameW: fw,
+          frameH: fh,
+          strips: stripsRef.current,
+          frames: framesUrls,
+        }));
         onBackupSavedRef.current?.();
-      } catch { /* storage full */ }
+      } catch { /* storage full — skip */ }
     }, 2000);
   }, []);
+
+  useEffect(() => { scheduleAutoSaveRef.current = scheduleAutoSave; }, [scheduleAutoSave]);
 
   // ── Undo ──────────────────────────────────────────────────────────────
 
@@ -436,15 +539,18 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
       const tinted = new ImageData(new Uint8ClampedArray(data.data), fw, fh);
       const d = tinted.data;
-      if (delta < 0) {
-        for (let i = 0; i < d.length; i += 4) {
-          d[i+1] = Math.floor(d[i+1] * 0.15);
-          d[i+2] = Math.floor(d[i+2] * 0.15);
-        }
-      } else {
-        for (let i = 0; i < d.length; i += 4) {
-          d[i]   = Math.floor(d[i]   * 0.15);
-          d[i+1] = Math.floor(d[i+1] * 0.6);
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i+1], b = d[i+2];
+        // Treat near-white (background) as transparent so it doesn't bleed through
+        if (r > 240 && g > 240 && b > 240) { d[i+3] = 0; continue; }
+        if (delta < 0) {
+          // Previous frame → red tint
+          d[i+1] = Math.floor(g * 0.15);
+          d[i+2] = Math.floor(b * 0.15);
+        } else {
+          // Next frame → blue/teal tint
+          d[i]   = Math.floor(r * 0.15);
+          d[i+1] = Math.floor(g * 0.6);
         }
       }
 
@@ -510,6 +616,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     }
     undoRef.current = [];
     isDirtyRef.current = true;
+    scheduleAutoSaveRef.current();
     renderOnionRef.current();
   }, []);
 
@@ -526,6 +633,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     loadFrameRef.current(currentStripRef.current, newFrame);
     undoRef.current = [];
     isDirtyRef.current = true;
+    scheduleAutoSaveRef.current();
     renderOnionRef.current();
   }, []);
 
@@ -546,6 +654,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     loadFrameRef.current(newIdx, 0);
     undoRef.current = [];
     isDirtyRef.current = true;
+    scheduleAutoSaveRef.current();
     renderOnionRef.current();
   }, []);
 
@@ -562,6 +671,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     loadFrameRef.current(newIdx, currentFrameRef.current);
     undoRef.current = [];
     isDirtyRef.current = true;
+    scheduleAutoSaveRef.current();
     renderOnionRef.current();
   }, []);
 
