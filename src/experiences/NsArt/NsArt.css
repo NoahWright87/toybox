@@ -230,6 +230,7 @@
 
 .ns-art__canvas-wrap {
   display: inline-block;
+  position: relative; /* needed for overlay canvases */
   /* checkerboard to show transparency */
   background-image:
     linear-gradient(45deg, #ccc 25%, transparent 25%),
@@ -246,6 +247,81 @@
   cursor: crosshair;
   image-rendering: pixelated;
   touch-action: none; /* prevent browser scroll/zoom so touch draws */
+}
+
+/* Onion skin + frame grid overlays — sit above the canvas, no pointer events */
+.ns-art__onion-overlay,
+.ns-art__grid-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.ns-art__onion-overlay {
+  z-index: 1;
+}
+
+.ns-art__grid-overlay {
+  z-index: 2;
+}
+
+/* ── Frame navigator bar ─────────────────────────────────────────────────── */
+
+.ns-art__frame-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: #c0c0c0;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #808080;
+  flex-shrink: 0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+}
+
+.ns-art__frame-nav-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 3px 7px;
+  cursor: pointer;
+  color: #000;
+  line-height: 1;
+}
+
+.ns-art__frame-nav-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.ns-art__frame-nav-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+.ns-art__frame-nav-label {
+  color: #000080;
+  white-space: nowrap;
+}
+
+.ns-art__frame-nav-pos {
+  color: #606060;
+  font-size: 6px;
+}
+
+.ns-art__frame-nav-info {
+  margin-left: auto;
+  color: #404040;
+  font-size: 6px;
+  white-space: nowrap;
+}
+
+.ns-art__frame-nav-onion {
+  color: #7b3dbe;
 }
 
 /* ── Bottom bar ──────────────────────────────────────────────────────────── */
@@ -436,4 +512,86 @@
 
 .ns-art__dialog-btn--primary:active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+/* ── Form dialog variant (sprite sheet setup, go to frame) ───────────────── */
+
+.ns-art__dialog--form {
+  min-width: 280px;
+  max-width: 380px;
+}
+
+.ns-art__form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ns-art__form-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  width: 110px;
+  flex-shrink: 0;
+  line-height: 1.6;
+}
+
+.ns-art__form-input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 3px 5px;
+  color: #000;
+  width: 70px;
+  box-sizing: border-box;
+}
+
+.ns-art__form-input:focus {
+  outline: 2px solid #000080;
+  outline-offset: 1px;
+}
+
+.ns-art__form-preview {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000080;
+  margin-top: 10px;
+  padding: 5px 6px;
+  background: #d4d0c8;
+  border: 1px solid #808080;
+  line-height: 1.7;
+}
+
+/* ── Wide dialog variant (export) ────────────────────────────────────────── */
+
+.ns-art__dialog--wide {
+  min-width: 340px;
+  max-width: 460px;
+}
+
+.ns-art__export-hint {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #404040;
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+
+.ns-art__export-textarea {
+  display: block;
+  width: 100%;
+  height: 160px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #000;
+  padding: 6px;
+  box-sizing: border-box;
+  resize: vertical;
+  cursor: text;
 }
