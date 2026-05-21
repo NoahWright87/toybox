@@ -30,6 +30,7 @@ import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import SoundRecorder, { lsGetSoundNames } from "./SoundRecorder";
 import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
+import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -70,7 +71,8 @@ type AppAction =
   | "readme"
   | "sound-recorder"
   | "midi-editor"
-  | "chain-reaction";
+  | "chain-reaction"
+  | "peg-solitaire";
 
 interface AppDef {
   title: string;
@@ -99,6 +101,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "sound-recorder": { title: "Sound Recorder",     icon: "🎙️", action: "sound-recorder"  },
   "midi-editor":    { title: "MIDI Editor",         icon: "🎹", action: "midi-editor"     },
   "chain-reaction": { title: "Chain Reaction",      icon: "🔗", action: "chain-reaction"  },
+  "peg-solitaire":  { title: "Peg Solitaire",       icon: "🔴", action: "peg-solitaire"   },
 };
 
 // ── Desktop icon entries (subset actually shown on desktop) ───────────────────
@@ -193,7 +196,8 @@ type WindowContent =
   | { type: "nsart-backup" }
   | { type: "sound-recorder"; fileName?: string }
   | { type: "midi-editor" }
-  | { type: "chain-reaction" };
+  | { type: "chain-reaction" }
+  | { type: "peg-solitaire" };
 
 interface OpenWindow {
   id: string;
@@ -553,6 +557,7 @@ export default function NsDoors97() {
         case "sound-recorder": content = { type: "sound-recorder" as const };                  width = 420; break;
         case "midi-editor":    content = { type: "midi-editor" as const };                     width = 860; break;
         case "chain-reaction": content = { type: "chain-reaction" as const };                  width = 540; break;
+        case "peg-solitaire":  content = { type: "peg-solitaire" as const };                   width = 580; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -891,6 +896,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "chain-reaction" && (
             <ChainReaction onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "peg-solitaire" && (
+            <PegSolitaire onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

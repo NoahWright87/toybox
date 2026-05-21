@@ -1,0 +1,149 @@
+.pegsol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #c0c0c0;
+  min-height: 100%;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────────── */
+.pegsol__status {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #000;
+  text-align: center;
+  min-height: 16px;
+}
+.pegsol__rating { color: #cc4400; }
+
+/* ── Board container ─────────────────────────────────────────────────────────── */
+.pegsol__board { position: relative; }
+
+.pegsol__board-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Layer 1: Cast shadow ────────────────────────────────────────────────────── */
+/*
+ * Stays fixed at the hole centre (board surface level).
+ * The peg SVG lifts independently; the shadow remains.
+ */
+.pegsol__shadow {
+  position: absolute;
+  width: 30px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.30);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+  transition: width 0.13s ease, height 0.13s ease, opacity 0.13s ease;
+}
+/* Peg lifted: shadow spreads and dims */
+.pegsol__shadow--sel {
+  width: 48px;
+  height: 16px;
+  opacity: 0.35;
+}
+
+/* ── Layer 2: Spot (hit area + glow only — no pegs inside) ──────────────────── */
+.pegsol__spot {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;   /* above rim overlays so pointer events reach it */
+}
+
+/* Anchor for the flying peg; transitions its board position */
+.pegsol__fly-anchor {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  transition: left 0.33s ease-in-out, top 0.33s ease-in-out;
+}
+
+/* ── Landing indicator: spinning red/yellow segmented ring ───────────────────── */
+.pegsol__spin-ring {
+  display: block;
+  animation: ps-spin 3s linear infinite;
+}
+@keyframes ps-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Peg wrapper ─────────────────────────────────────────────────────────────── */
+/*
+ * Positioned absolutely at (hole.x − PEG_W/2, hole.y − PEG_H).
+ * Ground level (y=0 in the SVG viewBox) therefore sits at hole.y.
+ * transform: translateY lifts the whole peg.
+ */
+.pegsol__peg {
+  position: absolute;
+  transition: transform 0.13s ease;
+}
+
+/* Selected – lift 22 px out of the hole */
+.pegsol__peg--sel { transform: translateY(-22px); }
+
+/* Flying – maximum lift 30 px */
+.pegsol__peg--fly { transform: translateY(-30px); }
+
+/* Jumped-over peg: lift + fade */
+.pegsol__peg--gone { animation: ps-vanish 0.42s ease-out forwards; }
+@keyframes ps-vanish {
+  0%   { transform: translateY(0);     opacity: 1; }
+  55%  { transform: translateY(-22px); opacity: 0.5; }
+  100% { transform: translateY(-32px); opacity: 0; }
+}
+
+/* First-peg removal: rises out of the hole then dissolves */
+.pegsol__peg--remove { animation: ps-remove 0.48s ease-out forwards; }
+@keyframes ps-remove {
+  0%   { transform: translateY(0);                    opacity: 1; }
+  30%  { transform: translateY(-30px);                opacity: 1; }
+  100% { transform: translateY(-54px) scale(0.25);   opacity: 0; }
+}
+
+/* ── Layer 3: Hole-rim overlay ───────────────────────────────────────────────── */
+/*
+ * Dark ellipse at every hole position, rendered ABOVE the peg stems (z-index: 10).
+ * The peg's SVG ground is at y=0; the rim is centred on hole.y.
+ * This clips the visible stem: only the cap and upper stem show above the rim.
+ * Together with the board image's dark hole circles, the pegs appear to go INTO the board.
+ */
+.pegsol__hole-rim {
+  position: absolute;
+  width: 30px;
+  height: 24px;
+  background: #0d0400;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────────── */
+.pegsol__controls { display: flex; gap: 8px; }
+
+.pegsol__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: #000;
+  white-space: nowrap;
+}
+.pegsol__btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}

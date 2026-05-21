@@ -21,6 +21,7 @@ import PoolPage from "./pages/PoolPage";
 import MidiEditorPage from "./pages/MidiEditorPage";
 import WordsPage from "./pages/WordsPage";
 import ChainReactionPage from "./pages/ChainReactionPage";
+import PegSolitairePage from "./pages/PegSolitairePage";
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/words" element={<WordsPage />} />
         <Route path="/component-test" element={<ComponentTestPage />} />
         <Route path="/chain-reaction" element={<ChainReactionPage />} />
+        <Route path="/peg-solitaire" element={<PegSolitairePage />} />
       </Routes>
     </BrowserRouter>
   );
