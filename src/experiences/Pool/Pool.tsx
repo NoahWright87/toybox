@@ -89,6 +89,9 @@ const STRICTNESS_MULT: Record<Strictness, { my: number; opp: number }> = {
   generous: { my: 1.15, opp: 0.95 },
 };
 
+// ── Aim hint level ────────────────────────────────────────────────────────────
+type HintLevel = 'minimal' | 'normal' | 'extra';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode   = 'hvh' | 'hvai' | 'aiai';
 type AIDiff = 'easy' | 'normal' | 'hard';
@@ -320,9 +323,10 @@ function liftColor(hex: string, amt: number): string {
   return `rgb(${Math.min(255, (n >> 16) + amt)},${Math.min(255, ((n >> 8) & 0xff) + amt)},${Math.min(255, (n & 0xff) + amt)})`;
 }
 
-function ghostBallDist(balls: Ball[], cue: Ball, angle: number): number {
+function ghostBallInfo(balls: Ball[], cue: Ball, angle: number): { dist: number; target: Ball | null } {
   const dx = Math.cos(angle), dy = Math.sin(angle);
   let minD = Infinity;
+  let target: Ball | null = null;
   for (const b of balls) {
     if (b.pocketed || b.num === 0) continue;
     const t = (b.x - cue.x) * dx + (b.y - cue.y) * dy;
@@ -331,10 +335,10 @@ function ghostBallDist(balls: Ball[], cue: Ball, angle: number): number {
     const perp = Math.hypot(b.x - px, b.y - py);
     if (perp < BR * 2) {
       const hit = t - Math.sqrt(Math.max(0, (BR * 2) ** 2 - perp * perp));
-      if (hit < minD) minD = hit;
+      if (hit < minD) { minD = hit; target = b; }
     }
   }
-  return minD === Infinity ? 0 : minD;
+  return minD === Infinity ? { dist: 0, target: null } : { dist: minD, target };
 }
 
 function drawBallScaled(
@@ -430,7 +434,7 @@ function drawStick(
   ctx.lineTo(tx + Math.cos(backAng) * 10, ty + Math.sin(backAng) * 10); ctx.stroke();
 }
 
-function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: number): void {
+function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: number, hintLevel: HintLevel): void {
   ctx.clearRect(0, 0, CW, CH);
 
   ctx.fillStyle = '#7a4010';
@@ -464,12 +468,45 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: numbe
 
   if (showAiming && cue) {
     const angle = gs.aimAngle;
-    const gd    = ghostBallDist(gs.balls, cue, angle);
-    if (gd > 0) {
+    const { dist: gd, target: hitBall } = ghostBallInfo(gs.balls, cue, angle);
+
+    // Ghost ball at impact point (normal + extra only)
+    if (hintLevel !== 'minimal' && gd > 0) {
       const gx = cue.x + Math.cos(angle) * gd, gy = cue.y + Math.sin(angle) * gd;
       ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1; ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(gx, gy, BR, 0, Math.PI * 2); ctx.stroke();
+
+      // Extra: projected paths for the hit ball and cue ball after collision
+      if (hintLevel === 'extra' && hitBall) {
+        // Collision normal: from ghost center toward hit ball center
+        const nx = (hitBall.x - gx) / (BR * 2);
+        const ny = (hitBall.y - gy) / (BR * 2);
+
+        // Target ball travels along the collision normal
+        const tLen = 90;
+        ctx.strokeStyle = 'rgba(255,200,80,0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(hitBall.x, hitBall.y);
+        ctx.lineTo(hitBall.x + nx * tLen, hitBall.y + ny * tLen);
+        ctx.stroke();
+
+        // Cue ball deflects perpendicular to collision normal (elastic equal-mass)
+        const cdx = Math.cos(angle), cdy = Math.sin(angle);
+        const dot = cdx * nx + cdy * ny;
+        const dflX = cdx - dot * nx, dflY = cdy - dot * ny;
+        const dflMag = Math.hypot(dflX, dflY);
+        if (dflMag > 0.01) {
+          const cLen = 65;
+          ctx.strokeStyle = 'rgba(120,200,255,0.45)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+          ctx.beginPath();
+          ctx.moveTo(gx, gy);
+          ctx.lineTo(gx + (dflX / dflMag) * cLen, gy + (dflY / dflMag) * cLen);
+          ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
     }
+
+    // Aim line from cue ball to impact (or full length if no target)
     ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1; ctx.setLineDash([6, 8]);
     ctx.beginPath();
     ctx.moveTo(cue.x, cue.y);
@@ -529,6 +566,7 @@ export default function Pool({ onQuit }: PoolProps) {
   const aimLerpRef   = useRef(0);
   const invertAimRef = useRef(false);
   const strictnessRef = useRef<Strictness>('strict');
+  const hintLevelRef  = useRef<HintLevel>('normal');
 
   const engBallRef   = useRef<HTMLDivElement>(null);
   const engDotRef    = useRef<HTMLDivElement>(null);
@@ -552,6 +590,7 @@ export default function Pool({ onQuit }: PoolProps) {
   const [invertAim,    setInvertAim]    = useState(false);
   const [cuePower,     setCuePower]     = useState(0);
   const [strictness,   setStrictness]   = useState<Strictness>('strict');
+  const [hintLevel,    setHintLevel]    = useState<HintLevel>('normal');
   const [showSettings, setShowSettings] = useState(false);
 
   const [uiPhase,     setUiPhase]     = useState<Phase>('aiming');
@@ -566,6 +605,7 @@ export default function Pool({ onQuit }: PoolProps) {
   useEffect(() => { diffRef.current = diff; }, [diff]);
   useEffect(() => { invertAimRef.current = invertAim; }, [invertAim]);
   useEffect(() => { strictnessRef.current = strictness; }, [strictness]);
+  useEffect(() => { hintLevelRef.current  = hintLevel;  }, [hintLevel]);
 
   const syncUi = useCallback((gs: GState) => {
     setUiPhase(gs.phase);
@@ -877,7 +917,7 @@ export default function Pool({ onQuit }: PoolProps) {
           }
         }
 
-        renderFrame(ctx, gsRef.current!, cuePowerRef.current);
+        renderFrame(ctx, gsRef.current!, cuePowerRef.current, hintLevelRef.current);
       }
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -1089,6 +1129,9 @@ export default function Pool({ onQuit }: PoolProps) {
   const strictnessLabel: Record<Strictness, string> = {
     strict: 'Strict', loose: 'Loose', generous: 'Generous',
   };
+  const hintLabel: Record<HintLevel, string> = {
+    minimal: 'Minimal', normal: 'Normal', extra: 'Extra',
+  };
 
   return (
     <div className="pool-game">
@@ -1115,6 +1158,25 @@ export default function Pool({ onQuit }: PoolProps) {
                 {strictness === 'strict'   && 'Standard hitboxes for all balls.'}
                 {strictness === 'loose'    && 'Slightly larger pockets for your balls.'}
                 {strictness === 'generous' && 'Bigger pockets for your balls, tighter for opponent\'s.'}
+              </div>
+            </div>
+            <div className="pool-modal__section">
+              <div className="pool-modal__label">Aim Hints</div>
+              <div className="pool-modal__options">
+                {(['minimal', 'normal', 'extra'] as HintLevel[]).map(h => (
+                  <button
+                    key={h}
+                    className={`pool-btn${hintLevel === h ? ' pool-btn--on' : ''}`}
+                    onClick={() => setHintLevel(h)}
+                  >
+                    {hintLabel[h]}
+                  </button>
+                ))}
+              </div>
+              <div className="pool-modal__desc">
+                {hintLevel === 'minimal' && 'Aim line only — no impact indicator.'}
+                {hintLevel === 'normal'  && 'Aim line + ghost ball at impact point.'}
+                {hintLevel === 'extra'   && 'Ghost ball + projected paths after collision.'}
               </div>
             </div>
             <button className="pool-btn pool-btn--primary" onClick={() => setShowSettings(false)}>OK</button>
