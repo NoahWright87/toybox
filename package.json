@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "playwright test",
-    "test:update": "playwright test --update-snapshots"
+    "test:update": "playwright test --update-snapshots",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@noahwright/design": "^1.1.0",
@@ -24,6 +25,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "jimp": "^0.22.12",
     "typescript": "^5.5.3",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^2.1.9"
   }
 }

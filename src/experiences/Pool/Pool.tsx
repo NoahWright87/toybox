@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useWindowMenus } from '../../components/Window/useWindowMenus';
 import type { MenuBarMenu } from '../../components/MenuBar/MenuBar';
+import type { Ball, Group, Phase, GState } from './poolLogic';
+import { groupBalls, processTurnEnd, DEFAULT_INHAND_POS } from './poolLogic';
 import './Pool.css';
 
 // ── Canvas dimensions ─────────────────────────────────────────────────────────
@@ -36,7 +38,6 @@ const AIM_LERP_MAX  = 0.18;
 const AIM_LERP_RAMP = 0.008;
 const ENG_LERP_MAX  = 0.15;
 const ENG_LERP_RAMP = 0.007;
-// English dot travel radius (px) for the 80px ball
 const ENG_DOT_SCALE = 30;
 
 // ── Key positions ─────────────────────────────────────────────────────────────
@@ -76,52 +77,27 @@ const STICK_COLORS = [
   '#e8dfc0', // Ivory
 ];
 
+// ── Pocket-size strictness ────────────────────────────────────────────────────
+type Strictness = 'strict' | 'loose' | 'generous';
+
+// Multipliers applied to the catch radius for player's own balls vs opponent's.
+// "Generous" gives the current player a bigger pocket and makes opponent balls
+// slightly smaller so they're harder to accidentally sink.
+const STRICTNESS_MULT: Record<Strictness, { my: number; opp: number }> = {
+  strict:   { my: 1.00, opp: 1.00 },
+  loose:    { my: 1.10, opp: 1.00 },
+  generous: { my: 1.15, opp: 0.95 },
+};
+
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Ball {
-  num: number;
-  x: number; y: number;
-  vx: number; vy: number;
-  spinX: number; spinY: number;
-  pocketed: boolean;
-  rotAngle: number;  // visual rolling angle, accumulated each frame
-}
-
-type Group  = 'solids' | 'stripes';
-type Phase  = 'aiming' | 'moving' | 'inhand' | 'over';
-type Mode   = 'hvh' | 'hvai';
+type Mode   = 'hvh' | 'hvai' | 'aiai';
 type AIDiff = 'easy' | 'normal' | 'hard';
-
-interface Player {
-  name: string;
-  group: Group | null;
-  isAI: boolean;
-  color: string;
-}
-
-interface GState {
-  balls: Ball[];
-  phase: Phase;
-  turn: 0 | 1;
-  players: [Player, Player];
-  foul: boolean;
-  isBreak: boolean;
-  pocketedThisTurn: number[];
-  sunkBalls: number[];
-  winner: 0 | 1 | null;
-  msg: string;
-  aimAngle: number;
-  englishX: number;
-  englishY: number;
-  inHandPos: { x: number; y: number };
-  firstBallHit: number | null;
-}
 
 interface MouseSt {
   x: number; y: number;
   down: boolean;
 }
 
-// State machine for the AI thinking/aiming/shooting animation
 interface AIThink {
   stage: 'thinking' | 'aiming' | 'cocking';
   targetAngle: number;
@@ -160,7 +136,13 @@ function createBalls(): Ball[] {
 }
 
 // ── Physics step ──────────────────────────────────────────────────────────────
-function stepBalls(balls: Ball[], firstHit: { value: number | null }): number[] {
+function stepBalls(
+  balls: Ball[],
+  firstHit: { value: number | null },
+  myMult: number,
+  oppMult: number,
+  playerGroup: Group | null,
+): number[] {
   const pocketed: number[] = [];
 
   for (const b of balls) {
@@ -221,7 +203,16 @@ function stepBalls(balls: Ball[], firstHit: { value: number | null }): number[] 
     let sunk = false;
     for (const p of POCKETS) {
       const dx = b.x - p.x, dy = b.y - p.y;
-      if (dx * dx + dy * dy < (PR + BR * 0.4) * (PR + BR * 0.4)) {
+      // Per-ball hitbox multiplier: aids player's own balls, neutral/tighter for opponent's
+      let catchMult = 1.0;
+      if (b.num !== 0 && b.num !== 8) {
+        const isMine = playerGroup === 'solids' ? (b.num >= 1 && b.num <= 7)
+                     : playerGroup === 'stripes' ? (b.num >= 9 && b.num <= 15)
+                     : false;
+        catchMult = isMine ? myMult : oppMult;
+      }
+      const catchR = (PR + BR * 0.4) * catchMult;
+      if (dx * dx + dy * dy < catchR * catchR) {
         b.pocketed = true; b.vx = 0; b.vy = 0; b.spinX = 0; b.spinY = 0;
         pocketed.push(b.num); sunk = true; break;
       }
@@ -253,104 +244,9 @@ function anyMoving(balls: Ball[]): boolean {
   return balls.some(b => !b.pocketed && (Math.abs(b.vx) > MIN_SPEED || Math.abs(b.vy) > MIN_SPEED));
 }
 
-// ── Game logic ────────────────────────────────────────────────────────────────
-function groupBalls(balls: Ball[], group: Group | null): Ball[] {
-  if (!group) return balls.filter(b => b.num !== 0 && b.num !== 8);
-  if (group === 'solids') return balls.filter(b => b.num >= 1 && b.num <= 7);
-  return balls.filter(b => b.num >= 9 && b.num <= 15);
-}
-
-function processTurnEnd(gs: GState): GState {
-  const { turn, players, balls, pocketedThisTurn, firstBallHit, isBreak } = gs;
-  const newPlayers: [Player, Player] = [{ ...players[0] }, { ...players[1] }];
-  let nextTurn: 0 | 1 = turn;
-  let foul = false;
-  let msg = '';
-
-  const scratch      = pocketedThisTurn.includes(0);
-  const eight        = pocketedThisTurn.includes(8);
-  const currentGroup = players[turn].group;
-  const oppTurn      = (1 - turn) as 0 | 1;
-
-  const newlySunk = pocketedThisTurn.filter(n => n !== 0 && n !== 8);
-  const sunkBalls = [...gs.sunkBalls, ...newlySunk];
-
-  if (!isBreak && !scratch && firstBallHit !== null) {
-    const hitSolid  = firstBallHit >= 1 && firstBallHit <= 7;
-    const hitStripe = firstBallHit >= 9 && firstBallHit <= 15;
-    if (currentGroup === 'solids'  && !hitSolid)  foul = true;
-    if (currentGroup === 'stripes' && !hitStripe) foul = true;
-  }
-  if (firstBallHit === null && !isBreak) foul = true;
-
-  if (eight) {
-    const activeMine = groupBalls(balls.filter(b => !b.pocketed), currentGroup);
-    if (foul || scratch || activeMine.length > 0) {
-      return { ...gs, sunkBalls, players: newPlayers, winner: oppTurn, phase: 'over',
-        msg: `${newPlayers[oppTurn].name} wins — ${newPlayers[turn].name} sank the 8-ball illegally!` };
-    }
-    return { ...gs, sunkBalls, players: newPlayers, winner: turn, phase: 'over',
-      msg: `${newPlayers[turn].name} wins! 🎱` };
-  }
-
-  if (newPlayers[0].group === null && !isBreak) {
-    const solidsIn  = pocketedThisTurn.some(n => n >= 1 && n <= 7);
-    const stripesIn = pocketedThisTurn.some(n => n >= 9 && n <= 15);
-    if (solidsIn && !stripesIn) {
-      newPlayers[turn].group = 'solids';
-      newPlayers[oppTurn].group = 'stripes';
-      msg = `${newPlayers[turn].name}: solids · ${newPlayers[oppTurn].name}: stripes`;
-    } else if (stripesIn && !solidsIn) {
-      newPlayers[turn].group = 'stripes';
-      newPlayers[oppTurn].group = 'solids';
-      msg = `${newPlayers[turn].name}: stripes · ${newPlayers[oppTurn].name}: solids`;
-    }
-  }
-
-  if (scratch) {
-    nextTurn = oppTurn;
-    const cb = balls.find(b => b.num === 0);
-    if (cb) { cb.pocketed = false; cb.x = CUE_HOME.x; cb.y = CUE_HOME.y; cb.vx = 0; cb.vy = 0; }
-    return {
-      ...gs, sunkBalls, players: newPlayers, turn: nextTurn, isBreak: false,
-      phase: 'inhand', inHandPos: { ...CUE_HOME },
-      pocketedThisTurn: [], firstBallHit: null, foul: false,
-      msg: `Scratch! ${newPlayers[nextTurn].name} has ball in hand.`,
-    };
-  }
-
-  const myGroup      = newPlayers[turn].group;
-  const pocketedOwn  = pocketedThisTurn.some(n => {
-    if (n === 0 || n === 8) return false;
-    if (!myGroup) return true;
-    return myGroup === 'solids' ? n >= 1 && n <= 7 : n >= 9 && n <= 15;
-  });
-  const pocketedOpp  = pocketedThisTurn.some(n => {
-    if (n === 0 || n === 8 || !myGroup) return false;
-    return myGroup === 'solids' ? n >= 9 && n <= 15 : n >= 1 && n <= 7;
-  });
-
-  if (foul || pocketedOpp) {
-    nextTurn = oppTurn;
-    if (!msg) msg = `Foul! ${newPlayers[nextTurn].name}'s turn.`;
-  } else if (!pocketedOwn) {
-    nextTurn = oppTurn;
-  }
-  if (!msg) {
-    msg = nextTurn === turn
-      ? `Nice! ${newPlayers[turn].name} shoots again.`
-      : `${newPlayers[nextTurn].name}'s turn.`;
-  }
-
-  return {
-    ...gs, sunkBalls, players: newPlayers, turn: nextTurn, isBreak: false,
-    phase: 'aiming', pocketedThisTurn: [], firstBallHit: null, foul: false, msg,
-  };
-}
-
 // ── AI ────────────────────────────────────────────────────────────────────────
 function getAIShot(
-  balls: Ball[], turn: 0 | 1, players: [Player, Player], difficulty: AIDiff,
+  balls: Ball[], turn: 0 | 1, players: [{ name: string; group: Group | null; isAI: boolean; color: string }, { name: string; group: Group | null; isAI: boolean; color: string }], difficulty: AIDiff,
 ): { angle: number; power: number; englishX: number; englishY: number } {
   const cue = balls.find(b => b.num === 0 && !b.pocketed);
   if (!cue) return { angle: 0, power: 0.5, englishX: 0, englishY: 0 };
@@ -441,7 +337,6 @@ function ghostBallDist(balls: Ball[], cue: Ball, angle: number): number {
   return minD === Infinity ? 0 : minD;
 }
 
-// General ball drawing at arbitrary position/radius with rolling rotation
 function drawBallScaled(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, r: number,
@@ -478,7 +373,6 @@ function drawBallScaled(
   ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = r * 0.07;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
 
-  // Rotating shine dot (gives rolling feel)
   const sx = x + Math.cos(rotAngle) * r * 0.5;
   const sy = y + Math.sin(rotAngle) * r * 0.5;
   const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.25);
@@ -487,7 +381,6 @@ function drawBallScaled(
   ctx.fillStyle = sg;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
 
-  // Number (stays upright)
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(x, y, r * 0.40, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#111';
@@ -500,7 +393,6 @@ function drawBall(ctx: CanvasRenderingContext2D, b: Ball): void {
   drawBallScaled(ctx, b.x, b.y, BR, b.num, b.rotAngle);
 }
 
-// ── Mini ball icon for sunk-balls tray ────────────────────────────────────────
 function BallIcon({ num, size }: { num: number; size: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -587,10 +479,16 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GState, shotPower: numbe
   }
 
   if (gs.phase === 'inhand') {
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.beginPath(); ctx.arc(gs.inHandPos.x, gs.inHandPos.y, BR, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(gs.inHandPos.x, gs.inHandPos.y, BR, 0, Math.PI * 2); ctx.stroke();
+    // Ghost ball follows cursor; cue ball stays pocketed until player confirms placement
+    const pos = gs.inHandPos;
+    const blocked = gs.balls.some(
+      b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - pos.x, b.y - pos.y) < BR * 2 + 2,
+    );
+    ctx.fillStyle = blocked ? 'rgba(255,80,80,0.25)' : 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.arc(pos.x, pos.y, BR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = blocked ? 'rgba(255,80,80,0.8)' : 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(pos.x, pos.y, BR, 0, Math.PI * 2); ctx.stroke();
   }
 
   for (const b of gs.balls) {
@@ -630,30 +528,31 @@ export default function Pool({ onQuit }: PoolProps) {
   const diffRef      = useRef<AIDiff>('normal');
   const aimLerpRef   = useRef(0);
   const invertAimRef = useRef(false);
+  const strictnessRef = useRef<Strictness>('strict');
 
-  // English (spin indicator) — imperative DOM updates for smooth RAF-driven lerp
   const engBallRef   = useRef<HTMLDivElement>(null);
   const engDotRef    = useRef<HTMLDivElement>(null);
   const engDownRef   = useRef(false);
   const engTargetRef = useRef({ x: 0, y: 0 });
   const engLerpRef   = useRef(0);
 
-  // Cue shooting drag
   const cuePowerRef    = useRef(0);
   const cueDraggingRef = useRef(false);
   const cueDragStartY  = useRef(0);
   const cueDragAreaH   = useRef(90);
 
   // ── React state ────────────────────────────────────────────────────────────
-  const [gamePhase, setGamePhase] = useState<'setup' | 'playing'>('setup');
-  const [mode,      setMode]      = useState<Mode>('hvh');
-  const [diff,      setDiff]      = useState<AIDiff>('normal');
-  const [p0name,    setP0name]    = useState('Player 1');
-  const [p1name,    setP1name]    = useState('Player 2');
-  const [p0color,   setP0color]   = useState(STICK_COLORS[0]);
-  const [p1color,   setP1color]   = useState(STICK_COLORS[1]);
-  const [invertAim, setInvertAim] = useState(false);
-  const [cuePower,  setCuePower]  = useState(0);
+  const [gamePhase,    setGamePhase]    = useState<'setup' | 'playing'>('setup');
+  const [mode,         setMode]         = useState<Mode>('hvh');
+  const [diff,         setDiff]         = useState<AIDiff>('normal');
+  const [p0name,       setP0name]       = useState('Player 1');
+  const [p1name,       setP1name]       = useState('Player 2');
+  const [p0color,      setP0color]      = useState(STICK_COLORS[0]);
+  const [p1color,      setP1color]      = useState(STICK_COLORS[1]);
+  const [invertAim,    setInvertAim]    = useState(false);
+  const [cuePower,     setCuePower]     = useState(0);
+  const [strictness,   setStrictness]   = useState<Strictness>('strict');
+  const [showSettings, setShowSettings] = useState(false);
 
   const [uiPhase,     setUiPhase]     = useState<Phase>('aiming');
   const [uiTurn,      setUiTurn]      = useState<0 | 1>(0);
@@ -666,6 +565,7 @@ export default function Pool({ onQuit }: PoolProps) {
 
   useEffect(() => { diffRef.current = diff; }, [diff]);
   useEffect(() => { invertAimRef.current = invertAim; }, [invertAim]);
+  useEffect(() => { strictnessRef.current = strictness; }, [strictness]);
 
   const syncUi = useCallback((gs: GState) => {
     setUiPhase(gs.phase);
@@ -705,7 +605,6 @@ export default function Pool({ onQuit }: PoolProps) {
     syncUi(gsRef.current);
   }, [syncUi, resetEngDot]);
 
-  // fireAI: sets up the AIThink animation state machine (no more direct setTimeout fire)
   const fireAI = useCallback(() => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     aiTimerRef.current = setTimeout(() => {
@@ -715,7 +614,6 @@ export default function Pool({ onQuit }: PoolProps) {
       const cue  = cur.balls.find(b => b.num === 0 && !b.pocketed);
       if (!cue) return;
 
-      // Pick 2 nearby balls to "look at" before aiming
       const fakeAngles = cur.balls
         .filter(b => !b.pocketed && b.num !== 0)
         .sort(() => Math.random() - 0.5)
@@ -734,18 +632,83 @@ export default function Pool({ onQuit }: PoolProps) {
     }, 300);
   }, []);
 
+  // After a scratch, auto-place the cue ball for an AI player
+  const placeForAI = useCallback(() => {
+    if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
+    aiTimerRef.current = setTimeout(() => {
+      const gs = gsRef.current;
+      if (!gs || gs.phase !== 'inhand' || !gs.players[gs.turn].isAI) return;
+
+      const tryPos = (x: number, y: number) => {
+        const cx = Math.max(PF_X1 + BR, Math.min(PF_X2 - BR, x));
+        const cy = Math.max(PF_Y1 + BR, Math.min(PF_Y2 - BR, y));
+        const ok = !gs.balls.some(
+          b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - cx, b.y - cy) < BR * 2 + 2,
+        );
+        return ok ? { x: cx, y: cy } : null;
+      };
+
+      const candidates = [
+        CUE_HOME,
+        { x: CUE_HOME.x, y: CUE_HOME.y - 50 },
+        { x: CUE_HOME.x, y: CUE_HOME.y + 50 },
+        { x: CUE_HOME.x - 50, y: CUE_HOME.y },
+        { x: CUE_HOME.x + 50, y: CUE_HOME.y },
+        { x: PF_X1 + BR + 10, y: PF_Y1 + PF_H * 0.5 },
+      ];
+
+      let placed: { x: number; y: number } | null = null;
+      for (const c of candidates) {
+        placed = tryPos(c.x, c.y);
+        if (placed) break;
+      }
+      // Fallback: force CUE_HOME even if overlapping
+      if (!placed) placed = { x: CUE_HOME.x, y: CUE_HOME.y };
+
+      const cb = gs.balls.find(b => b.num === 0);
+      if (cb) {
+        cb.pocketed = false;
+        cb.x = placed.x; cb.y = placed.y;
+        cb.vx = 0; cb.vy = 0;
+      }
+      const next: GState = { ...gs, phase: 'aiming' };
+      gsRef.current = next;
+      syncUi(next);
+      fireAI();
+    }, 900);
+  }, [syncUi, fireAI]);
+
+  // Confirm ball-in-hand placement (called by the human player's "Set Ball" button)
+  const setBall = useCallback(() => {
+    const gs = gsRef.current;
+    if (!gs || gs.phase !== 'inhand') return;
+    const pos = gs.inHandPos;
+    const ok = !gs.balls.some(
+      b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - pos.x, b.y - pos.y) < BR * 2 + 2,
+    );
+    if (!ok) return;
+    const cb = gs.balls.find(b => b.num === 0);
+    if (cb) {
+      cb.pocketed = false;
+      cb.x = pos.x; cb.y = pos.y;
+      cb.vx = 0; cb.vy = 0;
+    }
+    gsRef.current = { ...gs, phase: 'aiming' };
+    syncUi(gsRef.current);
+  }, [syncUi]);
+
   const startGame = useCallback((m: Mode, n0: string, n1: string, c0: string, c1: string) => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     aiThinkRef.current = null;
-    const players: [Player, Player] = [
-      { name: n0, group: null, isAI: false, color: c0 },
-      { name: n1, group: null, isAI: m === 'hvai', color: c1 },
+    const players: [{ name: string; group: Group | null; isAI: boolean; color: string }, { name: string; group: Group | null; isAI: boolean; color: string }] = [
+      { name: n0, group: null, isAI: m === 'aiai', color: c0 },
+      { name: n1, group: null, isAI: m !== 'hvh',  color: c1 },
     ];
     const gs: GState = {
       balls: createBalls(), phase: 'aiming', turn: 0, players,
       isBreak: true, pocketedThisTurn: [], sunkBalls: [], winner: null,
       msg: `${n0}'s break!`, aimAngle: 0,
-      englishX: 0, englishY: 0, inHandPos: { ...CUE_HOME }, firstBallHit: null,
+      englishX: 0, englishY: 0, inHandPos: { ...DEFAULT_INHAND_POS }, firstBallHit: null,
       foul: false,
     };
     gsRef.current = gs;
@@ -759,7 +722,15 @@ export default function Pool({ onQuit }: PoolProps) {
     syncUi(gs);
   }, [syncUi, resetEngDot]);
 
-  // ── Win95 menus via the standard OS window menu bar ───────────────────────
+  // Trigger AI for player 0 when game starts in aiai mode
+  useEffect(() => {
+    if (gamePhase === 'playing') {
+      const gs = gsRef.current;
+      if (gs && gs.players[gs.turn].isAI) fireAI();
+    }
+  }, [gamePhase, fireAI]);
+
+  // ── Win95 menus ───────────────────────────────────────────────────────────
   const menus = useMemo<MenuBarMenu[]>(() => [
     {
       label: 'Game',
@@ -772,6 +743,8 @@ export default function Pool({ onQuit }: PoolProps) {
       label: 'Options',
       items: [
         { label: 'Invert Aim', checked: invertAim, onClick: () => setInvertAim(v => !v) },
+        { separator: true as const },
+        { label: 'Settings...', onClick: () => setShowSettings(true) },
       ],
     },
   ], [invertAim, onQuit]);
@@ -789,13 +762,12 @@ export default function Pool({ onQuit }: PoolProps) {
       const gs = gsRef.current;
       if (gs) {
 
-        // ── AI animation (driven by RAF, not setTimeout) ──────────────────
+        // ── AI animation ──────────────────────────────────────────────────
         if (gs.players[gs.turn].isAI && gs.phase === 'aiming' && aiThinkRef.current) {
           const ai = aiThinkRef.current;
           const elapsed = performance.now() - ai.stageStartTime;
 
           if (ai.stage === 'thinking') {
-            // Lerp toward a fake angle to simulate "looking at" other balls
             const targetA = ai.fakeAngles[ai.fakeIdx] ?? ai.targetAngle;
             let d = targetA - gs.aimAngle;
             while (d > Math.PI)  d -= Math.PI * 2;
@@ -812,7 +784,6 @@ export default function Pool({ onQuit }: PoolProps) {
               }
             }
           } else if (ai.stage === 'aiming') {
-            // Settle on the actual shot angle
             let d = ai.targetAngle - gs.aimAngle;
             while (d > Math.PI)  d -= Math.PI * 2;
             while (d < -Math.PI) d += Math.PI * 2;
@@ -823,7 +794,6 @@ export default function Pool({ onQuit }: PoolProps) {
               ai.stageDuration = 500;
             }
           } else {
-            // Cocking: animate cue pullback, then fire
             const t = Math.min(1, elapsed / ai.stageDuration);
             cuePowerRef.current = t * ai.targetPower;
             setCuePower(cuePowerRef.current);
@@ -867,9 +837,9 @@ export default function Pool({ onQuit }: PoolProps) {
         // ── English lerp ──────────────────────────────────────────────────
         if (gs.phase === 'aiming' && engDownRef.current && !gs.players[gs.turn].isAI) {
           engLerpRef.current = rampedLerp(engLerpRef.current, ENG_LERP_RAMP, ENG_LERP_MAX);
-          const t = engTargetRef.current;
-          gs.englishX += (t.x - gs.englishX) * engLerpRef.current;
-          gs.englishY += (t.y - gs.englishY) * engLerpRef.current;
+          const et = engTargetRef.current;
+          gs.englishX += (et.x - gs.englishX) * engLerpRef.current;
+          gs.englishY += (et.y - gs.englishY) * engLerpRef.current;
           const mag = Math.hypot(gs.englishX, gs.englishY);
           if (mag > 1) { gs.englishX /= mag; gs.englishY /= mag; }
           if (engDotRef.current) {
@@ -880,10 +850,10 @@ export default function Pool({ onQuit }: PoolProps) {
 
         // ── Physics ───────────────────────────────────────────────────────
         if (gs.phase === 'moving') {
-          const sunk = stepBalls(gs.balls, firstHitRef.current);
+          const sm = STRICTNESS_MULT[strictnessRef.current];
+          const sunk = stepBalls(gs.balls, firstHitRef.current, sm.my, sm.opp, gs.players[gs.turn].group);
           if (sunk.length) {
             gs.pocketedThisTurn = [...gs.pocketedThisTurn, ...sunk];
-            // Update sunk-ball display immediately (don't wait for turn end)
             const regular = sunk.filter(n => n !== 0 && n !== 8);
             if (regular.length > 0) setUiSunkBalls(prev => [...prev, ...regular]);
           }
@@ -893,10 +863,11 @@ export default function Pool({ onQuit }: PoolProps) {
             gsRef.current = next;
             syncUi(next);
             if (next.phase === 'aiming' && next.players[next.turn].isAI) fireAI();
+            else if (next.phase === 'inhand' && next.players[next.turn].isAI) placeForAI();
           }
         }
 
-        // ── Rolling rotation (visual only) ────────────────────────────────
+        // ── Rolling rotation ──────────────────────────────────────────────
         for (const b of gs.balls) {
           if (!b.pocketed) {
             const speed = Math.hypot(b.vx, b.vy);
@@ -915,7 +886,7 @@ export default function Pool({ onQuit }: PoolProps) {
       cancelAnimationFrame(rafRef.current);
       if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     };
-  }, [gamePhase, syncUi, fireAI, resetEngDot]);
+  }, [gamePhase, syncUi, fireAI, placeForAI, resetEngDot]);
 
   // ── Canvas pointer events ─────────────────────────────────────────────────
   const clientToCanvas = useCallback((clientX: number, clientY: number) => {
@@ -930,7 +901,7 @@ export default function Pool({ onQuit }: PoolProps) {
     mouseRef.current.down = true; mouseRef.current.x = x; mouseRef.current.y = y;
     aimLerpRef.current = 0;
     const gs = gsRef.current;
-    if (gs?.phase === 'inhand') {
+    if (gs?.phase === 'inhand' && !gs.players[gs.turn].isAI) {
       gs.inHandPos = {
         x: Math.max(PF_X1 + BR, Math.min(PF_X2 - BR, x)),
         y: Math.max(PF_Y1 + BR, Math.min(PF_Y2 - BR, y)),
@@ -941,7 +912,7 @@ export default function Pool({ onQuit }: PoolProps) {
   const handleCanvasMove = useCallback((x: number, y: number) => {
     mouseRef.current.x = x; mouseRef.current.y = y;
     const gs = gsRef.current;
-    if (gs?.phase === 'inhand') {
+    if (gs?.phase === 'inhand' && !gs.players[gs.turn].isAI) {
       gs.inHandPos = {
         x: Math.max(PF_X1 + BR, Math.min(PF_X2 - BR, x)),
         y: Math.max(PF_Y1 + BR, Math.min(PF_Y2 - BR, y)),
@@ -951,19 +922,8 @@ export default function Pool({ onQuit }: PoolProps) {
 
   const handleCanvasUp = useCallback(() => {
     mouseRef.current.down = false;
-    const gs = gsRef.current;
-    if (!gs || gs.phase !== 'inhand') return;
-    const pos = gs.inHandPos;
-    const ok = !gs.balls.some(
-      b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - pos.x, b.y - pos.y) < BR * 2 + 2,
-    );
-    if (ok) {
-      const cb = gs.balls.find(b => b.num === 0);
-      if (cb) { cb.pocketed = false; cb.x = pos.x; cb.y = pos.y; cb.vx = 0; cb.vy = 0; }
-      gsRef.current = { ...gs, phase: 'aiming' };
-      syncUi(gsRef.current);
-    }
-  }, [syncUi]);
+    // Ball placement is now confirmed via the "Set Ball" button, not on pointer-up
+  }, []);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x, y } = canvasXY(e); handleCanvasDown(x, y);
@@ -1006,7 +966,7 @@ export default function Pool({ onQuit }: PoolProps) {
 
   const onEngPointerUp = useCallback(() => { engDownRef.current = false; }, []);
 
-  // ── Side cue drag (shooting) ──────────────────────────────────────────────
+  // ── Side cue drag ─────────────────────────────────────────────────────────
   const onCuePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const gs = gsRef.current;
     if (!gs || gs.phase !== 'aiming' || gs.players[gs.turn].isAI) return;
@@ -1039,26 +999,43 @@ export default function Pool({ onQuit }: PoolProps) {
   const p0Circles = getCircleNums(uiGroups[0]);
   const p1Circles = getCircleNums(uiGroups[1]);
 
+  // Check if current inhand position is valid (for "Set Ball" button)
+  const inHandValid = (() => {
+    const gs = gsRef.current;
+    if (!gs || gs.phase !== 'inhand') return false;
+    const pos = gs.inHandPos;
+    return !gs.balls.some(
+      b => !b.pocketed && b.num !== 0 && Math.hypot(b.x - pos.x, b.y - pos.y) < BR * 2 + 2,
+    );
+  })();
+
   // ── Setup screen ──────────────────────────────────────────────────────────
   if (gamePhase === 'setup') {
+    const isAI0 = mode === 'aiai';
+    const isAI1 = mode === 'hvai' || mode === 'aiai';
     return (
       <div className="pool-setup">
         <div className="pool-setup__title">8-BALL POOL</div>
         <div className="pool-setup__row">
           <button className={`pool-btn${mode === 'hvh'  ? ' pool-btn--on' : ''}`} onClick={() => setMode('hvh')}>2 Players</button>
-          <button className={`pool-btn${mode === 'hvai' ? ' pool-btn--on' : ''}`} onClick={() => setMode('hvai')}>vs Computer</button>
+          <button className={`pool-btn${mode === 'hvai' ? ' pool-btn--on' : ''}`} onClick={() => setMode('hvai')}>vs CPU</button>
+          <button className={`pool-btn${mode === 'aiai' ? ' pool-btn--on' : ''}`} onClick={() => setMode('aiai')}>CPU vs CPU</button>
         </div>
         <div className="pool-setup__fields">
-          <label className="pool-setup__label">Player 1 name</label>
+          <label className="pool-setup__label">{isAI0 ? 'CPU 1 name' : 'Player 1 name'}</label>
           <input className="pool-setup__inp" value={p0name} maxLength={16} onChange={e => setP0name(e.target.value)} />
-          <div className="pool-setup__swatches">
-            {STICK_COLORS.map(c => (
-              <button key={c} className={`pool-swatch${p0color === c ? ' pool-swatch--on' : ''}`}
-                style={{ background: c }} onClick={() => setP0color(c)} />
-            ))}
-          </div>
+          {!isAI0 && (
+            <div className="pool-setup__swatches">
+              {STICK_COLORS.map(c => (
+                <button key={c} className={`pool-swatch${p0color === c ? ' pool-swatch--on' : ''}`}
+                  style={{ background: c }} onClick={() => setP0color(c)} />
+              ))}
+            </div>
+          )}
 
-          <label className="pool-setup__label">{mode === 'hvh' ? 'Player 2 name' : 'Difficulty'}</label>
+          <label className="pool-setup__label">
+            {isAI1 && !isAI0 ? 'Difficulty' : isAI0 ? 'CPU 2 name / Difficulty' : 'Player 2 name'}
+          </label>
           {mode === 'hvh'
             ? <>
                 <input className="pool-setup__inp" value={p1name} maxLength={16} onChange={e => setP1name(e.target.value)} />
@@ -1069,19 +1046,28 @@ export default function Pool({ onQuit }: PoolProps) {
                   ))}
                 </div>
               </>
-            : <div className="pool-setup__row">
-                {(['easy', 'normal', 'hard'] as AIDiff[]).map(d => (
-                  <button key={d} className={`pool-btn${diff === d ? ' pool-btn--on' : ''}`} onClick={() => setDiff(d)}>
-                    {d.charAt(0).toUpperCase() + d.slice(1)}
-                  </button>
-                ))}
-              </div>
+            : <>
+                {mode === 'aiai' && (
+                  <input className="pool-setup__inp" value={p1name} maxLength={16} onChange={e => setP1name(e.target.value)} />
+                )}
+                <div className="pool-setup__row">
+                  {(['easy', 'normal', 'hard'] as AIDiff[]).map(d => (
+                    <button key={d} className={`pool-btn${diff === d ? ' pool-btn--on' : ''}`} onClick={() => setDiff(d)}>
+                      {d.charAt(0).toUpperCase() + d.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </>
           }
         </div>
         <div className="pool-setup__actions">
           <button
             className="pool-btn pool-btn--primary"
-            onClick={() => startGame(mode, p0name || 'Player 1', mode === 'hvh' ? (p1name || 'Player 2') : `CPU (${diff})`, p0color, p1color)}
+            onClick={() => {
+              const n0 = p0name || (isAI0 ? 'CPU 1' : 'Player 1');
+              const n1 = p1name || (isAI1 ? `CPU (${diff})` : 'Player 2');
+              startGame(mode, n0, n1, p0color, p1color);
+            }}
           >
             BREAK!
           </button>
@@ -1095,13 +1081,46 @@ export default function Pool({ onQuit }: PoolProps) {
     uiTurn === idx && uiPhase !== 'moving' && uiPhase !== 'over';
 
   const hintText = uiPhase === 'inhand'
-    ? 'Drag cue ball · release to place'
+    ? (isHumanTurn ? 'Move cue ball · click Set Ball' : 'CPU placing ball...')
     : uiPhase === 'aiming' && isHumanTurn
     ? 'Tap/hold to aim · drag cue down to shoot'
     : uiMsg;
 
+  const strictnessLabel: Record<Strictness, string> = {
+    strict: 'Strict', loose: 'Loose', generous: 'Generous',
+  };
+
   return (
     <div className="pool-game">
+
+      {/* ── Settings modal ── */}
+      {showSettings && (
+        <div className="pool-modal-backdrop" onClick={() => setShowSettings(false)}>
+          <div className="pool-modal" onClick={e => e.stopPropagation()}>
+            <div className="pool-modal__title">SETTINGS</div>
+            <div className="pool-modal__section">
+              <div className="pool-modal__label">Pocket Size</div>
+              <div className="pool-modal__options">
+                {(['strict', 'loose', 'generous'] as Strictness[]).map(s => (
+                  <button
+                    key={s}
+                    className={`pool-btn${strictness === s ? ' pool-btn--on' : ''}`}
+                    onClick={() => setStrictness(s)}
+                  >
+                    {strictnessLabel[s]}
+                  </button>
+                ))}
+              </div>
+              <div className="pool-modal__desc">
+                {strictness === 'strict'   && 'Standard hitboxes for all balls.'}
+                {strictness === 'loose'    && 'Slightly larger pockets for your balls.'}
+                {strictness === 'generous' && 'Bigger pockets for your balls, tighter for opponent\'s.'}
+              </div>
+            </div>
+            <button className="pool-btn pool-btn--primary" onClick={() => setShowSettings(false)}>OK</button>
+          </div>
+        </div>
+      )}
 
       {/* ── Canvas ── */}
       <div className="pool-canvas-wrap">
@@ -1113,6 +1132,20 @@ export default function Pool({ onQuit }: PoolProps) {
           onTouchStart={onTouchStart} onTouchMove={onTouchMove}
           onTouchEnd={handleCanvasUp}
         />
+
+        {/* Ball-in-hand confirm button */}
+        {uiPhase === 'inhand' && isHumanTurn && (
+          <div className="pool-inhand-bar">
+            <button
+              className={`pool-btn pool-btn--primary${!inHandValid ? ' pool-btn--disabled' : ''}`}
+              onClick={setBall}
+              disabled={!inHandValid}
+            >
+              Set Ball
+            </button>
+          </div>
+        )}
+
         {uiPhase === 'over' && (
           <div className="pool-over">
             <div className="pool-over__box">
