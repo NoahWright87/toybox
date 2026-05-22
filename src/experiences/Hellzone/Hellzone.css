@@ -602,3 +602,66 @@
   .hz-wslot-ammo { font-size: 14px; }
   .hz-wslot-name { font-size: 6px; }
 }
+
+/* ── Cheats overlay ─────────────────────────────────────────────────────── */
+.hz-cheats-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+.hz-cheats-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+}
+.hz-cheats-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #cc4400;
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #808080;
+  margin-bottom: 2px;
+}
+.hz-cheat-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.hz-cheat-btn:active,
+.hz-cheat-btn.active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffcc88;
+  color: #cc4400;
+}
+.hz-cheat-close {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  color: #444;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 5px 10px;
+  cursor: pointer;
+  text-align: center;
+  margin-top: 4px;
+}
+.hz-cheat-close:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}

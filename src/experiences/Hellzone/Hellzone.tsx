@@ -350,6 +350,14 @@ export default function Hellzone() {
     const projectiles: Projectile[] = [];
     const flameParticles: FlameParticle[] = [];
 
+    // ── Cheat state ────────────────────────────────────────────────────────────
+    let godMode = false;
+    let infAmmo = false;
+    let cheatBuffer = '';
+    let cheatClearTimer = 0;
+    let showCheatsMenu = false;
+    let longPressTriggered = false;
+
     // ── Sprites ─────────────────────────────────────────────────────────────────
     const sprWallRock = new Sprite('/sprites/wall-rock.png');
     // Lava sheet: 2×2 grid of 4 frames, each 627×627 within a 1254×1254 image.
@@ -453,6 +461,7 @@ export default function Hellzone() {
       switchState = 'idle'; switchProgress = 0; switchingTo = 'subwoofer';
       ballAmmo = 0; fuelAmmo = 0;
       projectiles.length = 0; flameParticles.length = 0;
+      godMode = false; infAmmo = false; cheatBuffer = ''; clearTimeout(cheatClearTimer);
       initLevel();
       setScreen("playing");
     }
@@ -470,6 +479,32 @@ export default function Hellzone() {
       if (!ownedWeapons.has(to)) return;
       switchState = 'lowering'; switchingTo = to;
       playSound('weapon-switch', 0.5);
+    }
+
+    function activateCheat(code: 'god' | 'boom') {
+      if (code === 'god') {
+        godMode = !godMode;
+        showMessage(godMode ? 'EGOD: GOD MODE ON' : 'EGOD: GOD MODE OFF');
+      } else {
+        infAmmo = !infAmmo;
+        if (infAmmo) {
+          ownedWeapons = new Set<WeaponId>(['claws','subwoofer','woofer','tennis','flamethrower']);
+          if (player) { player.ammo = 99; ballAmmo = 50; fuelAmmo = 99; }
+          showMessage('EGOBOOM: ALL WEAPONS LOADED');
+        } else {
+          showMessage('EGOBOOM: AMMO NORMAL');
+        }
+      }
+      updateCheatsMenu();
+    }
+
+    function updateCheatsMenu() {
+      const overlay = root.querySelector<HTMLElement>('.hz-cheats-overlay');
+      if (overlay) overlay.style.display = showCheatsMenu ? 'flex' : 'none';
+      const godBtn = root.querySelector<HTMLElement>('#hz-cheat-god');
+      const boomBtn = root.querySelector<HTMLElement>('#hz-cheat-boom');
+      if (godBtn) godBtn.className = 'hz-cheat-btn' + (godMode ? ' active' : '');
+      if (boomBtn) boomBtn.className = 'hz-cheat-btn' + (infAmmo ? ' active' : '');
     }
 
     function initLevel() {
@@ -619,6 +654,24 @@ export default function Hellzone() {
       ctx.fillStyle = "#c00";
       ctx.font = "6px 'Share Tech Mono', monospace";
       ctx.fillText(sprinting ? "FST" : "SLO", 4, SCREEN_H - 4);
+
+      // Cheat indicators
+      if (godMode || infAmmo) {
+        ctx.font = "6px 'Share Tech Mono', monospace";
+        let cx2 = SCREEN_W - 2;
+        if (infAmmo) {
+          ctx.fillStyle = '#ffaa00';
+          ctx.textAlign = 'right';
+          ctx.fillText('∞AMMO', cx2, SCREEN_H - 4);
+          cx2 -= 36;
+        }
+        if (godMode) {
+          ctx.fillStyle = '#ffff00';
+          ctx.textAlign = 'right';
+          ctx.fillText('GOD', cx2, SCREEN_H - 4);
+        }
+        ctx.textAlign = 'left';
+      }
 
       updateHUD();
 
@@ -1136,7 +1189,7 @@ export default function Hellzone() {
         const active = currentWeapon === slot.id && switchState === 'idle';
         slotEl.className = `hz-weapon-slot${active ? ' active' : ''}${!owned ? ' unowned' : ''}`;
         if (!owned) { ammoEl.textContent = '×'; }
-        else if (slot.id === 'claws') { ammoEl.textContent = '∞'; }
+        else if (slot.id === 'claws' || infAmmo) { ammoEl.textContent = '∞'; }
         else if (slot.id === 'subwoofer' || slot.id === 'woofer') {
           ammoEl.textContent = String(player.ammo);
           ammoEl.className = 'hz-wslot-ammo' + (player.ammo <= 5 && (slot.id === currentWeapon) ? ' low' : '');
@@ -1305,8 +1358,8 @@ export default function Hellzone() {
     }
 
     function fireRaycast(wId: 'subwoofer' | 'woofer') {
-      if (player.ammo <= 0) { showMessage('OUT OF BULLETS!'); return; }
-      player.ammo--;
+      if (!infAmmo && player.ammo <= 0) { showMessage('OUT OF BULLETS!'); return; }
+      if (!infAmmo) player.ammo--;
       shootCooldown = WEAPON_DEFS[wId].cooldown;
       gunRecoil = 1.0; muzzleFlashTimer = 8;
       playSound(wId === 'subwoofer' ? 'shoot-subwoofer' : 'shoot-woofer');
@@ -1338,8 +1391,8 @@ export default function Hellzone() {
     }
 
     function fireTennisLauncher() {
-      if (ballAmmo <= 0) { showMessage('NO TENNIS BALLS!'); return; }
-      ballAmmo--;
+      if (!infAmmo && ballAmmo <= 0) { showMessage('NO TENNIS BALLS!'); return; }
+      if (!infAmmo) ballAmmo--;
       shootCooldown = WEAPON_DEFS.tennis.cooldown;
       gunRecoil = 1.2;
       playSound('shoot-tennis');
@@ -1355,8 +1408,8 @@ export default function Hellzone() {
     }
 
     function fireFlamethrower() {
-      if (fuelAmmo <= 0) { showMessage('OUT OF FUEL!'); return; }
-      fuelAmmo--;
+      if (!infAmmo && fuelAmmo <= 0) { showMessage('OUT OF FUEL!'); return; }
+      if (!infAmmo) fuelAmmo--;
       shootCooldown = WEAPON_DEFS.flamethrower.cooldown;
       playSound('shoot-flamethrower', 0.25);
       const coneHalf = Math.PI / 12;
@@ -1497,21 +1550,23 @@ export default function Hellzone() {
           e.shootTimer -= dt * 60;
           if (e.shootTimer <= 0 && dist < 8 * CELL && hasLOS(e.x, e.y, player.x, player.y)) {
             const dmg = [8, 15, 5][e.type];
-            player.health -= dmg + Math.random() * 5;
-            flashTimer = 12;
             e.muzzleFlash = 8;
             e.shootTimer = [80, 120, 50][e.type] + Math.random() * 60;
-            if (hurtCooldown <= 0) {
-              playSound('hurt');
-              hurtCooldown = 45;
-            }
-            if (player.health <= 0) {
-              player.health = 0;
-              playSound('death');
-              const stats = q("#hz-death-stats");
-              stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>BULLETS: ${player.ammo} | BALLS: ${ballAmmo} | FUEL: ${fuelAmmo}`;
-              setScreen("dead");
-              if (document.pointerLockElement) document.exitPointerLock();
+            if (!godMode) {
+              player.health -= dmg + Math.random() * 5;
+              flashTimer = 12;
+              if (hurtCooldown <= 0) {
+                playSound('hurt');
+                hurtCooldown = 45;
+              }
+              if (player.health <= 0) {
+                player.health = 0;
+                playSound('death');
+                const stats = q("#hz-death-stats");
+                stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>BULLETS: ${player.ammo} | BALLS: ${ballAmmo} | FUEL: ${fuelAmmo}`;
+                setScreen("dead");
+                if (document.pointerLockElement) document.exitPointerLock();
+              }
             }
           }
         }
@@ -1549,10 +1604,20 @@ export default function Hellzone() {
         if (gameState === "playing") {
           setScreen("title");
           if (document.pointerLockElement) document.exitPointerLock();
+        } else if (showCheatsMenu) {
+          showCheatsMenu = false; updateCheatsMenu();
         } else {
           quitToTos();
         }
         return;
+      }
+      // Cheat code buffer — accumulate typed letters
+      if (e.key.length === 1 && /[A-Za-z]/.test(e.key)) {
+        cheatBuffer = (cheatBuffer + e.key.toUpperCase()).slice(-8);
+        clearTimeout(cheatClearTimer);
+        cheatClearTimer = window.setTimeout(() => { cheatBuffer = ''; }, 2500);
+        if (cheatBuffer.endsWith('EGOBOOM')) { activateCheat('boom'); cheatBuffer = ''; }
+        else if (cheatBuffer.endsWith('EGOD')) { activateCheat('god'); cheatBuffer = ''; }
       }
       initAudio();
       e.preventDefault();
@@ -1691,9 +1756,50 @@ export default function Hellzone() {
     // Help button click
     const helpBtn = root.querySelector<HTMLButtonElement>(".hz-help-btn");
     if (helpBtn) {
-      const helpClick = () => { showHelp = !showHelp; updateHelpOverlay(); };
+      let longPressTimer = 0;
+      const helpPointerDown = () => {
+        longPressTriggered = false;
+        longPressTimer = window.setTimeout(() => {
+          longPressTriggered = true;
+          showCheatsMenu = true;
+          updateCheatsMenu();
+        }, 800);
+      };
+      const helpPointerUp = () => { clearTimeout(longPressTimer); };
+      const helpClick = () => {
+        if (longPressTriggered) { longPressTriggered = false; return; }
+        showHelp = !showHelp; updateHelpOverlay();
+      };
+      helpBtn.addEventListener("pointerdown", helpPointerDown);
+      helpBtn.addEventListener("pointerup", helpPointerUp);
+      helpBtn.addEventListener("pointercancel", helpPointerUp);
       helpBtn.addEventListener("click", helpClick);
-      fabCleanups.push(() => helpBtn.removeEventListener("click", helpClick));
+      fabCleanups.push(() => {
+        helpBtn.removeEventListener("pointerdown", helpPointerDown);
+        helpBtn.removeEventListener("pointerup", helpPointerUp);
+        helpBtn.removeEventListener("pointercancel", helpPointerUp);
+        helpBtn.removeEventListener("click", helpClick);
+      });
+    }
+
+    // Cheats menu buttons
+    const cheatGodBtn  = root.querySelector<HTMLElement>('#hz-cheat-god');
+    const cheatBoomBtn = root.querySelector<HTMLElement>('#hz-cheat-boom');
+    const cheatCloseBtn = root.querySelector<HTMLElement>('#hz-cheat-close');
+    if (cheatGodBtn) {
+      const fn = () => activateCheat('god');
+      cheatGodBtn.addEventListener('click', fn);
+      fabCleanups.push(() => cheatGodBtn.removeEventListener('click', fn));
+    }
+    if (cheatBoomBtn) {
+      const fn = () => activateCheat('boom');
+      cheatBoomBtn.addEventListener('click', fn);
+      fabCleanups.push(() => cheatBoomBtn.removeEventListener('click', fn));
+    }
+    if (cheatCloseBtn) {
+      const fn = () => { showCheatsMenu = false; updateCheatsMenu(); };
+      cheatCloseBtn.addEventListener('click', fn);
+      fabCleanups.push(() => cheatCloseBtn.removeEventListener('click', fn));
     }
 
     function showTouchOverlay() {
@@ -1861,6 +1967,15 @@ export default function Hellzone() {
               <div className="hz-clear-title">LEVEL CLEAR!</div>
               <div className="hz-clear-sub">[ ENTER ] NEXT LEVEL</div>
               <div className="hz-clear-quit">[ ESC ] QUIT TO NS-TOS</div>
+            </div>
+            {/* Cheats overlay */}
+            <div className="hz-cheats-overlay" style={{ display: 'none' }}>
+              <div className="hz-cheats-panel">
+                <div className="hz-cheats-title">EGO CHEATS</div>
+                <button className="hz-cheat-btn" id="hz-cheat-god">EGOD — GOD MODE</button>
+                <button className="hz-cheat-btn" id="hz-cheat-boom">EGOBOOM — ALL WEAPONS</button>
+                <button className="hz-cheat-close" id="hz-cheat-close">CLOSE [ESC]</button>
+              </div>
             </div>
           </div>
           <div className="hz-hud">
