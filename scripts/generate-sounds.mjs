@@ -156,4 +156,12 @@ writeWav(gen(0.06, (t) => {
   return (rng()*0.5 + Math.sin(2*Math.PI*180*t)*0.5) * Math.exp(-t*60) * 0.6;
 }), join(OUT, 'weapon-switch.wav'));
 
+// door-open: metal rumble + slide (~0.45s)
+writeWav(gen(0.45, (t) => {
+  const rumble = Math.sin(2*Math.PI*55*t)*0.4 + Math.sin(2*Math.PI*82*t)*0.3;
+  const hiss = rng() * 0.3;
+  const env = t < 0.05 ? t/0.05 : Math.exp(-(t-0.05)*5);
+  return (rumble + hiss) * env * 0.75;
+}), join(OUT, 'door-open.wav'));
+
 console.log('Done. All sounds written to public/sounds/');

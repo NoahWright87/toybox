@@ -375,4 +375,31 @@ class Canvas {
   c.save('impact-enemy.png');
 }
 
+// Key pickup sprites — 32x32 each
+// Key shape: circular bow + shaft + teeth, on a dark circle background
+const KEY_DEFS = [
+  { name:'key-red',    r:220,g:40,  b:40  },
+  { name:'key-orange', r:220,g:130, b:0   },
+  { name:'key-yellow', r:230,g:220, b:0   },
+  { name:'key-green',  r:40, g:200, b:80  },
+  { name:'key-blue',   r:40, g:100, b:220 },
+  { name:'key-purple', r:160,g:40, b:220  },
+];
+for (const kd of KEY_DEFS) {
+  const c = new Canvas(32,32);
+  // Dark background circle
+  c.circle(16,16,14, 20,10,5, 200);
+  // Key bow (ring at top: filled circle minus smaller circle)
+  c.circle(13,10,7, kd.r,kd.g,kd.b, 255);
+  c.circle(13,10,4, 20,10,5,  255);  // hole in bow
+  // Key shaft
+  c.rect(12,16,3,10, kd.r,kd.g,kd.b, 255);
+  // Teeth (two teeth going right)
+  c.rect(15,18,3,2,  kd.r,kd.g,kd.b, 255);
+  c.rect(15,22,3,2,  kd.r,kd.g,kd.b, 255);
+  // Bright highlight on bow top-left
+  c.circle(11,8,2, Math.min(255,kd.r+80),Math.min(255,kd.g+80),Math.min(255,kd.b+60), 180);
+  c.save(kd.name+'.png');
+}
+
 console.log('Done — all sprites written to public/sprites/');

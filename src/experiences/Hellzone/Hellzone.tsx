@@ -58,8 +58,22 @@ export default function Hellzone() {
     // ── BSP Map Generator ──────────────────────────────────────────────────────
     const MAP_W = 40, MAP_H = 40;
     const TILE_EMPTY = 0, TILE_WALL = 1, TILE_LAVA = 2, TILE_EXIT = 3, TILE_WINDOW = 4;
+    const TILE_DOOR = 5, TILE_DOOR_RED = 6, TILE_DOOR_ORANGE = 7, TILE_DOOR_YELLOW = 8;
+    const TILE_DOOR_GREEN = 9, TILE_DOOR_BLUE = 10, TILE_DOOR_PURPLE = 11;
+
+    type KeyColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+    const KEY_COLORS: KeyColor[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
+    const KEY_HEX: Record<KeyColor, [number,number,number]> = {
+      red:    [255, 68,  68 ], orange: [255, 140,  0 ], yellow: [240, 220,  0 ],
+      green:  [ 40, 210,  90], blue:   [ 60, 130, 255], purple: [170,  60, 255],
+    };
+    function isDoorTile(t: number) { return t >= TILE_DOOR && t <= TILE_DOOR_PURPLE; }
+    function doorTileKeyColor(t: number): KeyColor | null {
+      return t === TILE_DOOR ? null : KEY_COLORS[t - TILE_DOOR_RED];
+    }
 
     interface Room { x: number; y: number; w: number; h: number; cx: number; cy: number; }
+    interface Door { tx: number; ty: number; keyColor: KeyColor | null; openProgress: number; state: 'closed' | 'opening' | 'open'; }
     interface Enemy {
       x: number; y: number; angle: number; health: number; maxHealth: number;
       state: string; type: number; shootTimer: number; alertRange: number;
@@ -280,16 +294,62 @@ export default function Hellzone() {
         [8.5, 33.5], [15.5, 32.5],
       ].forEach(([col, row]) => enemies.push(mkPatrol(col * CELL, row * CELL)));
 
+      // ── Room C (door/key test area) ──────────────────────────────────────────
+      // Passage from Room B (max col 24) → Room C: basic door at col 25, row 28
+      grid[28][25] = TILE_DOOR; // basic door (no key)
+
+      // Room C main area: cols 26-37, rows 22-34
+      for (let y = 22; y <= 34; y++)
+        for (let x = 26; x <= 37; x++)
+          grid[y][x] = TILE_EMPTY;
+
+      // North alcoves (above Room C y=22 wall, cut into rows 19-20 at cols 26-36)
+      // RED alcove: cols 26-28, rows 19-20; door at (27,21)
+      for (let y = 19; y <= 20; y++) for (let x = 26; x <= 28; x++) grid[y][x] = TILE_EMPTY;
+      grid[21][27] = TILE_DOOR_RED;
+      // ORANGE alcove: cols 30-32, rows 19-20; door at (31,21)
+      for (let y = 19; y <= 20; y++) for (let x = 30; x <= 32; x++) grid[y][x] = TILE_EMPTY;
+      grid[21][31] = TILE_DOOR_ORANGE;
+      // YELLOW alcove: cols 34-36, rows 19-20; door at (35,21)
+      for (let y = 19; y <= 20; y++) for (let x = 34; x <= 36; x++) grid[y][x] = TILE_EMPTY;
+      grid[21][35] = TILE_DOOR_YELLOW;
+
+      // South alcoves (below Room C y=34 wall, cut into rows 35-36 at cols 26-36)
+      // GREEN alcove: cols 26-28, rows 35-36; door at (27,35)
+      for (let y = 35; y <= 36; y++) for (let x = 26; x <= 28; x++) grid[y][x] = TILE_EMPTY;
+      grid[35][27] = TILE_DOOR_GREEN;
+      // BLUE alcove: cols 30-32, rows 35-36; door at (31,35)
+      for (let y = 35; y <= 36; y++) for (let x = 30; x <= 32; x++) grid[y][x] = TILE_EMPTY;
+      grid[35][31] = TILE_DOOR_BLUE;
+      // PURPLE alcove: cols 34-36, rows 35-36; door at (35,35)
+      for (let y = 35; y <= 36; y++) for (let x = 34; x <= 36; x++) grid[y][x] = TILE_EMPTY;
+      grid[35][35] = TILE_DOOR_PURPLE;
+
       const pickups: Pickup[] = [
         { x: 6.5 * CELL,  y: 3.5 * CELL,  type: "ammo",   taken: false },
         { x: 19.5 * CELL, y: 3.5 * CELL,  type: "health", taken: false },
         { x: 13.5 * CELL, y: 27.5 * CELL, type: "ammo",   taken: false },
         { x: 13.5 * CELL, y: 31.5 * CELL, type: "health", taken: false },
+        // Keys: scattered in Room A and Room B, accessible without any doors
+        { x: 6.5  * CELL, y: 8.5  * CELL, type: 'key-red',    taken: false },
+        { x: 18.5 * CELL, y: 8.5  * CELL, type: 'key-orange', taken: false },
+        { x: 6.5  * CELL, y: 24.5 * CELL, type: 'key-yellow', taken: false },
+        { x: 20.5 * CELL, y: 24.5 * CELL, type: 'key-green',  taken: false },
+        { x: 6.5  * CELL, y: 31.5 * CELL, type: 'key-blue',   taken: false },
+        { x: 20.5 * CELL, y: 31.5 * CELL, type: 'key-purple', taken: false },
+        // Health packs in alcoves (reward for unlocking)
+        { x: 27.5 * CELL, y: 19.5 * CELL, type: 'health', taken: false },
+        { x: 31.5 * CELL, y: 19.5 * CELL, type: 'health', taken: false },
+        { x: 35.5 * CELL, y: 19.5 * CELL, type: 'health', taken: false },
+        { x: 27.5 * CELL, y: 35.5 * CELL, type: 'ammo',   taken: false },
+        { x: 31.5 * CELL, y: 35.5 * CELL, type: 'ammo',   taken: false },
+        { x: 35.5 * CELL, y: 35.5 * CELL, type: 'ammo',   taken: false },
       ];
 
       const rooms: Room[] = [
         { x: 3, y: 2,  w: 20, h: 11, cx: 12, cy: 7  },
         { x: 3, y: 20, w: 22, h: 15, cx: 13, cy: 27 },
+        { x: 26, y: 22, w: 12, h: 13, cx: 32, cy: 28 },
       ];
 
       return { grid, rooms, enemies, pickups, spawn: { x: 12.5 * CELL, y: 4.5 * CELL, angle: Math.PI / 2 }, seed: 0 };
@@ -299,10 +359,17 @@ export default function Hellzone() {
     // Used as fallback when texture sprites haven't loaded yet.
     const WALL_COLORS = [
       null,
-      { light: "#4a3020", dark: "#2e1d10" },  // rock (fallback)
-      { light: "#cc4400", dark: "#882200" },  // lava (fallback)
-      { light: "#FFD700", dark: "#AA8800" },  // exit
-      { light: "#333322", dark: "#1a1a11" },  // window bar (fallback)
+      { light: "#4a3020", dark: "#2e1d10" },  // 1: rock
+      { light: "#cc4400", dark: "#882200" },  // 2: lava
+      { light: "#FFD700", dark: "#AA8800" },  // 3: exit
+      { light: "#333322", dark: "#1a1a11" },  // 4: window
+      { light: "#9a7030", dark: "#7a5020" },  // 5: basic door
+      { light: "#cc2222", dark: "#881111" },  // 6: red door
+      { light: "#cc6600", dark: "#884400" },  // 7: orange door
+      { light: "#cccc00", dark: "#888800" },  // 8: yellow door
+      { light: "#00aa44", dark: "#006622" },  // 9: green door
+      { light: "#2244cc", dark: "#112288" },  // 10: blue door
+      { light: "#8822cc", dark: "#551188" },  // 11: purple door
     ];
     const FLOOR_COLOR = "#1a1008";
     const CEILING_COLOR = "#0a0a14";
@@ -350,6 +417,12 @@ export default function Hellzone() {
     const projectiles: Projectile[] = [];
     const flameParticles: FlameParticle[] = [];
 
+    // ── Door / key state ───────────────────────────────────────────────────────
+    let doors: Door[] = [];
+    const doorMap = new Map<string, Door>();
+    let heldKeys = new Set<KeyColor>();
+    let lockedMsgTimer = 0;
+
     // ── Cheat state ────────────────────────────────────────────────────────────
     let godMode = false;
     let infAmmo = false;
@@ -395,6 +468,14 @@ export default function Hellzone() {
     const sprFlameParticle  = new Sprite('/sprites/flame-particle.png');
     const sprImpactWall = new Sprite('/sprites/impact-wall.png');
     const sprImpactEnemy = new Sprite('/sprites/impact-enemy.png');
+    const sprKeys: Record<KeyColor, Sprite> = {
+      red:    new Sprite('/sprites/key-red.png'),
+      orange: new Sprite('/sprites/key-orange.png'),
+      yellow: new Sprite('/sprites/key-yellow.png'),
+      green:  new Sprite('/sprites/key-green.png'),
+      blue:   new Sprite('/sprites/key-blue.png'),
+      purple: new Sprite('/sprites/key-purple.png'),
+    };
 
     // ── Sound system ───────────────────────────────────────────────────────────
     let audioCtx: AudioContext | null = null;
@@ -408,7 +489,7 @@ export default function Hellzone() {
           'intro','shoot','hit-wall','hit-enemy','hurt','death','level-complete','pickup','alert',
           'shoot-subwoofer','shoot-woofer','swipe-claws','hit-claws',
           'shoot-tennis','bounce-tennis','shoot-flamethrower','burning',
-          'pickup-weapon','weapon-switch',
+          'pickup-weapon','weapon-switch','door-open',
         ];
         for (const name of names) {
           fetch(`/sounds/${name}.wav`)
@@ -481,11 +562,11 @@ export default function Hellzone() {
       playSound('weapon-switch', 0.5);
     }
 
-    function activateCheat(code: 'god' | 'boom') {
+    function activateCheat(code: 'god' | 'boom' | 'key') {
       if (code === 'god') {
         godMode = !godMode;
         showMessage(godMode ? 'EGOD: GOD MODE ON' : 'EGOD: GOD MODE OFF');
-      } else {
+      } else if (code === 'boom') {
         infAmmo = !infAmmo;
         if (infAmmo) {
           ownedWeapons = new Set<WeaponId>(['claws','subwoofer','woofer','tennis','flamethrower']);
@@ -494,6 +575,9 @@ export default function Hellzone() {
         } else {
           showMessage('EGOBOOM: AMMO NORMAL');
         }
+      } else {
+        KEY_COLORS.forEach(c => heldKeys.add(c));
+        showMessage('EGOKEY: ALL KEYS');
       }
       updateCheatsMenu();
     }
@@ -501,10 +585,56 @@ export default function Hellzone() {
     function updateCheatsMenu() {
       const overlay = root.querySelector<HTMLElement>('.hz-cheats-overlay');
       if (overlay) overlay.style.display = showCheatsMenu ? 'flex' : 'none';
-      const godBtn = root.querySelector<HTMLElement>('#hz-cheat-god');
+      const godBtn  = root.querySelector<HTMLElement>('#hz-cheat-god');
       const boomBtn = root.querySelector<HTMLElement>('#hz-cheat-boom');
-      if (godBtn) godBtn.className = 'hz-cheat-btn' + (godMode ? ' active' : '');
+      const keyBtn  = root.querySelector<HTMLElement>('#hz-cheat-key');
+      if (godBtn)  godBtn.className  = 'hz-cheat-btn' + (godMode ? ' active' : '');
       if (boomBtn) boomBtn.className = 'hz-cheat-btn' + (infAmmo ? ' active' : '');
+      if (keyBtn)  keyBtn.className  = 'hz-cheat-btn' + (heldKeys.size === KEY_COLORS.length ? ' active' : '');
+    }
+
+    function buildDoorMap() {
+      doors = [];
+      doorMap.clear();
+      for (let ty = 0; ty < MAP_H; ty++) {
+        for (let tx = 0; tx < MAP_W; tx++) {
+          const t = map[ty][tx];
+          if (isDoorTile(t)) {
+            const d: Door = { tx, ty, keyColor: doorTileKeyColor(t), openProgress: 0, state: 'closed' };
+            doors.push(d);
+            doorMap.set(`${tx},${ty}`, d);
+          }
+        }
+      }
+    }
+
+    function updateDoors(dt: number) {
+      // Advance opening animation
+      for (const door of doors) {
+        if (door.state === 'opening') {
+          door.openProgress = Math.min(1, door.openProgress + dt * 2.2); // ~0.45s
+          if (door.openProgress >= 1) {
+            door.state = 'open';
+            map[door.ty][door.tx] = TILE_EMPTY; // now physically passable
+          }
+        }
+      }
+      // Check proximity and try to open
+      if (lockedMsgTimer > 0) lockedMsgTimer -= dt * 60;
+      const px = player.x / CELL, py = player.y / CELL;
+      for (const door of doors) {
+        if (door.state !== 'closed') continue;
+        const dx = door.tx + 0.5 - px, dy = door.ty + 0.5 - py;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 1.5) continue;
+        if (door.keyColor === null || heldKeys.has(door.keyColor)) {
+          door.state = 'opening';
+          playSound('door-open', 0.55);
+        } else if (lockedMsgTimer <= 0) {
+          showMessage(`NEED ${door.keyColor.toUpperCase()} KEY`);
+          lockedMsgTimer = 60;
+        }
+      }
     }
 
     function initLevel() {
@@ -513,6 +643,9 @@ export default function Hellzone() {
       enemies = data.enemies;
       pickups = data.pickups;
       totalKills = enemies.length;
+      heldKeys = new Set<KeyColor>();
+      lockedMsgTimer = 0;
+      buildDoorMap();
       player = {
         x: data.spawn.x, y: data.spawn.y, angle: data.spawn.angle,
         health: player ? Math.min(Math.max(player.health, 1), 100) : 100,
@@ -524,6 +657,7 @@ export default function Hellzone() {
       if (level === 1) {
         setTimeout(() => showMessage("ROOM A: SHOOT THE TARGETS"), 600);
         setTimeout(() => showMessage("ROOM B: SOUTH HALLWAY — MOVING TARGETS"), 4000);
+        setTimeout(() => showMessage("ROOM C: FIND KEYS — GO EAST THROUGH ROOM B"), 12000);
       }
     }
 
@@ -548,6 +682,7 @@ export default function Hellzone() {
       else              { stepY =  1; sideDistY = (mapY + 1 - player.y / CELL) * deltaDistY; }
       let hit = false, side = 0, dist = 0, tile = 0;
       let glassHit: { dist: number; side: number; wallX: number } | null = null;
+      let doorHitDist = -1, doorHitWallX = 0, doorHitTile = 0, doorHitSide = 0;
       for (let i = 0; i < MAX_DEPTH * 2; i++) {
         if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
         else                        { sideDistY += deltaDistY; mapY += stepY; side = 1; }
@@ -555,7 +690,6 @@ export default function Hellzone() {
         tile = map[mapY][mapX];
         if (tile === TILE_WINDOW) {
           if (!glassHit) {
-            // Record the glass hit but keep marching to find the solid wall behind it.
             const gd = side === 0
               ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
               : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
@@ -564,18 +698,43 @@ export default function Hellzone() {
             glassHit = { dist: Math.max(gd, 0.1), side, wallX: gwx };
             continue;
           }
-          // Second window layer acts as a solid wall.
           hit = true; break;
+        }
+        // Wolfenstein-style door: test at the midpoint of the door cell
+        if (isDoorTile(tile)) {
+          const door = doorMap.get(`${mapX},${mapY}`);
+          const openProg = door ? door.openProgress : 0;
+          const midDist = side === 0
+            ? (mapX + 0.5 - player.x / CELL) / rayDirX
+            : (mapY + 0.5 - player.y / CELL) / rayDirY;
+          if (midDist > 0) {
+            let dwx = side === 0
+              ? player.y / CELL + midDist * rayDirY
+              : player.x / CELL + midDist * rayDirX;
+            dwx -= Math.floor(dwx);
+            if (dwx < openProg) { continue; } // ray passes through open gap
+            // Door panel is hit at the midpoint
+            doorHitDist = Math.max(midDist, 0.1);
+            doorHitWallX = dwx;
+            doorHitTile = tile;
+            doorHitSide = side;
+            hit = true; break;
+          }
+          continue;
         }
         if (tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) { hit = true; break; }
       }
       let wallX = 0;
       if (hit) {
-        dist = side === 0
-          ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
-          : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
-        let wx = side === 0 ? player.y / CELL + dist * rayDirY : player.x / CELL + dist * rayDirX;
-        wallX = wx - Math.floor(wx);
+        if (doorHitDist >= 0) {
+          dist = doorHitDist; wallX = doorHitWallX; tile = doorHitTile; side = doorHitSide;
+        } else {
+          dist = side === 0
+            ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
+            : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
+          let wx = side === 0 ? player.y / CELL + dist * rayDirY : player.x / CELL + dist * rayDirX;
+          wallX = wx - Math.floor(wx);
+        }
       } else {
         dist = MAX_DEPTH;
       }
@@ -615,9 +774,11 @@ export default function Hellzone() {
           ctx.globalAlpha = baseFog;
           sprWallLava.drawColumn(ctx, lavaFrame, wallX, x, top, wallH);
         } else if (tile === TILE_WALL && sprWallRock.loaded) {
-          // Darken side-1 walls (y-aligned hits) for depth cue
           ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
           sprWallRock.drawColumn(ctx, 0, wallX, x, top, wallH);
+        } else if (isDoorTile(tile)) {
+          ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
+          drawDoorColumn(x, tile, wallX, top, wallH, side);
         } else {
           const colors = WALL_COLORS[tile] || WALL_COLORS[1];
           ctx.globalAlpha = baseFog;
@@ -673,6 +834,33 @@ export default function Hellzone() {
         ctx.textAlign = 'left';
       }
 
+      // Key icons (top-right of canvas)
+      if (heldKeys.size > 0) {
+        let kx = SCREEN_W - 2;
+        for (let ki = KEY_COLORS.length - 1; ki >= 0; ki--) {
+          const kc = KEY_COLORS[ki];
+          if (!heldKeys.has(kc)) continue;
+          const [r, g, b] = KEY_HEX[kc];
+          const hexStr = `rgb(${r},${g},${b})`;
+          const darkStr = `rgb(${Math.floor(r*0.5)},${Math.floor(g*0.5)},${Math.floor(b*0.5)})`;
+          // Bow (ring)
+          ctx.fillStyle = hexStr;
+          ctx.fillRect(kx-6, 2, 5, 1); ctx.fillRect(kx-7, 3, 7, 1); ctx.fillRect(kx-7, 4, 7, 2);
+          ctx.fillRect(kx-6, 6, 5, 1);
+          // Hole in bow
+          ctx.fillStyle = '#000'; ctx.fillRect(kx-5, 3, 3, 3);
+          // Shaft
+          ctx.fillStyle = hexStr;
+          ctx.fillRect(kx-4, 7, 2, 5);
+          // Teeth
+          ctx.fillRect(kx-2, 9, 2, 1); ctx.fillRect(kx-2, 11, 2, 1);
+          // Shadow on shaft bottom
+          ctx.fillStyle = darkStr;
+          ctx.fillRect(kx-3, 11, 1, 1);
+          kx -= 10;
+        }
+      }
+
       updateHUD();
 
       if (showFullMap) renderFullMap();
@@ -687,6 +875,47 @@ export default function Hellzone() {
       const screenX = Math.floor(SCREEN_W / 2 + (camX / camZ) * (SCREEN_W / 2) / Math.tan(HALF_FOV));
       const spriteH = Math.max(4, Math.floor((SCREEN_H / camZ) * 0.9));
       return { screenX, spriteH, spriteW: spriteH, tz: camZ };
+    }
+
+    function drawDoorColumn(x: number, tile: number, wallX: number, top: number, wallH: number, side: number) {
+      const shade = side === 1 ? 0.65 : 1.0;
+      const isBasic = tile === TILE_DOOR;
+      const keyColor = isBasic ? null : doorTileKeyColor(tile);
+      const iH = Math.ceil(wallH);
+      for (let dy = 0; dy < iH; dy++) {
+        const py = Math.floor(top) + dy;
+        if (py < 0 || py >= SCREEN_H) continue;
+        const vy = dy / wallH;
+        const isVFrame = vy < 0.06 || vy > 0.94;
+        const isHFrame = wallX < 0.04 || wallX > 0.96;
+        let col: string;
+        if (isBasic) {
+          if (isVFrame || isHFrame) {
+            col = shade < 1 ? '#3a2208' : '#4e2e08';
+          } else if (vy > 0.45 && vy < 0.55) {
+            col = shade < 1 ? '#5a3a12' : '#7a5020';
+          } else {
+            col = shade < 1 ? '#7a5820' : '#a07030';
+          }
+        } else {
+          const [r, g, b] = KEY_HEX[keyColor!];
+          const isColorBand = vy > 0.28 && vy < 0.72;
+          const isKeyhole = Math.abs(wallX - 0.5) < 0.06 && vy > 0.45 && vy < 0.6;
+          if (isVFrame || isHFrame) {
+            col = shade < 1 ? '#181818' : '#282828';
+          } else if (isKeyhole) {
+            col = '#050505';
+          } else if (isColorBand) {
+            const sr = Math.floor(r * shade), sg = Math.floor(g * shade), sb = Math.floor(b * shade);
+            col = `rgb(${sr},${sg},${sb})`;
+          } else {
+            const v = Math.floor(90 * shade);
+            col = `rgb(${v},${v},${v})`;
+          }
+        }
+        ctx.fillStyle = col;
+        ctx.fillRect(x, py, 1, 1);
+      }
     }
 
     function renderSprites() {
@@ -961,6 +1190,7 @@ export default function Hellzone() {
         : p.type === 'weapon-woofer' ? sprPickupWoofer
         : p.type === 'weapon-tennis' ? sprPickupTennis
         : p.type === 'weapon-flamethrower' ? sprPickupFlame
+        : p.type.startsWith('key-') ? sprKeys[p.type.slice(4) as KeyColor]
         : sprPickupAmmo;
       if (spr.loaded) {
         const fog = Math.max(0, 1 - tz / MAX_DEPTH);
@@ -978,6 +1208,7 @@ export default function Hellzone() {
           : p.type.startsWith('weapon-') ? '#ff6600'
           : p.type === 'fuel' ? '#cc2200'
           : p.type === 'balls' ? '#88aa00'
+          : p.type.startsWith('key-') ? (() => { const [r,g,b]=KEY_HEX[p.type.slice(4) as KeyColor]; return `rgb(${r},${g},${b})`; })()
           : '#ffaa00';
         for (let sx = 0; sx < size; sx++) {
           for (let sy = 0; sy < size; sy++) {
@@ -1132,6 +1363,8 @@ export default function Hellzone() {
           else if (tile === TILE_LAVA) mapCtx.fillStyle = "#882200";
           else if (tile === TILE_WINDOW) mapCtx.fillStyle = "#2a2a1a";
           else if (tile === TILE_EXIT) mapCtx.fillStyle = "#ffdd00";
+          else if (tile === TILE_DOOR) mapCtx.fillStyle = "#8b6914";
+          else if (isDoorTile(tile)) { const [r,g,b] = KEY_HEX[KEY_COLORS[tile-TILE_DOOR_RED]]; mapCtx.fillStyle = `rgb(${Math.floor(r*0.7)},${Math.floor(g*0.7)},${Math.floor(b*0.7)})`; }
           else mapCtx.fillStyle = "#1a0a00";
           mapCtx.fillRect(x * MSCALE, y * MSCALE, MSCALE, MSCALE);
         }
@@ -1172,6 +1405,8 @@ export default function Hellzone() {
           else if (tile === TILE_LAVA) { ctx.fillStyle = "#661100"; }
           else if (tile === TILE_WINDOW) { ctx.fillStyle = "#1a1a0d"; }
           else if (tile === TILE_EXIT) { ctx.fillStyle = "#ffdd00"; }
+          else if (tile === TILE_DOOR) { ctx.fillStyle = "#8b6914"; }
+          else if (isDoorTile(tile)) { const [r,g,b] = KEY_HEX[KEY_COLORS[tile-TILE_DOOR_RED]]; ctx.fillStyle = `rgb(${r},${g},${b})`; }
           else { ctx.fillStyle = "#110800"; }
           ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
         }
@@ -1256,9 +1491,10 @@ export default function Hellzone() {
     }
 
     // Lava and window bars are physically solid; only empty floor and exits are passable.
-    function isSolid(t: number) { return t === TILE_WALL || t === TILE_LAVA || t === TILE_WINDOW; }
-    // Windows are transparent to line-of-sight (enemies can see/shoot through bars).
-    function blocksLOS(t: number) { return t === TILE_WALL || t === TILE_LAVA; }
+    // Closed doors (TILE_DOOR*) are also solid; they become TILE_EMPTY when fully open.
+    function isSolid(t: number) { return t === TILE_WALL || t === TILE_LAVA || t === TILE_WINDOW || isDoorTile(t); }
+    // Closed doors block enemy LOS; windows do not (bars are transparent to bullets/sight).
+    function blocksLOS(t: number) { return t === TILE_WALL || t === TILE_LAVA || isDoorTile(t); }
 
     function approach(current: number, target: number, delta: number): number {
       if (Math.abs(target - current) <= delta) return target;
@@ -1313,6 +1549,11 @@ export default function Hellzone() {
             ballAmmo = Math.min(50, ballAmmo + 10); showMessage('+ TENNIS BALLS'); playSound('pickup');
           } else if (p.type === 'fuel') {
             fuelAmmo = Math.min(99, fuelAmmo + 30); showMessage('+ FUEL CANISTER'); playSound('pickup');
+          } else if (p.type.startsWith('key-')) {
+            const kc = p.type.slice(4) as KeyColor;
+            heldKeys.add(kc);
+            showMessage(`+ ${kc.toUpperCase()} KEY`);
+            playSound('pickup');
           } else if (p.type.startsWith('weapon-')) {
             const wId = p.type.slice(7) as WeaponId;
             if (!ownedWeapons.has(wId)) {
@@ -1655,6 +1896,7 @@ export default function Hellzone() {
         clearTimeout(cheatClearTimer);
         cheatClearTimer = window.setTimeout(() => { cheatBuffer = ''; }, 2500);
         if (cheatBuffer.endsWith('EGOBOOM')) { activateCheat('boom'); cheatBuffer = ''; }
+        else if (cheatBuffer.endsWith('EGOKEY')) { activateCheat('key'); cheatBuffer = ''; }
         else if (cheatBuffer.endsWith('EGOD')) { activateCheat('god'); cheatBuffer = ''; }
       }
       initAudio();
@@ -1821,8 +2063,9 @@ export default function Hellzone() {
     }
 
     // Cheats menu buttons
-    const cheatGodBtn  = root.querySelector<HTMLElement>('#hz-cheat-god');
-    const cheatBoomBtn = root.querySelector<HTMLElement>('#hz-cheat-boom');
+    const cheatGodBtn   = root.querySelector<HTMLElement>('#hz-cheat-god');
+    const cheatBoomBtn  = root.querySelector<HTMLElement>('#hz-cheat-boom');
+    const cheatKeyBtn   = root.querySelector<HTMLElement>('#hz-cheat-key');
     const cheatCloseBtn = root.querySelector<HTMLElement>('#hz-cheat-close');
     if (cheatGodBtn) {
       const fn = () => activateCheat('god');
@@ -1833,6 +2076,11 @@ export default function Hellzone() {
       const fn = () => activateCheat('boom');
       cheatBoomBtn.addEventListener('click', fn);
       fabCleanups.push(() => cheatBoomBtn.removeEventListener('click', fn));
+    }
+    if (cheatKeyBtn) {
+      const fn = () => activateCheat('key');
+      cheatKeyBtn.addEventListener('click', fn);
+      fabCleanups.push(() => cheatKeyBtn.removeEventListener('click', fn));
     }
     if (cheatCloseBtn) {
       const fn = () => { showCheatsMenu = false; updateCheatsMenu(); };
@@ -1889,6 +2137,7 @@ export default function Hellzone() {
       lastTime = ts;
       if (gameState === "playing") {
         movePlayer(dt);
+        updateDoors(dt);
         updateEnemies(dt);
         updateProjectiles(dt);
         updateFlameParticles(dt);
@@ -2012,6 +2261,7 @@ export default function Hellzone() {
                 <div className="hz-cheats-title">EGO CHEATS</div>
                 <button className="hz-cheat-btn" id="hz-cheat-god">EGOD — GOD MODE</button>
                 <button className="hz-cheat-btn" id="hz-cheat-boom">EGOBOOM — ALL WEAPONS</button>
+                <button className="hz-cheat-btn" id="hz-cheat-key">EGOKEY — ALL KEYS</button>
                 <button className="hz-cheat-close" id="hz-cheat-close">CLOSE [ESC]</button>
               </div>
             </div>
