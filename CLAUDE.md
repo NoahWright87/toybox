@@ -206,6 +206,22 @@ NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
 - Built-in apps: file browser, About Noahsoft dialog, simulated internet browser, Tic-Tac-Toe window
 - All windows use Win95-style chrome: title bar (orange/brown gradient), close/min/max buttons, beveled borders
 
+### Adding a new app/game to NS Doors 97
+
+There are **three separate places** that must all be updated — missing any one of them is a recurring mistake:
+
+1. **`NsDoors97.tsx`** — four changes:
+   - Add to `AppAction` union type
+   - Add to `APP_REGISTRY` (id → title/icon/action)
+   - Add to `WindowContent` union type
+   - Add `case` in the `openWindow()` switch statement
+   - Add the render conditional inside the window map (`win.content.type === "..."`)
+   - Add the import for the component at the top
+
+2. **`Taskbar.tsx`** — add an entry to `GAMES_ITEMS` (or `TOOLS_ITEMS`). **This is the Start menu list.** Without this the app will open when double-clicked from the desktop but will NOT appear in Start → Games. This step is easy to forget — don't skip it.
+
+3. **`src/data/experiences.ts`** and **`src/App.tsx`** — add the experience entry and the `/route` if the game also has a standalone page.
+
 ## Before finishing any task
 
 **CRITICAL: Always run TypeScript check and fix ALL errors before pushing.**

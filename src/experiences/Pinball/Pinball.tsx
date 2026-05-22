@@ -542,7 +542,7 @@ export default function Pinball({ onQuit }: Props) {
         ctx.fillText("PINBALL", W / 2 - 10, FLIPPER_Y - 66);
         ctx.fillStyle = "#c0c0c0";
         ctx.font = "6px 'Press Start 2P', monospace";
-        ctx.fillText("SPACE to launch", W / 2 - 10, FLIPPER_Y - 50);
+        ctx.fillText("SPACE / LAUNCH btn", W / 2 - 10, FLIPPER_Y - 50);
         ctx.fillText("Z/← Left  X/→ Right", W / 2 - 10, FLIPPER_Y - 36);
         ctx.textAlign = "left";
       }
@@ -603,6 +603,28 @@ export default function Pinball({ onQuit }: Props) {
     if (e.key === " " || e.key === "Spacebar") keysRef.current.space = false;
   }, []);
 
+  // ── Touch / pointer controls ─────────────────────────────────────────────────
+
+  const handleLeftDown = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    keysRef.current.left = true;
+  }, []);
+  const handleLeftUp = useCallback(() => { keysRef.current.left = false; }, []);
+
+  const handleRightDown = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    keysRef.current.right = true;
+  }, []);
+  const handleRightUp = useCallback(() => { keysRef.current.right = false; }, []);
+
+  const handleLaunchDown = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const gs = stateRef.current;
+    if (gs.phase === "game-over") { resetGame(); return; }
+    keysRef.current.space = true;
+  }, [resetGame]);
+  const handleLaunchUp = useCallback(() => { keysRef.current.space = false; }, []);
+
   // Lives display
   const livesArr = Array.from({ length: 3 }, (_, i) => i < stateRef.current.lives);
 
@@ -637,6 +659,32 @@ export default function Pinball({ onQuit }: Props) {
             />
           ))}
         </div>
+      </div>
+      <div className="pinball__touch-controls">
+        <button
+          className="pinball__touch-btn pinball__touch-btn--left"
+          onPointerDown={handleLeftDown}
+          onPointerUp={handleLeftUp}
+          onPointerCancel={handleLeftUp}
+        >
+          ◀ LEFT
+        </button>
+        <button
+          className="pinball__touch-btn pinball__touch-btn--launch"
+          onPointerDown={handleLaunchDown}
+          onPointerUp={handleLaunchUp}
+          onPointerCancel={handleLaunchUp}
+        >
+          LAUNCH
+        </button>
+        <button
+          className="pinball__touch-btn pinball__touch-btn--right"
+          onPointerDown={handleRightDown}
+          onPointerUp={handleRightUp}
+          onPointerCancel={handleRightUp}
+        >
+          RIGHT ▶
+        </button>
       </div>
     </div>
   );
