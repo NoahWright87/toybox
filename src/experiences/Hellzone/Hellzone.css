@@ -256,6 +256,74 @@
   margin-top: 4px;
 }
 
+/* ── WEAPON BAR ── */
+.hz-weapon-bar {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.hz-weapon-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 62px;
+  border: 2px solid;
+  border-color: #ffffff #555 #555 #ffffff;
+  background: #0d0d0d;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  gap: 1px;
+  padding: 2px 0;
+  transition: background 0.05s;
+}
+
+.hz-weapon-slot.active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #1a0800;
+  cursor: default;
+}
+
+.hz-weapon-slot.unowned {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.hz-weapon-slot:not(.unowned):not(.active):hover {
+  background: #1a0a00;
+  border-color: #888 #333 #333 #888;
+}
+
+.hz-wslot-num {
+  font-size: 7px;
+  color: #550000;
+  line-height: 1;
+}
+.hz-weapon-slot.active .hz-wslot-num { color: #ff6600; }
+
+.hz-wslot-name {
+  font-size: 7px;
+  color: #666;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+.hz-weapon-slot.active .hz-wslot-name { color: #aa2200; }
+
+.hz-wslot-ammo {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: #666;
+  line-height: 1;
+}
+.hz-weapon-slot.active .hz-wslot-ammo { color: #ff6600; }
+.hz-wslot-ammo.low { color: #ff4400; animation: hz-blink 0.5s step-end infinite; }
+
 /* ── MINIMAP ── */
 .hz-minimap {
   position: absolute;
@@ -530,4 +598,7 @@
   .hz-death-title { font-size: clamp(48px, 14vw, 96px); }
   .hz-hud-value { font-size: 36px; }
   .hz-minimap { right: 80px; width: 60px; height: 60px; }
+  .hz-weapon-slot { width: 32px; height: 54px; }
+  .hz-wslot-ammo { font-size: 14px; }
+  .hz-wslot-name { font-size: 6px; }
 }

@@ -3,6 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
 import "./Hellzone.css";
 
+const WEAPON_SLOT_DATA = [
+  { id: 'claws'        as const, abbrev: 'CLW', key: '1' },
+  { id: 'subwoofer'    as const, abbrev: 'SUB', key: '2' },
+  { id: 'woofer'       as const, abbrev: 'WOO', key: '3' },
+  { id: 'tennis'       as const, abbrev: 'TEN', key: '4' },
+  { id: 'flamethrower' as const, abbrev: 'FLA', key: '5' },
+];
+
 export default function Hellzone() {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -56,8 +64,21 @@ export default function Hellzone() {
       x: number; y: number; angle: number; health: number; maxHealth: number;
       state: string; type: number; shootTimer: number; alertRange: number;
       speed: number; deathTimer: number; muzzleFlash: number;
+      burning: boolean; burnTimer: number; burnDamage: number;
     }
     interface Pickup { x: number; y: number; type: string; taken: boolean; }
+
+    type WeaponId = 'claws' | 'subwoofer' | 'woofer' | 'tennis' | 'flamethrower';
+    const WEAPON_DEFS = {
+      claws:        { slot: 1, fullName: 'CLAWS',          minDmg: 22, maxDmg: 32, cooldown: 25, ammoType: null    as null },
+      subwoofer:    { slot: 2, fullName: 'SUBWOOFER',      minDmg: 15, maxDmg: 24, cooldown: 12, ammoType: 'bullets' as const },
+      woofer:       { slot: 3, fullName: 'WOOFER',         minDmg: 15, maxDmg: 24, cooldown: 5,  ammoType: 'bullets' as const },
+      tennis:       { slot: 4, fullName: 'TENNIS LAUNCHER',minDmg: 14, maxDmg: 20, cooldown: 30, ammoType: 'balls'   as const },
+      flamethrower: { slot: 5, fullName: 'DA FLAMTHROWER', minDmg: 4,  maxDmg: 7,  cooldown: 3,  ammoType: 'fuel'    as const },
+    } as const;
+
+    interface Projectile { x: number; y: number; velX: number; velY: number; damage: number; age: number; maxAge: number; }
+    interface FlameParticle { x: number; y: number; velX: number; velY: number; age: number; maxAge: number; damage: number; }
 
     class BSPNode {
       x: number; y: number; w: number; h: number;
@@ -157,6 +178,7 @@ export default function Hellzone() {
             state: "idle", type: Math.floor(rng() * 3),
             shootTimer: 60 + Math.floor(rng() * 120),
             alertRange: 6 * CELL, speed: 0, deathTimer: 0, muzzleFlash: 0,
+            burning: false, burnTimer: 0, burnDamage: 0,
           });
         }
       }
@@ -164,7 +186,20 @@ export default function Hellzone() {
       const pickups: Pickup[] = [];
       for (let i = 2; i < rooms.length - 1; i += 2) {
         const room = rooms[i];
-        pickups.push({ x: (room.cx + 0.5) * CELL, y: (room.cy + 0.5) * CELL, type: rng() > 0.5 ? "health" : "ammo", taken: false });
+        pickups.push({ x: (room.cx + 0.5) * CELL, y: (room.cy + 0.5) * CELL, type: rng() > 0.5 ? "health" : "bullets", taken: false });
+      }
+      // Place one weapon pickup per level in mid-to-late rooms
+      const weaponTypes: string[] = ['weapon-woofer', 'weapon-tennis', 'weapon-flamethrower'];
+      const wIdx = Math.floor(rng() * weaponTypes.length);
+      const wRoomIdx = Math.min(Math.floor(rooms.length * 0.5), rooms.length - 2);
+      if (wRoomIdx >= 1) {
+        pickups.push({ x: (rooms[wRoomIdx].cx + 0.5) * CELL, y: (rooms[wRoomIdx].cy + 0.5) * CELL, type: weaponTypes[wIdx], taken: false });
+      }
+      // Extra ammo pickups in later rooms
+      if (rooms.length > 6) {
+        const lateRoom = rooms[Math.floor(rooms.length * 0.75)];
+        const ammoTypes: string[] = ['bullets', 'fuel', 'balls'];
+        pickups.push({ x: (lateRoom.cx + 0.5) * CELL, y: (lateRoom.cy + 0.5) * CELL, type: ammoTypes[Math.floor(rng() * ammoTypes.length)], taken: false });
       }
 
       // Post-pass: ~25% of walls adjacent to open space become lava walls.
@@ -219,6 +254,7 @@ export default function Hellzone() {
       const mkDummy = (x: number, y: number): Enemy => ({
         x, y, angle: 0, health: 50, maxHealth: 50,
         state: "idle", type: 3, shootTimer: 999999, alertRange: 0, speed: 0, deathTimer: 0, muzzleFlash: 0,
+        burning: false, burnTimer: 0, burnDamage: 0,
       });
 
       let pi = 0;
@@ -226,6 +262,7 @@ export default function Hellzone() {
         x, y, angle: (pi++ * 1.618) % (Math.PI * 2),
         health: 40, maxHealth: 40,
         state: "idle", type: pi % 3, shootTimer: 999999, alertRange: 0, speed: 0, deathTimer: 0, muzzleFlash: 0,
+        burning: false, burnTimer: 0, burnDamage: 0,
       });
 
       const sY = 12.45 * CELL;
@@ -300,6 +337,19 @@ export default function Hellzone() {
     interface Impact { sx: number; sy: number; type: string; timer: number; maxTimer: number; }
     const impacts: Impact[] = [];
 
+    // ── Weapon state ───────────────────────────────────────────────────────────
+    let ownedWeapons = new Set<WeaponId>(['claws', 'subwoofer']);
+    let currentWeapon: WeaponId = 'subwoofer';
+    let switchState: 'idle' | 'lowering' | 'raising' = 'idle';
+    let switchProgress = 0;
+    let switchingTo: WeaponId = 'subwoofer';
+    let ballAmmo = 0;
+    let fuelAmmo = 0;
+    let mouseHeld = false;
+    let touchFireHeld = false;
+    const projectiles: Projectile[] = [];
+    const flameParticles: FlameParticle[] = [];
+
     // ── Sprites ─────────────────────────────────────────────────────────────────
     const sprWallRock = new Sprite('/sprites/wall-rock.png');
     // Lava sheet: 2×2 grid of 4 frames, each 627×627 within a 1254×1254 image.
@@ -320,7 +370,21 @@ export default function Hellzone() {
     const sprTargetDead = new Sprite('/sprites/target-dummy-dead.png');
     const sprPickupHealth = new Sprite('/sprites/pickup-health.png');
     const sprPickupAmmo = new Sprite('/sprites/pickup-ammo.png');
-    const sprGun = new Sprite('/sprites/gun-pistol.png');
+    const sprWeapon: Record<WeaponId, Sprite> = {
+      claws:        new Sprite('/sprites/gun-claws.png'),
+      subwoofer:    new Sprite('/sprites/gun-subwoofer.png'),
+      woofer:       new Sprite('/sprites/gun-woofer.png'),
+      tennis:       new Sprite('/sprites/gun-tennis.png'),
+      flamethrower: new Sprite('/sprites/gun-flamethrower.png'),
+    };
+    const sprPickupBullets  = new Sprite('/sprites/pickup-bullets.png');
+    const sprPickupFuel     = new Sprite('/sprites/pickup-fuel.png');
+    const sprPickupBalls    = new Sprite('/sprites/pickup-balls.png');
+    const sprPickupWoofer   = new Sprite('/sprites/pickup-weapon-woofer.png');
+    const sprPickupTennis   = new Sprite('/sprites/pickup-weapon-tennis.png');
+    const sprPickupFlame    = new Sprite('/sprites/pickup-weapon-flamethrower.png');
+    const sprTennisBall     = new Sprite('/sprites/projectile-tennis.png');
+    const sprFlameParticle  = new Sprite('/sprites/flame-particle.png');
     const sprImpactWall = new Sprite('/sprites/impact-wall.png');
     const sprImpactEnemy = new Sprite('/sprites/impact-enemy.png');
 
@@ -332,7 +396,12 @@ export default function Hellzone() {
       if (audioCtx) return;
       try {
         audioCtx = new AudioContext();
-        const names = ['intro','shoot','hit-wall','hit-enemy','hurt','death','level-complete','pickup','alert'];
+        const names = [
+          'intro','shoot','hit-wall','hit-enemy','hurt','death','level-complete','pickup','alert',
+          'shoot-subwoofer','shoot-woofer','swipe-claws','hit-claws',
+          'shoot-tennis','bounce-tennis','shoot-flamethrower','burning',
+          'pickup-weapon','weapon-switch',
+        ];
         for (const name of names) {
           fetch(`/sounds/${name}.wav`)
             .then(r => r.arrayBuffer())
@@ -379,6 +448,11 @@ export default function Hellzone() {
       kills = 0; totalKills = 0; level = 1;
       seed = Math.floor(Math.random() * 99999);
       player = null as unknown as Player;
+      ownedWeapons = new Set<WeaponId>(['claws', 'subwoofer']);
+      currentWeapon = 'subwoofer';
+      switchState = 'idle'; switchProgress = 0; switchingTo = 'subwoofer';
+      ballAmmo = 0; fuelAmmo = 0;
+      projectiles.length = 0; flameParticles.length = 0;
       initLevel();
       setScreen("playing");
     }
@@ -386,8 +460,16 @@ export default function Hellzone() {
     function nextLevel() {
       level++;
       seed = Math.floor(Math.random() * 99999);
+      projectiles.length = 0; flameParticles.length = 0;
       initLevel();
       setScreen("playing");
+    }
+
+    function switchWeapon(to: WeaponId) {
+      if (currentWeapon === to || switchState !== 'idle') return;
+      if (!ownedWeapons.has(to)) return;
+      switchState = 'lowering'; switchingTo = to;
+      playSound('weapon-switch', 0.5);
     }
 
     function initLevel() {
@@ -525,7 +607,7 @@ export default function Hellzone() {
         }
       }
 
-      drawGun();
+      drawWeapon();
 
       if (flashTimer > 0) {
         ctx.fillStyle = `rgba(200,0,0,${(flashTimer / 20) * 0.5})`;
@@ -556,7 +638,8 @@ export default function Hellzone() {
 
     function renderSprites() {
       ctx.imageSmoothingEnabled = false;
-      const sprites: { type: string; obj: Enemy | Pickup; dist: number }[] = [];
+      type SEntry = { type: string; obj: Enemy | Pickup | Projectile | FlameParticle; dist: number };
+      const sprites: SEntry[] = [];
       for (const e of enemies) {
         const dx = e.x - player.x, dy = e.y - player.y;
         sprites.push({ type: "enemy", obj: e, dist: Math.sqrt(dx * dx + dy * dy) });
@@ -566,10 +649,83 @@ export default function Hellzone() {
         const dx = p.x - player.x, dy = p.y - player.y;
         sprites.push({ type: "pickup", obj: p, dist: Math.sqrt(dx * dx + dy * dy) });
       }
+      for (const pr of projectiles) {
+        const dx = pr.x - player.x, dy = pr.y - player.y;
+        sprites.push({ type: "projectile", obj: pr, dist: Math.sqrt(dx * dx + dy * dy) });
+      }
+      for (const fp of flameParticles) {
+        const dx = fp.x - player.x, dy = fp.y - player.y;
+        sprites.push({ type: "flame", obj: fp, dist: Math.sqrt(dx * dx + dy * dy) });
+      }
       sprites.sort((a, b) => b.dist - a.dist);
       for (const s of sprites) {
-        if (s.type === "enemy") drawEnemySprite(s.obj as Enemy);
-        else drawPickupSprite(s.obj as Pickup);
+        if (s.type === "enemy")      drawEnemySprite(s.obj as Enemy);
+        else if (s.type === "pickup")     drawPickupSprite(s.obj as Pickup);
+        else if (s.type === "projectile") drawProjectileSprite(s.obj as Projectile);
+        else if (s.type === "flame")      drawFlameSprite(s.obj as FlameParticle);
+      }
+    }
+
+    function drawProjectileSprite(proj: Projectile) {
+      const p = projectSprite(proj.x, proj.y);
+      if (!p) return;
+      const { screenX, tz } = p;
+      const size = Math.max(2, Math.floor(8 / tz));
+      const startX = Math.floor(screenX - size / 2);
+      const startY = Math.floor(SCREEN_H / 2 - size / 2);
+      const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+      ctx.globalAlpha = fog * 0.9 + 0.1;
+      if (sprTennisBall.loaded) {
+        for (let sx = 0; sx < size; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W) continue;
+          if (tz >= zBuffer[px]) continue;
+          sprTennisBall.drawColumn(ctx, 0, sx / size, px, startY, size);
+        }
+      } else {
+        for (let sx = 0; sx < size; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W || tz >= zBuffer[px]) continue;
+          ctx.fillStyle = '#aacc00';
+          ctx.fillRect(px, startY, 1, size);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawFlameSprite(fp: FlameParticle) {
+      const p = projectSprite(fp.x, fp.y);
+      if (!p) return;
+      const { screenX, tz } = p;
+      const lifeRatio = 1 - fp.age / fp.maxAge;
+      const size = Math.max(2, Math.floor((10 / tz) * lifeRatio));
+      if (size <= 0) return;
+      const startX = Math.floor(screenX - size / 2);
+      const startY = Math.floor(SCREEN_H / 2 - size / 2);
+      const g = Math.floor(lifeRatio * 120 + 50);
+      const fog = Math.max(0, 1 - tz / MAX_DEPTH);
+      if (sprFlameParticle.loaded) {
+        ctx.globalAlpha = fog * lifeRatio * 0.85 + 0.05;
+        for (let sx = 0; sx < size; sx++) {
+          const px = startX + sx;
+          if (px < 0 || px >= SCREEN_W || tz >= zBuffer[px]) continue;
+          sprFlameParticle.drawColumn(ctx, 0, sx / size, px, startY, size);
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        for (let sx = 0; sx < size; sx++) {
+          for (let sy = 0; sy < size; sy++) {
+            const px = startX + sx, py = startY + sy;
+            if (px < 0 || px >= SCREEN_W || py < 0 || py >= SCREEN_H) continue;
+            if (tz >= zBuffer[px]) continue;
+            const u = sx / size - 0.5, v = sy / size - 0.5;
+            if (u * u + v * v > 0.25) continue;
+            ctx.globalAlpha = fog * lifeRatio * 0.8;
+            ctx.fillStyle = `rgb(255,${g},0)`;
+            ctx.fillRect(px, py, 1, 1);
+          }
+        }
+        ctx.globalAlpha = 1;
       }
     }
 
@@ -745,7 +901,14 @@ export default function Hellzone() {
       const startX = Math.floor(screenX - size / 2);
       const startY = Math.floor(SCREEN_H / 2 + spriteH * 0.05);
 
-      const spr = p.type === "health" ? sprPickupHealth : sprPickupAmmo;
+      const spr = p.type === 'health' ? sprPickupHealth
+        : p.type === 'bullets' || p.type === 'ammo' ? sprPickupBullets
+        : p.type === 'balls' ? sprPickupBalls
+        : p.type === 'fuel' ? sprPickupFuel
+        : p.type === 'weapon-woofer' ? sprPickupWoofer
+        : p.type === 'weapon-tennis' ? sprPickupTennis
+        : p.type === 'weapon-flamethrower' ? sprPickupFlame
+        : sprPickupAmmo;
       if (spr.loaded) {
         const fog = Math.max(0, 1 - tz / MAX_DEPTH);
         ctx.globalAlpha = fog * 0.85 + 0.15;
@@ -758,7 +921,11 @@ export default function Hellzone() {
         ctx.globalAlpha = 1;
       } else {
         // Fallback: procedural
-        const col = p.type === "health" ? "#00cc44" : "#ffaa00";
+        const col = p.type === 'health' ? '#00cc44'
+          : p.type.startsWith('weapon-') ? '#ff6600'
+          : p.type === 'fuel' ? '#cc2200'
+          : p.type === 'balls' ? '#88aa00'
+          : '#ffaa00';
         for (let sx = 0; sx < size; sx++) {
           for (let sy = 0; sy < size; sy++) {
             const px = startX + sx, py = startY + sy;
@@ -778,40 +945,42 @@ export default function Hellzone() {
       }
     }
 
-    // ── Gun / Weapon ───────────────────────────────────────────────────────────
-    function drawGun() {
+    // ── Weapon rendering ───────────────────────────────────────────────────────
+    function drawWeapon() {
       ctx.imageSmoothingEnabled = false;
       const recoil = Math.round(gunRecoil * 10);
       const gw = 24, gh = 48;
       const dx = Math.floor(SCREEN_W / 2) - gw / 2;
-      const dy = SCREEN_H - gh + 18 + recoil;
+      // switchProgress 0=visible, 1=fully lowered off-screen
+      const switchOffset = Math.round(switchProgress * (gh + 24));
+      const dy = SCREEN_H - gh + 18 + recoil + switchOffset;
 
-      if (sprGun.loaded) {
-        sprGun.draw(ctx, 0, dx, dy, gw, gh);
+      const spr = sprWeapon[currentWeapon];
+      if (spr && spr.loaded) {
+        spr.draw(ctx, 0, dx, dy, gw, gh);
       } else {
-        // Fallback: procedural vertical gun
+        // Procedural fallback for current weapon
         const cx = Math.floor(SCREEN_W / 2);
-        const cy = SCREEN_H + 4 + recoil;
-        // Barrel (vertical, pointing up)
-        ctx.fillStyle = "#777";
-        ctx.fillRect(cx - 3, cy - 40, 6, 30);
-        // Barrel tip/muzzle
-        ctx.fillStyle = "#555";
-        ctx.fillRect(cx - 4, cy - 42, 8, 4);
-        // Slide/body
-        ctx.fillStyle = "#666";
-        ctx.fillRect(cx - 12, cy - 16, 24, 16);
-        // Inner body
-        ctx.fillStyle = "#444";
-        ctx.fillRect(cx - 9, cy - 13, 18, 13);
-        // Grip
-        ctx.fillStyle = "#3a2a18";
-        ctx.fillRect(cx - 9, cy - 2, 18, 20);
-        // Grip texture
-        for (let i = 0; i < 3; i++) ctx.fillRect(cx - 7 + i * 5, cy, 2, 14);
+        const cy = SCREEN_H + 4 + recoil + switchOffset;
+        if (currentWeapon === 'claws') {
+          ctx.fillStyle = '#382212'; ctx.fillRect(cx - 14, cy - 38, 10, 28); ctx.fillRect(cx + 4, cy - 38, 10, 28);
+          ctx.fillStyle = '#e8dcc8';
+          for (let j = 0; j < 3; j++) { ctx.fillRect(cx - 12 + j * 4, cy - 52, 3, 16); ctx.fillRect(cx + 6 + j * 4, cy - 52, 3, 16); }
+        } else if (currentWeapon === 'flamethrower') {
+          ctx.fillStyle = '#bb3a0e'; ctx.fillRect(cx + 2, cy - 42, 12, 36);
+          ctx.fillStyle = '#6e6458'; ctx.fillRect(cx - 12, cy - 32, 14, 10);
+          ctx.fillStyle = '#ff8800'; ctx.fillRect(cx - 14, cy - 28, 4, 6);
+        } else {
+          ctx.fillStyle = '#777'; ctx.fillRect(cx - 3, cy - 40, 6, 30);
+          ctx.fillStyle = '#555'; ctx.fillRect(cx - 4, cy - 42, 8, 4);
+          ctx.fillStyle = '#666'; ctx.fillRect(cx - 12, cy - 16, 24, 16);
+          ctx.fillStyle = '#3a2a18'; ctx.fillRect(cx - 9, cy - 2, 18, 20);
+          if (currentWeapon === 'woofer') { ctx.fillStyle = '#3a2a08'; ctx.fillRect(cx - 8, cy + 16, 14, 10); }
+        }
       }
 
-      if (muzzleFlashTimer > 0) drawMuzzleFlash(Math.floor(SCREEN_W / 2), dy + 2, muzzleFlashTimer);
+      const isGun = currentWeapon === 'subwoofer' || currentWeapon === 'woofer';
+      if (muzzleFlashTimer > 0 && isGun) drawMuzzleFlash(Math.floor(SCREEN_W / 2), dy + 2, muzzleFlashTimer);
     }
 
     function drawMuzzleFlash(cx: number, cy: number, t: number) {
@@ -954,13 +1123,26 @@ export default function Hellzone() {
     // ── HUD ────────────────────────────────────────────────────────────────────
     function updateHUD() {
       const hHealth = q<HTMLElement>("#hz-hud-health");
-      const hAmmo   = q<HTMLElement>("#hz-hud-ammo");
       const hKills  = q<HTMLElement>("#hz-hud-kills");
       hHealth.textContent = String(Math.max(0, Math.ceil(player.health)));
-      hAmmo.textContent   = String(player.ammo);
       hKills.textContent  = String(kills);
       hHealth.className = "hz-hud-value" + (player.health <= 20 ? " low" : "");
-      hAmmo.className   = "hz-hud-value" + (player.ammo <= 5 ? " low" : "");
+      // Weapon slots
+      for (const slot of WEAPON_SLOT_DATA) {
+        const slotEl = root.querySelector<HTMLElement>(`#hz-wslot-${slot.id}`);
+        const ammoEl = root.querySelector<HTMLElement>(`#hz-wslot-ammo-${slot.id}`);
+        if (!slotEl || !ammoEl) continue;
+        const owned = ownedWeapons.has(slot.id);
+        const active = currentWeapon === slot.id && switchState === 'idle';
+        slotEl.className = `hz-weapon-slot${active ? ' active' : ''}${!owned ? ' unowned' : ''}`;
+        if (!owned) { ammoEl.textContent = '×'; }
+        else if (slot.id === 'claws') { ammoEl.textContent = '∞'; }
+        else if (slot.id === 'subwoofer' || slot.id === 'woofer') {
+          ammoEl.textContent = String(player.ammo);
+          ammoEl.className = 'hz-wslot-ammo' + (player.ammo <= 5 && (slot.id === currentWeapon) ? ' low' : '');
+        } else if (slot.id === 'tennis') { ammoEl.textContent = String(ballAmmo); }
+        else if (slot.id === 'flamethrower') { ammoEl.textContent = String(fuelAmmo); }
+      }
       drawFace();
     }
 
@@ -1042,9 +1224,31 @@ export default function Hellzone() {
         if (p.taken) continue;
         if (Math.hypot(p.x - player.x, p.y - player.y) < CELL * 0.5) {
           p.taken = true;
-          playSound('pickup');
-          if (p.type === "health") { player.health = Math.min(100, player.health + 25); showMessage("+ HEALTH PACK"); }
-          else { player.ammo = Math.min(99, player.ammo + 20); showMessage("+ AMMO CRATE"); }
+          if (p.type === 'health') {
+            player.health = Math.min(100, player.health + 25); showMessage('+ HEALTH PACK'); playSound('pickup');
+          } else if (p.type === 'ammo' || p.type === 'bullets') {
+            player.ammo = Math.min(99, player.ammo + 20); showMessage('+ AMMO CRATE'); playSound('pickup');
+          } else if (p.type === 'balls') {
+            ballAmmo = Math.min(50, ballAmmo + 10); showMessage('+ TENNIS BALLS'); playSound('pickup');
+          } else if (p.type === 'fuel') {
+            fuelAmmo = Math.min(99, fuelAmmo + 30); showMessage('+ FUEL CANISTER'); playSound('pickup');
+          } else if (p.type.startsWith('weapon-')) {
+            const wId = p.type.slice(7) as WeaponId;
+            if (!ownedWeapons.has(wId)) {
+              ownedWeapons.add(wId);
+              if (wId === 'tennis') ballAmmo = Math.min(50, ballAmmo + 10);
+              if (wId === 'flamethrower') fuelAmmo = Math.min(99, fuelAmmo + 40);
+              if (wId === 'woofer') player.ammo = Math.min(99, player.ammo + 20);
+              showMessage('GOT THE ' + WEAPON_DEFS[wId].fullName + '!');
+              playSound('pickup-weapon');
+              switchWeapon(wId);
+            } else {
+              if (wId === 'woofer') player.ammo = Math.min(99, player.ammo + 15);
+              else if (wId === 'tennis') ballAmmo = Math.min(50, ballAmmo + 8);
+              else if (wId === 'flamethrower') fuelAmmo = Math.min(99, fuelAmmo + 25);
+              showMessage('+ AMMO BONUS'); playSound('pickup');
+            }
+          }
         }
       }
 
@@ -1065,19 +1269,50 @@ export default function Hellzone() {
       return true;
     }
 
-    function shoot() {
-      if (shootCooldown > 0 || player.ammo <= 0) {
-        if (player.ammo <= 0) showMessage("OUT OF AMMO!");
-        return;
+    function tryFire() {
+      if (switchState !== 'idle' || shootCooldown > 0) return;
+      switch (currentWeapon) {
+        case 'claws': fireMelee(); break;
+        case 'subwoofer': fireRaycast('subwoofer'); break;
+        case 'woofer':    fireRaycast('woofer'); break;
+        case 'tennis':    fireTennisLauncher(); break;
+        case 'flamethrower': fireFlamethrower(); break;
       }
+    }
+
+    function fireMelee() {
+      shootCooldown = WEAPON_DEFS.claws.cooldown;
+      gunRecoil = 0.6;
+      playSound('swipe-claws');
+      let hit = false;
+      for (const e of enemies) {
+        if (e.state === 'dead') continue;
+        const dx = e.x - player.x, dy = e.y - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 1.5 * CELL) continue;
+        let angleDiff = Math.atan2(dy, dx) - player.angle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        if (Math.abs(angleDiff) > Math.PI / 4) continue;
+        const damage = WEAPON_DEFS.claws.minDmg + Math.floor(Math.random() * (WEAPON_DEFS.claws.maxDmg - WEAPON_DEFS.claws.minDmg));
+        e.health -= damage; e.state = 'chase'; hit = true;
+        playSound('hit-claws', 0.8);
+        const sp = projectSprite(e.x, e.y);
+        impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 12, maxTimer: 12 });
+        if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('MAULED!'); }
+      }
+      if (!hit) impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: 'wall', timer: 8, maxTimer: 8 });
+    }
+
+    function fireRaycast(wId: 'subwoofer' | 'woofer') {
+      if (player.ammo <= 0) { showMessage('OUT OF BULLETS!'); return; }
       player.ammo--;
-      shootCooldown = 12;
-      gunRecoil = 1.0;
-      muzzleFlashTimer = 8;
-      playSound('shoot');
+      shootCooldown = WEAPON_DEFS[wId].cooldown;
+      gunRecoil = 1.0; muzzleFlashTimer = 8;
+      playSound(wId === 'subwoofer' ? 'shoot-subwoofer' : 'shoot-woofer');
       let nearest: Enemy | null = null, nearDist = Infinity;
       for (const e of enemies) {
-        if (e.state === "dead") continue;
+        if (e.state === 'dead') continue;
         const dx = e.x - player.x, dy = e.y - player.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         let angleDiff = Math.atan2(dy, dx) - player.angle;
@@ -1088,23 +1323,126 @@ export default function Hellzone() {
           nearest = e; nearDist = dist;
         }
       }
+      const def = WEAPON_DEFS[wId];
       if (nearest) {
-        const damage = 15 + Math.floor(Math.random() * 10);
-        nearest.health -= damage;
-        nearest.state = "chase";
-        const proj = projectSprite(nearest.x, nearest.y);
-        impacts.push({ sx: proj ? proj.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: "enemy", timer: 12, maxTimer: 12 });
+        const damage = def.minDmg + Math.floor(Math.random() * (def.maxDmg - def.minDmg));
+        nearest.health -= damage; nearest.state = 'chase';
+        const sp = projectSprite(nearest.x, nearest.y);
+        impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 12, maxTimer: 12 });
         playSound('hit-enemy');
-        if (nearest.health <= 0) { nearest.state = "dead"; kills++; showMessage("ENEMY DOWN!"); }
+        if (nearest.health <= 0) { nearest.state = 'dead'; kills++; showMessage('ENEMY DOWN!'); }
       } else {
-        impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: "wall", timer: 10, maxTimer: 10 });
+        impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: 'wall', timer: 10, maxTimer: 10 });
         playSound('hit-wall');
+      }
+    }
+
+    function fireTennisLauncher() {
+      if (ballAmmo <= 0) { showMessage('NO TENNIS BALLS!'); return; }
+      ballAmmo--;
+      shootCooldown = WEAPON_DEFS.tennis.cooldown;
+      gunRecoil = 1.2;
+      playSound('shoot-tennis');
+      const speed = 0.14 * CELL;
+      const def = WEAPON_DEFS.tennis;
+      projectiles.push({
+        x: player.x, y: player.y,
+        velX: Math.cos(player.angle) * speed,
+        velY: Math.sin(player.angle) * speed,
+        damage: def.minDmg + Math.floor(Math.random() * (def.maxDmg - def.minDmg)),
+        age: 0, maxAge: 360,
+      });
+    }
+
+    function fireFlamethrower() {
+      if (fuelAmmo <= 0) { showMessage('OUT OF FUEL!'); return; }
+      fuelAmmo--;
+      shootCooldown = WEAPON_DEFS.flamethrower.cooldown;
+      playSound('shoot-flamethrower', 0.25);
+      const coneHalf = Math.PI / 12;
+      const def = WEAPON_DEFS.flamethrower;
+      for (let i = 0; i < 5; i++) {
+        const spread = (Math.random() - 0.5) * coneHalf * 2;
+        const pAngle = player.angle + spread;
+        const speed = (0.028 + Math.random() * 0.018) * CELL;
+        flameParticles.push({
+          x: player.x + Math.cos(player.angle) * 18,
+          y: player.y + Math.sin(player.angle) * 18,
+          velX: Math.cos(pAngle) * speed, velY: Math.sin(pAngle) * speed,
+          age: 0, maxAge: 45 + Math.floor(Math.random() * 30),
+          damage: def.minDmg + Math.floor(Math.random() * (def.maxDmg - def.minDmg)),
+        });
+      }
+    }
+
+    function updateProjectiles(dt: number) {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.age++;
+        if (p.age > 90) p.damage *= 0.97;
+        const newX = p.x + p.velX * dt * 60;
+        const newY = p.y + p.velY * dt * 60;
+        const tx = Math.floor(newX / CELL), ty = Math.floor(newY / CELL);
+        const oldTx = Math.floor(p.x / CELL);
+        if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) { projectiles.splice(i, 1); continue; }
+        if (isSolid(map[ty][tx])) {
+          if (tx !== oldTx) p.velX = -p.velX * 0.72; else p.velY = -p.velY * 0.72;
+          p.damage *= 0.7;
+          playSound('bounce-tennis', 0.45);
+          if (p.damage < 2) { projectiles.splice(i, 1); continue; }
+        } else {
+          p.x = newX; p.y = newY;
+        }
+        if (p.age >= p.maxAge) { projectiles.splice(i, 1); continue; }
+        for (const e of enemies) {
+          if (e.state === 'dead') continue;
+          if (Math.hypot(e.x - p.x, e.y - p.y) < CELL * 0.45) {
+            const dmg = Math.max(1, Math.floor(p.damage));
+            e.health -= dmg; e.state = 'chase';
+            p.damage *= 0.55;
+            const sp = projectSprite(e.x, e.y);
+            impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 8, maxTimer: 8 });
+            playSound('bounce-tennis', 0.65);
+            if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('BOUNCED!'); }
+            if (p.damage < 2) { projectiles.splice(i, 1); break; }
+          }
+        }
+      }
+    }
+
+    function updateFlameParticles(dt: number) {
+      for (let i = flameParticles.length - 1; i >= 0; i--) {
+        const fp = flameParticles[i];
+        fp.age++;
+        fp.x += fp.velX * dt * 60; fp.y += fp.velY * dt * 60;
+        const tx = Math.floor(fp.x / CELL), ty = Math.floor(fp.y / CELL);
+        if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H || isSolid(map[ty][tx])) {
+          flameParticles.splice(i, 1); continue;
+        }
+        if (fp.age >= fp.maxAge) { flameParticles.splice(i, 1); continue; }
+        for (const e of enemies) {
+          if (e.state === 'dead') continue;
+          if (Math.hypot(e.x - fp.x, e.y - fp.y) < CELL * 0.55) {
+            e.burning = true;
+            e.burnTimer = Math.max(e.burnTimer, 180);
+            e.burnDamage = fp.damage;
+            if (e.state !== 'chase') { e.state = 'chase'; playSound('alert', 0.5); }
+          }
+        }
       }
     }
 
     // ── Enemy AI ───────────────────────────────────────────────────────────────
     function updateEnemies(dt: number) {
       for (const e of enemies) {
+        if (e.state === "dead") continue;
+        // Burning DoT
+        if (e.burning && e.burnTimer > 0) {
+          e.burnTimer -= dt * 60;
+          e.health -= e.burnDamage * dt;
+          if (e.burnTimer <= 0) { e.burning = false; e.burnTimer = 0; }
+          if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('CRISPY!'); }
+        }
         if (e.state === "dead") continue;
         if (e.type === 3) continue;
 
@@ -1171,7 +1509,7 @@ export default function Hellzone() {
               player.health = 0;
               playSound('death');
               const stats = q("#hz-death-stats");
-              stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>AMMO REMAINING: ${player.ammo}`;
+              stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>BULLETS: ${player.ammo} | BALLS: ${ballAmmo} | FUEL: ${fuelAmmo}`;
               setScreen("dead");
               if (document.pointerLockElement) document.exitPointerLock();
             }
@@ -1199,12 +1537,14 @@ export default function Hellzone() {
       keys[e.code] = true;
       if (e.code === "KeyM") showFullMap = !showFullMap;
       if (e.code === "CapsLock") capsLocked = !capsLocked;
-      if (e.code === "F1" || e.key === "?") {
-        showHelp = !showHelp;
-        updateHelpOverlay();
-      }
+      if (e.code === "F1" || e.key === "?") { showHelp = !showHelp; updateHelpOverlay(); }
       if (e.code === "Enter") handleEnter();
-      if (e.code === "Space" && gameState === "playing") shoot();
+      if (e.code === "Space" && gameState === "playing") tryFire();
+      // Weapon switching 1-5
+      if (gameState === "playing") {
+        const wMap: Record<string, WeaponId> = { Digit1:'claws', Digit2:'subwoofer', Digit3:'woofer', Digit4:'tennis', Digit5:'flamethrower' };
+        if (wMap[e.code]) switchWeapon(wMap[e.code]);
+      }
       if (e.code === "Escape") {
         if (gameState === "playing") {
           setScreen("title");
@@ -1214,7 +1554,6 @@ export default function Hellzone() {
         }
         return;
       }
-      // Init audio on first key
       initAudio();
       e.preventDefault();
     }
@@ -1222,14 +1561,15 @@ export default function Hellzone() {
 
     function handleMouseDown(e: MouseEvent) {
       initAudio();
+      mouseHeld = true;
       if (gameState === "playing") {
         if (!pointerLocked) canvas.requestPointerLock();
-        else shoot();
+        else tryFire();
       }
       if (gameState === "title") handleEnter();
-      // Left click also fires
-      if (e.button === 0 && pointerLocked && gameState === "playing") shoot();
+      if (e.button === 0 && pointerLocked && gameState === "playing") tryFire();
     }
+    function handleMouseUp() { mouseHeld = false; }
 
     function handleMouseMove(e: MouseEvent) {
       if (pointerLocked && gameState === "playing") player.angle += e.movementX * MOUSE_SENSITIVITY;
@@ -1242,6 +1582,7 @@ export default function Hellzone() {
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keyup", handleKeyUp);
     document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("mouseup", handleMouseUp);
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("pointerlockchange", handlePointerLockChange);
 
@@ -1282,8 +1623,8 @@ export default function Hellzone() {
 
     const fabShoot = root.querySelector<HTMLElement>(".hz-fab-shoot");
     if (fabShoot) {
-      const fireOn  = (ev: Event) => { ev.preventDefault(); fabShoot.classList.add("pressed");    if (gameState === "playing") shoot(); };
-      const fireOff = (ev: Event) => { ev.preventDefault(); fabShoot.classList.remove("pressed"); };
+      const fireOn  = (ev: Event) => { ev.preventDefault(); fabShoot.classList.add("pressed"); touchFireHeld = true; if (gameState === "playing") tryFire(); };
+      const fireOff = (ev: Event) => { ev.preventDefault(); fabShoot.classList.remove("pressed"); touchFireHeld = false; };
       fabShoot.addEventListener("touchstart",  fireOn,  { passive: false });
       fabShoot.addEventListener("touchend",    fireOff, { passive: false });
       fabShoot.addEventListener("touchcancel", fireOff, { passive: false });
@@ -1295,6 +1636,19 @@ export default function Hellzone() {
         fabShoot.removeEventListener("touchcancel", fireOff);
         fabShoot.removeEventListener("mousedown", fireOn);
         fabShoot.removeEventListener("mouseup", fireOff);
+      });
+    }
+
+    // Weapon slot click/tap handlers
+    for (const slot of WEAPON_SLOT_DATA) {
+      const slotEl = root.querySelector<HTMLElement>(`#hz-wslot-${slot.id}`);
+      if (!slotEl) continue;
+      const handler = (ev: Event) => { ev.preventDefault(); initAudio(); if (gameState === 'playing') switchWeapon(slot.id); };
+      slotEl.addEventListener('click', handler);
+      slotEl.addEventListener('touchstart', handler, { passive: false });
+      fabCleanups.push(() => {
+        slotEl.removeEventListener('click', handler);
+        slotEl.removeEventListener('touchstart', handler);
       });
     }
 
@@ -1392,6 +1746,8 @@ export default function Hellzone() {
       if (gameState === "playing") {
         movePlayer(dt);
         updateEnemies(dt);
+        updateProjectiles(dt);
+        updateFlameParticles(dt);
         if (shootCooldown > 0) shootCooldown -= dt * 60;
         if (gunRecoil > 0) gunRecoil = Math.max(0, gunRecoil - 0.15 * dt * 60);
         if (muzzleFlashTimer > 0) muzzleFlashTimer = Math.max(0, muzzleFlashTimer - dt * 60);
@@ -1402,6 +1758,19 @@ export default function Hellzone() {
             const msgEl = root.querySelector<HTMLElement>(".hz-message");
             if (msgEl) msgEl.style.opacity = "0";
           }
+        }
+        // Weapon switch animation (~9 frames = 0.15s each phase)
+        if (switchState === 'lowering') {
+          switchProgress = Math.min(1, switchProgress + dt * 60 / 9);
+          if (switchProgress >= 1) { currentWeapon = switchingTo; switchState = 'raising'; }
+        } else if (switchState === 'raising') {
+          switchProgress = Math.max(0, switchProgress - dt * 60 / 9);
+          if (switchProgress <= 0) { switchState = 'idle'; }
+        }
+        // Auto-fire for held weapons
+        if (switchState === 'idle' && shootCooldown <= 0) {
+          const held = keys['Space'] || mouseHeld || touchFireHeld;
+          if (held && (currentWeapon === 'woofer' || currentWeapon === 'flamethrower')) tryFire();
         }
         render();
         renderMap();
@@ -1418,6 +1787,7 @@ export default function Hellzone() {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
       document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mouseup", handleMouseUp);
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("pointerlockchange", handlePointerLockChange);
       window.removeEventListener("touchstart", showTouchOverlay);
@@ -1478,6 +1848,7 @@ export default function Hellzone() {
                   <li><span>WASD / ARROWS</span><span>Move &amp; Strafe</span></li>
                   <li><span>MOUSE / ↺↻</span><span>Turn</span></li>
                   <li><span>SPACE / LMB / FIRE</span><span>Shoot</span></li>
+                  <li><span>1-5 / WEAPON SLOTS</span><span>Switch weapon</span></li>
                   <li><span>M</span><span>Toggle full map</span></li>
                   <li><span>SHIFT</span><span>Sprint</span></li>
                   <li><span>CAPS LOCK</span><span>Toggle always-sprint</span></li>
@@ -1500,9 +1871,14 @@ export default function Hellzone() {
             <div className="hz-hud-divider" />
             <canvas ref={faceRef} className="hz-face-sprite" width={24} height={24} />
             <div className="hz-hud-divider" />
-            <div className="hz-hud-panel">
-              <div className="hz-hud-label">AMMO</div>
-              <div className="hz-hud-value" id="hz-hud-ammo">50</div>
+            <div className="hz-weapon-bar">
+              {WEAPON_SLOT_DATA.map((slot, i) => (
+                <div key={slot.id} className="hz-weapon-slot unowned" id={`hz-wslot-${slot.id}`}>
+                  <div className="hz-wslot-num">[{i + 1}]</div>
+                  <div className="hz-wslot-name">{slot.abbrev}</div>
+                  <div className="hz-wslot-ammo" id={`hz-wslot-ammo-${slot.id}`}>×</div>
+                </div>
+              ))}
             </div>
             <div className="hz-hud-divider" />
             <div className="hz-hud-panel">

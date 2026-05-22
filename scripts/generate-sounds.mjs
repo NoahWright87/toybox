@@ -94,4 +94,66 @@ writeWav(gen(0.1, (t) => {
   return (rng()*0.4 + Math.sin(2*Math.PI*320*t)*0.6) * d * 0.7;
 }), join(OUT, 'alert.wav'));
 
+// shoot-subwoofer: deep sub-bass thud
+writeWav(gen(0.14, (t) => {
+  const d = Math.exp(-t*32);
+  return (rng()*0.4 + Math.sin(2*Math.PI*52*t)*0.7) * d * 0.92;
+}), join(OUT, 'shoot-subwoofer.wav'));
+
+// shoot-woofer: lighter faster pop
+writeWav(gen(0.08, (t) => {
+  const d = Math.exp(-t*50);
+  return (rng()*0.5 + Math.sin(2*Math.PI*80*t)*0.5) * d * 0.85;
+}), join(OUT, 'shoot-woofer.wav'));
+
+// swipe-claws: whoosh
+writeWav(gen(0.18, (t) => {
+  const freq = 1200 + 800*(1-t/0.18);
+  const d = t < 0.06 ? t/0.06 : Math.exp(-(t-0.06)*18);
+  return rng() * d * Math.exp(-Math.pow((freq-1600)/600,2)) * 0.8;
+}), join(OUT, 'swipe-claws.wav'));
+
+// hit-claws: meaty thud
+writeWav(gen(0.12, (t) => {
+  const d = Math.exp(-t*35);
+  return (Math.sin(2*Math.PI*110*t)*0.55 + rng()*0.45) * d * 0.85;
+}), join(OUT, 'hit-claws.wav'));
+
+// shoot-tennis: thwack/pop
+writeWav(gen(0.15, (t) => {
+  const d = Math.exp(-t*30);
+  return (Math.sin(2*Math.PI*210*t)*0.45 + rng()*0.55) * d * 0.8;
+}), join(OUT, 'shoot-tennis.wav'));
+
+// bounce-tennis: short chirp
+writeWav(gen(0.09, (t) => {
+  const freq = 380 + 240*(1-t/0.09);
+  return Math.sin(2*Math.PI*freq*t) * Math.exp(-t*30) * 0.7;
+}), join(OUT, 'bounce-tennis.wav'));
+
+// shoot-flamethrower: hiss burst
+writeWav(gen(0.22, (t) => {
+  const d = t < 0.04 ? t/0.04 : Math.exp(-(t-0.04)*8);
+  return rng() * d * 0.75;
+}), join(OUT, 'shoot-flamethrower.wav'));
+
+// burning: crackle
+writeWav(gen(0.28, (t) => {
+  const crackle = Math.sin(t*47*Math.PI*2)*Math.sin(t*113*Math.PI*2);
+  return (rng()*0.6 + crackle*0.4) * Math.exp(-t*5) * Math.exp(-Math.pow(t-0.05,2)*80) * 0.7;
+}), join(OUT, 'burning.wav'));
+
+// pickup-weapon: 3-note power-up
+writeWav(gen(0.42, (t) => {
+  const notes = [262, 392, 523];
+  const note = notes[Math.min(Math.floor(t*7.5), notes.length-1)];
+  const nT = (t*7.5) % 1;
+  return Math.sin(2*Math.PI*note*t) * Math.exp(-nT*3) * 0.65;
+}), join(OUT, 'pickup-weapon.wav'));
+
+// weapon-switch: quick click
+writeWav(gen(0.06, (t) => {
+  return (rng()*0.5 + Math.sin(2*Math.PI*180*t)*0.5) * Math.exp(-t*60) * 0.6;
+}), join(OUT, 'weapon-switch.wav'));
+
 console.log('Done. All sounds written to public/sounds/');
