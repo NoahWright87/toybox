@@ -1063,6 +1063,34 @@ export default function Hellzone() {
         imp.timer--;
         if (imp.timer <= 0) { impacts.splice(i, 1); continue; }
         const t = imp.timer / imp.maxTimer;
+
+        if (imp.type === 'claws' || imp.type === 'claws-miss') {
+          // Swipe lines: 3 diagonal parallel scratches
+          const hit = imp.type === 'claws';
+          const cx2 = imp.sx, cy2 = imp.sy;
+          const len = hit ? 28 : 18;
+          const gap = hit ? 5 : 4;
+          ctx.globalAlpha = t * 0.92;
+          // Slash direction: top-left to bottom-right, 3 parallel lines
+          for (let li = -1; li <= 1; li++) {
+            const ox2 = li * gap, oy2 = -li * gap;
+            // Each line drawn as thick pixel stroke
+            const steps = len;
+            for (let s = 0; s < steps; s++) {
+              const frac = s / steps;
+              const px = Math.floor(cx2 + ox2 + (frac - 0.5) * len);
+              const py = Math.floor(cy2 + oy2 + (frac - 0.5) * len);
+              if (px < 0 || px >= SCREEN_W || py < 0 || py >= SCREEN_H) continue;
+              const edge = Math.min(frac, 1 - frac) * 2;
+              ctx.globalAlpha = t * edge * (hit ? 0.95 : 0.6);
+              ctx.fillStyle = hit ? '#ff6600' : '#cc8844';
+              ctx.fillRect(px, py, 2, 2);
+            }
+          }
+          ctx.globalAlpha = 1;
+          continue;
+        }
+
         const spr = imp.type === 'wall' ? sprImpactWall : sprImpactEnemy;
         const size = 16;
         ctx.globalAlpha = t * 0.9;
@@ -1351,10 +1379,10 @@ export default function Hellzone() {
         e.health -= damage; e.state = 'chase'; hit = true;
         playSound('hit-claws', 0.8);
         const sp = projectSprite(e.x, e.y);
-        impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 12, maxTimer: 12 });
+        impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'claws', timer: 10, maxTimer: 10 });
         if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('MAULED!'); }
       }
-      if (!hit) impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: 'wall', timer: 8, maxTimer: 8 });
+      if (!hit) impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: 'claws-miss', timer: 7, maxTimer: 7 });
     }
 
     function fireRaycast(wId: 'subwoofer' | 'woofer') {
@@ -1412,18 +1440,37 @@ export default function Hellzone() {
       if (!infAmmo) fuelAmmo--;
       shootCooldown = WEAPON_DEFS.flamethrower.cooldown;
       playSound('shoot-flamethrower', 0.25);
-      const coneHalf = Math.PI / 12;
-      const def = WEAPON_DEFS.flamethrower;
-      for (let i = 0; i < 5; i++) {
+      const coneHalf = Math.PI / 9; // ±20° — tight cone
+      const maxRange = 7 * CELL;
+      // Instant cone damage check — ignite everything in the cone
+      for (const e of enemies) {
+        if (e.state === 'dead') continue;
+        const dx = e.x - player.x, dy = e.y - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > maxRange) continue;
+        let angleDiff = Math.atan2(dy, dx) - player.angle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        if (Math.abs(angleDiff) > coneHalf) continue;
+        if (!hasLOS(player.x, player.y, e.x, e.y)) continue;
+        e.burning = true;
+        e.burnTimer = Math.max(e.burnTimer, 180);
+        e.burnDamage = WEAPON_DEFS.flamethrower.minDmg + Math.floor(Math.random() * (WEAPON_DEFS.flamethrower.maxDmg - WEAPON_DEFS.flamethrower.minDmg));
+        if (e.state !== 'chase') { e.state = 'chase'; playSound('alert', 0.5); }
+        const sp = projectSprite(e.x, e.y);
+        impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 8, maxTimer: 8 });
+      }
+      // Spawn visual-only particles along the tight cone
+      for (let i = 0; i < 4; i++) {
         const spread = (Math.random() - 0.5) * coneHalf * 2;
         const pAngle = player.angle + spread;
-        const speed = (0.028 + Math.random() * 0.018) * CELL;
+        const speed = (0.06 + Math.random() * 0.04) * CELL;
         flameParticles.push({
-          x: player.x + Math.cos(player.angle) * 18,
-          y: player.y + Math.sin(player.angle) * 18,
+          x: player.x + Math.cos(player.angle) * CELL * 0.4,
+          y: player.y + Math.sin(player.angle) * CELL * 0.4,
           velX: Math.cos(pAngle) * speed, velY: Math.sin(pAngle) * speed,
-          age: 0, maxAge: 45 + Math.floor(Math.random() * 30),
-          damage: def.minDmg + Math.floor(Math.random() * (def.maxDmg - def.minDmg)),
+          age: 0, maxAge: 20 + Math.floor(Math.random() * 15),
+          damage: 0, // visual only; damage is handled by the cone check above
         });
       }
     }
@@ -1473,15 +1520,6 @@ export default function Hellzone() {
           flameParticles.splice(i, 1); continue;
         }
         if (fp.age >= fp.maxAge) { flameParticles.splice(i, 1); continue; }
-        for (const e of enemies) {
-          if (e.state === 'dead') continue;
-          if (Math.hypot(e.x - fp.x, e.y - fp.y) < CELL * 0.55) {
-            e.burning = true;
-            e.burnTimer = Math.max(e.burnTimer, 180);
-            e.burnDamage = fp.damage;
-            if (e.state !== 'chase') { e.state = 'chase'; playSound('alert', 0.5); }
-          }
-        }
       }
     }
 
