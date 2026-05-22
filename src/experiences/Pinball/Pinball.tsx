@@ -11,30 +11,34 @@ interface Props {
 const W = 320;
 const H = 560;
 const WALL = 12;
-const FLIPPER_Y = H - 60;
+const FLIPPER_Y = H - 60;       // 500
 const FLIPPER_LEN = 52;
 const FLIPPER_THICK = 7;
-const LEFT_FLIPPER_X = WALL + 28;
-const RIGHT_FLIPPER_X = W - WALL - 28;
-const PLUNGER_X = W - WALL - 6;
-const DRAIN_Y = H - 20;
+const LEFT_FLIPPER_X  = 100;    // moved inward (was WALL+28=40)
+const RIGHT_FLIPPER_X = 220;    // moved inward (was W-WALL-28=280)
+const PLUNGER_X = W - WALL - 6; // 302
+const DRAIN_Y = H - 20;         // 540
+const SLING_THICK = 5;
 
 // ── Physics constants ─────────────────────────────────────────────────────────
-const GRAVITY = 0.25;
+const GRAVITY = 0.15;           // was 0.25
 const BALL_R = 7;
-const FLIPPER_POWER = 14;
-const BUMPER_BOUNCE = 1.5;
+const FLIPPER_POWER = 11;       // was 14
+const BUMPER_BOUNCE = 1.2;      // was 1.5
+const SPEED_CAP = 12;           // was 18
 
 // ── Colors ────────────────────────────────────────────────────────────────────
-const COL_BG       = "#0a0018";
-const COL_WALL     = "#5b2d8e";
-const COL_FLIPPER  = "#cc4400";
-const COL_BUMPER   = "#ff6b00";
+const COL_BG         = "#0a0018";
+const COL_WALL       = "#5b2d8e";
+const COL_FLIPPER    = "#cc4400";
+const COL_BUMPER     = "#ff6b00";
 const COL_BUMPER_LIT = "#ffff00";
-const COL_LANE     = "#5b2d8e";
-const COL_LANE_LIT = "#ff6b00";
-const COL_SCORE    = "#ff6b00";
-const COL_PLUNGER  = "#808080";
+const COL_SLING      = "#cc4400";
+const COL_SLING_LIT  = "#ffff00";
+const COL_LANE       = "#5b2d8e";
+const COL_LANE_LIT   = "#ff6b00";
+const COL_SCORE      = "#ff6b00";
+const COL_PLUNGER    = "#808080";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Ball {
@@ -48,7 +52,14 @@ interface Bumper {
   x: number;
   y: number;
   r: number;
-  lit: number; // frames remaining lit
+  lit: number;
+  value: number;
+}
+
+interface Slingshot {
+  x1: number; y1: number;
+  x2: number; y2: number;
+  lit: number;
   value: number;
 }
 
@@ -64,7 +75,7 @@ interface Lane {
 interface Flipper {
   cx: number;
   cy: number;
-  dir: 1 | -1; // 1=left, -1=right
+  dir: 1 | -1;
   angle: number;
   targetAngle: number;
   restAngle: number;
@@ -75,11 +86,12 @@ interface GameState {
   ball: Ball | null;
   flippers: [Flipper, Flipper];
   bumpers: Bumper[];
+  slingshots: Slingshot[];
   lanes: Lane[];
   score: number;
   lives: number;
   phase: "idle" | "launch" | "play" | "lost-ball" | "game-over";
-  plungerCharge: number; // 0..1
+  plungerCharge: number;
   hiScore: number;
   bonusMultiplier: number;
   tilt: number;
@@ -89,20 +101,38 @@ interface GameState {
 
 function makeBumpers(): Bumper[] {
   return [
-    { x: 100, y: 140, r: 16, lit: 0, value: 100 },
-    { x: 200, y: 160, r: 16, lit: 0, value: 100 },
-    { x: 150, y: 210, r: 16, lit: 0, value: 100 },
-    { x: 80,  y: 270, r: 14, lit: 0, value: 50  },
-    { x: 230, y: 260, r: 14, lit: 0, value: 50  },
+    // upper cluster
+    { x: 108, y: 135, r: 15, lit: 0, value: 100 },
+    { x: 188, y: 128, r: 15, lit: 0, value: 100 },
+    { x: 150, y: 192, r: 15, lit: 0, value: 100 },
+    // mid row
+    { x: 75,  y: 255, r: 12, lit: 0, value: 75  },
+    { x: 228, y: 255, r: 12, lit: 0, value: 75  },
+    { x: 150, y: 312, r: 12, lit: 0, value: 75  },
+    // lower row
+    { x: 108, y: 368, r: 10, lit: 0, value: 50  },
+    { x: 195, y: 368, r: 10, lit: 0, value: 50  },
+    // side guide posts
+    { x: 50,  y: 192, r:  7, lit: 0, value: 25  },
+    { x: 248, y: 195, r:  7, lit: 0, value: 25  },
+  ];
+}
+
+function makeSlingshots(): Slingshot[] {
+  return [
+    // left slingshot: diagonal from near left wall down to just above left flipper
+    { x1: WALL + 6,        y1: FLIPPER_Y - 105,
+      x2: LEFT_FLIPPER_X - 10, y2: FLIPPER_Y - 10, lit: 0, value: 30 },
+    // right slingshot: mirror (stays left of plunger lane)
+    { x1: W - WALL - 20,   y1: FLIPPER_Y - 105,
+      x2: RIGHT_FLIPPER_X + 10, y2: FLIPPER_Y - 10, lit: 0, value: 30 },
   ];
 }
 
 function makeLanes(): Lane[] {
-  // Three small targets at the top
-  const targets: Lane[] = [80, 140, 200].map((x, i) => ({
+  return [80, 140, 200].map((x, i) => ({
     x, y: 80, w: 20, h: 8, lit: false, value: 500 * (i + 1),
   }));
-  return targets;
 }
 
 function makeFlippers(): [Flipper, Flipper] {
@@ -133,6 +163,7 @@ function makeInitialState(hiScore: number): GameState {
     ball: null,
     flippers: makeFlippers(),
     bumpers: makeBumpers(),
+    slingshots: makeSlingshots(),
     lanes: makeLanes(),
     score: 0,
     lives: 3,
@@ -248,12 +279,30 @@ export default function Pinball({ onQuit }: Props) {
         ball.y = cy + ny * (BALL_R + FLIPPER_THICK + 0.5);
         const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
         const [rvx, rvy] = reflectVelocity(ball.vx, ball.vy, nx, ny, 0.6);
-        // boost if flipper is moving up
         const isMovingUp = f.angle !== f.targetAngle && f.targetAngle === f.upAngle;
         const boost = isMovingUp ? FLIPPER_POWER : Math.max(speed, 4);
         const mag = Math.sqrt(rvx * rvx + rvy * rvy) || 1;
         ball.vx = (rvx / mag) * boost;
         ball.vy = (rvy / mag) * boost;
+      }
+    }
+
+    function collideBallSlingshot(ball: Ball, sl: Slingshot, gs: GameState) {
+      const [cx, cy] = closestPointOnSegment(ball.x, ball.y, sl.x1, sl.y1, sl.x2, sl.y2);
+      const dx = ball.x - cx, dy = ball.y - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < BALL_R + SLING_THICK && dist > 0) {
+        const nx = dx / dist, ny = dy / dist;
+        ball.x = cx + nx * (BALL_R + SLING_THICK + 0.5);
+        ball.y = cy + ny * (BALL_R + SLING_THICK + 0.5);
+        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        const [rvx, rvy] = reflectVelocity(ball.vx, ball.vy, nx, ny, 0.7);
+        const mag = Math.sqrt(rvx * rvx + rvy * rvy) || 1;
+        const kickSpeed = Math.max(speed, 5) * 1.2;
+        ball.vx = (rvx / mag) * kickSpeed;
+        ball.vy = (rvy / mag) * kickSpeed;
+        sl.lit = 14;
+        gs.score += sl.value * gs.bonusMultiplier;
       }
     }
 
@@ -274,63 +323,45 @@ export default function Pinball({ onQuit }: Props) {
       }
 
       if (gs.phase === "idle") {
-        if (keys.space) {
-          gs.phase = "launch";
-          gs.plungerCharge = 0;
-        }
+        if (keys.space) { gs.phase = "launch"; gs.plungerCharge = 0; }
         return;
       }
 
       if (gs.phase === "launch") {
         gs.plungerCharge = Math.min(1, gs.plungerCharge + 0.025);
         if (!keys.space) {
-          const speed = 6 + gs.plungerCharge * 12;
-          gs.ball = {
-            x: PLUNGER_X - BALL_R - 2,
-            y: FLIPPER_Y - 20,
-            vx: -1,
-            vy: -speed,
-          };
+          const speed = 4 + gs.plungerCharge * 9; // was 6+12
+          gs.ball = { x: PLUNGER_X - BALL_R - 2, y: FLIPPER_Y - 20, vx: -0.5, vy: -speed };
           gs.phase = "play";
           gs.plungerCharge = 0;
         }
         return;
       }
 
-      if (gs.phase === "lost-ball") {
-        gs.phase = "idle";
-        return;
-      }
-
+      if (gs.phase === "lost-ball") { gs.phase = "idle"; return; }
       if (gs.phase === "game-over" || !gs.ball) return;
 
       const b = gs.ball;
 
-      // Gravity
       b.vy += GRAVITY;
-
-      // Move
       b.x += b.vx;
       b.y += b.vy;
 
       // Wall collisions
       if (b.x - BALL_R < WALL) {
         b.x = WALL + BALL_R;
-        b.vx = Math.abs(b.vx) * 0.75;
+        b.vx = Math.abs(b.vx) * 0.6;
       }
-      // Right wall has a gap for the plunger lane
       const rightBound = PLUNGER_X - BALL_R - 2;
       if (b.x > rightBound && b.y > FLIPPER_Y - 80) {
-        // in plunger lane — let it sit
         if (b.x + BALL_R > W - WALL) { b.x = W - WALL - BALL_R; b.vx *= -0.5; }
       } else if (b.x + BALL_R > W - WALL) {
         b.x = W - WALL - BALL_R;
-        b.vx = -Math.abs(b.vx) * 0.75;
+        b.vx = -Math.abs(b.vx) * 0.6;
       }
-      // Top wall
       if (b.y - BALL_R < WALL) {
         b.y = WALL + BALL_R;
-        b.vy = Math.abs(b.vy) * 0.6;
+        b.vy = Math.abs(b.vy) * 0.55;
       }
 
       // Bumpers
@@ -342,23 +373,28 @@ export default function Pinball({ onQuit }: Props) {
           b.x = bump.x + nx * (BALL_R + bump.r + 1);
           b.y = bump.y + ny * (BALL_R + bump.r + 1);
           const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-          b.vx = nx * Math.max(speed, 5) * BUMPER_BOUNCE;
-          b.vy = ny * Math.max(speed, 5) * BUMPER_BOUNCE;
+          b.vx = nx * Math.max(speed, 4) * BUMPER_BOUNCE;
+          b.vy = ny * Math.max(speed, 4) * BUMPER_BOUNCE;
           bump.lit = 12;
           gs.score += bump.value * gs.bonusMultiplier;
         }
         if (bump.lit > 0) bump.lit--;
       }
 
-      // Lanes (top targets)
+      // Slingshots
+      for (const sl of gs.slingshots) {
+        collideBallSlingshot(b, sl, gs);
+        if (sl.lit > 0) sl.lit--;
+      }
+
+      // Lanes
       for (const lane of gs.lanes) {
         if (!lane.lit &&
           b.x > lane.x && b.x < lane.x + lane.w &&
           b.y - BALL_R < lane.y + lane.h && b.y + BALL_R > lane.y) {
           lane.lit = true;
           gs.score += lane.value * gs.bonusMultiplier;
-          b.vy = Math.abs(b.vy) * 0.6;
-          // Check all lanes lit → bonus multiplier
+          b.vy = Math.abs(b.vy) * 0.55;
           if (gs.lanes.every((l) => l.lit)) {
             gs.bonusMultiplier++;
             gs.lanes.forEach((l) => { l.lit = false; });
@@ -382,15 +418,15 @@ export default function Pinball({ onQuit }: Props) {
           }
         } else {
           gs.phase = "lost-ball";
-          // Reset lanes and bumpers
           gs.bumpers = makeBumpers();
+          gs.slingshots = makeSlingshots();
           gs.flippers = makeFlippers();
         }
       }
 
       // Speed cap
       const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-      if (spd > 18) { b.vx = (b.vx / spd) * 18; b.vy = (b.vy / spd) * 18; }
+      if (spd > SPEED_CAP) { b.vx = (b.vx / spd) * SPEED_CAP; b.vy = (b.vy / spd) * SPEED_CAP; }
     }
 
     function draw(gs: GameState) {
@@ -407,7 +443,7 @@ export default function Pinball({ onQuit }: Props) {
       ctx.fillStyle = COL_WALL;
       ctx.fillRect(PLUNGER_X, FLIPPER_Y - 80, 2, H - FLIPPER_Y + 80);
 
-      // Drain gutter hints
+      // Drain gutter shading
       ctx.fillStyle = "#2a0040";
       ctx.beginPath();
       ctx.moveTo(WALL, FLIPPER_Y + 10);
@@ -421,6 +457,25 @@ export default function Pinball({ onQuit }: Props) {
       ctx.lineTo(W - WALL, DRAIN_Y);
       ctx.closePath();
       ctx.fill();
+
+      // Slingshots
+      for (const sl of gs.slingshots) {
+        const lit = sl.lit > 0;
+        ctx.beginPath();
+        ctx.moveTo(sl.x1, sl.y1);
+        ctx.lineTo(sl.x2, sl.y2);
+        ctx.strokeStyle = lit ? COL_SLING_LIT : COL_SLING;
+        ctx.lineWidth = SLING_THICK * 2;
+        ctx.lineCap = "round";
+        ctx.stroke();
+        if (lit) {
+          ctx.shadowColor = COL_SLING_LIT;
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        ctx.lineCap = "butt";
+      }
 
       // Lanes
       for (const lane of gs.lanes) {
@@ -455,15 +510,17 @@ export default function Pinball({ onQuit }: Props) {
         ctx.strokeStyle = lit ? "#fff" : "#cc4400";
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = lit ? "#000" : "#fff";
-        ctx.font = "6px 'Press Start 2P', monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(String(bump.value), bump.x, bump.y);
-        ctx.textBaseline = "alphabetic";
+        if (bump.r >= 10) {
+          ctx.fillStyle = lit ? "#000" : "#fff";
+          ctx.font = "6px 'Press Start 2P', monospace";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(bump.value), bump.x, bump.y);
+          ctx.textBaseline = "alphabetic";
+        }
       }
 
-      // Score display inside field
+      // Score display
       ctx.fillStyle = COL_SCORE;
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.textAlign = "right";
@@ -472,7 +529,6 @@ export default function Pinball({ onQuit }: Props) {
       ctx.fillStyle = "#7b3dbe";
       ctx.fillText("HI " + String(gs.hiScore).padStart(7, "0"), W - WALL - 8, WALL + 36);
 
-      // Multiplier
       if (gs.bonusMultiplier > 1) {
         ctx.fillStyle = COL_BUMPER_LIT;
         ctx.font = "7px 'Press Start 2P', monospace";
@@ -532,7 +588,7 @@ export default function Pinball({ onQuit }: Props) {
         ctx.stroke();
       }
 
-      // Overlays
+      // Idle/game-over overlays
       if (gs.phase === "idle") {
         ctx.fillStyle = "rgba(0,0,0,0.55)";
         ctx.fillRect(WALL, FLIPPER_Y - 100, W - WALL * 2 - 22, 60);
@@ -589,10 +645,7 @@ export default function Pinball({ onQuit }: Props) {
     }
     if (e.key === " " || e.key === "Spacebar") {
       e.preventDefault();
-      if (gs.phase === "game-over") {
-        resetGame();
-        return;
-      }
+      if (gs.phase === "game-over") { resetGame(); return; }
       keysRef.current.space = true;
     }
   }, [resetGame]);
