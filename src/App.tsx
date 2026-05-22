@@ -22,6 +22,7 @@ import MidiEditorPage from "./pages/MidiEditorPage";
 import WordsPage from "./pages/WordsPage";
 import ChainReactionPage from "./pages/ChainReactionPage";
 import PegSolitairePage from "./pages/PegSolitairePage";
+import PinballPage from "./pages/PinballPage";
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/component-test" element={<ComponentTestPage />} />
         <Route path="/chain-reaction" element={<ChainReactionPage />} />
         <Route path="/peg-solitaire" element={<PegSolitairePage />} />
+        <Route path="/pinball" element={<PinballPage />} />
       </Routes>
     </BrowserRouter>
   );
