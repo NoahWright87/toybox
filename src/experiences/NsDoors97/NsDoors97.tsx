@@ -32,6 +32,8 @@ import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import Pinball from "../Pinball/Pinball";
+import classicBoard from "../Pinball/boards/classic.json";
+import type { Board as PinballBoard } from "../Pinball/boardTypes";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -906,7 +908,7 @@ export default function NsDoors97() {
             <PegSolitaire onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "pinball" && (
-            <Pinball onQuit={() => closeWindow(win.id)} />
+            <Pinball board={classicBoard as PinballBoard} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

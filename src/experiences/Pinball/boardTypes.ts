@@ -1,0 +1,64 @@
+export interface BoardWall {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  angle?: number; // radians
+}
+
+export interface BoardBumper {
+  x: number;
+  y: number;
+  r: number;
+  label?: string;
+}
+
+export interface BoardPost {
+  x: number;
+  y: number;
+  r: number;
+}
+
+export interface BoardFlipper {
+  side: "left" | "right";
+  pivotX: number;
+  pivotY: number;
+  length: number;
+}
+
+export interface BoardSlingshot {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  angle?: number;
+}
+
+export interface BoardTarget {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  angle?: number;
+  label?: string;
+}
+
+export interface BoardPlunger {
+  x: number;
+  topY: number;
+  bottomY: number;
+}
+
+export interface Board {
+  width: number;
+  height: number;
+  walls: BoardWall[];
+  bumpers: BoardBumper[];
+  posts: BoardPost[];
+  flippers: BoardFlipper[];
+  slingshots: BoardSlingshot[];
+  targets: BoardTarget[];
+  plunger: BoardPlunger;
+  ballStartX: number;
+  ballStartY: number;
+}

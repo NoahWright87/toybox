@@ -23,6 +23,7 @@ import WordsPage from "./pages/WordsPage";
 import ChainReactionPage from "./pages/ChainReactionPage";
 import PegSolitairePage from "./pages/PegSolitairePage";
 import PinballPage from "./pages/PinballPage";
+import PinballEditorPage from "./pages/PinballEditorPage";
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/chain-reaction" element={<ChainReactionPage />} />
         <Route path="/peg-solitaire" element={<PegSolitairePage />} />
         <Route path="/pinball" element={<PinballPage />} />
+        <Route path="/pinball-editor" element={<PinballEditorPage />} />
       </Routes>
     </BrowserRouter>
   );
