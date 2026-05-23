@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import * as Matter from "matter-js";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -108,6 +108,7 @@ export default function Pinball({ board, onQuit }: Props) {
   const rightDownRef = useRef(false);
   const plungerRef = useRef(false);
   const hiScoreRef = useRef(0);
+  const [showAbout, setShowAbout] = useState(false);
 
   const menus = useMemo<MenuBarMenu[]>(() => [
     {
@@ -116,6 +117,12 @@ export default function Pinball({ board, onQuit }: Props) {
         { label: "New Game", onClick: () => restartGame() },
         { separator: true },
         { label: "Quit", onClick: () => onQuit?.() },
+      ],
+    },
+    {
+      label: "Help",
+      items: [
+        { label: "About Pinball...", onClick: () => setShowAbout(true) },
       ],
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -758,6 +765,35 @@ export default function Pinball({ board, onQuit }: Props) {
           onPointerCancel={handleRightUp}
         >RIGHT ▶</button>
       </div>
+      {showAbout && (
+        <div className="pinball__overlay" style={{ pointerEvents: "auto" }}>
+          <div className="pinball__about-box">
+            <div className="pinball__about-title">PINBALL</div>
+            <div className="pinball__about-body">
+              <p>Classic retro pinball.</p>
+              <p>Hit bumpers, trigger slingshots,<br/>light all targets for a bonus.</p>
+              <p className="pinball__about-credits">
+                Powered by{" "}
+                <a
+                  href="/pinball-editor"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pinball__about-link"
+                >
+                  Pinball Board Maker
+                </a>
+              </p>
+            </div>
+            <button
+              className="pinball__touch-btn"
+              style={{ marginTop: 8 }}
+              onClick={() => setShowAbout(false)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

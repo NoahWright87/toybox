@@ -129,3 +129,59 @@
 .pinball__touch-btn--launch:active {
   background: #b0b0b0;
 }
+
+.pinball__about-box {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  pointer-events: auto;
+}
+
+.pinball__about-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: #ff6b00;
+  text-shadow: 1px 1px 0 #000;
+  border-bottom: 1px solid #808080;
+  width: 100%;
+  text-align: center;
+  padding-bottom: 6px;
+}
+
+.pinball__about-body {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  text-align: center;
+  line-height: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pinball__about-body p {
+  margin: 0;
+}
+
+.pinball__about-credits {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #808080;
+  color: #444;
+}
+
+.pinball__about-link {
+  color: #000080;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pinball__about-link:hover {
+  color: #cc4400;
+}
