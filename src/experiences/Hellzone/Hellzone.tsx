@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
+import { QUIPS, QuipKey, pickRandom, pickLockedDoorQuip } from "./quips";
 import "./Hellzone.css";
 
 const WEAPON_SLOT_DATA = [
@@ -404,6 +405,16 @@ export default function Hellzone() {
     interface Impact { sx: number; sy: number; type: string; timer: number; maxTimer: number; }
     const impacts: Impact[] = [];
 
+    // ── Quip system ─────────────────────────────────────────────────────────────
+    // Combat quips queue until a lull (no kills/damage for ~1.5 s), then one fires.
+    let quipQueue: Array<{ key: QuipKey; weaponKey?: QuipKey }> = [];
+    let quipCooldown = 0;    // frames until next quip can fire
+    let quipLullTimer = 0;   // frames since last combat signal; 0 = lull
+    let playerLowHealthQuipped = false;
+    let prevBullets = 50;
+    let prevBalls = 0;
+    let prevFuel = 0;
+
     // ── Weapon state ───────────────────────────────────────────────────────────
     let ownedWeapons = new Set<WeaponId>(['claws', 'subwoofer']);
     let currentWeapon: WeaponId = 'subwoofer';
@@ -523,7 +534,7 @@ export default function Hellzone() {
       q<HTMLElement>(".hz-game-container").style.display = s !== "title" ? "flex" : "none";
       q<HTMLElement>(".hz-death-screen").style.display   = s === "dead" ? "flex" : "none";
       q<HTMLElement>(".hz-level-clear").style.display    = s === "clear" ? "flex" : "none";
-      if (s === "clear") playSound('level-complete');
+      if (s === "clear") { playSound('level-complete'); showMessage(pickRandom(QUIPS.level_clear)); }
       if (s === "title") playSound('intro');
     }
 
@@ -553,6 +564,7 @@ export default function Hellzone() {
       projectiles.length = 0; flameParticles.length = 0;
       initLevel();
       setScreen("playing");
+      setTimeout(() => { if (gameState === 'playing') { showMessage(pickRandom(QUIPS.level_start)); quipCooldown = 300; } }, 1500);
     }
 
     function switchWeapon(to: WeaponId) {
@@ -645,16 +657,18 @@ export default function Hellzone() {
       if (door.state === 'open') {
         door.state = 'closing';
         map[door.ty][door.tx] = door.tileType; // make solid again immediately so enemies/player can't walk through
+        softFireQuip('action_close_door');
         playSound('door-open', 0.45);
       } else if (door.state === 'closed') {
         if (door.keyColor !== null && !heldKeys.has(door.keyColor)) {
           if (lockedMsgTimer <= 0) {
-            showMessage(`NEED ${door.keyColor.toUpperCase()} KEY`);
+            showMessage(pickLockedDoorQuip(door.keyColor));
             lockedMsgTimer = 60;
           }
           return;
         }
         door.state = 'opening';
+        softFireQuip('action_open_door');
         playSound('door-open', 0.55);
       }
     }
@@ -676,6 +690,14 @@ export default function Hellzone() {
       };
       q("#hz-hud-level").textContent = String(level);
       q("#hz-hud-seed").textContent = level === 1 ? "TRAINING" : "SEED:" + seed;
+      // Reset quip system for the new level
+      quipQueue.length = 0;
+      quipCooldown = 180;
+      quipLullTimer = 0;
+      playerLowHealthQuipped = false;
+      prevBullets = player.ammo;
+      prevBalls = ballAmmo;
+      prevFuel = fuelAmmo;
       if (level === 1) {
         setTimeout(() => showMessage("ROOM A: SHOOT THE TARGETS"), 600);
         setTimeout(() => showMessage("ROOM B: SOUTH HALLWAY — MOVING TARGETS"), 4000);
@@ -1585,13 +1607,13 @@ export default function Hellzone() {
         if (Math.hypot(p.x - player.x, p.y - player.y) < CELL * 0.5) {
           p.taken = true;
           if (p.type === 'health') {
-            player.health = Math.min(100, player.health + 25); showMessage('+ HEALTH PACK'); playSound('pickup');
+            player.health = Math.min(100, player.health + 25); showMessage(pickRandom(QUIPS.pickup_health)); playSound('pickup');
           } else if (p.type === 'ammo' || p.type === 'bullets') {
-            player.ammo = Math.min(99, player.ammo + 20); showMessage('+ AMMO CRATE'); playSound('pickup');
+            player.ammo = Math.min(99, player.ammo + 20); showMessage(pickRandom(QUIPS.pickup_ammo_bullets)); playSound('pickup');
           } else if (p.type === 'balls') {
-            ballAmmo = Math.min(50, ballAmmo + 10); showMessage('+ TENNIS BALLS'); playSound('pickup');
+            ballAmmo = Math.min(50, ballAmmo + 10); showMessage(pickRandom(QUIPS.pickup_ammo_balls)); playSound('pickup');
           } else if (p.type === 'fuel') {
-            fuelAmmo = Math.min(99, fuelAmmo + 30); showMessage('+ FUEL CANISTER'); playSound('pickup');
+            fuelAmmo = Math.min(99, fuelAmmo + 30); showMessage(pickRandom(QUIPS.pickup_ammo_fuel)); playSound('pickup');
           } else if (p.type.startsWith('key-')) {
             const kc = p.type.slice(4) as KeyColor;
             heldKeys.add(kc);
@@ -1604,14 +1626,18 @@ export default function Hellzone() {
               if (wId === 'tennis') ballAmmo = Math.min(50, ballAmmo + 10);
               if (wId === 'flamethrower') fuelAmmo = Math.min(99, fuelAmmo + 40);
               if (wId === 'woofer') player.ammo = Math.min(99, player.ammo + 20);
-              showMessage('GOT THE ' + WEAPON_DEFS[wId].fullName + '!');
+              const wqKey: QuipKey = wId === 'woofer' ? 'pickup_weapon_woofer'
+                : wId === 'tennis' ? 'pickup_weapon_tennis'
+                : wId === 'flamethrower' ? 'pickup_weapon_flamethrower'
+                : 'pickup_weapon';
+              showMessage(pickRandom(QUIPS[wqKey]));
               playSound('pickup-weapon');
               switchWeapon(wId);
             } else {
-              if (wId === 'woofer') player.ammo = Math.min(99, player.ammo + 15);
-              else if (wId === 'tennis') ballAmmo = Math.min(50, ballAmmo + 8);
-              else if (wId === 'flamethrower') fuelAmmo = Math.min(99, fuelAmmo + 25);
-              showMessage('+ AMMO BONUS'); playSound('pickup');
+              if (wId === 'woofer') { player.ammo = Math.min(99, player.ammo + 15); showMessage(pickRandom(QUIPS.pickup_ammo_bullets)); }
+              else if (wId === 'tennis') { ballAmmo = Math.min(50, ballAmmo + 8); showMessage(pickRandom(QUIPS.pickup_ammo_balls)); }
+              else if (wId === 'flamethrower') { fuelAmmo = Math.min(99, fuelAmmo + 25); showMessage(pickRandom(QUIPS.pickup_ammo_fuel)); }
+              playSound('pickup');
             }
           }
         }
@@ -1664,13 +1690,13 @@ export default function Hellzone() {
         playSound('hit-claws', 0.8);
         const sp = projectSprite(e.x, e.y);
         impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'claws', timer: 10, maxTimer: 10 });
-        if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('MAULED!'); }
+        if (e.health <= 0) { e.state = 'dead'; kills++; signalCombat(); queueQuip('enemy_killed', 'enemy_killed_claws'); }
       }
       if (!hit) impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: 'claws-miss', timer: 7, maxTimer: 7 });
     }
 
     function fireRaycast(wId: 'subwoofer' | 'woofer') {
-      if (!infAmmo && player.ammo <= 0) { showMessage('OUT OF BULLETS!'); return; }
+      if (!infAmmo && player.ammo <= 0) { showMessage(pickRandom(QUIPS.player_no_ammo_bullets)); return; }
       if (!infAmmo) player.ammo--;
       shootCooldown = WEAPON_DEFS[wId].cooldown;
       gunRecoil = 1.0; muzzleFlashTimer = 8;
@@ -1695,7 +1721,7 @@ export default function Hellzone() {
         const sp = projectSprite(nearest.x, nearest.y);
         impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 12, maxTimer: 12 });
         playSound('hit-enemy');
-        if (nearest.health <= 0) { nearest.state = 'dead'; kills++; showMessage('ENEMY DOWN!'); }
+        if (nearest.health <= 0) { nearest.state = 'dead'; kills++; signalCombat(); queueQuip('enemy_killed', wId === 'subwoofer' ? 'enemy_killed_subwoofer' : 'enemy_killed_woofer'); }
       } else {
         impacts.push({ sx: SCREEN_W / 2, sy: SCREEN_H / 2, type: 'wall', timer: 10, maxTimer: 10 });
         playSound('hit-wall');
@@ -1703,7 +1729,7 @@ export default function Hellzone() {
     }
 
     function fireTennisLauncher() {
-      if (!infAmmo && ballAmmo <= 0) { showMessage('NO TENNIS BALLS!'); return; }
+      if (!infAmmo && ballAmmo <= 0) { showMessage(pickRandom(QUIPS.player_no_ammo_balls)); return; }
       if (!infAmmo) ballAmmo--;
       shootCooldown = WEAPON_DEFS.tennis.cooldown;
       gunRecoil = 1.2;
@@ -1720,7 +1746,7 @@ export default function Hellzone() {
     }
 
     function fireFlamethrower() {
-      if (!infAmmo && fuelAmmo <= 0) { showMessage('OUT OF FUEL!'); return; }
+      if (!infAmmo && fuelAmmo <= 0) { showMessage(pickRandom(QUIPS.player_no_ammo_fuel)); return; }
       if (!infAmmo) fuelAmmo--;
       shootCooldown = WEAPON_DEFS.flamethrower.cooldown;
       playSound('shoot-flamethrower', 0.25);
@@ -1787,7 +1813,7 @@ export default function Hellzone() {
             const sp = projectSprite(e.x, e.y);
             impacts.push({ sx: sp ? sp.screenX : SCREEN_W / 2, sy: Math.floor(SCREEN_H * 0.45), type: 'enemy', timer: 8, maxTimer: 8 });
             playSound('bounce-tennis', 0.65);
-            if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('BOUNCED!'); }
+            if (e.health <= 0) { e.state = 'dead'; kills++; signalCombat(); queueQuip('enemy_killed', 'enemy_killed_tennis'); }
             if (p.damage < 2) { projectiles.splice(i, 1); break; }
           }
         }
@@ -1816,7 +1842,7 @@ export default function Hellzone() {
           e.burnTimer -= dt * 60;
           e.health -= e.burnDamage * dt;
           if (e.burnTimer <= 0) { e.burning = false; e.burnTimer = 0; }
-          if (e.health <= 0) { e.state = 'dead'; kills++; showMessage('CRISPY!'); }
+          if (e.health <= 0) { e.state = 'dead'; kills++; signalCombat(); queueQuip('enemy_killed', 'enemy_killed_flamethrower'); }
         }
         if (e.state === "dead") continue;
         if (e.type === 3) continue;
@@ -1877,13 +1903,16 @@ export default function Hellzone() {
             if (!godMode) {
               player.health -= dmg + Math.random() * 5;
               flashTimer = 12;
+              signalCombat();
               if (hurtCooldown <= 0) {
                 playSound('hurt');
                 hurtCooldown = 45;
+                queueQuip('player_hurt');
               }
               if (player.health <= 0) {
                 player.health = 0;
                 playSound('death');
+                showMessage(pickRandom(QUIPS.player_death));
                 const stats = q("#hz-death-stats");
                 stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>BULLETS: ${player.ammo} | BALLS: ${ballAmmo} | FUEL: ${fuelAmmo}`;
                 setScreen("dead");
@@ -1901,6 +1930,21 @@ export default function Hellzone() {
       el.textContent = text;
       el.style.opacity = "1";
       messageTimer = 120;
+    }
+
+    // Marks that combat is active, delaying lull-based quips.
+    function signalCombat() { quipLullTimer = 90; }
+
+    // Adds a combat quip to the lull queue (max 3; drops if full).
+    function queueQuip(key: QuipKey, weaponKey?: QuipKey) {
+      if (quipQueue.length < 3) quipQueue.push({ key, weaponKey });
+    }
+
+    // Shows a quip immediately if the cooldown allows (soft — skips if busy).
+    function softFireQuip(key: QuipKey) {
+      if (quipCooldown > 0) return;
+      showMessage(pickRandom(QUIPS[key]));
+      quipCooldown = 200;
     }
 
     // ── Help overlay ───────────────────────────────────────────────────────────
@@ -2197,6 +2241,28 @@ export default function Hellzone() {
         if (gunRecoil > 0) gunRecoil = Math.max(0, gunRecoil - 0.15 * dt * 60);
         if (muzzleFlashTimer > 0) muzzleFlashTimer = Math.max(0, muzzleFlashTimer - dt * 60);
         if (hurtCooldown > 0) hurtCooldown -= dt * 60;
+        // Quip lull system: fire a queued combat quip after ~1.5 s of quiet
+        if (quipCooldown > 0) quipCooldown -= dt * 60;
+        if (quipLullTimer > 0) quipLullTimer -= dt * 60;
+        if (quipLullTimer <= 0 && quipCooldown <= 0 && quipQueue.length > 0) {
+          const { key, weaponKey } = quipQueue.shift()!;
+          const pool = weaponKey ? [...QUIPS[weaponKey], ...QUIPS[key]] : QUIPS[key];
+          showMessage(pool[Math.floor(Math.random() * pool.length)]);
+          quipCooldown = 300;
+          quipQueue.length = 0;
+        }
+        // Low health — queue once per level when first crossing below 25
+        if (!playerLowHealthQuipped && player.health > 0 && player.health < 25) {
+          playerLowHealthQuipped = true;
+          queueQuip('player_low_health');
+        }
+        // Low ammo — queue once each time ammo drops through the threshold
+        if (prevBullets > 10 && player.ammo <= 10 && player.ammo > 0) queueQuip('player_low_ammo_bullets');
+        prevBullets = player.ammo;
+        if (prevBalls > 5 && ballAmmo <= 5 && ballAmmo > 0) queueQuip('player_low_ammo_balls');
+        prevBalls = ballAmmo;
+        if (prevFuel > 10 && fuelAmmo <= 10 && fuelAmmo > 0) queueQuip('player_low_ammo_fuel');
+        prevFuel = fuelAmmo;
         if (messageTimer > 0) {
           messageTimer -= dt * 60;
           if (messageTimer <= 0) {
