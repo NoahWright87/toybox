@@ -73,7 +73,7 @@ export default function Hellzone() {
     }
 
     interface Room { x: number; y: number; w: number; h: number; cx: number; cy: number; }
-    interface Door { tx: number; ty: number; keyColor: KeyColor | null; openProgress: number; state: 'closed' | 'opening' | 'open'; }
+    interface Door { tx: number; ty: number; keyColor: KeyColor | null; openProgress: number; state: 'closed' | 'opening' | 'open' | 'closing'; axis: 0 | 1; tileType: number; }
     interface Enemy {
       x: number; y: number; angle: number; health: number; maxHealth: number;
       state: string; type: number; shootTimer: number; alertRange: number;
@@ -600,7 +600,12 @@ export default function Hellzone() {
         for (let tx = 0; tx < MAP_W; tx++) {
           const t = map[ty][tx];
           if (isDoorTile(t)) {
-            const d: Door = { tx, ty, keyColor: doorTileKeyColor(t), openProgress: 0, state: 'closed' };
+            // axis=0: corridor runs E-W (walls to N/S), panel perpendicular to X
+            // axis=1: corridor runs N-S (walls to E/W), panel perpendicular to Y
+            const northSolid = ty > 0 && (map[ty-1][tx] === TILE_WALL || isDoorTile(map[ty-1][tx]));
+            const southSolid = ty < MAP_H-1 && (map[ty+1][tx] === TILE_WALL || isDoorTile(map[ty+1][tx]));
+            const axis: 0 | 1 = (northSolid || southSolid) ? 0 : 1;
+            const d: Door = { tx, ty, keyColor: doorTileKeyColor(t), openProgress: 0, state: 'closed', axis, tileType: t };
             doors.push(d);
             doorMap.set(`${tx},${ty}`, d);
           }
@@ -609,31 +614,48 @@ export default function Hellzone() {
     }
 
     function updateDoors(dt: number) {
-      // Advance opening animation
+      if (lockedMsgTimer > 0) lockedMsgTimer -= dt * 60;
       for (const door of doors) {
         if (door.state === 'opening') {
-          door.openProgress = Math.min(1, door.openProgress + dt * 2.2); // ~0.45s
+          door.openProgress = Math.min(1, door.openProgress + dt * 2.2);
           if (door.openProgress >= 1) {
             door.state = 'open';
-            map[door.ty][door.tx] = TILE_EMPTY; // now physically passable
+            map[door.ty][door.tx] = TILE_EMPTY;
+          }
+        } else if (door.state === 'closing') {
+          door.openProgress = Math.max(0, door.openProgress - dt * 2.2);
+          if (door.openProgress <= 0) {
+            door.state = 'closed';
+            map[door.ty][door.tx] = door.tileType; // restore door tile
           }
         }
       }
-      // Check proximity and try to open
-      if (lockedMsgTimer > 0) lockedMsgTimer -= dt * 60;
+    }
+
+    function tryUseDoor() {
       const px = player.x / CELL, py = player.y / CELL;
+      let nearest: Door | null = null, nearDist = 1.6;
       for (const door of doors) {
-        if (door.state !== 'closed') continue;
         const dx = door.tx + 0.5 - px, dy = door.ty + 0.5 - py;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 1.5) continue;
-        if (door.keyColor === null || heldKeys.has(door.keyColor)) {
-          door.state = 'opening';
-          playSound('door-open', 0.55);
-        } else if (lockedMsgTimer <= 0) {
-          showMessage(`NEED ${door.keyColor.toUpperCase()} KEY`);
-          lockedMsgTimer = 60;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < nearDist) { nearDist = d; nearest = door; }
+      }
+      if (!nearest) return;
+      const door = nearest;
+      if (door.state === 'open') {
+        door.state = 'closing';
+        map[door.ty][door.tx] = door.tileType; // make solid again immediately so enemies/player can't walk through
+        playSound('door-open', 0.45);
+      } else if (door.state === 'closed') {
+        if (door.keyColor !== null && !heldKeys.has(door.keyColor)) {
+          if (lockedMsgTimer <= 0) {
+            showMessage(`NEED ${door.keyColor.toUpperCase()} KEY`);
+            lockedMsgTimer = 60;
+          }
+          return;
         }
+        door.state = 'opening';
+        playSound('door-open', 0.55);
       }
     }
 
@@ -704,23 +726,22 @@ export default function Hellzone() {
         if (isDoorTile(tile)) {
           const door = doorMap.get(`${mapX},${mapY}`);
           const openProg = door ? door.openProgress : 0;
-          const midDist = side === 0
+          // Use canonical door axis (not DDA side) to avoid rendering glitches
+          const dAxis = door ? door.axis : (side as 0 | 1);
+          const midDist = dAxis === 0
             ? (mapX + 0.5 - player.x / CELL) / rayDirX
             : (mapY + 0.5 - player.y / CELL) / rayDirY;
-          if (midDist > 0) {
-            let dwx = side === 0
-              ? player.y / CELL + midDist * rayDirY
-              : player.x / CELL + midDist * rayDirX;
-            dwx -= Math.floor(dwx);
-            if (dwx < openProg) { continue; } // ray passes through open gap
-            // Door panel is hit at the midpoint
-            doorHitDist = Math.max(midDist, 0.1);
-            doorHitWallX = dwx;
-            doorHitTile = tile;
-            doorHitSide = side;
-            hit = true; break;
-          }
-          continue;
+          if (midDist <= 0) { continue; } // ray approaches from wrong direction
+          let dwx = dAxis === 0
+            ? player.y / CELL + midDist * rayDirY
+            : player.x / CELL + midDist * rayDirX;
+          dwx -= Math.floor(dwx);
+          if (dwx < openProg) { continue; } // ray passes through open gap
+          doorHitDist = Math.max(midDist, 0.1);
+          doorHitWallX = dwx;
+          doorHitTile = tile;
+          doorHitSide = dAxis;
+          hit = true; break;
         }
         if (tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) { hit = true; break; }
       }
@@ -858,6 +879,28 @@ export default function Hellzone() {
           ctx.fillStyle = darkStr;
           ctx.fillRect(kx-3, 11, 1, 1);
           kx -= 10;
+        }
+      }
+
+      // Door proximity prompt
+      if (gameState === 'playing') {
+        const ppx = player.x / CELL, ppy = player.y / CELL;
+        let nearDoor: Door | null = null, nearDoorDist = 1.6;
+        for (const door of doors) {
+          if (door.state === 'opening') continue;
+          const ddx = door.tx + 0.5 - ppx, ddy = door.ty + 0.5 - ppy;
+          const dd = Math.sqrt(ddx*ddx + ddy*ddy);
+          if (dd < nearDoorDist) { nearDoorDist = dd; nearDoor = door; }
+        }
+        if (nearDoor) {
+          const label = nearDoor.state === 'open' ? '[E] CLOSE' : '[E] OPEN';
+          ctx.font = "7px 'Share Tech Mono', monospace";
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.fillRect(SCREEN_W/2 - 28, SCREEN_H/2 + 16, 56, 11);
+          ctx.fillStyle = '#ffdd88';
+          ctx.fillText(label, SCREEN_W/2, SCREEN_H/2 + 24);
+          ctx.textAlign = 'left';
         }
       }
 
@@ -1874,6 +1917,7 @@ export default function Hellzone() {
       if (e.code === "F1" || e.key === "?") { showHelp = !showHelp; updateHelpOverlay(); }
       if (e.code === "Enter") handleEnter();
       if (e.code === "Space" && gameState === "playing") tryFire();
+      if (e.code === "KeyE" && gameState === "playing") tryUseDoor();
       // Weapon switching 1-5
       if (gameState === "playing") {
         const wMap: Record<string, WeaponId> = { Digit1:'claws', Digit2:'subwoofer', Digit3:'woofer', Digit4:'tennis', Digit5:'flamethrower' };
@@ -2019,6 +2063,14 @@ export default function Hellzone() {
       fabEsc.addEventListener("touchstart", doEsc, { passive: false });
       fabEsc.addEventListener("click", doEsc);
       fabCleanups.push(() => { fabEsc.removeEventListener("touchstart", doEsc); fabEsc.removeEventListener("click", doEsc); });
+    }
+
+    const fabUse = root.querySelector<HTMLElement>(".hz-fab-use");
+    if (fabUse) {
+      const doUse = (ev: Event) => { ev.preventDefault(); if (gameState === "playing") tryUseDoor(); };
+      fabUse.addEventListener("touchstart", doUse, { passive: false });
+      fabUse.addEventListener("click", doUse);
+      fabCleanups.push(() => { fabUse.removeEventListener("touchstart", doUse); fabUse.removeEventListener("click", doUse); });
     }
 
     // Minimap click/tap toggles full map
@@ -2241,6 +2293,7 @@ export default function Hellzone() {
                   <li><span>WASD / ARROWS</span><span>Move &amp; Strafe</span></li>
                   <li><span>MOUSE / ↺↻</span><span>Turn</span></li>
                   <li><span>SPACE / LMB / FIRE</span><span>Shoot</span></li>
+                  <li><span>E</span><span>Open / close door</span></li>
                   <li><span>1-5 / WEAPON SLOTS</span><span>Switch weapon</span></li>
                   <li><span>M</span><span>Toggle full map</span></li>
                   <li><span>SHIFT</span><span>Sprint</span></li>
@@ -2313,6 +2366,7 @@ export default function Hellzone() {
         <div className="hz-fab hz-fab-tr">↻</div>
         <div className="hz-fab hz-fab-esc">ESC</div>
         <div className="hz-fab hz-fab-map">MAP</div>
+        <div className="hz-fab hz-fab-use">USE</div>
         <div className="hz-fab hz-fab-shoot">FIRE</div>
       </div>
     </div>
