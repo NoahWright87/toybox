@@ -42,8 +42,8 @@ export function playNote(
   const t = when ?? c.currentTime;
 
   if (gmProgram !== undefined && isSoundFontReady()) {
-    playSfNote(gmProgram, pitch, velocity, durationSec, c, t, gain);
-    return;
+    if (playSfNote(gmProgram, pitch, velocity, durationSec, c, t, gain)) return;
+    // SF failed to find a zone for this pitch — fall through to oscillator
   }
   const vol = (velocity / 127) * 0.22 * Math.max(0, Math.min(1, gain));
 

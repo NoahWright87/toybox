@@ -1076,7 +1076,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const previewPitch = useCallback((track: Track, pitch: number) => {
     resumeAudio();
-    playNote(pitch, 100, 0.35, track.waveform, undefined, track.volume);
+    playNote(pitch, 100, 0.35, track.waveform, undefined, track.volume, track.attack, track.release, track.gmProgram);
   }, []);
 
   const previewDrum = useCallback((pitch: number) => {
