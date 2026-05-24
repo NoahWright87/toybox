@@ -649,17 +649,17 @@
 .hz-fab-sl   { width: 60px; height: 48px; left: 4px;   bottom: 80px;  }
 .hz-fab-sr   { width: 60px; height: 48px; left: 130px; bottom: 80px;  }
 
-/* Turn */
-.hz-fab-tl { width: 54px; height: 44px; left: 200px; bottom: 80px; }
-.hz-fab-tr { width: 54px; height: 44px; left: 260px; bottom: 80px; }
+/* Turn: right-anchored so they never overlap the FIRE/USE column */
+.hz-fab-tl { width: 52px; height: 44px; right: 166px; left: auto; bottom: 80px; }
+.hz-fab-tr { width: 52px; height: 44px; right: 106px;  left: auto; bottom: 80px; }
 
-/* FIRE */
+/* FIRE: tall rectangle, bottom-right */
 .hz-fab-shoot {
-  width: 90px;
-  height: 90px;
-  right: 16px;
-  bottom: 60px;
-  border-radius: 50%;
+  width: 82px;
+  height: 78px;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 8px;
   font-size: 18px;
   letter-spacing: 1px;
   border-width: 3px;
@@ -679,11 +679,11 @@
   font-size: 14px; letter-spacing: 1px;
 }
 
-/* USE (door interaction) */
+/* USE (door interaction): shorter rectangle stacked above FIRE */
 .hz-fab-use {
-  width: 64px; height: 48px;
-  right: 116px;
-  bottom: 80px;
+  width: 82px; height: 46px;
+  right: 8px;
+  bottom: 94px;
   font-size: 14px; letter-spacing: 1px;
 }
 

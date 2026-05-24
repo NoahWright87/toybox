@@ -260,10 +260,17 @@ export default function Hellzone() {
       grid[13][11] = TILE_DOOR;
       grid[13][12] = TILE_DOOR;
 
-      // Room B: patrol range
+      // Room B: patrol range (full area y=20–34)
       for (let y = 20; y <= 34; y++)
         for (let x = 3; x <= 24; x++)
           grid[y][x] = TILE_EMPTY;
+
+      // Dividing wall inside Room B at y=26: tests 3-wide horizontal door grouping
+      // (mirrors the A→B door — same mechanic, same width, second test of multi-tile BFS)
+      for (let x = 3; x <= 24; x++) grid[26][x] = TILE_WALL;
+      grid[26][11] = TILE_DOOR;
+      grid[26][12] = TILE_DOOR;
+      grid[26][13] = TILE_DOOR;
 
       // Exit
       for (let x = 11; x <= 13; x++)
@@ -296,16 +303,13 @@ export default function Hellzone() {
 
       [
         [6.5, 22.5], [12.5, 22.5], [18.5, 23.5], [22.5, 24.5],
-        [5.5, 27.5], [11.5, 29.5], [17.5, 26.5], [21.5, 30.5],
+        [5.5, 27.5], [11.5, 29.5], [17.5, 27.5], [21.5, 30.5],
         [8.5, 33.5], [15.5, 32.5],
       ].forEach(([col, row]) => enemies.push(mkPatrol(col * CELL, row * CELL)));
 
       // ── Room C (door/key test area) ──────────────────────────────────────────
-      // Passage from Room B (max col 24) → Room C: basic door at col 25, row 28
-      // B→C passage: 3-tile-wide door tests multi-tile grouping
-      grid[27][25] = TILE_DOOR;
+      // Single door connecting south half of Room B → Room C
       grid[28][25] = TILE_DOOR;
-      grid[29][25] = TILE_DOOR;
 
       // Room C main area: cols 26-37, rows 22-34
       for (let y = 22; y <= 34; y++)
