@@ -373,70 +373,92 @@
   text-shadow: 0 0 8px #cc4400;
 }
 
-/* ── EXIT CONFIRMATION MODAL ── */
+/* ── EXIT CONFIRMATION — full terminal screen ── */
 .hz-exit-modal {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 500;
 }
-.hz-exit-panel {
-  background: #c0c0c0;
-  border: 3px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 0;
+.hz-exit-modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,0,0,0.03) 2px, rgba(255,0,0,0.03) 4px);
+  pointer-events: none;
+}
+.hz-exit-screen {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(300px, 92%);
-  box-shadow: 4px 4px 0 #000;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  width: min(480px, 94%);
 }
-.hz-exit-title {
-  background: linear-gradient(90deg, #cc4400, #883300);
-  color: #fff;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  padding: 6px 10px;
-  letter-spacing: 0.5px;
+.hz-exit-rule {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: #600;
+  letter-spacing: 2px;
+  width: 100%;
+}
+.hz-exit-heading {
+  font-family: 'VT323', monospace;
+  font-size: 32px;
+  color: #ff2200;
+  letter-spacing: 4px;
+  text-shadow: 0 0 12px #ff2200;
 }
 .hz-exit-prompt {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 6px;
-  color: #000;
-  text-align: center;
-  line-height: 1.8;
-  padding: 16px 12px 12px;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  color: #c00;
+  line-height: 1.4;
+  margin: 8px 0 4px;
 }
-.hz-exit-buttons {
+.hz-exit-choices {
   display: flex;
-  gap: 8px;
-  justify-content: center;
-  padding: 4px 12px 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
 }
 .hz-exit-stay,
 .hz-exit-quit {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 5px;
-  padding: 7px 10px;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  background: none;
+  border: none;
   cursor: pointer;
-  border: 2px solid;
-  background: #c0c0c0;
-  line-height: 1.4;
-  flex: 1;
-  text-align: center;
+  padding: 0;
+  letter-spacing: 1px;
+  text-align: left;
+  transition: color 0.1s, text-shadow 0.1s;
 }
 .hz-exit-stay {
-  border-color: #ffffff #808080 #808080 #ffffff;
-  color: #006600;
+  color: #888;
 }
-.hz-exit-stay:active { border-color: #808080 #ffffff #ffffff #808080; }
+.hz-exit-stay:hover,
+.hz-exit-stay:focus {
+  color: #fff;
+  text-shadow: 0 0 8px #fff;
+  outline: none;
+}
 .hz-exit-quit {
-  border-color: #ffffff #808080 #808080 #ffffff;
-  color: #880000;
+  color: #555;
 }
-.hz-exit-quit:active { border-color: #808080 #ffffff #ffffff #808080; }
+.hz-exit-quit:hover,
+.hz-exit-quit:focus {
+  color: #ff4444;
+  text-shadow: 0 0 8px #ff4444;
+  outline: none;
+}
 
 /* ── CROSSHAIR ── */
 .hz-crosshair {
