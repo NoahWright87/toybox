@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import * as Matter from "matter-js";
 import type {
   Board, BoardWall, BoardBumper, BoardPost, BoardFlipper,
   BoardSlingshot, BoardTarget,
@@ -42,6 +43,9 @@ interface ContextMenu {
   clientX: number; clientY: number;
   item: SelItem | null;
 }
+
+type TrailPoint = { x: number; y: number };
+type GhostTrail = TrailPoint[];
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
@@ -364,6 +368,125 @@ const IconPlay = () => (
   </svg>
 );
 
+// ── Ghost ball simulation ─────────────────────────────────────────────────────
+
+const GHOST_DT = 1000 / 60;
+const GHOST_STEPS = 420;
+const GHOST_LAUNCH_MAX_VY = 35; // must match Pinball.tsx LAUNCH_MAX_VY
+const GHOST_GRAVITY = 1.2;
+const GHOST_CAT_BALL = 0x0001;
+const GHOST_CAT_STATIC = 0x0002;
+
+function computeGhostTrails(board: Board, sel: SelItem): GhostTrail[] {
+  const engine = Matter.Engine.create({ gravity: { x: 0, y: GHOST_GRAVITY } });
+  const W = board.width, H = board.height;
+
+  const staticOpts = {
+    isStatic: true,
+    restitution: 0.4,
+    friction: 0.1,
+    collisionFilter: { category: GHOST_CAT_STATIC, mask: GHOST_CAT_BALL },
+  };
+
+  // Boundary walls — no bottom so balls drain out naturally
+  Matter.Composite.add(engine.world, [
+    Matter.Bodies.rectangle(W / 2, -6, W + 24, 12, staticOpts),
+    Matter.Bodies.rectangle(-6, H / 2, 12, H, staticOpts),
+    Matter.Bodies.rectangle(W + 6, H / 2, 12, H, staticOpts),
+  ]);
+
+  for (const w of board.walls)
+    Matter.Composite.add(engine.world, Matter.Bodies.rectangle(w.x, w.y, w.w, w.h, { ...staticOpts, angle: w.angle ?? 0 }));
+  for (const b of board.bumpers)
+    Matter.Composite.add(engine.world, Matter.Bodies.circle(b.x, b.y, b.r, { ...staticOpts, restitution: 1.5, friction: 0 }));
+  for (const p of board.posts)
+    Matter.Composite.add(engine.world, Matter.Bodies.circle(p.x, p.y, p.r, { ...staticOpts, restitution: 0.6, friction: 0.05 }));
+  for (const s of board.slingshots)
+    Matter.Composite.add(engine.world, Matter.Bodies.rectangle(s.x, s.y, s.w, s.h, { ...staticOpts, angle: s.angle ?? 0, restitution: 1.2, friction: 0 }));
+  for (const t of board.targets)
+    Matter.Composite.add(engine.world, Matter.Bodies.rectangle(t.x, t.y, t.w, t.h, { ...staticOpts, angle: t.angle ?? 0, restitution: 0.6, friction: 0 }));
+
+  // Flippers at rest
+  for (const f of board.flippers) {
+    const ra = f.side === "left" ? 0.5 : -0.5;
+    const cx = f.side === "left" ? f.pivotX + (f.length / 2) * Math.cos(ra) : f.pivotX - (f.length / 2) * Math.cos(ra);
+    const cy = f.pivotY + (f.length / 2) * Math.sin(ra);
+    Matter.Composite.add(engine.world, Matter.Bodies.rectangle(cx, cy, f.length, 8, { ...staticOpts, angle: ra, restitution: 0.3, friction: 0.05 }));
+  }
+
+  // Plunger lane divider wall (only for non-plunger selections)
+  const pl = board.plunger;
+  if (sel.kind !== "plunger") {
+    Matter.Composite.add(engine.world,
+      Matter.Bodies.rectangle(pl.x - BALL_R - 6, (pl.topY + pl.bottomY) / 2, 8, pl.bottomY - pl.topY, staticOpts)
+    );
+  }
+
+  // Element center for ring spawning
+  let ecx = 0, ecy = 0;
+  if (sel.kind === "wall") { ecx = board.walls[sel.idx].x; ecy = board.walls[sel.idx].y; }
+  else if (sel.kind === "bumper") { ecx = board.bumpers[sel.idx].x; ecy = board.bumpers[sel.idx].y; }
+  else if (sel.kind === "post") { ecx = board.posts[sel.idx].x; ecy = board.posts[sel.idx].y; }
+  else if (sel.kind === "flipper") { ecx = board.flippers[sel.idx].pivotX; ecy = board.flippers[sel.idx].pivotY; }
+  else if (sel.kind === "slingshot") { ecx = board.slingshots[sel.idx].x; ecy = board.slingshots[sel.idx].y; }
+  else if (sel.kind === "target") { ecx = board.targets[sel.idx].x; ecy = board.targets[sel.idx].y; }
+  else if (sel.kind === "plunger") { ecx = pl.x; ecy = (pl.topY + pl.bottomY) / 2; }
+
+  const ballOpts = {
+    restitution: 0.5, friction: 0.01, frictionAir: 0.008, density: 0.005,
+    collisionFilter: { category: GHOST_CAT_BALL, mask: GHOST_CAT_STATIC },
+  };
+
+  interface GhostEntry { body: Matter.Body; trail: GhostTrail; alive: boolean; }
+  const entries: GhostEntry[] = [];
+
+  if (sel.kind === "plunger") {
+    // Launch balls at varying charge levels to show the full range of trajectories
+    const N = 14;
+    for (let i = 0; i < N; i++) {
+      const charge = (i + 1) / N;
+      const vy = -(charge * GHOST_LAUNCH_MAX_VY * (pl.launchPower ?? 1.0) + 4);
+      const body = Matter.Bodies.circle(board.ballStartX, board.ballStartY, BALL_R, ballOpts);
+      Matter.Body.setVelocity(body, { x: 0, y: vy });
+      Matter.Composite.add(engine.world, body);
+      entries.push({ body, trail: [{ x: board.ballStartX, y: board.ballStartY }], alive: true });
+    }
+  } else {
+    // Spawn balls in a ring aimed at the element center
+    const N = 20;
+    const ringR = 180;
+    for (let i = 0; i < N; i++) {
+      const angle = (i / N) * Math.PI * 2;
+      const bx = ecx + ringR * Math.cos(angle);
+      const by = ecy + ringR * Math.sin(angle);
+      if (bx < -BALL_R || bx > W + BALL_R || by < -BALL_R * 3 || by > H + BALL_R) continue;
+      const speed = 8 + Math.random() * 17;
+      const baseAngle = Math.atan2(ecy - by, ecx - bx);
+      const vx = Math.cos(baseAngle + (Math.random() - 0.5) * 0.3) * speed;
+      const vy = Math.sin(baseAngle + (Math.random() - 0.5) * 0.3) * speed;
+      const body = Matter.Bodies.circle(bx, by, BALL_R, ballOpts);
+      Matter.Body.setVelocity(body, { x: vx, y: vy });
+      Matter.Composite.add(engine.world, body);
+      entries.push({ body, trail: [{ x: bx, y: by }], alive: true });
+    }
+  }
+
+  // Step simulation and collect positions
+  for (let step = 0; step < GHOST_STEPS; step++) {
+    Matter.Engine.update(engine, GHOST_DT);
+    for (const e of entries) {
+      if (!e.alive) continue;
+      const p = e.body.position;
+      if (p.x < -BALL_R || p.x > W + BALL_R || p.y > H + BALL_R) { e.alive = false; continue; }
+      if (step % 2 === 0) e.trail.push({ x: p.x, y: p.y });
+    }
+    if (entries.every(e => !e.alive)) break;
+  }
+
+  Matter.Engine.clear(engine);
+  return entries.map(e => e.trail);
+}
+
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
 function drawScene(
@@ -373,6 +496,7 @@ function drawScene(
   selected: SelItem[],
   rubber: { bx1: number; by1: number; bx2: number; by2: number } | null,
   preview: { bx1: number; by1: number; bx2: number; by2: number } | null,
+  trails?: GhostTrail[],
 ) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#404040";
@@ -526,6 +650,23 @@ function drawScene(
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText("B", board.ballStartX, board.ballStartY);
 
+  // Ghost ball trails
+  if (trails && trails.length > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = "#00e5ff";
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = "round";
+    for (const trail of trails) {
+      if (trail.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(trail[0].x, trail[0].y);
+      for (let i = 1; i < trail.length; i++) ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Preview rect
   if (preview) {
     const px = Math.min(preview.bx1, preview.bx2), py = Math.min(preview.by1, preview.by2);
@@ -600,12 +741,14 @@ export default function PinballEditor() {
   const [showProps, setShowProps] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [ghostBalls, setGhostBalls] = useState(false);
+  const [ghostTrails, setGhostTrails] = useState<GhostTrail[]>([]);
 
   const viewRef = useRef(view); viewRef.current = view;
   const boardRef = useRef(board); boardRef.current = board;
   const selectedRef = useRef(selected); selectedRef.current = selected;
   const toolRef = useRef(tool); toolRef.current = tool;
   const showPropsRef = useRef(showProps); showPropsRef.current = showProps;
+  const ghostTrailsRef = useRef<GhostTrail[]>([]); ghostTrailsRef.current = ghostTrails;
 
   const dragRef = useRef<DragState | null>(null);
   const middlePanRef = useRef<{ startSX: number; startSY: number; startVX: number; startVY: number } | null>(null);
@@ -739,8 +882,8 @@ export default function PinballEditor() {
       const w = container.clientWidth, h = container.clientHeight;
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     }
-    drawScene(ctx, board, view, selected, rubber, preview);
-  }, [board, view, selected, rubber, preview]);
+    drawScene(ctx, board, view, selected, rubber, preview, ghostTrails);
+  }, [board, view, selected, rubber, preview, ghostTrails]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -752,11 +895,28 @@ export default function PinballEditor() {
       if (!ctx) return;
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
-      drawScene(ctx, boardRef.current, viewRef.current, selectedRef.current, null, null);
+      drawScene(ctx, boardRef.current, viewRef.current, selectedRef.current, null, null, ghostTrailsRef.current);
     });
     ro.observe(container);
     return () => ro.disconnect();
   }, []);
+
+  // ── Ghost trail computation ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!ghostBalls || selected.length !== 1) {
+      setGhostTrails([]);
+      return;
+    }
+    const sel = selected[0];
+    // Debounce: wait 300ms after last board/selection change before computing
+    const timer = setTimeout(() => {
+      setGhostTrails(computeGhostTrails(boardRef.current, sel));
+    }, 300);
+    return () => clearTimeout(timer);
+  // board is intentionally included so trails update when the board is edited
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghostBalls, selected, board]);
 
   // ── Coord helpers ────────────────────────────────────────────────────────────
 
