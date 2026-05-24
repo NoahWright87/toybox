@@ -351,11 +351,11 @@ export function playSfNote(
   const relDur = Math.min(0.08, durationSec * 0.15);
   gainNode.gain.setValueAtTime(vol, when + durationSec);
   gainNode.gain.linearRampToValueAtTime(0, when + durationSec + relDur);
-  source.stop(when + durationSec + relDur + 0.01);
 
   source.connect(gainNode);
   gainNode.connect(ctx.destination);
   source.start(when);
+  source.stop(when + durationSec + relDur + 0.01); // must come after start()
 
   return true;
 }
