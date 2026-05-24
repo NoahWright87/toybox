@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
 import { QUIPS, QuipKey, SubtitleCategory, SubtitleSettings, EXIT_QUIPS, pickRandom, pickLockedDoorQuip } from "./quips";
+import { generateMap as genMapFromModule, type MapGenParams, GEN_WALL as MGEN_WALL } from './mapgen';
 import "./Hellzone.css";
 
 const WEAPON_SLOT_DATA = [
@@ -56,8 +57,8 @@ export default function Hellzone() {
       };
     }
 
-    // ── BSP Map Generator ──────────────────────────────────────────────────────
-    const MAP_W = 40, MAP_H = 40;
+    // ── Map dimensions (updated per level) ────────────────────────────────────
+    let MAP_W = 40, MAP_H = 40;
     const TILE_EMPTY = 0, TILE_WALL = 1, TILE_LAVA = 2, TILE_EXIT = 3, TILE_WINDOW = 4;
     const TILE_DOOR = 5, TILE_DOOR_RED = 6, TILE_DOOR_ORANGE = 7, TILE_DOOR_YELLOW = 8;
     const TILE_DOOR_GREEN = 9, TILE_DOOR_BLUE = 10, TILE_DOOR_PURPLE = 11;
@@ -96,149 +97,131 @@ export default function Hellzone() {
     interface Projectile { x: number; y: number; velX: number; velY: number; damage: number; age: number; maxAge: number; }
     interface FlameParticle { x: number; y: number; velX: number; velY: number; age: number; maxAge: number; damage: number; }
 
-    class BSPNode {
-      x: number; y: number; w: number; h: number;
-      left: BSPNode | null = null;
-      right: BSPNode | null = null;
-      room: Room | null = null;
-      constructor(x: number, y: number, w: number, h: number) {
-        this.x = x; this.y = y; this.w = w; this.h = h;
-      }
+    function gridSizeForLevel(lvl: number): number {
+      if (lvl <= 3) return 64;
+      if (lvl <= 6) return 96;
+      return 128;
     }
 
-    function generateMap(seed: number) {
-      const rng = mulberry32(seed);
-      const grid: Uint8Array[] = Array.from({ length: MAP_H }, () => new Uint8Array(MAP_W).fill(TILE_WALL));
-      const MIN_SIZE = 6, MAX_SIZE = 16;
+    function generateProcMap(seed: number, lvl: number) {
+      const size = gridSizeForLevel(lvl);
+      const numLayers = Math.min(Math.floor(1 + lvl * 0.4), 4);
+      const allLayerDefs: MapGenParams['layers'] = [
+        { color: '#ffffff', topo: 'drunken', rooms: 12, randomStart: false },
+        { color: '#e05040', topo: 'spiral',  rooms: 10, randomStart: true  },
+        { color: '#e08830', topo: 'linear',  rooms: 8,  randomStart: false },
+        { color: '#d4c040', topo: 'grid',    rooms: 8,  randomStart: true  },
+      ];
+      const params: MapGenParams = {
+        seed,
+        size,
+        extraDoorsPct: 0.25,
+        roomAvg: 7 + Math.floor(lvl * 0.3),
+        roomVariance: 3,
+        layers: allLayerDefs.slice(0, numLayers),
+        secretTreasure: Math.min(2 + Math.floor(lvl * 0.3), 5),
+        secretShortcut: Math.min(1 + Math.floor(lvl * 0.2), 3),
+      };
+      const result = genMapFromModule(params);
 
-      function split(node: BSPNode, depth: number) {
-        if (depth === 0 || node.w < MIN_SIZE * 2 || node.h < MIN_SIZE * 2) return;
-        const canH = node.h >= MIN_SIZE * 2;
-        const canV = node.w >= MIN_SIZE * 2;
-        const horizontal = canH && (!canV || rng() > 0.5);
-        if (horizontal) {
-          const splitY = Math.floor(MIN_SIZE + rng() * (node.h - MIN_SIZE * 2));
-          node.left = new BSPNode(node.x, node.y, node.w, splitY);
-          node.right = new BSPNode(node.x, node.y + splitY, node.w, node.h - splitY);
+      // Convert flat tile array to game's 2D grid format
+      const grid: Uint8Array[] = Array.from({ length: size }, () => new Uint8Array(size).fill(TILE_WALL));
+      const rng2 = mulberry32(seed + 1);
+
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const t = result.tiles[y * size + x];
+          if (t !== MGEN_WALL) grid[y][x] = TILE_EMPTY;
+        }
+      }
+
+      // Place door tiles using metadata (layerIdx 0=keyless, N=colored)
+      for (const door of result.doors) {
+        if (door.isHidden) {
+          grid[door.y][door.x] = TILE_WALL;
         } else {
-          const splitX = Math.floor(MIN_SIZE + rng() * (node.w - MIN_SIZE * 2));
-          node.left = new BSPNode(node.x, node.y, splitX, node.h);
-          node.right = new BSPNode(node.x + splitX, node.y, node.w - splitX, node.h);
-        }
-        split(node.left, depth - 1);
-        split(node.right, depth - 1);
-      }
-
-      function placeRooms(node: BSPNode): Room | null {
-        if (!node.left && !node.right) {
-          const rw = Math.floor(3 + rng() * (Math.min(node.w - 3, MAX_SIZE - 3)));
-          const rh = Math.floor(3 + rng() * (Math.min(node.h - 3, MAX_SIZE - 3)));
-          const rx = node.x + Math.floor(1 + rng() * (node.w - rw - 2));
-          const ry = node.y + Math.floor(1 + rng() * (node.h - rh - 2));
-          node.room = { x: rx, y: ry, w: rw, h: rh, cx: Math.floor(rx + rw / 2), cy: Math.floor(ry + rh / 2) };
-          for (let y = ry; y < ry + rh; y++)
-            for (let x = rx; x < rx + rw; x++)
-              grid[y][x] = TILE_EMPTY;
-          return node.room;
-        }
-        const lRoom = placeRooms(node.left!);
-        const rRoom = placeRooms(node.right!);
-        if (lRoom && rRoom) connectRooms(lRoom, rRoom);
-        return lRoom || rRoom;
-      }
-
-      function connectRooms(a: Room, b: Room) {
-        const ax = a.cx, ay = a.cy, bx = b.cx, by = b.cy;
-        if (rng() > 0.5) { carveLine(ax, ay, bx, ay); carveLine(bx, ay, bx, by); }
-        else              { carveLine(ax, ay, ax, by); carveLine(ax, by, bx, by); }
-      }
-
-      function carveLine(x0: number, y0: number, x1: number, y1: number) {
-        if (x0 === x1) {
-          const [a, b] = y0 < y1 ? [y0, y1] : [y1, y0];
-          for (let y = a; y <= b; y++) if (y >= 0 && y < MAP_H && x0 >= 0 && x0 < MAP_W) grid[y][x0] = TILE_EMPTY;
-        } else {
-          const [a, b] = x0 < x1 ? [x0, x1] : [x1, x0];
-          for (let x = a; x <= b; x++) if (y0 >= 0 && y0 < MAP_H && x >= 0 && x < MAP_W) grid[y0][x] = TILE_EMPTY;
+          grid[door.y][door.x] = TILE_DOOR + door.layerIdx;
         }
       }
 
-      const bspRoot = new BSPNode(1, 1, MAP_W - 2, MAP_H - 2);
-      split(bspRoot, 5);
-      placeRooms(bspRoot);
+      // Exit tile at exit room center
+      const exitGenRoom = result.rooms.find(r => r.isExit);
+      if (exitGenRoom) grid[exitGenRoom.cy][exitGenRoom.cx] = TILE_EXIT;
 
-      const rooms: Room[] = [];
-      function collectRooms(node: BSPNode | null) {
-        if (!node) return;
-        if (node.room) rooms.push(node.room);
-        collectRooms(node.left);
-        collectRooms(node.right);
-      }
-      collectRooms(bspRoot);
-
-      if (rooms.length > 1) {
-        const exitRoom = rooms[rooms.length - 1];
-        grid[exitRoom.cy][exitRoom.cx] = TILE_EXIT;
+      // Lava post-pass
+      for (let py = 1; py < size - 1; py++) {
+        for (let px = 1; px < size - 1; px++) {
+          if (grid[py][px] !== TILE_WALL) continue;
+          const hasOpen = grid[py-1][px] === TILE_EMPTY || grid[py+1][px] === TILE_EMPTY
+                       || grid[py][px-1] === TILE_EMPTY || grid[py][px+1] === TILE_EMPTY;
+          if (hasOpen && rng2() < 0.25) grid[py][px] = TILE_LAVA;
+        }
       }
 
+      // Window post-pass
+      for (let py = 1; py < size - 1; py++) {
+        for (let px = 1; px < size - 1; px++) {
+          if (grid[py][px] !== TILE_WALL) continue;
+          const nsOpen = grid[py-1][px] === TILE_EMPTY && grid[py+1][px] === TILE_EMPTY;
+          const ewOpen = grid[py][px-1] === TILE_EMPTY && grid[py][px+1] === TILE_EMPTY;
+          if ((nsOpen || ewOpen) && rng2() < 0.45) grid[py][px] = TILE_WINDOW;
+        }
+      }
+
+      // Enemies: spawn in non-start, non-secret rooms
       const enemies: Enemy[] = [];
-      for (let i = 1; i < rooms.length; i++) {
-        const room = rooms[i];
-        const count = Math.floor(1 + rng() * 3);
+      for (const room of result.rooms) {
+        if (room.isStart || room.isSecret) continue;
+        const count = Math.floor(1 + rng2() * 3);
         for (let e = 0; e < count; e++) {
           enemies.push({
-            x: (room.x + 1 + rng() * (room.w - 2)) * CELL + CELL / 2,
-            y: (room.y + 1 + rng() * (room.h - 2)) * CELL + CELL / 2,
-            angle: rng() * Math.PI * 2,
+            x: (room.x1 + 1 + rng2() * (room.x2 - room.x1 - 2)) * CELL + CELL / 2,
+            y: (room.y1 + 1 + rng2() * (room.y2 - room.y1 - 2)) * CELL + CELL / 2,
+            angle: rng2() * Math.PI * 2,
             health: 40, maxHealth: 40,
-            state: "idle", type: Math.floor(rng() * 3),
-            shootTimer: 60 + Math.floor(rng() * 120),
+            state: 'idle', type: Math.floor(rng2() * 3),
+            shootTimer: 60 + Math.floor(rng2() * 120),
             alertRange: 6 * CELL, speed: 0, deathTimer: 0, muzzleFlash: 0,
             burning: false, burnTimer: 0, burnDamage: 0,
           });
         }
       }
 
+      // Pickups: key rooms → key items; regular rooms → health/ammo/weapons
       const pickups: Pickup[] = [];
-      for (let i = 2; i < rooms.length - 1; i += 2) {
-        const room = rooms[i];
-        pickups.push({ x: (room.cx + 0.5) * CELL, y: (room.cy + 0.5) * CELL, type: rng() > 0.5 ? "health" : "bullets", taken: false });
-      }
-      // Place one weapon pickup per level in mid-to-late rooms
-      const weaponTypes: string[] = ['weapon-woofer', 'weapon-tennis', 'weapon-flamethrower'];
-      const wIdx = Math.floor(rng() * weaponTypes.length);
-      const wRoomIdx = Math.min(Math.floor(rooms.length * 0.5), rooms.length - 2);
-      if (wRoomIdx >= 1) {
-        pickups.push({ x: (rooms[wRoomIdx].cx + 0.5) * CELL, y: (rooms[wRoomIdx].cy + 0.5) * CELL, type: weaponTypes[wIdx], taken: false });
-      }
-      // Extra ammo pickups in later rooms
-      if (rooms.length > 6) {
-        const lateRoom = rooms[Math.floor(rooms.length * 0.75)];
-        const ammoTypes: string[] = ['bullets', 'fuel', 'balls'];
-        pickups.push({ x: (lateRoom.cx + 0.5) * CELL, y: (lateRoom.cy + 0.5) * CELL, type: ammoTypes[Math.floor(rng() * ammoTypes.length)], taken: false });
-      }
-
-      // Post-pass: ~25% of walls adjacent to open space become lava walls.
-      for (let py = 1; py < MAP_H - 1; py++) {
-        for (let px = 1; px < MAP_W - 1; px++) {
-          if (grid[py][px] !== TILE_WALL) continue;
-          const hasOpen = grid[py-1][px] === TILE_EMPTY || grid[py+1][px] === TILE_EMPTY
-                       || grid[py][px-1] === TILE_EMPTY || grid[py][px+1] === TILE_EMPTY;
-          if (hasOpen && rng() < 0.25) grid[py][px] = TILE_LAVA;
+      const keyRoomColors: KeyColor[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
+      for (const room of result.rooms) {
+        if (room.isKey && room.layerIdx < keyRoomColors.length) {
+          pickups.push({
+            x: (room.cx + 0.5) * CELL,
+            y: (room.cy + 0.5) * CELL,
+            type: `key-${keyRoomColors[room.layerIdx]}`,
+            taken: false,
+          });
         }
       }
-
-      // Post-pass: thin walls (open space on both opposing sides) become iron-bar windows.
-      for (let py = 1; py < MAP_H - 1; py++) {
-        for (let px = 1; px < MAP_W - 1; px++) {
-          if (grid[py][px] !== TILE_WALL) continue;
-          const nsOpen = grid[py-1][px] === TILE_EMPTY && grid[py+1][px] === TILE_EMPTY;
-          const ewOpen = grid[py][px-1] === TILE_EMPTY && grid[py][px+1] === TILE_EMPTY;
-          if ((nsOpen || ewOpen) && rng() < 0.45) grid[py][px] = TILE_WINDOW;
-        }
+      const regularRooms = result.rooms.filter(r => !r.isStart && !r.isKey && !r.isSecret && !r.isExit);
+      for (let i = 1; i < regularRooms.length; i += 2) {
+        const room = regularRooms[i];
+        pickups.push({ x: (room.cx + 0.5) * CELL, y: (room.cy + 0.5) * CELL, type: rng2() > 0.5 ? 'health' : 'bullets', taken: false });
+      }
+      const wpnTypes = ['weapon-woofer', 'weapon-tennis', 'weapon-flamethrower'];
+      if (regularRooms.length > 3) {
+        const wRoom = regularRooms[Math.floor(regularRooms.length * 0.5)];
+        pickups.push({ x: (wRoom.cx + 0.5) * CELL, y: (wRoom.cy + 0.5) * CELL, type: wpnTypes[Math.floor(rng2() * wpnTypes.length)], taken: false });
       }
 
-      const spawn = { x: (rooms[0].cx + 0.5) * CELL, y: (rooms[0].cy + 0.5) * CELL, angle: 0 };
+      const startGenRoom = result.rooms.find(r => r.isStart);
+      const spawn = startGenRoom
+        ? { x: (startGenRoom.cx + 0.5) * CELL, y: (startGenRoom.cy + 0.5) * CELL, angle: 0 }
+        : { x: CELL * 2, y: CELL * 2, angle: 0 };
+
+      // BSP-compatible room list (used only for totalKills count)
+      const rooms: Room[] = result.rooms.map(r => ({
+        x: r.x1, y: r.y1, w: r.x2 - r.x1, h: r.y2 - r.y1,
+        cx: r.cx, cy: r.cy,
+      }));
+
       return { grid, rooms, enemies, pickups, spawn, seed };
     }
 
@@ -776,7 +759,9 @@ export default function Hellzone() {
     }
 
     function initLevel() {
-      const data = level === 1 ? generateTrainingMap() : generateMap(seed);
+      if (level === 1) { MAP_W = 40; MAP_H = 40; }
+      else { MAP_W = gridSizeForLevel(level); MAP_H = MAP_W; }
+      const data = level === 1 ? generateTrainingMap() : generateProcMap(seed, level);
       map = data.grid;
       enemies = data.enemies;
       pickups = data.pickups;
