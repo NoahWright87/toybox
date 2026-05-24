@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
-import { QUIPS, QuipKey, pickRandom, pickLockedDoorQuip } from "./quips";
+import { QUIPS, QuipKey, SubtitleCategory, SubtitleSettings, pickRandom, pickLockedDoorQuip } from "./quips";
 import "./Hellzone.css";
 
 const WEAPON_SLOT_DATA = [
@@ -405,8 +405,10 @@ export default function Hellzone() {
     interface Impact { sx: number; sy: number; type: string; timer: number; maxTimer: number; }
     const impacts: Impact[] = [];
 
-    // ── Quip system ─────────────────────────────────────────────────────────────
+    // ── Quip / subtitle system ──────────────────────────────────────────────────
     // Combat quips queue until a lull (no kills/damage for ~1.5 s), then one fires.
+    // monster_tell is always shown; player and monster_voice are user-toggleable.
+    let subtitleSettings: SubtitleSettings = { player: true, monster_voice: true };
     let quipQueue: Array<{ key: QuipKey; weaponKey?: QuipKey }> = [];
     let quipCooldown = 0;    // frames until next quip can fire
     let quipLullTimer = 0;   // frames since last combat signal; 0 = lull
@@ -534,7 +536,7 @@ export default function Hellzone() {
       q<HTMLElement>(".hz-game-container").style.display = s !== "title" ? "flex" : "none";
       q<HTMLElement>(".hz-death-screen").style.display   = s === "dead" ? "flex" : "none";
       q<HTMLElement>(".hz-level-clear").style.display    = s === "clear" ? "flex" : "none";
-      if (s === "clear") { playSound('level-complete'); showMessage(pickRandom(QUIPS.level_clear)); }
+      if (s === "clear") { playSound('level-complete'); fireQuip('level_clear'); }
       if (s === "title") playSound('intro');
     }
 
@@ -564,7 +566,7 @@ export default function Hellzone() {
       projectiles.length = 0; flameParticles.length = 0;
       initLevel();
       setScreen("playing");
-      setTimeout(() => { if (gameState === 'playing') { showMessage(pickRandom(QUIPS.level_start)); quipCooldown = 300; } }, 1500);
+      setTimeout(() => { if (gameState === 'playing') { fireQuip('level_start'); quipCooldown = 300; } }, 1500);
     }
 
     function switchWeapon(to: WeaponId) {
@@ -662,7 +664,8 @@ export default function Hellzone() {
       } else if (door.state === 'closed') {
         if (door.keyColor !== null && !heldKeys.has(door.keyColor)) {
           if (lockedMsgTimer <= 0) {
-            showMessage(pickLockedDoorQuip(door.keyColor));
+            const lq = pickLockedDoorQuip(door.keyColor);
+            showMessage(lq.text, 'player', lq.audio);
             lockedMsgTimer = 60;
           }
           return;
@@ -1607,13 +1610,13 @@ export default function Hellzone() {
         if (Math.hypot(p.x - player.x, p.y - player.y) < CELL * 0.5) {
           p.taken = true;
           if (p.type === 'health') {
-            player.health = Math.min(100, player.health + 25); showMessage(pickRandom(QUIPS.pickup_health)); playSound('pickup');
+            player.health = Math.min(100, player.health + 25); fireQuip('pickup_health'); playSound('pickup');
           } else if (p.type === 'ammo' || p.type === 'bullets') {
-            player.ammo = Math.min(99, player.ammo + 20); showMessage(pickRandom(QUIPS.pickup_ammo_bullets)); playSound('pickup');
+            player.ammo = Math.min(99, player.ammo + 20); fireQuip('pickup_ammo_bullets'); playSound('pickup');
           } else if (p.type === 'balls') {
-            ballAmmo = Math.min(50, ballAmmo + 10); showMessage(pickRandom(QUIPS.pickup_ammo_balls)); playSound('pickup');
+            ballAmmo = Math.min(50, ballAmmo + 10); fireQuip('pickup_ammo_balls'); playSound('pickup');
           } else if (p.type === 'fuel') {
-            fuelAmmo = Math.min(99, fuelAmmo + 30); showMessage(pickRandom(QUIPS.pickup_ammo_fuel)); playSound('pickup');
+            fuelAmmo = Math.min(99, fuelAmmo + 30); fireQuip('pickup_ammo_fuel'); playSound('pickup');
           } else if (p.type.startsWith('key-')) {
             const kc = p.type.slice(4) as KeyColor;
             heldKeys.add(kc);
@@ -1630,13 +1633,13 @@ export default function Hellzone() {
                 : wId === 'tennis' ? 'pickup_weapon_tennis'
                 : wId === 'flamethrower' ? 'pickup_weapon_flamethrower'
                 : 'pickup_weapon';
-              showMessage(pickRandom(QUIPS[wqKey]));
+              fireQuip(wqKey);
               playSound('pickup-weapon');
               switchWeapon(wId);
             } else {
-              if (wId === 'woofer') { player.ammo = Math.min(99, player.ammo + 15); showMessage(pickRandom(QUIPS.pickup_ammo_bullets)); }
-              else if (wId === 'tennis') { ballAmmo = Math.min(50, ballAmmo + 8); showMessage(pickRandom(QUIPS.pickup_ammo_balls)); }
-              else if (wId === 'flamethrower') { fuelAmmo = Math.min(99, fuelAmmo + 25); showMessage(pickRandom(QUIPS.pickup_ammo_fuel)); }
+              if (wId === 'woofer') { player.ammo = Math.min(99, player.ammo + 15); fireQuip('pickup_ammo_bullets'); }
+              else if (wId === 'tennis') { ballAmmo = Math.min(50, ballAmmo + 8); fireQuip('pickup_ammo_balls'); }
+              else if (wId === 'flamethrower') { fuelAmmo = Math.min(99, fuelAmmo + 25); fireQuip('pickup_ammo_fuel'); }
               playSound('pickup');
             }
           }
@@ -1696,7 +1699,7 @@ export default function Hellzone() {
     }
 
     function fireRaycast(wId: 'subwoofer' | 'woofer') {
-      if (!infAmmo && player.ammo <= 0) { showMessage(pickRandom(QUIPS.player_no_ammo_bullets)); return; }
+      if (!infAmmo && player.ammo <= 0) { fireQuip('player_no_ammo_bullets'); return; }
       if (!infAmmo) player.ammo--;
       shootCooldown = WEAPON_DEFS[wId].cooldown;
       gunRecoil = 1.0; muzzleFlashTimer = 8;
@@ -1729,7 +1732,7 @@ export default function Hellzone() {
     }
 
     function fireTennisLauncher() {
-      if (!infAmmo && ballAmmo <= 0) { showMessage(pickRandom(QUIPS.player_no_ammo_balls)); return; }
+      if (!infAmmo && ballAmmo <= 0) { fireQuip('player_no_ammo_balls'); return; }
       if (!infAmmo) ballAmmo--;
       shootCooldown = WEAPON_DEFS.tennis.cooldown;
       gunRecoil = 1.2;
@@ -1746,7 +1749,7 @@ export default function Hellzone() {
     }
 
     function fireFlamethrower() {
-      if (!infAmmo && fuelAmmo <= 0) { showMessage(pickRandom(QUIPS.player_no_ammo_fuel)); return; }
+      if (!infAmmo && fuelAmmo <= 0) { fireQuip('player_no_ammo_fuel'); return; }
       if (!infAmmo) fuelAmmo--;
       shootCooldown = WEAPON_DEFS.flamethrower.cooldown;
       playSound('shoot-flamethrower', 0.25);
@@ -1912,7 +1915,7 @@ export default function Hellzone() {
               if (player.health <= 0) {
                 player.health = 0;
                 playSound('death');
-                showMessage(pickRandom(QUIPS.player_death));
+                fireQuip('player_death');
                 const stats = q("#hz-death-stats");
                 stats.innerHTML = `LEVEL: ${level}<br>KILLS: ${kills} / ${totalKills}<br>BULLETS: ${player.ammo} | BALLS: ${ballAmmo} | FUEL: ${fuelAmmo}`;
                 setScreen("dead");
@@ -1924,12 +1927,23 @@ export default function Hellzone() {
       }
     }
 
-    // ── Messages ───────────────────────────────────────────────────────────────
-    function showMessage(text: string) {
+    // ── Messages / subtitles ───────────────────────────────────────────────────
+    // category controls subtitle color and toggleability.
+    // _audio is reserved for recorded voice clips; wired now, populated later.
+    function showMessage(text: string, category: SubtitleCategory = 'info', _audio?: string) {
+      if (category === 'player' && !subtitleSettings.player) return;
+      if (category === 'monster_voice' && !subtitleSettings.monster_voice) return;
       const el = q<HTMLElement>(".hz-message");
       el.textContent = text;
       el.style.opacity = "1";
+      el.className = `hz-message hz-subtitle--${category.replace(/_/g, '-')}`;
       messageTimer = 120;
+    }
+
+    // Picks a random line from a quip key and shows it immediately.
+    function fireQuip(key: QuipKey) {
+      const line = pickRandom(QUIPS[key]);
+      showMessage(line.text, 'player', line.audio);
     }
 
     // Marks that combat is active, delaying lull-based quips.
@@ -1940,10 +1954,10 @@ export default function Hellzone() {
       if (quipQueue.length < 3) quipQueue.push({ key, weaponKey });
     }
 
-    // Shows a quip immediately if the cooldown allows (soft — skips if busy).
+    // Shows a quip immediately if the global cooldown allows; skips if busy.
     function softFireQuip(key: QuipKey) {
       if (quipCooldown > 0) return;
-      showMessage(pickRandom(QUIPS[key]));
+      fireQuip(key);
       quipCooldown = 200;
     }
 
@@ -2247,7 +2261,8 @@ export default function Hellzone() {
         if (quipLullTimer <= 0 && quipCooldown <= 0 && quipQueue.length > 0) {
           const { key, weaponKey } = quipQueue.shift()!;
           const pool = weaponKey ? [...QUIPS[weaponKey], ...QUIPS[key]] : QUIPS[key];
-          showMessage(pool[Math.floor(Math.random() * pool.length)]);
+          const line = pool[Math.floor(Math.random() * pool.length)];
+          showMessage(line.text, 'player', line.audio);
           quipCooldown = 300;
           quipQueue.length = 0;
         }

@@ -336,7 +336,7 @@
   border: 1px solid #333;
 }
 
-/* ── MESSAGES ── */
+/* ── MESSAGES / SUBTITLES ── */
 .hz-message {
   position: absolute;
   top: 8px;
@@ -350,6 +350,27 @@
   opacity: 0;
   transition: opacity 0.3s;
   white-space: nowrap;
+}
+/* Player (wolf) voice — warm gold */
+.hz-message.hz-subtitle--player {
+  color: #ffdd44;
+  text-shadow: 0 0 8px #cc8800;
+}
+/* System / pickup info — bright yellow (default, same as base) */
+.hz-message.hz-subtitle--info {
+  color: #ffff00;
+  text-shadow: 0 0 8px #ff0;
+}
+/* Enemy attack telegraph — red, larger, always shown */
+.hz-message.hz-subtitle--monster-tell {
+  color: #ff4444;
+  text-shadow: 0 0 10px #ff0000;
+  font-size: 24px;
+}
+/* Enemy ambient voice — orange */
+.hz-message.hz-subtitle--monster-voice {
+  color: #ff8844;
+  text-shadow: 0 0 8px #cc4400;
 }
 
 /* ── CROSSHAIR ── */
