@@ -74,7 +74,8 @@ export default function Hellzone() {
     }
 
     interface Room { x: number; y: number; w: number; h: number; cx: number; cy: number; }
-    interface Door { tx: number; ty: number; keyColor: KeyColor | null; openProgress: number; state: 'closed' | 'opening' | 'open' | 'closing'; axis: 0 | 1; tileType: number; }
+    interface DoorGroup { id: number; openProgress: number; state: 'closed' | 'opening' | 'open' | 'closing'; keyColor: KeyColor | null; tiles: Door[]; }
+    interface Door { tx: number; ty: number; axis: 0 | 1; tileType: number; group: DoorGroup; }
     interface Enemy {
       x: number; y: number; angle: number; health: number; maxHealth: number;
       state: string; type: number; shootTimer: number; alertRange: number;
@@ -431,7 +432,10 @@ export default function Hellzone() {
     const flameParticles: FlameParticle[] = [];
 
     // ── Door / key state ───────────────────────────────────────────────────────
+    const DOOR_TEX_SIZE = 64;
+    const doorTextures = new Map<number, HTMLCanvasElement>();
     let doors: Door[] = [];
+    let doorGroups: DoorGroup[] = [];
     const doorMap = new Map<string, Door>();
     let heldKeys = new Set<KeyColor>();
     let lockedMsgTimer = 0;
@@ -631,38 +635,100 @@ export default function Hellzone() {
 
     function buildDoorMap() {
       doors = [];
+      doorGroups = [];
       doorMap.clear();
+      const visited = new Set<string>();
+      let groupId = 0;
+
       for (let ty = 0; ty < MAP_H; ty++) {
         for (let tx = 0; tx < MAP_W; tx++) {
+          const startKey = `${tx},${ty}`;
+          if (visited.has(startKey)) continue;
           const t = map[ty][tx];
-          if (isDoorTile(t)) {
-            // axis=0: corridor runs E-W (walls to N/S), panel perpendicular to X
-            // axis=1: corridor runs N-S (walls to E/W), panel perpendicular to Y
-            const northSolid = ty > 0 && (map[ty-1][tx] === TILE_WALL || isDoorTile(map[ty-1][tx]));
-            const southSolid = ty < MAP_H-1 && (map[ty+1][tx] === TILE_WALL || isDoorTile(map[ty+1][tx]));
+          if (!isDoorTile(t)) continue;
+
+          const group: DoorGroup = { id: groupId++, openProgress: 0, state: 'closed', keyColor: doorTileKeyColor(t), tiles: [] };
+          doorGroups.push(group);
+          const queue: Array<{ tx: number; ty: number }> = [{ tx, ty }];
+          visited.add(startKey);
+
+          while (queue.length > 0) {
+            const { tx: cx, ty: cy } = queue.shift()!;
+            const ct = map[cy][cx];
+            if (!isDoorTile(ct)) continue;
+            // axis=0: corridor runs E-W (walls to N/S); axis=1: corridor runs N-S (walls to E/W)
+            const northSolid = cy > 0 && (map[cy-1][cx] === TILE_WALL || isDoorTile(map[cy-1][cx]));
+            const southSolid = cy < MAP_H-1 && (map[cy+1][cx] === TILE_WALL || isDoorTile(map[cy+1][cx]));
             const axis: 0 | 1 = (northSolid || southSolid) ? 0 : 1;
-            const d: Door = { tx, ty, keyColor: doorTileKeyColor(t), openProgress: 0, state: 'closed', axis, tileType: t };
-            doors.push(d);
-            doorMap.set(`${tx},${ty}`, d);
+            const door: Door = { tx: cx, ty: cy, axis, tileType: ct, group };
+            doors.push(door);
+            doorMap.set(`${cx},${cy}`, door);
+            group.tiles.push(door);
+            // BFS: spread to adjacent door tiles to form a group
+            for (const [nx, ny] of [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]] as [number,number][]) {
+              const nk = `${nx},${ny}`;
+              if (visited.has(nk)) continue;
+              if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) continue;
+              if (!isDoorTile(map[ny][nx])) continue;
+              visited.add(nk);
+              queue.push({ tx: nx, ty: ny });
+            }
           }
         }
       }
     }
 
+    function buildDoorTextures() {
+      const sz = DOOR_TEX_SIZE;
+      for (let tileType = TILE_DOOR; tileType <= TILE_DOOR_PURPLE; tileType++) {
+        const offscreen = document.createElement('canvas');
+        offscreen.width = sz; offscreen.height = sz;
+        const oc = offscreen.getContext('2d')!;
+        if (tileType === TILE_DOOR) {
+          // Warm wood panel
+          oc.fillStyle = '#a07030'; oc.fillRect(0, 0, sz, sz);
+          // Frame
+          oc.fillStyle = '#4e2e08';
+          oc.fillRect(0, 0, sz, 4); oc.fillRect(0, sz-4, sz, 4);
+          oc.fillRect(0, 0, 3, sz); oc.fillRect(sz-3, 0, 3, sz);
+          // Panel shading
+          oc.fillStyle = '#8a6028';
+          oc.fillRect(3, 4, sz-6, 24); oc.fillRect(3, 36, sz-6, 24);
+          // Center bar
+          oc.fillStyle = '#7a5020'; oc.fillRect(3, 28, sz-6, 8);
+        } else {
+          const kc = doorTileKeyColor(tileType)!;
+          const [r, g, b] = KEY_HEX[kc];
+          // Dark gray body
+          oc.fillStyle = '#303030'; oc.fillRect(0, 0, sz, sz);
+          // Colored center band
+          oc.fillStyle = `rgb(${r},${g},${b})`; oc.fillRect(0, 18, sz, 28);
+          // Frame
+          oc.fillStyle = '#181818';
+          oc.fillRect(0, 0, sz, 4); oc.fillRect(0, sz-4, sz, 4);
+          oc.fillRect(0, 0, 3, sz); oc.fillRect(sz-3, 0, 3, sz);
+          // Keyhole
+          oc.fillStyle = '#050505';
+          oc.fillRect(29, 28, 6, 10); oc.fillRect(27, 34, 10, 4);
+        }
+        doorTextures.set(tileType, offscreen);
+      }
+    }
+
     function updateDoors(dt: number) {
       if (lockedMsgTimer > 0) lockedMsgTimer -= dt * 60;
-      for (const door of doors) {
-        if (door.state === 'opening') {
-          door.openProgress = Math.min(1, door.openProgress + dt * 2.2);
-          if (door.openProgress >= 1) {
-            door.state = 'open';
-            map[door.ty][door.tx] = TILE_EMPTY;
+      for (const group of doorGroups) {
+        if (group.state === 'opening') {
+          group.openProgress = Math.min(1, group.openProgress + dt * 2.2);
+          if (group.openProgress >= 1) {
+            group.state = 'open';
+            for (const d of group.tiles) map[d.ty][d.tx] = TILE_EMPTY;
           }
-        } else if (door.state === 'closing') {
-          door.openProgress = Math.max(0, door.openProgress - dt * 2.2);
-          if (door.openProgress <= 0) {
-            door.state = 'closed';
-            map[door.ty][door.tx] = door.tileType; // restore door tile
+        } else if (group.state === 'closing') {
+          group.openProgress = Math.max(0, group.openProgress - dt * 2.2);
+          if (group.openProgress <= 0) {
+            group.state = 'closed';
+            for (const d of group.tiles) map[d.ty][d.tx] = d.tileType;
           }
         }
       }
@@ -677,22 +743,22 @@ export default function Hellzone() {
         if (d < nearDist) { nearDist = d; nearest = door; }
       }
       if (!nearest) return;
-      const door = nearest;
-      if (door.state === 'open') {
-        door.state = 'closing';
-        map[door.ty][door.tx] = door.tileType; // make solid again immediately so enemies/player can't walk through
+      const group = nearest.group;
+      if (group.state === 'open') {
+        group.state = 'closing';
+        for (const d of group.tiles) map[d.ty][d.tx] = d.tileType;
         softFireQuip('action_close_door');
         playSound('door-open', 0.45);
-      } else if (door.state === 'closed') {
-        if (door.keyColor !== null && !heldKeys.has(door.keyColor)) {
+      } else if (group.state === 'closed') {
+        if (group.keyColor !== null && !heldKeys.has(group.keyColor)) {
           if (lockedMsgTimer <= 0) {
-            const lq = pickLockedDoorQuip(door.keyColor);
+            const lq = pickLockedDoorQuip(group.keyColor);
             showMessage(lq.text, 'player', lq.audio);
             lockedMsgTimer = 60;
           }
           return;
         }
-        door.state = 'opening';
+        group.state = 'opening';
         softFireQuip('action_open_door');
         playSound('door-open', 0.55);
       }
@@ -707,6 +773,7 @@ export default function Hellzone() {
       heldKeys = new Set<KeyColor>();
       lockedMsgTimer = 0;
       buildDoorMap();
+      buildDoorTextures();
       player = {
         x: data.spawn.x, y: data.spawn.y, angle: data.spawn.angle,
         health: player ? Math.min(Math.max(player.health, 1), 100) : 100,
@@ -750,8 +817,8 @@ export default function Hellzone() {
       if (rayDirY < 0) { stepY = -1; sideDistY = (player.y / CELL - mapY) * deltaDistY; }
       else              { stepY =  1; sideDistY = (mapY + 1 - player.y / CELL) * deltaDistY; }
       let hit = false, side = 0, dist = 0, tile = 0;
+      let hitMapX = mapX, hitMapY = mapY;
       let glassHit: { dist: number; side: number; wallX: number } | null = null;
-      let doorHitDist = -1, doorHitWallX = 0, doorHitTile = 0, doorHitSide = 0;
       for (let i = 0; i < MAX_DEPTH * 2; i++) {
         if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
         else                        { sideDistY += deltaDistY; mapY += stepY; side = 1; }
@@ -769,44 +836,21 @@ export default function Hellzone() {
           }
           hit = true; break;
         }
-        // Wolfenstein-style door: test at the midpoint of the door cell
-        if (isDoorTile(tile)) {
-          const door = doorMap.get(`${mapX},${mapY}`);
-          const openProg = door ? door.openProgress : 0;
-          // Use canonical door axis (not DDA side) to avoid rendering glitches
-          const dAxis = door ? door.axis : (side as 0 | 1);
-          const midDist = dAxis === 0
-            ? (mapX + 0.5 - player.x / CELL) / rayDirX
-            : (mapY + 0.5 - player.y / CELL) / rayDirY;
-          if (midDist <= 0) { continue; } // ray approaches from wrong direction
-          let dwx = dAxis === 0
-            ? player.y / CELL + midDist * rayDirY
-            : player.x / CELL + midDist * rayDirX;
-          dwx -= Math.floor(dwx);
-          if (dwx < openProg) { continue; } // ray passes through open gap
-          doorHitDist = Math.max(midDist, 0.1);
-          doorHitWallX = dwx;
-          doorHitTile = tile;
-          doorHitSide = dAxis;
-          hit = true; break;
+        if (isDoorTile(tile) || tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) {
+          hit = true; hitMapX = mapX; hitMapY = mapY; break;
         }
-        if (tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) { hit = true; break; }
       }
       let wallX = 0;
       if (hit) {
-        if (doorHitDist >= 0) {
-          dist = doorHitDist; wallX = doorHitWallX; tile = doorHitTile; side = doorHitSide;
-        } else {
-          dist = side === 0
-            ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
-            : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
-          let wx = side === 0 ? player.y / CELL + dist * rayDirY : player.x / CELL + dist * rayDirX;
-          wallX = wx - Math.floor(wx);
-        }
+        dist = side === 0
+          ? (mapX - player.x / CELL + (1 - stepX) / 2) / rayDirX
+          : (mapY - player.y / CELL + (1 - stepY) / 2) / rayDirY;
+        let wx = side === 0 ? player.y / CELL + dist * rayDirY : player.x / CELL + dist * rayDirX;
+        wallX = wx - Math.floor(wx);
       } else {
         dist = MAX_DEPTH;
       }
-      return { dist: Math.max(dist, 0.1), side, tile, hit, wallX, glassHit };
+      return { dist: Math.max(dist, 0.1), side, tile, hit, wallX, glassHit, hitMapX, hitMapY };
     }
 
     // ── Rendering ──────────────────────────────────────────────────────────────
@@ -822,7 +866,7 @@ export default function Hellzone() {
 
       for (let x = 0; x < NUM_RAYS; x++) {
         const rayAngle = player.angle - HALF_FOV + (x / NUM_RAYS) * FOV;
-        const { dist, side, tile, hit, wallX, glassHit } = castRay(rayAngle);
+        const { dist, side, tile, hit, wallX, glassHit, hitMapX, hitMapY } = castRay(rayAngle);
         const perpDist = dist * Math.cos(rayAngle - player.angle);
         zBuffer[x] = hit ? perpDist : MAX_DEPTH;
 
@@ -845,8 +889,24 @@ export default function Hellzone() {
           ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
           sprWallRock.drawColumn(ctx, 0, wallX, x, top, wallH);
         } else if (isDoorTile(tile)) {
-          ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
-          drawDoorColumn(x, tile, wallX, top, wallH, side);
+          const door = doorMap.get(`${hitMapX},${hitMapY}`);
+          const openProg = door ? door.group.openProgress : 0;
+          const drawnH = wallH * (1 - openProg);
+          // Door sinks into the floor: top rises as openProgress increases
+          const doorTop = top + wallH * openProg;
+          if (drawnH > 0.5) {
+            ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
+            const tex = doorTextures.get(tile);
+            if (tex) {
+              const srcX = Math.floor(wallX * DOOR_TEX_SIZE);
+              const srcH = Math.max(0.5, DOOR_TEX_SIZE * (1 - openProg));
+              ctx.drawImage(tex, srcX, 0, 1, srcH, x, doorTop, 1, drawnH);
+            } else {
+              const colors = WALL_COLORS[tile] || WALL_COLORS[1];
+              ctx.fillStyle = side === 1 ? colors!.dark : colors!.light;
+              ctx.fillRect(x, doorTop, 1, drawnH);
+            }
+          }
         } else {
           const colors = WALL_COLORS[tile] || WALL_COLORS[1];
           ctx.globalAlpha = baseFog;
@@ -932,15 +992,15 @@ export default function Hellzone() {
       // Door proximity prompt
       if (gameState === 'playing') {
         const ppx = player.x / CELL, ppy = player.y / CELL;
-        let nearDoor: Door | null = null, nearDoorDist = 1.6;
+        let nearGroup: DoorGroup | null = null, nearDoorDist = 1.6;
         for (const door of doors) {
-          if (door.state === 'opening') continue;
+          if (door.group.state === 'opening') continue;
           const ddx = door.tx + 0.5 - ppx, ddy = door.ty + 0.5 - ppy;
           const dd = Math.sqrt(ddx*ddx + ddy*ddy);
-          if (dd < nearDoorDist) { nearDoorDist = dd; nearDoor = door; }
+          if (dd < nearDoorDist) { nearDoorDist = dd; nearGroup = door.group; }
         }
-        if (nearDoor) {
-          const label = nearDoor.state === 'open' ? '[E] CLOSE' : '[E] OPEN';
+        if (nearGroup) {
+          const label = nearGroup.state === 'open' ? '[E] CLOSE' : '[E] OPEN';
           ctx.font = "7px 'Share Tech Mono', monospace";
           ctx.textAlign = 'center';
           ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -965,47 +1025,6 @@ export default function Hellzone() {
       const screenX = Math.floor(SCREEN_W / 2 + (camX / camZ) * (SCREEN_W / 2) / Math.tan(HALF_FOV));
       const spriteH = Math.max(4, Math.floor((SCREEN_H / camZ) * 0.9));
       return { screenX, spriteH, spriteW: spriteH, tz: camZ };
-    }
-
-    function drawDoorColumn(x: number, tile: number, wallX: number, top: number, wallH: number, side: number) {
-      const shade = side === 1 ? 0.65 : 1.0;
-      const isBasic = tile === TILE_DOOR;
-      const keyColor = isBasic ? null : doorTileKeyColor(tile);
-      const iH = Math.ceil(wallH);
-      for (let dy = 0; dy < iH; dy++) {
-        const py = Math.floor(top) + dy;
-        if (py < 0 || py >= SCREEN_H) continue;
-        const vy = dy / wallH;
-        const isVFrame = vy < 0.06 || vy > 0.94;
-        const isHFrame = wallX < 0.04 || wallX > 0.96;
-        let col: string;
-        if (isBasic) {
-          if (isVFrame || isHFrame) {
-            col = shade < 1 ? '#3a2208' : '#4e2e08';
-          } else if (vy > 0.45 && vy < 0.55) {
-            col = shade < 1 ? '#5a3a12' : '#7a5020';
-          } else {
-            col = shade < 1 ? '#7a5820' : '#a07030';
-          }
-        } else {
-          const [r, g, b] = KEY_HEX[keyColor!];
-          const isColorBand = vy > 0.28 && vy < 0.72;
-          const isKeyhole = Math.abs(wallX - 0.5) < 0.06 && vy > 0.45 && vy < 0.6;
-          if (isVFrame || isHFrame) {
-            col = shade < 1 ? '#181818' : '#282828';
-          } else if (isKeyhole) {
-            col = '#050505';
-          } else if (isColorBand) {
-            const sr = Math.floor(r * shade), sg = Math.floor(g * shade), sb = Math.floor(b * shade);
-            col = `rgb(${sr},${sg},${sb})`;
-          } else {
-            const v = Math.floor(90 * shade);
-            col = `rgb(${v},${v},${v})`;
-          }
-        }
-        ctx.fillStyle = col;
-        ctx.fillRect(x, py, 1, 1);
-      }
     }
 
     function renderSprites() {
