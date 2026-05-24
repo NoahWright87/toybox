@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
 import { QUIPS, QuipKey, SubtitleCategory, SubtitleSettings, EXIT_QUIPS, pickRandom, pickLockedDoorQuip } from "./quips";
-import { generateMap as genMapFromModule, type MapGenParams, GEN_WALL as MGEN_WALL } from './mapgen';
+import { generateMap as genMapFromModule, type MapGenParams, type Topology, GEN_WALL as MGEN_WALL } from './mapgen';
 import "./Hellzone.css";
 
 const WEAPON_SLOT_DATA = [
@@ -106,19 +106,24 @@ export default function Hellzone() {
     function generateProcMap(seed: number, lvl: number) {
       const size = gridSizeForLevel(lvl);
       const numLayers = Math.min(Math.floor(1 + lvl * 0.4), 4);
-      const allLayerDefs: MapGenParams['layers'] = [
-        { color: '#ffffff', topo: 'drunken', rooms: 12, randomStart: false },
-        { color: '#e05040', topo: 'spiral',  rooms: 10, randomStart: true  },
-        { color: '#e08830', topo: 'linear',  rooms: 8,  randomStart: false },
-        { color: '#d4c040', topo: 'grid',    rooms: 8,  randomStart: true  },
-      ];
+      const topos: Topology[] = ['drunken', 'random', 'linear', 'grid', 'spiral'];
+      const layerColors = ['#ffffff', '#e05040', '#e08830', '#d4c040'];
+      // Shuffle topologies with seed so each layer gets a different one
+      const rngTopo = mulberry32(seed ^ 0xABCDEF);
+      const shuffledTopos = topos.slice().sort(() => rngTopo() - 0.5);
+      const layerDefs: MapGenParams['layers'] = Array.from({ length: numLayers }, (_, i) => ({
+        color: layerColors[i],
+        topo: shuffledTopos[i % shuffledTopos.length],
+        rooms: 6 + Math.floor(rngTopo() * 3), // 6-8
+        randomStart: i > 0,
+      }));
       const params: MapGenParams = {
         seed,
         size,
-        extraDoorsPct: 0.25,
-        roomAvg: 7 + Math.floor(lvl * 0.3),
-        roomVariance: 3,
-        layers: allLayerDefs.slice(0, numLayers),
+        extraDoorsPct: 0.05,
+        roomAvg: 20,
+        roomVariance: 5,
+        layers: layerDefs,
         secretTreasure: Math.min(2 + Math.floor(lvl * 0.3), 5),
         secretShortcut: Math.min(1 + Math.floor(lvl * 0.2), 3),
       };
@@ -596,7 +601,7 @@ export default function Hellzone() {
       playSound('weapon-switch', 0.5);
     }
 
-    function activateCheat(code: 'god' | 'boom' | 'key') {
+    function activateCheat(code: 'god' | 'boom' | 'key' | 'next') {
       if (code === 'god') {
         godMode = !godMode;
         showMessage(godMode ? 'EGOD: GOD MODE ON' : 'EGOD: GOD MODE OFF');
@@ -609,9 +614,13 @@ export default function Hellzone() {
         } else {
           showMessage('EGOBOOM: AMMO NORMAL');
         }
-      } else {
+      } else if (code === 'key') {
         KEY_COLORS.forEach(c => heldKeys.add(c));
         showMessage('EGOKEY: ALL KEYS');
+      } else {
+        if (gameState !== 'playing') return;
+        showMessage(`EGONEXT: SKIPPING TO LEVEL ${level + 1}`);
+        setTimeout(() => nextLevel(), 500);
       }
       updateCheatsMenu();
     }
@@ -2076,6 +2085,7 @@ export default function Hellzone() {
         clearTimeout(cheatClearTimer);
         cheatClearTimer = window.setTimeout(() => { cheatBuffer = ''; }, 2500);
         if (cheatBuffer.endsWith('EGOBOOM')) { activateCheat('boom'); cheatBuffer = ''; }
+        else if (cheatBuffer.endsWith('EGONEXT')) { activateCheat('next'); cheatBuffer = ''; }
         else if (cheatBuffer.endsWith('EGOKEY')) { activateCheat('key'); cheatBuffer = ''; }
         else if (cheatBuffer.endsWith('EGOD')) { activateCheat('god'); cheatBuffer = ''; }
       }
@@ -2270,6 +2280,12 @@ export default function Hellzone() {
       const fn = () => activateCheat('key');
       cheatKeyBtn.addEventListener('click', fn);
       fabCleanups.push(() => cheatKeyBtn.removeEventListener('click', fn));
+    }
+    const cheatNextBtn = root.querySelector<HTMLElement>('#hz-cheat-next');
+    if (cheatNextBtn) {
+      const fn = () => activateCheat('next');
+      cheatNextBtn.addEventListener('click', fn);
+      fabCleanups.push(() => cheatNextBtn.removeEventListener('click', fn));
     }
     if (cheatCloseBtn) {
       const fn = () => { showCheatsMenu = false; updateCheatsMenu(); };
@@ -2500,6 +2516,7 @@ export default function Hellzone() {
                 <button className="hz-cheat-btn" id="hz-cheat-god">EGOD — GOD MODE</button>
                 <button className="hz-cheat-btn" id="hz-cheat-boom">EGOBOOM — ALL WEAPONS</button>
                 <button className="hz-cheat-btn" id="hz-cheat-key">EGOKEY — ALL KEYS</button>
+                <button className="hz-cheat-btn" id="hz-cheat-next">EGONEXT — NEXT LEVEL</button>
                 <button className="hz-cheat-close" id="hz-cheat-close">CLOSE [ESC]</button>
               </div>
             </div>
