@@ -154,4 +154,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/peg-solitaire",
   },
+  {
+    id: "pinball",
+    title: "Pinball",
+    description: "Classic retro pinball. Hit bumpers, light lanes, and rack up a high score. 3 balls — don't drain!",
+    category: "game",
+    path: "/pinball",
+  },
 ];

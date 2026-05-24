@@ -9,10 +9,14 @@ interface StandaloneWindowProps {
   title: string;
   icon?: string;
   helpContent?: React.ReactNode;
+  /** Fill the entire viewport; titlebar + menubar at top, content takes remaining space. Default: false (centered floating window). */
+  fullscreen?: boolean;
+  /** If set, show this confirmation message before navigating away on close. */
+  confirmClose?: string;
   children: React.ReactNode;
 }
 
-export default function StandaloneWindow({ title, icon, helpContent, children }: StandaloneWindowProps) {
+export default function StandaloneWindow({ title, icon, helpContent, fullscreen, confirmClose, children }: StandaloneWindowProps) {
   const navigate = useNavigate();
   const [showHelp, setShowHelp] = useState(false);
 
@@ -27,30 +31,38 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
   }, []);
 
   function exitToDoors() {
+    if (confirmClose && !window.confirm(confirmClose)) return;
     navigate("/doors97", { state: { skipBoot: true } });
   }
 
-  const fileMenu: MenuBarMenu = {
-    label: "File",
-    items: [{ label: "Exit to Doors", onClick: exitToDoors }],
-  };
-
+  const exitItem = { label: "Exit to Doors", onClick: exitToDoors };
   const helpMenu: MenuBarMenu | null = helpContent
     ? { label: "Help", items: [{ label: "Keyboard Shortcuts", onClick: () => setShowHelp(true) }] }
     : null;
 
-  const menus: MenuBarMenu[] = [
-    fileMenu,
-    ...(dynamicMenus ?? []),
-    ...(helpMenu ? [helpMenu] : []),
-  ];
+  // If dynamic menus include a "File" menu, inject "Exit to Doors" at the bottom of it.
+  // Otherwise prepend a standalone File menu so the exit option is always reachable.
+  let menus: MenuBarMenu[];
+  if (dynamicMenus && dynamicMenus.some(m => m.label === "File")) {
+    menus = [
+      ...dynamicMenus.map(m =>
+        m.label === "File"
+          ? { ...m, items: [...m.items, { separator: true as const }, exitItem] }
+          : m
+      ),
+      ...(helpMenu ? [helpMenu] : []),
+    ];
+  } else {
+    const fileMenu: MenuBarMenu = { label: "File", items: [exitItem] };
+    menus = [fileMenu, ...(dynamicMenus ?? []), ...(helpMenu ? [helpMenu] : [])];
+  }
 
   return (
-    <div className="standalone-page">
-      <div className="standalone-window">
+    <div className={`standalone-page${fullscreen ? " standalone-page--fullscreen" : ""}`}>
+      <div className={`standalone-window${fullscreen ? " standalone-window--fullscreen" : ""}`}>
         <TitleBar title={title} icon={icon} onClose={exitToDoors} />
         <MenuBar menus={menus} />
-        <div className="standalone-window__content">
+        <div className={`standalone-window__content${fullscreen ? " standalone-window__content--fullscreen" : ""}`}>
           <WindowMenuContext.Provider value={registerMenus}>
             {children}
           </WindowMenuContext.Provider>

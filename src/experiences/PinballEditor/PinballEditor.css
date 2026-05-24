@@ -1,0 +1,461 @@
+.pbed {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  user-select: none;
+}
+
+/* ── Center row (canvas + sidebar) ────────────────────────────────────────── */
+
+.pbed__center {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Tool bar ──────────────────────────────────────────────────────────────── */
+
+.pbed__toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  background: #c0c0c0;
+  border-bottom: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.pbed__toolbar::-webkit-scrollbar { display: none; }
+
+/* Divider between play button and tool buttons */
+.pbed__toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: #808080;
+  margin: 2px 2px;
+  flex-shrink: 0;
+}
+
+.pbed__tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  cursor: pointer;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 40px;
+  touch-action: manipulation;
+  line-height: 1;
+}
+
+.pbed__tool-btn svg { display: block; }
+
+.pbed__tool-btn:active,
+.pbed__tool-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+
+.pbed__tool-btn--danger { color: #cc0000; }
+
+/* Green play button */
+.pbed__tool-btn--play {
+  color: #004400;
+  background: #88cc44;
+  border-color: #ccff88 #336600 #336600 #ccff88;
+}
+
+.pbed__tool-btn--play:active {
+  background: #669933;
+  border-color: #336600 #ccff88 #ccff88 #336600;
+}
+
+/* ── Canvas area ───────────────────────────────────────────────────────────── */
+
+.pbed__canvas-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #404040;
+  min-height: 0;
+}
+
+.pbed__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.pbed__canvas--pan    { cursor: grab; }
+.pbed__canvas--pan:active { cursor: grabbing; }
+.pbed__canvas--select { cursor: default; }
+.pbed__canvas--delete { cursor: crosshair; }
+.pbed__canvas--place  { cursor: crosshair; }
+
+/* ── ✏️ FAB — bottom-LEFT corner ───────────────────────────────────────────── */
+
+.pbed__props-fab {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  border-radius: 50%;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
+  touch-action: manipulation;
+  z-index: 10;
+}
+
+.pbed__props-fab:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #a0a0a0;
+}
+
+/* ── Zoom buttons — bottom-RIGHT corner ────────────────────────────────────── */
+
+.pbed__zoom-btns {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 10;
+}
+
+.pbed__zoom-btn {
+  width: 36px;
+  height: 28px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  cursor: pointer;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+}
+
+.pbed__zoom-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #a0a0a0;
+}
+
+/* ── Context menu ─────────────────────────────────────────────────────────── */
+
+.pbed__context-menu {
+  position: fixed;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 3px 3px 8px rgba(0,0,0,0.4);
+  z-index: 500;
+  min-width: 120px;
+}
+
+.pbed__ctx-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  color: #000;
+  border: none;
+  white-space: nowrap;
+}
+
+.pbed__ctx-item:hover {
+  background: #000080;
+  color: #fff;
+}
+
+.pbed__ctx-item--danger { color: #cc0000; }
+.pbed__ctx-item--danger:hover { background: #cc0000; color: #fff; }
+
+.pbed__ctx-sep {
+  height: 1px;
+  background: #808080;
+  margin: 2px 0;
+}
+
+.pbed__ctx-empty {
+  padding: 6px 10px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #666;
+}
+
+/* ── Properties modal ──────────────────────────────────────────────────────── */
+
+.pbed__modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pbed__modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 220px;
+  max-width: 340px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 4px 12px rgba(0,0,0,0.5);
+}
+
+.pbed__modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background: #000080;
+  color: #fff;
+  font-size: 7px;
+}
+
+.pbed__modal-close {
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 2px 5px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.pbed__modal-close:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+.pbed__modal-body {
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  align-content: start;
+}
+
+.pbed__modal-footer {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid #808080;
+}
+
+.pbed__ok-btn {
+  flex: 1;
+  padding: 5px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  background: #c0c0c0;
+  color: #000080;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+
+.pbed__ok-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+.pbed__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pbed__field label {
+  font-size: 5px;
+  color: #333;
+}
+
+.pbed__field input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 4px;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pbed__delete-btn {
+  flex: 1;
+  padding: 5px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  background: #c0c0c0;
+  color: #cc0000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+
+.pbed__delete-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ── Test play overlay ─────────────────────────────────────────────────────── */
+
+.pbed__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  gap: 12px;
+}
+
+.pbed__overlay-title {
+  font-size: 10px;
+  color: #ff6b00;
+}
+
+.pbed__overlay-btn {
+  padding: 8px 12px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pbed__overlay-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ── Properties sidebar ────────────────────────────────────────────────────── */
+
+/* Hidden on small screens; shown at ≥900px */
+.pbed__sidebar {
+  display: none;
+}
+
+.pbed__sidebar-header {
+  padding: 4px 6px;
+  background: #000080;
+  color: #fff;
+  font-size: 6px;
+  flex-shrink: 0;
+}
+
+.pbed__sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  align-content: start;
+}
+
+.pbed__sidebar-footer {
+  padding: 6px;
+  border-top: 1px solid #808080;
+  flex-shrink: 0;
+}
+
+.pbed__sidebar-empty {
+  padding: 10px 8px;
+  font-size: 5px;
+  color: #555;
+  line-height: 1.8;
+}
+
+/* ── Large-screen responsive layout (≥900px) ───────────────────────────────── */
+
+@media (min-width: 900px) {
+  /* Rotate toolbar to vertical strip on the left */
+  .pbed {
+    flex-direction: row;
+  }
+
+  .pbed__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-bottom: none;
+    border-right: 2px solid #808080;
+    padding: 4px 3px;
+    width: 58px;
+  }
+
+  .pbed__toolbar-sep {
+    width: auto;
+    height: 1px;
+    margin: 2px 0;
+  }
+
+  /* Stack icon + label vertically (already the default flex-direction: column) */
+  .pbed__tool-btn {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* Center row fills the remaining space */
+  .pbed__center {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Show sidebar */
+  .pbed__sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 200px;
+    flex-shrink: 0;
+    background: #c0c0c0;
+    border-left: 2px solid #808080;
+    overflow: hidden;
+  }
+
+  /* FAB is redundant on large screens — sidebar handles properties */
+  .pbed__props-fab {
+    display: none;
+  }
+}

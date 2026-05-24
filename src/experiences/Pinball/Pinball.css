@@ -1,0 +1,187 @@
+.pinball {
+  display: flex;
+  flex-direction: column;
+  background: #1a0a2e;
+  user-select: none;
+  outline: none;
+}
+
+.pinball__canvas-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: #0a0018;
+}
+
+.pinball__canvas {
+  display: block;
+}
+
+.pinball__hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: #c0c0c0;
+  border-top: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #000;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pinball__hud-score {
+  color: #cc4400;
+}
+
+.pinball__hud-balls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.pinball__ball-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c0c0c0;
+  border: 1px solid #808080;
+}
+
+.pinball__ball-pip--used {
+  background: #333;
+  border-color: #555;
+}
+
+.pinball__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  font-family: "Press Start 2P", monospace;
+  color: #fff;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.pinball__overlay-title {
+  font-size: 14px;
+  color: #ff6b00;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.pinball__overlay-sub {
+  font-size: 8px;
+  color: #c0c0c0;
+}
+
+.pinball__overlay-score {
+  font-size: 10px;
+  color: #ffd700;
+}
+
+.pinball__wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.pinball__touch-controls {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #c0c0c0;
+  border-top: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.pinball__touch-btn {
+  flex: 1;
+  padding: 10px 4px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pinball__touch-btn:active,
+.pinball__touch-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+
+.pinball__touch-btn--launch {
+  background: #c0c0c0;
+  color: #cc4400;
+}
+
+.pinball__touch-btn--launch:active {
+  background: #b0b0b0;
+}
+
+.pinball__about-box {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  pointer-events: auto;
+}
+
+.pinball__about-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: #ff6b00;
+  text-shadow: 1px 1px 0 #000;
+  border-bottom: 1px solid #808080;
+  width: 100%;
+  text-align: center;
+  padding-bottom: 6px;
+}
+
+.pinball__about-body {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  text-align: center;
+  line-height: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pinball__about-body p {
+  margin: 0;
+}
+
+.pinball__about-credits {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #808080;
+  color: #444;
+}
+
+.pinball__about-link {
+  color: #000080;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pinball__about-link:hover {
+  color: #cc4400;
+}

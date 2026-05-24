@@ -110,6 +110,7 @@ const GAMES_ITEMS = [
   { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
   { id: "chain-reaction", icon: "🔗", label: "Chain Reaction"   },
   { id: "peg-solitaire",  icon: "🔴", label: "Peg Solitaire"    },
+  { id: "pinball",        icon: "🎮", label: "Pinball"          },
 ] as const;
 
 const TOOLS_ITEMS = [
