@@ -6,7 +6,8 @@
   "plunger": {
     "x": 296,
     "topY": 60,
-    "bottomY": 540
+    "bottomY": 540,
+    "launchPower": 1.0
   },
   "walls": [
     { "x": 160, "y": 6, "w": 320, "h": 12 },

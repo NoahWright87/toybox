@@ -9,10 +9,14 @@ interface StandaloneWindowProps {
   title: string;
   icon?: string;
   helpContent?: React.ReactNode;
+  /** Fill the entire viewport; titlebar + menubar at top, content takes remaining space. Default: false (centered floating window). */
+  fullscreen?: boolean;
+  /** If set, show this confirmation message before navigating away on close. */
+  confirmClose?: string;
   children: React.ReactNode;
 }
 
-export default function StandaloneWindow({ title, icon, helpContent, children }: StandaloneWindowProps) {
+export default function StandaloneWindow({ title, icon, helpContent, fullscreen, confirmClose, children }: StandaloneWindowProps) {
   const navigate = useNavigate();
   const [showHelp, setShowHelp] = useState(false);
 
@@ -27,6 +31,7 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
   }, []);
 
   function exitToDoors() {
+    if (confirmClose && !window.confirm(confirmClose)) return;
     navigate("/doors97", { state: { skipBoot: true } });
   }
 
@@ -46,11 +51,11 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
   ];
 
   return (
-    <div className="standalone-page">
-      <div className="standalone-window">
+    <div className={`standalone-page${fullscreen ? " standalone-page--fullscreen" : ""}`}>
+      <div className={`standalone-window${fullscreen ? " standalone-window--fullscreen" : ""}`}>
         <TitleBar title={title} icon={icon} onClose={exitToDoors} />
         <MenuBar menus={menus} />
-        <div className="standalone-window__content">
+        <div className={`standalone-window__content${fullscreen ? " standalone-window__content--fullscreen" : ""}`}>
           <WindowMenuContext.Provider value={registerMenus}>
             {children}
           </WindowMenuContext.Provider>

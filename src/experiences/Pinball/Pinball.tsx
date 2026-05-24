@@ -8,7 +8,8 @@ import "./Pinball.css";
 const SUBSTEPS = 3;
 const DT = (1000 / 60) / SUBSTEPS;
 const BALL_R = 10;
-const SPEED_CAP = 15;
+const SPEED_CAP = 30;
+const LAUNCH_MAX_VY = 35; // base launch velocity at full charge (before launchPower multiplier)
 const FLIPPER_REST_L = 0.5;
 const FLIPPER_UP_L = -0.45;
 const FLIPPER_REST_R = -0.5;
@@ -670,7 +671,7 @@ export default function Pinball({ board, onQuit }: Props) {
         Matter.Body.setStatic(ball, false);
         const charge = st.plungerCharge;
         st.plungerCharge = 0;
-        Matter.Body.setVelocity(ball, { x: 0, y: -(charge * 18 + 4) });
+        Matter.Body.setVelocity(ball, { x: 0, y: -(Math.max(0.1, charge) * LAUNCH_MAX_VY * (board.plunger.launchPower ?? 1.0) + 4) });
         st.phase = "playing";
       }
     }

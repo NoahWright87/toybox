@@ -47,6 +47,7 @@ export interface BoardPlunger {
   x: number;
   topY: number;
   bottomY: number;
+  launchPower?: number; // multiplier on max launch velocity (default 1.0)
 }
 
 export interface Board {

@@ -1,22 +1,26 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import type {
   Board, BoardWall, BoardBumper, BoardPost, BoardFlipper,
   BoardSlingshot, BoardTarget,
 } from "../Pinball/boardTypes";
+import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import Pinball from "../Pinball/Pinball";
 import classicBoard from "../Pinball/boards/classic.json";
 import "./PinballEditor.css";
 
 const LS_KEY = "pinball_editor_board";
-const HANDLE_R = 9;     // screen pixels
+const HANDLE_R = 9;
 const SNAP = 4;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 type Tool = "select" | "wall" | "bumper" | "post" | "flipper-l" | "flipper-r"
   | "slingshot" | "target" | "delete";
 
-type SelKind = "wall" | "bumper" | "post" | "flipper" | "slingshot" | "target";
+type SelKind = "wall" | "bumper" | "post" | "flipper" | "slingshot" | "target" | "plunger";
 interface SelItem { kind: SelKind; idx: number; }
 
 interface ViewXform { x: number; y: number; scale: number; }
@@ -31,6 +35,11 @@ interface DragState {
   handle?: Handle;
   origBoard?: Board;
   startViewX?: number; startViewY?: number;
+}
+
+interface ContextMenu {
+  clientX: number; clientY: number;
+  item: SelItem | null;
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -70,6 +79,11 @@ function s2b(sx: number, sy: number, v: ViewXform): [number, number] {
 // ── Hit testing ───────────────────────────────────────────────────────────────
 
 function hitTest(board: Board, bx: number, by: number): SelItem | null {
+  // Plunger lane (non-deletable)
+  const pl = board.plunger;
+  if (bx >= pl.x - 15 && bx <= pl.x + 10 && by >= pl.topY && by <= pl.bottomY)
+    return { kind: "plunger", idx: 0 };
+
   for (let i = board.flippers.length - 1; i >= 0; i--) {
     const f = board.flippers[i];
     if (Math.hypot(bx - f.pivotX, by - f.pivotY) < 12) return { kind: "flipper", idx: i };
@@ -183,20 +197,15 @@ function applyHandleDrag(board: Board, sel: SelItem, handle: Handle, bx: number,
     const el = arr[sel.idx];
     const a = el.angle ?? 0;
     const dx = bx - el.x, dy = by - el.y;
-
     if (handle.kind === "rotate") {
       const newAngle = Math.atan2(dx, -dy);
-      const next = arr.map((e, i) => i === sel.idx ? { ...e, angle: newAngle } : e);
-      return { ...board, [arrKey]: next };
+      return { ...board, [arrKey]: arr.map((e, i) => i === sel.idx ? { ...e, angle: newAngle } : e) };
     }
-
-    // Corner resize: symmetric from center
     const lx = dx * Math.cos(a) + dy * Math.sin(a);
     const ly = -dx * Math.sin(a) + dy * Math.cos(a);
     const newW = Math.max(8, 2 * Math.abs(lx));
     const newH = Math.max(8, 2 * Math.abs(ly));
-    const next = arr.map((e, i) => i === sel.idx ? { ...e, w: newW, h: newH } : e);
-    return { ...board, [arrKey]: next };
+    return { ...board, [arrKey]: arr.map((e, i) => i === sel.idx ? { ...e, w: newW, h: newH } : e) };
   }
   if (sel.kind === "bumper") {
     const b = board.bumpers[sel.idx];
@@ -212,24 +221,28 @@ function applyHandleDrag(board: Board, sel: SelItem, handle: Handle, bx: number,
 }
 
 function moveItems(board: Board, items: SelItem[], dbx: number, dby: number): Board {
-  const b = { ...board };
-  const movedWalls = new Set(items.filter(s => s.kind === "wall").map(s => s.idx));
-  const movedBumpers = new Set(items.filter(s => s.kind === "bumper").map(s => s.idx));
-  const movedPosts = new Set(items.filter(s => s.kind === "post").map(s => s.idx));
-  const movedFlippers = new Set(items.filter(s => s.kind === "flipper").map(s => s.idx));
-  const movedSlings = new Set(items.filter(s => s.kind === "slingshot").map(s => s.idx));
-  const movedTargets = new Set(items.filter(s => s.kind === "target").map(s => s.idx));
-  b.walls = board.walls.map((w, i) => movedWalls.has(i) ? { ...w, x: snap(w.x + dbx), y: snap(w.y + dby) } : w);
-  b.bumpers = board.bumpers.map((bm, i) => movedBumpers.has(i) ? { ...bm, x: snap(bm.x + dbx), y: snap(bm.y + dby) } : bm);
-  b.posts = board.posts.map((p, i) => movedPosts.has(i) ? { ...p, x: snap(p.x + dbx), y: snap(p.y + dby) } : p);
-  b.flippers = board.flippers.map((f, i) => movedFlippers.has(i) ? { ...f, pivotX: snap(f.pivotX + dbx), pivotY: snap(f.pivotY + dby) } : f);
-  b.slingshots = board.slingshots.map((sl, i) => movedSlings.has(i) ? { ...sl, x: snap(sl.x + dbx), y: snap(sl.y + dby) } : sl);
-  b.targets = board.targets.map((t, i) => movedTargets.has(i) ? { ...t, x: snap(t.x + dbx), y: snap(t.y + dby) } : t);
-  return b;
+  const movedWalls = new Set<number>(items.filter(s => s.kind === "wall").map(s => s.idx));
+  const movedBumpers = new Set<number>(items.filter(s => s.kind === "bumper").map(s => s.idx));
+  const movedPosts = new Set<number>(items.filter(s => s.kind === "post").map(s => s.idx));
+  const movedFlippers = new Set<number>(items.filter(s => s.kind === "flipper").map(s => s.idx));
+  const movedSlings = new Set<number>(items.filter(s => s.kind === "slingshot").map(s => s.idx));
+  const movedTargets = new Set<number>(items.filter(s => s.kind === "target").map(s => s.idx));
+  const movedPlunger = items.some(s => s.kind === "plunger");
+  return {
+    ...board,
+    walls: board.walls.map((w, i) => movedWalls.has(i) ? { ...w, x: snap(w.x + dbx), y: snap(w.y + dby) } : w),
+    bumpers: board.bumpers.map((b, i) => movedBumpers.has(i) ? { ...b, x: snap(b.x + dbx), y: snap(b.y + dby) } : b),
+    posts: board.posts.map((p, i) => movedPosts.has(i) ? { ...p, x: snap(p.x + dbx), y: snap(p.y + dby) } : p),
+    flippers: board.flippers.map((f, i) => movedFlippers.has(i) ? { ...f, pivotX: snap(f.pivotX + dbx), pivotY: snap(f.pivotY + dby) } : f),
+    slingshots: board.slingshots.map((sl, i) => movedSlings.has(i) ? { ...sl, x: snap(sl.x + dbx), y: snap(sl.y + dby) } : sl),
+    targets: board.targets.map((t, i) => movedTargets.has(i) ? { ...t, x: snap(t.x + dbx), y: snap(t.y + dby) } : t),
+    plunger: movedPlunger ? { ...board.plunger, x: snap(board.plunger.x + dbx) } : board.plunger,
+  };
 }
 
 function deleteItems(board: Board, items: SelItem[]): Board {
-  const toDelete = (k: SelKind) => new Set(items.filter(s => s.kind === k).map(s => s.idx));
+  // Plunger can't be deleted
+  const toDelete = (k: SelKind) => new Set<number>(items.filter(s => s.kind === k).map(s => s.idx));
   return {
     ...board,
     walls: board.walls.filter((_, i) => !toDelete("wall").has(i)),
@@ -241,6 +254,107 @@ function deleteItems(board: Board, items: SelItem[]): Board {
   };
 }
 
+function duplicateItem(board: Board, s: SelItem): { board: Board; newSel: SelItem } {
+  const D = 12;
+  if (s.kind === "wall") {
+    const w = { ...board.walls[s.idx], x: board.walls[s.idx].x + D, y: board.walls[s.idx].y + D };
+    return { board: { ...board, walls: [...board.walls, w] }, newSel: { kind: "wall", idx: board.walls.length } };
+  }
+  if (s.kind === "bumper") {
+    const b = { ...board.bumpers[s.idx], x: board.bumpers[s.idx].x + D, y: board.bumpers[s.idx].y + D };
+    return { board: { ...board, bumpers: [...board.bumpers, b] }, newSel: { kind: "bumper", idx: board.bumpers.length } };
+  }
+  if (s.kind === "post") {
+    const p = { ...board.posts[s.idx], x: board.posts[s.idx].x + D, y: board.posts[s.idx].y + D };
+    return { board: { ...board, posts: [...board.posts, p] }, newSel: { kind: "post", idx: board.posts.length } };
+  }
+  if (s.kind === "flipper") {
+    const f = { ...board.flippers[s.idx], pivotX: board.flippers[s.idx].pivotX + D, pivotY: board.flippers[s.idx].pivotY + D };
+    return { board: { ...board, flippers: [...board.flippers, f] }, newSel: { kind: "flipper", idx: board.flippers.length } };
+  }
+  if (s.kind === "slingshot") {
+    const sl = { ...board.slingshots[s.idx], x: board.slingshots[s.idx].x + D, y: board.slingshots[s.idx].y + D };
+    return { board: { ...board, slingshots: [...board.slingshots, sl] }, newSel: { kind: "slingshot", idx: board.slingshots.length } };
+  }
+  if (s.kind === "target") {
+    const t = { ...board.targets[s.idx], x: board.targets[s.idx].x + D, y: board.targets[s.idx].y + D };
+    return { board: { ...board, targets: [...board.targets, t] }, newSel: { kind: "target", idx: board.targets.length } };
+  }
+  return { board, newSel: s };
+}
+
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
+
+const IconPan = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M10 16V9M10 9Q10 7 12 7Q14 7 14 9V13M14 9Q14 7 16 7Q18 7 18 9V13Q18 17 14 18L8 18Q4 18 4 14V12Q4 10 6 10Q8 10 8 11V9Q8 7 10 7"/>
+  </svg>
+);
+
+const IconSelect = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
+    <path d="M4 3L4 17L7.5 13L10.5 19L12.5 18L9.5 12L15 12Z"/>
+  </svg>
+);
+
+const IconWall = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="2" y="6" width="16" height="8"/>
+  </svg>
+);
+
+const IconBumper = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="10" cy="10" r="6"/>
+    <circle cx="10" cy="2.5" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="17" cy="14" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="3" cy="14" r="1.5" fill="currentColor" stroke="none"/>
+  </svg>
+);
+
+const IconPost = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
+    <circle cx="10" cy="10" r="4"/>
+    <circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+  </svg>
+);
+
+const IconFlipperL = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M3 14L17 10L17 14Z"/>
+    <circle cx="3" cy="14" r="2.5" fill="currentColor" stroke="none"/>
+  </svg>
+);
+
+const IconFlipperR = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M17 14L3 10L3 14Z"/>
+    <circle cx="17" cy="14" r="2.5" fill="currentColor" stroke="none"/>
+  </svg>
+);
+
+const IconSlingshot = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="2" y="6" width="16" height="8" transform="rotate(-10 10 10)"/>
+    <line x1="5" y1="9" x2="15" y2="9" transform="rotate(-10 10 10)" strokeDasharray="2 2"/>
+  </svg>
+);
+
+const IconTarget = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="3" y="7" width="14" height="6"/>
+    <line x1="10" y1="7" x2="10" y2="13"/>
+    <line x1="10" y1="5" x2="10" y2="7" strokeWidth="2"/>
+  </svg>
+);
+
+const IconDelete = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" stroke="currentColor" strokeWidth="2.5">
+    <line x1="4" y1="4" x2="16" y2="16"/>
+    <line x1="16" y1="4" x2="4" y2="16"/>
+  </svg>
+);
+
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
 function drawScene(
@@ -251,18 +365,13 @@ function drawScene(
   rubber: { bx1: number; by1: number; bx2: number; by2: number } | null,
   preview: { bx1: number; by1: number; bx2: number; by2: number } | null,
 ) {
-  const { width: W, height: H } = canvas2board(ctx.canvas, view);
-  void W; void H;
-
-  // Clear canvas
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#404040";
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-  // Apply view transform for board drawing
   ctx.setTransform(view.scale, 0, 0, view.scale, view.x, view.y);
 
-  const isSelected = (kind: SelKind, idx: number) => selected.some(s => s.kind === kind && s.idx === idx);
+  const isSel = (kind: SelKind, idx: number) => selected.some(s => s.kind === kind && s.idx === idx);
 
   // Board background
   ctx.fillStyle = "#0a0018";
@@ -277,42 +386,32 @@ function drawScene(
   for (let y = 0; y <= board.height; y += 10) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(board.width, y); ctx.stroke();
   }
-
-  // Boundary
-  ctx.strokeStyle = "#5030a0";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#5030a0"; ctx.lineWidth = 2;
   ctx.strokeRect(1, 1, board.width - 2, board.height - 2);
 
   // Walls
   board.walls.forEach((w, i) => {
-    const sel = isSelected("wall", i);
+    const sel = isSel("wall", i);
     ctx.save();
-    ctx.translate(w.x, w.y);
-    ctx.rotate(w.angle ?? 0);
+    ctx.translate(w.x, w.y); ctx.rotate(w.angle ?? 0);
     ctx.fillStyle = sel ? "#8060ff" : "#2a1050";
     ctx.strokeStyle = sel ? "#c0a0ff" : "#5030a0";
     ctx.lineWidth = sel ? 2 : 1;
-    ctx.beginPath();
-    ctx.rect(-w.w / 2, -w.h / 2, w.w, w.h);
-    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(-w.w / 2, -w.h / 2, w.w, w.h); ctx.fill(); ctx.stroke();
     ctx.restore();
   });
 
   // Targets
   board.targets.forEach((t, i) => {
-    const sel = isSelected("target", i);
+    const sel = isSel("target", i);
     ctx.save();
-    ctx.translate(t.x, t.y);
-    ctx.rotate(t.angle ?? 0);
+    ctx.translate(t.x, t.y); ctx.rotate(t.angle ?? 0);
     ctx.fillStyle = sel ? "#ff9030" : "#cc4400";
     ctx.strokeStyle = sel ? "#ffc080" : "#ffcc88";
     ctx.lineWidth = sel ? 2 : 1;
-    ctx.beginPath();
-    ctx.rect(-t.w / 2, -t.h / 2, t.w, t.h);
-    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(-t.w / 2, -t.h / 2, t.w, t.h); ctx.fill(); ctx.stroke();
     if (t.label) {
-      ctx.fillStyle = "#fff";
-      ctx.font = "5px 'Press Start 2P'";
+      ctx.fillStyle = "#fff"; ctx.font = "5px 'Press Start 2P'";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(t.label, 0, 0);
     }
@@ -321,24 +420,20 @@ function drawScene(
 
   // Slingshots
   board.slingshots.forEach((sl, i) => {
-    const sel = isSelected("slingshot", i);
+    const sel = isSel("slingshot", i);
     ctx.save();
-    ctx.translate(sl.x, sl.y);
-    ctx.rotate(sl.angle ?? 0);
+    ctx.translate(sl.x, sl.y); ctx.rotate(sl.angle ?? 0);
     ctx.fillStyle = sel ? "#9060e0" : "#5b2d8e";
     ctx.strokeStyle = sel ? "#d0a0ff" : "#9060d0";
     ctx.lineWidth = sel ? 2 : 1;
-    ctx.beginPath();
-    ctx.rect(-sl.w / 2, -sl.h / 2, sl.w, sl.h);
-    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(-sl.w / 2, -sl.h / 2, sl.w, sl.h); ctx.fill(); ctx.stroke();
     ctx.restore();
   });
 
   // Bumpers
   board.bumpers.forEach((b, i) => {
-    const sel = isSelected("bumper", i);
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    const sel = isSel("bumper", i);
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
     ctx.fillStyle = sel ? "#e0b0ff" : "#7b3dbe";
     ctx.strokeStyle = sel ? "#fff" : "#c080ff";
     ctx.lineWidth = sel ? 2 : 1;
@@ -353,9 +448,8 @@ function drawScene(
 
   // Posts
   board.posts.forEach((p, i) => {
-    const sel = isSelected("post", i);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    const sel = isSel("post", i);
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     ctx.fillStyle = sel ? "#ffffff" : "#c0c0c0";
     ctx.strokeStyle = sel ? "#ffd700" : "#808080";
     ctx.lineWidth = sel ? 2 : 1;
@@ -364,11 +458,10 @@ function drawScene(
 
   // Flippers
   board.flippers.forEach((f, i) => {
-    const sel = isSelected("flipper", i);
+    const sel = isSel("flipper", i);
     const ra = f.side === "left" ? 0.5 : -0.5;
     ctx.save();
-    ctx.translate(f.pivotX, f.pivotY);
-    ctx.rotate(ra);
+    ctx.translate(f.pivotX, f.pivotY); ctx.rotate(ra);
     ctx.fillStyle = sel ? "#ffffff" : "#c0c0c0";
     ctx.strokeStyle = sel ? "#ffd700" : "#606060";
     ctx.lineWidth = sel ? 2 : 1;
@@ -378,125 +471,93 @@ function drawScene(
       ctx.beginPath(); ctx.rect(-f.length, -4, f.length, 8); ctx.fill(); ctx.stroke();
     }
     ctx.restore();
-    ctx.beginPath();
-    ctx.arc(f.pivotX, f.pivotY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = sel ? "#ffd700" : "#d0d0d0";
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(f.pivotX, f.pivotY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = sel ? "#ffd700" : "#d0d0d0"; ctx.fill();
   });
 
   // Plunger lane
   const pl = board.plunger;
-  ctx.fillStyle = "rgba(200,150,255,0.3)";
-  ctx.strokeStyle = "#a080e0";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.rect((pl.x - 15), pl.topY, 20, pl.bottomY - pl.topY);
-  ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#a080e0";
-  ctx.font = "5px 'Press Start 2P'";
-  ctx.textAlign = "center";
+  const plSel = isSel("plunger", 0);
+  ctx.fillStyle = plSel ? "rgba(255,200,100,0.4)" : "rgba(200,150,255,0.3)";
+  ctx.strokeStyle = plSel ? "#ffcc00" : "#a080e0";
+  ctx.lineWidth = plSel ? 2 : 1;
+  ctx.beginPath(); ctx.rect((pl.x - 15), pl.topY, 20, pl.bottomY - pl.topY); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = plSel ? "#ffcc00" : "#a080e0";
+  ctx.font = "5px 'Press Start 2P'"; ctx.textAlign = "center";
   ctx.fillText("P", pl.x, pl.topY + 10);
+  if (plSel) {
+    ctx.fillStyle = "#ffcc00"; ctx.font = "4px 'Press Start 2P'";
+    ctx.fillText(`PWR ${(pl.launchPower ?? 1.0).toFixed(1)}×`, pl.x, pl.topY + 22);
+  }
 
   // Ball start
-  ctx.beginPath();
-  ctx.arc(board.ballStartX, board.ballStartY, 10, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(board.ballStartX, board.ballStartY, 10, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.2)"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1;
   ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#fff";
-  ctx.font = "5px 'Press Start 2P'";
+  ctx.fillStyle = "#fff"; ctx.font = "5px 'Press Start 2P'";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText("B", board.ballStartX, board.ballStartY);
 
-  // Draw preview rect (wall/sling/target in progress)
+  // Preview rect
   if (preview) {
-    const px = Math.min(preview.bx1, preview.bx2);
-    const py = Math.min(preview.by1, preview.by2);
-    const pw = Math.abs(preview.bx2 - preview.bx1);
-    const ph = Math.abs(preview.by2 - preview.by1);
-    ctx.strokeStyle = "#00ff88";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(px, py, pw, ph);
-    ctx.setLineDash([]);
+    const px = Math.min(preview.bx1, preview.bx2), py = Math.min(preview.by1, preview.by2);
+    const pw = Math.abs(preview.bx2 - preview.bx1), ph = Math.abs(preview.by2 - preview.by1);
+    ctx.strokeStyle = "#00ff88"; ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]); ctx.strokeRect(px, py, pw, ph); ctx.setLineDash([]);
   }
 
-  // Rubber band selection rect
+  // Rubber band
   if (rubber) {
-    const rx = Math.min(rubber.bx1, rubber.bx2);
-    const ry = Math.min(rubber.by1, rubber.by2);
-    const rw = Math.abs(rubber.bx2 - rubber.bx1);
-    const rh = Math.abs(rubber.by2 - rubber.by1);
-    ctx.strokeStyle = "#00aaff";
-    ctx.fillStyle = "rgba(0,170,255,0.08)";
-    ctx.lineWidth = 1;
+    const rx = Math.min(rubber.bx1, rubber.bx2), ry = Math.min(rubber.by1, rubber.by2);
+    const rw = Math.abs(rubber.bx2 - rubber.bx1), rh = Math.abs(rubber.by2 - rubber.by1);
+    ctx.strokeStyle = "#00aaff"; ctx.fillStyle = "rgba(0,170,255,0.08)"; ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.rect(rx, ry, rw, rh);
-    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.fill(); ctx.stroke();
     ctx.setLineDash([]);
   }
 
-  // Handles (drawn in screen space at fixed size)
+  // Handles (drawn in screen space)
   if (selected.length === 1) {
     const handles = getHandles(board, selected, view);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Line from center to rotate handle
+    const rot = handles.find(h => h.kind === "rotate");
+    if (rot) {
+      const s = selected[0];
+      const [ecx, ecy] = s.kind === "wall" ? [board.walls[s.idx].x, board.walls[s.idx].y]
+        : s.kind === "slingshot" ? [board.slingshots[s.idx].x, board.slingshots[s.idx].y]
+        : s.kind === "target" ? [board.targets[s.idx].x, board.targets[s.idx].y]
+        : [0, 0];
+      const [csx, csy] = b2s(ecx, ecy, view);
+      const [rsx, rsy] = b2s(rot.bx, rot.by, view);
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = "rgba(0,255,136,0.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(csx, csy); ctx.lineTo(rsx, rsy); ctx.stroke();
+      ctx.setLineDash([]);
+    }
     handles.forEach(h => {
       const [sx, sy] = b2s(h.bx, h.by, view);
-      ctx.beginPath();
-      ctx.arc(sx, sy, HANDLE_R, 0, Math.PI * 2);
-      if (h.kind === "rotate") {
-        ctx.fillStyle = "#00ff88";
-        ctx.strokeStyle = "#004400";
-      } else {
-        ctx.fillStyle = "#ffffff";
-        ctx.strokeStyle = "#0044cc";
-      }
-      ctx.lineWidth = 2;
-      ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx, sy, HANDLE_R, 0, Math.PI * 2);
+      ctx.fillStyle = h.kind === "rotate" ? "#00ff88" : "#ffffff";
+      ctx.strokeStyle = h.kind === "rotate" ? "#004400" : "#0044cc";
+      ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
     });
-    // Dashed line from element center to rotate handle
-    if (handles.length > 0) {
-      const rot = handles.find(h => h.kind === "rotate");
-      if (rot) {
-        const s = selected[0];
-        const cx = s.kind === "wall" ? board.walls[s.idx].x
-          : s.kind === "slingshot" ? board.slingshots[s.idx].x
-          : s.kind === "target" ? board.targets[s.idx].x : 0;
-        const cy = s.kind === "wall" ? board.walls[s.idx].y
-          : s.kind === "slingshot" ? board.slingshots[s.idx].y
-          : s.kind === "target" ? board.targets[s.idx].y : 0;
-        const [csx, csy] = b2s(cx, cy, view);
-        const [rsx, rsy] = b2s(rot.bx, rot.by, view);
-        ctx.beginPath();
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = "rgba(0,255,136,0.5)";
-        ctx.lineWidth = 1;
-        ctx.moveTo(csx, csy); ctx.lineTo(rsx, rsy);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
   }
 }
 
-function canvas2board(_canvas: HTMLCanvasElement, _view: ViewXform) {
-  return { width: 0, height: 0 };
-}
+// ── Tool definitions ──────────────────────────────────────────────────────────
 
-// ── Tool labels ───────────────────────────────────────────────────────────────
-
-const TOOL_LABELS: Record<Tool, string> = {
-  select: "✦ SEL",
-  wall: "WALL",
-  bumper: "BUMPER",
-  post: "POST",
-  "flipper-l": "FLIP L",
-  "flipper-r": "FLIP R",
-  slingshot: "SLING",
-  target: "TARGET",
-  delete: "✕ DEL",
-};
+const TOOLS: { id: Tool; label: string; Icon: React.FC }[] = [
+  { id: "select",    label: "Select",    Icon: IconSelect },
+  { id: "wall",      label: "Wall",      Icon: IconWall },
+  { id: "bumper",    label: "Bumper",    Icon: IconBumper },
+  { id: "post",      label: "Post",      Icon: IconPost },
+  { id: "flipper-l", label: "Flip L",    Icon: IconFlipperL },
+  { id: "flipper-r", label: "Flip R",    Icon: IconFlipperR },
+  { id: "slingshot", label: "Sling",     Icon: IconSlingshot },
+  { id: "target",    label: "Target",    Icon: IconTarget },
+  { id: "delete",    label: "Delete",    Icon: IconDelete },
+];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -508,16 +569,17 @@ export default function PinballEditor() {
   const [rubber, setRubber] = useState<{ bx1: number; by1: number; bx2: number; by2: number } | null>(null);
   const [preview, setPreview] = useState<{ bx1: number; by1: number; bx2: number; by2: number } | null>(null);
   const [testPlay, setTestPlay] = useState(false);
-  const [showFileMenu, setShowFileMenu] = useState(false);
   const [showProps, setShowProps] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
 
-  // Mirror mutable state into refs so handlers always see current values
   const viewRef = useRef(view); viewRef.current = view;
   const boardRef = useRef(board); boardRef.current = board;
   const selectedRef = useRef(selected); selectedRef.current = selected;
   const toolRef = useRef(tool); toolRef.current = tool;
+  const showPropsRef = useRef(showProps); showPropsRef.current = showProps;
 
   const dragRef = useRef<DragState | null>(null);
+  const middlePanRef = useRef<{ startSX: number; startSY: number; startVX: number; startVY: number } | null>(null);
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -531,6 +593,109 @@ export default function PinballEditor() {
     });
   }, []);
 
+  // ── Window menus ────────────────────────────────────────────────────────────
+
+  const handleImport = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".json";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          setBoard(JSON.parse(ev.target?.result as string) as Board);
+          setSelected([]);
+        } catch { /* ignore */ }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [setBoard]);
+
+  const handleClearAll = useCallback(() => {
+    if (!window.confirm("Clear the entire board?")) return;
+    setBoard(prev => ({ ...prev, walls: [], bumpers: [], posts: [], flippers: [], slingshots: [], targets: [] }));
+    setSelected([]);
+  }, [setBoard]);
+
+  const handleResetToClassic = useCallback(() => {
+    if (!window.confirm("Reset to classic board? All changes will be lost.")) return;
+    setBoard(classicBoard as Board); setSelected([]);
+  }, [setBoard]);
+
+  const deleteSelected = useCallback(() => {
+    const sel = selectedRef.current;
+    if (sel.length === 0) return;
+    setBoard(prev => deleteItems(prev, sel));
+    setSelected([]);
+  }, [setBoard]);
+
+  const duplicateSelected = useCallback(() => {
+    const sel = selectedRef.current;
+    if (sel.length !== 1 || sel[0].kind === "plunger") return;
+    const { board: next, newSel } = duplicateItem(boardRef.current, sel[0]);
+    setBoard(next);
+    setSelected([newSel]);
+  }, [setBoard]);
+
+  const zoomIn = useCallback(() => setView(v => {
+    const s = Math.min(MAX_SCALE, v.scale * 1.25);
+    const cx = (canvasRef.current?.width ?? 400) / 2;
+    const cy = (canvasRef.current?.height ?? 600) / 2;
+    const bx = (cx - v.x) / v.scale, by = (cy - v.y) / v.scale;
+    return { scale: s, x: cx - bx * s, y: cy - by * s };
+  }), []);
+
+  const zoomOut = useCallback(() => setView(v => {
+    const s = Math.max(MIN_SCALE, v.scale * 0.8);
+    const cx = (canvasRef.current?.width ?? 400) / 2;
+    const cy = (canvasRef.current?.height ?? 600) / 2;
+    const bx = (cx - v.x) / v.scale, by = (cy - v.y) / v.scale;
+    return { scale: s, x: cx - bx * s, y: cy - by * s };
+  }), []);
+
+  const fitToScreen = useCallback(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const s = Math.min(c.width / boardRef.current.width * 0.9, c.height / boardRef.current.height * 0.9);
+    setView({ x: (c.width - boardRef.current.width * s) / 2, y: (c.height - boardRef.current.height * s) / 2, scale: s });
+  }, []);
+
+  const menus = useMemo<MenuBarMenu[]>(() => [
+    {
+      label: "File",
+      items: [
+        { label: "Export JSON",        onClick: () => exportBoard(boardRef.current) },
+        { label: "Import JSON",        onClick: handleImport },
+        { separator: true },
+        { label: "Reset to Classic",   onClick: handleResetToClassic },
+        { label: "Clear All",          onClick: handleClearAll },
+        { separator: true },
+        { label: "▶  Test Play",       onClick: () => setTestPlay(true) },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        { label: "Delete Selected  Del",    onClick: deleteSelected },
+        { label: "Duplicate        Ctrl+D", onClick: duplicateSelected },
+        { separator: true },
+        { label: "Properties…",            onClick: () => setShowProps(true) },
+      ],
+    },
+    {
+      label: "View",
+      items: [
+        { label: "Zoom In   +", onClick: zoomIn },
+        { label: "Zoom Out  −", onClick: zoomOut },
+        { label: "Fit Board  F", onClick: fitToScreen },
+      ],
+    },
+  ], [handleImport, handleClearAll, handleResetToClassic, deleteSelected, duplicateSelected, zoomIn, zoomOut, fitToScreen]);
+
+  useWindowMenus(menus);
+
   // ── Canvas draw ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -538,7 +703,6 @@ export default function PinballEditor() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Sync canvas buffer size to CSS size
     const container = canvas.parentElement;
     if (container) {
       const w = container.clientWidth, h = container.clientHeight;
@@ -547,7 +711,6 @@ export default function PinballEditor() {
     drawScene(ctx, board, view, selected, rubber, preview);
   }, [board, view, selected, rubber, preview]);
 
-  // Resize observer: redraw when container size changes
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -564,53 +727,51 @@ export default function PinballEditor() {
     return () => ro.disconnect();
   }, []);
 
-  // ── Pointer event utilities ─────────────────────────────────────────────────
+  // ── Coord helpers ────────────────────────────────────────────────────────────
 
-  const getCanvasCoords = useCallback((clientX: number, clientY: number): [number, number] => {
-    const canvas = canvasRef.current;
-    if (!canvas) return [0, 0];
-    const rect = canvas.getBoundingClientRect();
+  const getCanvasXY = useCallback((clientX: number, clientY: number): [number, number] => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return [0, 0];
     return [clientX - rect.left, clientY - rect.top];
   }, []);
 
-  // ── Pointer down ────────────────────────────────────────────────────────────
+  // ── Pointer events ───────────────────────────────────────────────────────────
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     canvasRef.current?.setPointerCapture(e.pointerId);
-    const pt = { x: e.clientX, y: e.clientY };
-    pointersRef.current.set(e.pointerId, pt);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    const v = viewRef.current;
-    const t = toolRef.current;
-    const [sx, sy] = getCanvasCoords(e.clientX, e.clientY);
-    const [bx, by] = s2b(sx, sy, v);
-
-    // Two-finger pinch already in progress
-    if (pointersRef.current.size >= 2) {
-      dragRef.current = null;
+    // Middle mouse: always pan, regardless of tool
+    if (e.button === 1) {
+      const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
+      middlePanRef.current = { startSX: sx, startSY: sy, startVX: viewRef.current.x, startVY: viewRef.current.y };
       return;
     }
 
-    // Pan mode (no tool)
-    if (t === null) {
+    if (pointersRef.current.size >= 2) { dragRef.current = null; return; }
+
+    const v = viewRef.current;
+    const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
+    const [bx, by] = s2b(sx, sy, v);
+
+    if (toolRef.current === null) {
       dragRef.current = { type: "pan", startSX: sx, startSY: sy, startBX: bx, startBY: by, startViewX: v.x, startViewY: v.y };
       return;
     }
 
-    if (t === "delete") {
+    if (toolRef.current === "delete") {
       const hit = hitTest(boardRef.current, bx, by);
-      if (hit) {
+      if (hit && hit.kind !== "plunger") {
         setBoard(prev => deleteItems(prev, [hit]));
         setSelected([]);
       }
       return;
     }
 
-    if (t === "select") {
+    if (toolRef.current === "select") {
       const b = boardRef.current;
       const sel = selectedRef.current;
-      // Check handles first
       if (sel.length === 1) {
         const handles = getHandles(b, sel, v);
         const hh = hitHandle(handles, bx, by, v);
@@ -619,112 +780,92 @@ export default function PinballEditor() {
           return;
         }
       }
-      // Check if hitting a selected element → move
-      const hitSel = sel.find(s => {
-        const h = hitTest(b, bx, by);
-        return h && h.kind === s.kind && h.idx === s.idx;
-      });
-      if (hitSel || (sel.length > 0 && hitTest(b, bx, by) && sel.some(s => {
-        const h = hitTest(b, bx, by);
-        return h && h.kind === s.kind && h.idx === s.idx;
-      }))) {
-        dragRef.current = { type: "move", startSX: sx, startSY: sy, startBX: bx, startBY: by, origBoard: b };
-        return;
-      }
-      // Hit any element → select it and move
       const hit = hitTest(b, bx, by);
       if (hit) {
-        setSelected([hit]);
-        selectedRef.current = [hit];
-        dragRef.current = { type: "move", startSX: sx, startSY: sy, startBX: bx, startBY: by, origBoard: b };
+        if (!sel.some(s => s.kind === hit.kind && s.idx === hit.idx)) {
+          setSelected([hit]); selectedRef.current = [hit];
+        }
+        dragRef.current = { type: "move", startSX: sx, startSY: sy, startBX: bx, startBY: by };
         return;
       }
-      // Empty space → rubber band
-      setSelected([]);
-      selectedRef.current = [];
+      setSelected([]); selectedRef.current = [];
       setRubber({ bx1: bx, by1: by, bx2: bx, by2: by });
       dragRef.current = { type: "rubber", startSX: sx, startSY: sy, startBX: bx, startBY: by };
       return;
     }
 
-    // Placement tools that require drag (draw rect)
-    if (t === "wall" || t === "slingshot" || t === "target") {
+    if (toolRef.current === "wall" || toolRef.current === "slingshot" || toolRef.current === "target") {
       setPreview({ bx1: bx, by1: by, bx2: bx, by2: by });
       dragRef.current = { type: "draw", startSX: sx, startSY: sy, startBX: bx, startBY: by };
       return;
     }
 
-    // Point-place tools
-    const b = boardRef.current;
-    if (t === "bumper") {
-      const nb: BoardBumper = { x: snap(bx), y: snap(by), r: 16, label: String.fromCharCode(65 + b.bumpers.length) };
+    const bd = boardRef.current;
+    if (toolRef.current === "bumper") {
+      const nb: BoardBumper = { x: snap(bx), y: snap(by), r: 16, label: String.fromCharCode(65 + bd.bumpers.length) };
       setBoard(prev => ({ ...prev, bumpers: [...prev.bumpers, nb] }));
-    } else if (t === "post") {
+    } else if (toolRef.current === "post") {
       const np: BoardPost = { x: snap(bx), y: snap(by), r: 5 };
       setBoard(prev => ({ ...prev, posts: [...prev.posts, np] }));
-    } else if (t === "flipper-l") {
+    } else if (toolRef.current === "flipper-l") {
       const nf: BoardFlipper = { side: "left", pivotX: snap(bx), pivotY: snap(by), length: 60 };
       setBoard(prev => ({ ...prev, flippers: [...prev.flippers, nf] }));
-    } else if (t === "flipper-r") {
+    } else if (toolRef.current === "flipper-r") {
       const nf: BoardFlipper = { side: "right", pivotX: snap(bx), pivotY: snap(by), length: 60 };
       setBoard(prev => ({ ...prev, flippers: [...prev.flippers, nf] }));
     }
-  }, [getCanvasCoords, setBoard]);
-
-  // ── Pointer move ────────────────────────────────────────────────────────────
+  }, [getCanvasXY, setBoard]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const v = viewRef.current;
 
-    // Pinch-to-zoom: two active pointers
+    // Middle mouse pan (overrides everything)
+    if (middlePanRef.current) {
+      const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
+      const mb = middlePanRef.current;
+      setView(v => ({ ...v, x: mb.startVX + (sx - mb.startSX), y: mb.startVY + (sy - mb.startSY) }));
+      return;
+    }
+
+    const v = viewRef.current;
     const ptrs = [...pointersRef.current.values()];
     if (ptrs.length === 2) {
       const [p0, p1] = ptrs;
-      const [ax0, ay0] = getCanvasCoords(p0.x, p0.y);
-      const [ax1, ay1] = getCanvasCoords(p1.x, p1.y);
+      const [ax0, ay0] = getCanvasXY(p0.x, p0.y);
+      const [ax1, ay1] = getCanvasXY(p1.x, p1.y);
       const dist = Math.hypot(ax1 - ax0, ay1 - ay0);
       const midSX = (ax0 + ax1) / 2, midSY = (ay0 + ay1) / 2;
-
-      const prev = (dragRef.current as { prevDist?: number; prevMidX?: number; prevMidY?: number } | null);
-      if (prev && prev.prevDist) {
-        const ratio = dist / prev.prevDist;
+      const dr = dragRef.current as { prevDist?: number } | null;
+      if (dr && dr.prevDist) {
+        const ratio = dist / dr.prevDist;
         const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * ratio));
         const pinchBX = (midSX - v.x) / v.scale;
         const pinchBY = (midSY - v.y) / v.scale;
-        const newX = midSX - pinchBX * newScale + (midSX - prev.prevMidX!) * 0;
-        const newY = midSY - pinchBY * newScale + (midSY - prev.prevMidY!) * 0;
-        setView({ x: newX, y: newY, scale: newScale });
+        setView({ scale: newScale, x: midSX - pinchBX * newScale, y: midSY - pinchBY * newScale });
       }
-      (dragRef.current as { prevDist?: number; prevMidX?: number; prevMidY?: number } | null) && Object.assign(dragRef.current!, { prevDist: dist, prevMidX: midSX, prevMidY: midSY });
       if (!dragRef.current) dragRef.current = { type: "pan", startSX: 0, startSY: 0, startBX: 0, startBY: 0 };
-      Object.assign(dragRef.current, { prevDist: dist, prevMidX: midSX, prevMidY: midSY });
+      Object.assign(dragRef.current, { prevDist: dist });
       return;
     }
 
     const drag = dragRef.current;
     if (!drag) return;
-    const [sx, sy] = getCanvasCoords(e.clientX, e.clientY);
+    const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
     const [bx, by] = s2b(sx, sy, v);
 
     if (drag.type === "pan") {
-      const newX = (drag.startViewX ?? v.x) + (sx - drag.startSX);
-      const newY = (drag.startViewY ?? v.y) + (sy - drag.startSY);
-      setView({ ...v, x: newX, y: newY });
+      setView(prev => ({ ...prev, x: (drag.startViewX ?? prev.x) + (sx - drag.startSX), y: (drag.startViewY ?? prev.y) + (sy - drag.startSY) }));
       return;
     }
-
     if (drag.type === "rubber") {
       setRubber({ bx1: drag.startBX, by1: drag.startBY, bx2: bx, by2: by });
       return;
     }
-
     if (drag.type === "draw") {
       setPreview({ bx1: drag.startBX, by1: drag.startBY, bx2: bx, by2: by });
       return;
     }
-
     if (drag.type === "move") {
       const sel = selectedRef.current;
       if (sel.length === 0) return;
@@ -733,133 +874,119 @@ export default function PinballEditor() {
       setBoard(prev => moveItems(prev, sel, dbx, dby));
       return;
     }
-
     if (drag.type === "handle" && drag.handle && drag.origBoard) {
       const sel = selectedRef.current;
       if (sel.length !== 1) return;
-      // Re-read latest board for handle drag, keep applying to original for stable ref handling
       setBoard(() => applyHandleDrag(drag.origBoard!, sel[0], drag.handle!, bx, by));
       return;
     }
-  }, [getCanvasCoords, setBoard]);
-
-  // ── Pointer up ──────────────────────────────────────────────────────────────
+  }, [getCanvasXY, setBoard]);
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     pointersRef.current.delete(e.pointerId);
-    const v = viewRef.current;
+
+    if (e.button === 1) { middlePanRef.current = null; return; }
+
     const drag = dragRef.current;
+    const v = viewRef.current;
 
     if (drag?.type === "rubber") {
-      const sel = selectAllInBand(boardRef.current, drag.startBX, drag.startBY,
-        ...s2b(...getCanvasCoords(e.clientX, e.clientY) as [number, number], v) as [number, number]);
-      setSelected(sel);
-      selectedRef.current = sel;
+      const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
+      const [bx, by] = s2b(sx, sy, v);
+      const sel = selectAllInBand(boardRef.current, drag.startBX, drag.startBY, bx, by);
+      setSelected(sel); selectedRef.current = sel;
       setRubber(null);
       dragRef.current = null;
       return;
     }
-
     if (drag?.type === "draw") {
       const t = toolRef.current;
-      const [sx, sy] = getCanvasCoords(e.clientX, e.clientY);
+      const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
       const [bx, by] = s2b(sx, sy, v);
-      const cx = snap((drag.startBX + bx) / 2);
-      const cy = snap((drag.startBY + by) / 2);
-      const w = Math.max(8, Math.abs(bx - drag.startBX));
-      const h = Math.max(8, Math.abs(by - drag.startBY));
+      const cx = snap((drag.startBX + bx) / 2), cy = snap((drag.startBY + by) / 2);
+      const w = Math.max(8, Math.abs(bx - drag.startBX)), h = Math.max(8, Math.abs(by - drag.startBY));
       if (t === "wall") {
         const nw: BoardWall = { x: cx, y: cy, w, h };
         setBoard(prev => ({ ...prev, walls: [...prev.walls, nw] }));
       } else if (t === "slingshot") {
-        const ns: BoardSlingshot = { x: cx, y: cy, w, h };
-        setBoard(prev => ({ ...prev, slingshots: [...prev.slingshots, ns] }));
+        setBoard(prev => ({ ...prev, slingshots: [...prev.slingshots, { x: cx, y: cy, w, h }] }));
       } else if (t === "target") {
-        const nt: BoardTarget = { x: cx, y: cy, w, h, label: String(boardRef.current.targets.length + 1) };
-        setBoard(prev => ({ ...prev, targets: [...prev.targets, nt] }));
+        setBoard(prev => ({ ...prev, targets: [...prev.targets, { x: cx, y: cy, w, h, label: String(prev.targets.length + 1) }] }));
       }
       setPreview(null);
       dragRef.current = null;
       return;
     }
-
     dragRef.current = null;
-  }, [getCanvasCoords, setBoard]);
+  }, [getCanvasXY, setBoard]);
 
   const onPointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     pointersRef.current.delete(e.pointerId);
+    middlePanRef.current = null;
     dragRef.current = null;
-    setRubber(null);
-    setPreview(null);
+    setRubber(null); setPreview(null);
   }, []);
 
-  // ── Mouse wheel zoom ────────────────────────────────────────────────────────
-
+  // Mouse wheel zoom (always active)
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const v = viewRef.current;
-    const [sx, sy] = getCanvasCoords(e.clientX, e.clientY);
+    const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
     const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * factor));
-    const bx = (sx - v.x) / v.scale;
-    const by = (sy - v.y) / v.scale;
+    const bx = (sx - v.x) / v.scale, by = (sy - v.y) / v.scale;
     setView({ scale: newScale, x: sx - bx * newScale, y: sy - by * newScale });
-  }, [getCanvasCoords]);
+  }, [getCanvasXY]);
 
-  // ── Keyboard ────────────────────────────────────────────────────────────────
+  // Right-click context menu
+  const onContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const [sx, sy] = getCanvasXY(e.clientX, e.clientY);
+    const [bx, by] = s2b(sx, sy, viewRef.current);
+    const hit = hitTest(boardRef.current, bx, by);
+    if (hit) { setSelected([hit]); selectedRef.current = [hit]; }
+    setContextMenu({ clientX: e.clientX, clientY: e.clientY, item: hit });
+  }, [getCanvasXY]);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ignore delete keys when properties modal is open
+      if (showPropsRef.current) return;
       if (e.key === "Delete" || e.key === "Backspace") {
         const sel = selectedRef.current;
-        if (sel.length > 0) {
-          setBoard(prev => deleteItems(prev, sel));
-          setSelected([]);
-        }
+        if (sel.length > 0) { setBoard(prev => deleteItems(prev, sel)); setSelected([]); }
       }
-      if (e.key === "Escape") {
-        setSelected([]);
-        setShowProps(false);
-        setShowFileMenu(false);
-      }
+      if (e.key === "Escape") { setSelected([]); setContextMenu(null); }
+      if (e.key === "+" || e.key === "=") zoomIn();
+      if (e.key === "-") zoomOut();
+      if (e.key === "f" || e.key === "F") fitToScreen();
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") { e.preventDefault(); duplicateSelected(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setBoard]);
+  }, [setBoard, zoomIn, zoomOut, fitToScreen, duplicateSelected]);
 
-  // ── Import ──────────────────────────────────────────────────────────────────
+  // Close context menu on click-away
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [contextMenu]);
 
-  const handleImport = useCallback(() => {
-    const input = document.createElement("input");
-    input.type = "file"; input.accept = ".json";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        try {
-          const parsed = JSON.parse(ev.target?.result as string) as Board;
-          setBoard(parsed);
-          setSelected([]);
-        } catch { /* ignore */ }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-    setShowFileMenu(false);
-  }, [setBoard]);
-
-  // ── Properties form ─────────────────────────────────────────────────────────
+  // ── Properties modal ─────────────────────────────────────────────────────────
 
   const renderPropsModal = () => {
-    if (!showProps || selected.length !== 1) return null;
-    const s = selected[0];
+    if (!showProps) return null;
+    const s = selected.length === 1 ? selected[0] : null;
+    if (!s) return null;
 
     const numField = (label: string, val: number, onChange: (v: number) => void) => (
       <div className="pbed__field" key={label}>
         <label>{label}</label>
-        <input type="number" value={val} onChange={ev => onChange(Number(ev.target.value))} />
+        <input type="number" value={val} step="any" onChange={ev => onChange(Number(ev.target.value))} />
       </div>
     );
     const strField = (label: string, val: string, onChange: (v: string) => void) => (
@@ -869,88 +996,77 @@ export default function PinballEditor() {
       </div>
     );
 
+    const canDelete = s.kind !== "plunger";
     const deleteEl = () => {
-      setBoard(prev => deleteItems(prev, selected));
-      setSelected([]);
-      setShowProps(false);
+      if (!canDelete) return;
+      setBoard(prev => deleteItems(prev, [s]));
+      setSelected([]); setShowProps(false);
     };
 
     let fields: React.ReactNode = null;
     let title = "";
 
-    if (s.kind === "wall") {
+    if (s.kind === "plunger") {
+      const pl = board.plunger;
+      const upd = (p: Partial<typeof pl>) => setBoard(prev => ({ ...prev, plunger: { ...prev.plunger, ...p } }));
+      title = "PLUNGER / LAUNCHER";
+      fields = <>
+        {numField("X", pl.x, v => upd({ x: v }))}
+        {numField("Top Y", pl.topY, v => upd({ topY: v }))}
+        {numField("Bottom Y", pl.bottomY, v => upd({ bottomY: v }))}
+        {numField("Launch Power (×)", pl.launchPower ?? 1.0, v => upd({ launchPower: v }))}
+      </>;
+    } else if (s.kind === "wall") {
       const w = board.walls[s.idx];
-      const upd = (p: Partial<BoardWall>) => setBoard(prev => {
-        const walls = [...prev.walls]; walls[s.idx] = { ...walls[s.idx], ...p }; return { ...prev, walls };
-      });
+      const upd = (p: Partial<BoardWall>) => setBoard(prev => { const walls = [...prev.walls]; walls[s.idx] = { ...walls[s.idx], ...p }; return { ...prev, walls }; });
       title = "WALL";
       fields = <>
-        {numField("X", w.x, v => upd({ x: v }))}
-        {numField("Y", w.y, v => upd({ y: v }))}
-        {numField("W", w.w, v => upd({ w: v }))}
-        {numField("H", w.h, v => upd({ h: v }))}
-        {numField("ANGLE", w.angle ?? 0, v => upd({ angle: v }))}
+        {numField("X", w.x, v => upd({ x: v }))} {numField("Y", w.y, v => upd({ y: v }))}
+        {numField("Width", w.w, v => upd({ w: v }))} {numField("Height", w.h, v => upd({ h: v }))}
+        {numField("Angle (rad)", w.angle ?? 0, v => upd({ angle: v }))}
       </>;
     } else if (s.kind === "bumper") {
       const b = board.bumpers[s.idx];
-      const upd = (p: Partial<BoardBumper>) => setBoard(prev => {
-        const bumpers = [...prev.bumpers]; bumpers[s.idx] = { ...bumpers[s.idx], ...p }; return { ...prev, bumpers };
-      });
+      const upd = (p: Partial<BoardBumper>) => setBoard(prev => { const bumpers = [...prev.bumpers]; bumpers[s.idx] = { ...bumpers[s.idx], ...p }; return { ...prev, bumpers }; });
       title = "BUMPER";
       fields = <>
-        {numField("X", b.x, v => upd({ x: v }))}
-        {numField("Y", b.y, v => upd({ y: v }))}
-        {numField("RADIUS", b.r, v => upd({ r: v }))}
-        {strField("LABEL", b.label ?? "", v => upd({ label: v }))}
+        {numField("X", b.x, v => upd({ x: v }))} {numField("Y", b.y, v => upd({ y: v }))}
+        {numField("Radius", b.r, v => upd({ r: v }))} {strField("Label", b.label ?? "", v => upd({ label: v }))}
       </>;
     } else if (s.kind === "post") {
       const p = board.posts[s.idx];
-      const upd = (patch: Partial<BoardPost>) => setBoard(prev => {
-        const posts = [...prev.posts]; posts[s.idx] = { ...posts[s.idx], ...patch }; return { ...prev, posts };
-      });
+      const upd = (patch: Partial<BoardPost>) => setBoard(prev => { const posts = [...prev.posts]; posts[s.idx] = { ...posts[s.idx], ...patch }; return { ...prev, posts }; });
       title = "POST";
       fields = <>
-        {numField("X", p.x, v => upd({ x: v }))}
-        {numField("Y", p.y, v => upd({ y: v }))}
-        {numField("RADIUS", p.r, v => upd({ r: v }))}
+        {numField("X", p.x, v => upd({ x: v }))} {numField("Y", p.y, v => upd({ y: v }))}
+        {numField("Radius", p.r, v => upd({ r: v }))}
       </>;
     } else if (s.kind === "flipper") {
       const f = board.flippers[s.idx];
-      const upd = (p: Partial<BoardFlipper>) => setBoard(prev => {
-        const flippers = [...prev.flippers]; flippers[s.idx] = { ...flippers[s.idx], ...p }; return { ...prev, flippers };
-      });
+      const upd = (p: Partial<BoardFlipper>) => setBoard(prev => { const flippers = [...prev.flippers]; flippers[s.idx] = { ...flippers[s.idx], ...p }; return { ...prev, flippers }; });
       title = `FLIPPER (${f.side.toUpperCase()})`;
       fields = <>
-        {numField("PIVOT X", f.pivotX, v => upd({ pivotX: v }))}
-        {numField("PIVOT Y", f.pivotY, v => upd({ pivotY: v }))}
-        {numField("LENGTH", f.length, v => upd({ length: v }))}
+        {numField("Pivot X", f.pivotX, v => upd({ pivotX: v }))} {numField("Pivot Y", f.pivotY, v => upd({ pivotY: v }))}
+        {numField("Length", f.length, v => upd({ length: v }))}
       </>;
     } else if (s.kind === "slingshot") {
       const sl = board.slingshots[s.idx];
-      const upd = (p: Partial<BoardSlingshot>) => setBoard(prev => {
-        const slingshots = [...prev.slingshots]; slingshots[s.idx] = { ...slingshots[s.idx], ...p }; return { ...prev, slingshots };
-      });
+      const upd = (p: Partial<BoardSlingshot>) => setBoard(prev => { const slingshots = [...prev.slingshots]; slingshots[s.idx] = { ...slingshots[s.idx], ...p }; return { ...prev, slingshots }; });
       title = "SLINGSHOT";
       fields = <>
-        {numField("X", sl.x, v => upd({ x: v }))}
-        {numField("Y", sl.y, v => upd({ y: v }))}
-        {numField("W", sl.w, v => upd({ w: v }))}
-        {numField("H", sl.h, v => upd({ h: v }))}
-        {numField("ANGLE", sl.angle ?? 0, v => upd({ angle: v }))}
+        {numField("X", sl.x, v => upd({ x: v }))} {numField("Y", sl.y, v => upd({ y: v }))}
+        {numField("Width", sl.w, v => upd({ w: v }))} {numField("Height", sl.h, v => upd({ h: v }))}
+        {numField("Angle (rad)", sl.angle ?? 0, v => upd({ angle: v }))}
       </>;
     } else if (s.kind === "target") {
       const t = board.targets[s.idx];
-      const upd = (p: Partial<BoardTarget>) => setBoard(prev => {
-        const targets = [...prev.targets]; targets[s.idx] = { ...targets[s.idx], ...p }; return { ...prev, targets };
-      });
+      const upd = (p: Partial<BoardTarget>) => setBoard(prev => { const targets = [...prev.targets]; targets[s.idx] = { ...targets[s.idx], ...p }; return { ...prev, targets }; });
       title = "TARGET";
       fields = <>
-        {numField("X", t.x, v => upd({ x: v }))}
-        {numField("Y", t.y, v => upd({ y: v }))}
-        {numField("W", t.w, v => upd({ w: v }))}
-        {numField("H", t.h, v => upd({ h: v }))}
-        {numField("ANGLE", t.angle ?? 0, v => upd({ angle: v }))}
-        {strField("LABEL", t.label ?? "", v => upd({ label: v }))}
+        {numField("X", t.x, v => upd({ x: v }))} {numField("Y", t.y, v => upd({ y: v }))}
+        {numField("Width", t.w, v => upd({ w: v }))} {numField("Height", t.h, v => upd({ h: v }))}
+        {numField("Angle (rad)", t.angle ?? 0, v => upd({ angle: v }))}
+        {strField("Label", t.label ?? "", v => upd({ label: v }))}
       </>;
     }
 
@@ -963,7 +1079,7 @@ export default function PinballEditor() {
           </div>
           <div className="pbed__modal-body">{fields}</div>
           <div className="pbed__modal-footer">
-            <button className="pbed__delete-btn" onClick={deleteEl}>DELETE</button>
+            {canDelete && <button className="pbed__delete-btn" onClick={deleteEl}>DELETE</button>}
             <button className="pbed__ok-btn" onClick={() => setShowProps(false)}>OK</button>
           </div>
         </div>
@@ -971,61 +1087,29 @@ export default function PinballEditor() {
     );
   };
 
-  const tools: Tool[] = ["select", "wall", "bumper", "post", "flipper-l", "flipper-r", "slingshot", "target", "delete"];
-
-  const canvasMode = tool === null ? "pan"
-    : tool === "select" ? "select"
-    : tool === "delete" ? "delete"
-    : "place";
+  const canvasMode = tool === null ? "pan" : tool === "select" ? "select" : tool === "delete" ? "delete" : "place";
 
   return (
     <div className="pbed">
-      {/* Menu bar */}
-      <div className="pbed__menubar">
-        <span className="pbed__title">PINBALL EDITOR</span>
-        <div style={{ position: "relative" }}>
-          <button
-            className="pbed__menu-btn"
-            onClick={() => setShowFileMenu(v => !v)}
-            title="File menu"
-          >
-            ☰
-          </button>
-          {showFileMenu && (
-            <div className="pbed__dropdown">
-              <button className="pbed__dropdown-item" onClick={() => { exportBoard(board); setShowFileMenu(false); }}>EXPORT JSON</button>
-              <button className="pbed__dropdown-item" onClick={handleImport}>IMPORT JSON</button>
-              <div className="pbed__dropdown-sep" />
-              <button className="pbed__dropdown-item" onClick={() => { setTestPlay(true); setShowFileMenu(false); }}>▶ TEST PLAY</button>
-              <div className="pbed__dropdown-sep" />
-              <button className="pbed__dropdown-item" onClick={() => {
-                if (confirm("Reset to classic board?")) { setBoard(classicBoard as Board); setSelected([]); setShowFileMenu(false); }
-              }}>RESET TO CLASSIC</button>
-              <button className="pbed__dropdown-item pbed__dropdown-item--danger" onClick={() => {
-                if (confirm("Clear the entire board?")) { setBoard(prev => ({ ...prev, walls: [], bumpers: [], posts: [], flippers: [], slingshots: [], targets: [] })); setSelected([]); setShowFileMenu(false); }
-              }}>CLEAR ALL</button>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Tool bar */}
       <div className="pbed__toolbar">
         <button
           className={`pbed__tool-btn${tool === null ? " pbed__tool-btn--active" : ""}`}
           onClick={() => { setTool(null); setSelected([]); }}
-          title="Pan / zoom (no tool)"
+          title="Pan / Zoom (no tool active)"
         >
-          ✋
+          <IconPan />
+          <span>Pan</span>
         </button>
-        {tools.map(t => (
+        {TOOLS.map(({ id, label, Icon }) => (
           <button
-            key={t}
-            className={`pbed__tool-btn${tool === t ? " pbed__tool-btn--active" : ""}${t === "delete" ? " pbed__tool-btn--danger" : ""}`}
-            onClick={() => { setTool(prev => prev === t ? null : t); if (t !== "select") setSelected([]); }}
-            title={TOOL_LABELS[t]}
+            key={id}
+            className={`pbed__tool-btn${tool === id ? " pbed__tool-btn--active" : ""}${id === "delete" ? " pbed__tool-btn--danger" : ""}`}
+            onClick={() => { setTool(prev => prev === id ? null : id); if (id !== "select") setSelected([]); }}
+            title={label}
           >
-            {TOOL_LABELS[t]}
+            <Icon />
+            <span>{label}</span>
           </button>
         ))}
       </div>
@@ -1040,42 +1124,60 @@ export default function PinballEditor() {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
           onWheel={onWheel}
+          onContextMenu={onContextMenu}
           style={{ touchAction: "none" }}
         />
-        {/* Floating ✏️ properties button */}
+
+        {/* ✏️ FAB — bottom-left so it never overlaps the zoom buttons (bottom-right) */}
         {selected.length === 1 && !showProps && (
-          <button
-            className="pbed__props-fab"
-            onClick={() => setShowProps(true)}
-            title="Edit properties"
-          >
+          <button className="pbed__props-fab" onClick={() => setShowProps(true)} title="Edit properties">
             ✏️
           </button>
         )}
-        {/* Floating zoom buttons */}
+
+        {/* Zoom buttons — bottom-right */}
         <div className="pbed__zoom-btns">
-          <button className="pbed__zoom-btn" onClick={() => setView(v => {
-            const s = Math.min(MAX_SCALE, v.scale * 1.25);
-            const cx = (canvasRef.current?.width ?? 400) / 2;
-            const cy = (canvasRef.current?.height ?? 600) / 2;
-            const bx = (cx - v.x) / v.scale, by = (cy - v.y) / v.scale;
-            return { scale: s, x: cx - bx * s, y: cy - by * s };
-          })}>+</button>
-          <button className="pbed__zoom-btn" onClick={() => setView({
-            x: 20, y: 20, scale: Math.min(
-              (canvasRef.current?.width ?? 400) / board.width * 0.9,
-              (canvasRef.current?.height ?? 600) / board.height * 0.9
-            ),
-          })}>FIT</button>
-          <button className="pbed__zoom-btn" onClick={() => setView(v => {
-            const s = Math.max(MIN_SCALE, v.scale * 0.8);
-            const cx = (canvasRef.current?.width ?? 400) / 2;
-            const cy = (canvasRef.current?.height ?? 600) / 2;
-            const bx = (cx - v.x) / v.scale, by = (cy - v.y) / v.scale;
-            return { scale: s, x: cx - bx * s, y: cy - by * s };
-          })}>−</button>
+          <button className="pbed__zoom-btn" onClick={zoomIn}  title="Zoom in (+)">+</button>
+          <button className="pbed__zoom-btn" onClick={fitToScreen} title="Fit board (F)">FIT</button>
+          <button className="pbed__zoom-btn" onClick={zoomOut} title="Zoom out (−)">−</button>
         </div>
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          className="pbed__context-menu"
+          style={{ left: contextMenu.clientX, top: contextMenu.clientY }}
+          onPointerDown={e => e.stopPropagation()}
+        >
+          {contextMenu.item ? (
+            <>
+              <button className="pbed__ctx-item" onClick={() => { setShowProps(true); setContextMenu(null); }}>
+                Modify…
+              </button>
+              {contextMenu.item.kind !== "plunger" && (
+                <button className="pbed__ctx-item" onClick={() => {
+                  duplicateSelected(); setContextMenu(null);
+                }}>
+                  Duplicate
+                </button>
+              )}
+              {contextMenu.item.kind !== "plunger" && (
+                <>
+                  <div className="pbed__ctx-sep" />
+                  <button className="pbed__ctx-item pbed__ctx-item--danger" onClick={() => {
+                    deleteSelected(); setContextMenu(null);
+                  }}>
+                    Delete
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="pbed__ctx-empty">Nothing here</div>
+          )}
+        </div>
+      )}
 
       {/* Properties modal */}
       {renderPropsModal()}
@@ -1088,9 +1190,6 @@ export default function PinballEditor() {
           <button className="pbed__overlay-btn" onClick={() => setTestPlay(false)}>EXIT TEST PLAY</button>
         </div>
       )}
-
-      {/* Click-away to close file menu */}
-      {showFileMenu && <div className="pbed__backdrop" onClick={() => setShowFileMenu(false)} />}
     </div>
   );
 }
