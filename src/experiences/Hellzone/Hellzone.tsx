@@ -804,7 +804,8 @@ export default function Hellzone() {
     }
 
     // ── Raycasting ─────────────────────────────────────────────────────────────
-    function castRay(angle: number) {
+    // skipGroupId: if set, rays pass through tiles belonging to that door group
+    function castRay(angle: number, skipGroupId?: number) {
       const sinA = Math.sin(angle), cosA = Math.cos(angle);
       let mapX = Math.floor(player.x / CELL);
       let mapY = Math.floor(player.y / CELL);
@@ -836,7 +837,14 @@ export default function Hellzone() {
           }
           hit = true; break;
         }
-        if (isDoorTile(tile) || tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) {
+        if (isDoorTile(tile)) {
+          if (skipGroupId !== undefined) {
+            const skd = doorMap.get(`${mapX},${mapY}`);
+            if (skd && skd.group.id === skipGroupId) continue;
+          }
+          hit = true; hitMapX = mapX; hitMapY = mapY; break;
+        }
+        if (tile === TILE_WALL || tile === TILE_LAVA || tile === TILE_EXIT) {
           hit = true; hitMapX = mapX; hitMapY = mapY; break;
         }
       }
@@ -891,8 +899,35 @@ export default function Hellzone() {
         } else if (isDoorTile(tile)) {
           const door = doorMap.get(`${hitMapX},${hitMapY}`);
           const openProg = door ? door.group.openProgress : 0;
+
+          // While animating, cast a behind ray and draw the corridor first.
+          // The door panel is drawn on top and covers the still-closed portion.
+          if (openProg > 0 && door) {
+            const behind = castRay(rayAngle, door.group.id);
+            if (behind.hit) {
+              const bPerp = behind.dist * Math.cos(rayAngle - player.angle);
+              const bWallH = (SCREEN_H / bPerp) * 0.8;
+              const bTop = (SCREEN_H - bWallH) / 2;
+              const bFog = Math.max(0, 1 - bPerp / MAX_DEPTH);
+              const bBaseFog = bFog * bFog + 0.05;
+              if (behind.tile === TILE_LAVA && sprWallLava.loaded) {
+                ctx.globalAlpha = bBaseFog;
+                sprWallLava.drawColumn(ctx, lavaFrame, behind.wallX, x, bTop, bWallH);
+              } else if (behind.tile === TILE_WALL && sprWallRock.loaded) {
+                ctx.globalAlpha = behind.side === 1 ? bBaseFog * 0.65 : bBaseFog;
+                sprWallRock.drawColumn(ctx, 0, behind.wallX, x, bTop, bWallH);
+              } else {
+                const bColors = WALL_COLORS[behind.tile] || WALL_COLORS[1];
+                ctx.globalAlpha = bBaseFog;
+                ctx.fillStyle = behind.side === 1 ? bColors!.dark : bColors!.light;
+                ctx.fillRect(x, bTop, 1, bWallH);
+              }
+              ctx.globalAlpha = 1;
+            }
+          }
+
+          // Draw door panel (covers lower portion, leaving the open gap visible above)
           const drawnH = wallH * (1 - openProg);
-          // Door sinks into the floor: top rises as openProgress increases
           const doorTop = top + wallH * openProg;
           if (drawnH > 0.5) {
             ctx.globalAlpha = side === 1 ? baseFog * 0.65 : baseFog;
