@@ -302,7 +302,10 @@ export default function Hellzone() {
 
       // ── Room C (door/key test area) ──────────────────────────────────────────
       // Passage from Room B (max col 24) → Room C: basic door at col 25, row 28
-      grid[28][25] = TILE_DOOR; // basic door (no key)
+      // B→C passage: 3-tile-wide door tests multi-tile grouping
+      grid[27][25] = TILE_DOOR;
+      grid[28][25] = TILE_DOOR;
+      grid[29][25] = TILE_DOOR;
 
       // Room C main area: cols 26-37, rows 22-34
       for (let y = 22; y <= 34; y++)
@@ -784,8 +787,6 @@ export default function Hellzone() {
         ammo:   player ? Math.max(player.ammo, 10) : 50,
         velX: 0, velY: 0, angVel: 0,
       };
-      q("#hz-hud-level").textContent = String(level);
-      q("#hz-hud-seed").textContent = level === 1 ? "TRAINING" : "SEED:" + seed;
       // Reset quip system for the new level
       quipQueue.length = 0;
       quipCooldown = 180;
@@ -1584,15 +1585,14 @@ export default function Hellzone() {
       // Label
       ctx.fillStyle = "#c00";
       ctx.font = "7px 'Share Tech Mono', monospace";
-      ctx.fillText("[ M ] CLOSE MAP", offsetX, offsetY - 3);
+      const levelLabel = level === 1 ? "TRAINING" : `LVL ${level}  SEED:${seed}`;
+      ctx.fillText(`[ M ] CLOSE MAP  ·  ${levelLabel}`, offsetX, offsetY - 3);
     }
 
     // ── HUD ────────────────────────────────────────────────────────────────────
     function updateHUD() {
       const hHealth = q<HTMLElement>("#hz-hud-health");
-      const hKills  = q<HTMLElement>("#hz-hud-kills");
       hHealth.textContent = String(Math.max(0, Math.ceil(player.health)));
-      hKills.textContent  = String(kills);
       hHealth.className = "hz-hud-value" + (player.health <= 20 ? " low" : "");
       // Weapon slots
       for (const slot of WEAPON_SLOT_DATA) {
@@ -2471,17 +2471,12 @@ export default function Hellzone() {
           </div>
         </div>
 
-        {/* Death screen */}
-        <div className="hz-death-screen">
-          <div className="hz-death-title">YOU DIED</div>
-          <div className="hz-death-sub">GAME OVER, MAN</div>
-          <div className="hz-death-stats" id="hz-death-stats"></div>
-          <div className="hz-death-press">[ ENTER ] TRY AGAIN</div>
-          <div className="hz-death-quit">[ ESC ] QUIT TO NS-TOS</div>
-        </div>
-
         {/* Game */}
         <div className="hz-game-container">
+          {/* Top bar: minimap above the canvas, in the black space */}
+          <div className="hz-top-bar">
+            <canvas ref={minimapRef} className="hz-minimap" width={80} height={80} />
+          </div>
           <div style={{ position: "relative" }}>
             <canvas ref={canvasRef} className="hz-render-canvas" width={320} height={180} />
             <div className="hz-crosshair" />
@@ -2520,14 +2515,10 @@ export default function Hellzone() {
               </div>
             </div>
           </div>
+          {/* Compact HUD: health + face + weapons only */}
           <div className="hz-hud">
-            <div className="hz-hud-panel">
-              <div className="hz-hud-label">HEALTH</div>
-              <div className="hz-hud-value" id="hz-hud-health">100</div>
-            </div>
-            <div className="hz-hud-divider" />
+            <div className="hz-hud-value" id="hz-hud-health">100</div>
             <canvas ref={faceRef} className="hz-face-sprite" width={24} height={24} />
-            <div className="hz-hud-divider" />
             <div className="hz-weapon-bar">
               {WEAPON_SLOT_DATA.map((slot, i) => (
                 <div key={slot.id} className="hz-weapon-slot unowned" id={`hz-wslot-${slot.id}`}>
@@ -2537,17 +2528,14 @@ export default function Hellzone() {
                 </div>
               ))}
             </div>
-            <div className="hz-hud-divider" />
-            <div className="hz-hud-panel">
-              <div className="hz-hud-label">KILLS</div>
-              <div className="hz-hud-value" id="hz-hud-kills">0</div>
-            </div>
-            <canvas ref={minimapRef} className="hz-minimap" width={80} height={80} />
-            <div className="hz-level-info">
-              <div className="hz-hud-label">LEVEL</div>
-              <div className="hz-hud-level-num" id="hz-hud-level">1</div>
-              <div className="hz-hud-seed" id="hz-hud-seed"></div>
-            </div>
+          </div>
+          {/* Death screen overlays the entire game container */}
+          <div className="hz-death-screen">
+            <div className="hz-death-title">YOU DIED</div>
+            <div className="hz-death-sub">GAME OVER, MAN</div>
+            <div className="hz-death-stats" id="hz-death-stats"></div>
+            <div className="hz-death-press">[ ENTER ] TRY AGAIN</div>
+            <div className="hz-death-quit">[ ESC ] QUIT TO NS-TOS</div>
           </div>
         </div>
       </div>

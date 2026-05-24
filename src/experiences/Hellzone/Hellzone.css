@@ -15,8 +15,10 @@
 
 .hellzone-wrapper {
   position: relative;
-  width: min(100vw, calc((100vh - 72px) * 16 / 9));
+  width: min(100vw, calc((100vh - 96px) * 16 / 9));
   image-rendering: pixelated;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── TITLE SCREEN ── */
@@ -116,15 +118,14 @@
 /* ── DEATH SCREEN ── */
 .hz-death-screen {
   display: none;
-  width: 100%;
-  aspect-ratio: 16/9;
   background: #000;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   border: 2px solid #c00;
   position: absolute;
-  top: 0; left: 0;
+  inset: 0;
+  z-index: 20;
 }
 
 .hz-death-title {
@@ -171,6 +172,20 @@
   display: none;
   flex-direction: column;
   width: 100%;
+  position: relative;
+}
+
+/* ── TOP BAR (minimap sits above the canvas) ── */
+.hz-top-bar {
+  width: 100%;
+  height: 48px;
+  background: #0d0d0d;
+  border-bottom: 1px solid #1a0000;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 8px;
+  box-sizing: border-box;
 }
 
 .hz-render-canvas {
@@ -185,14 +200,14 @@
 /* ── HUD ── */
 .hz-hud {
   width: 100%;
-  height: 72px;
+  height: 48px;
   background: #111;
-  border-top: 3px solid #c00;
+  border-top: 2px solid #c00;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 10px;
-  position: relative;
+  padding: 0 8px;
+  gap: 8px;
+  box-sizing: border-box;
 }
 
 .hz-hud-panel {
@@ -212,21 +227,22 @@
 
 .hz-hud-value {
   font-family: 'VT323', monospace;
-  font-size: 44px;
+  font-size: 36px;
   color: #c00;
   line-height: 1;
-  text-shadow: 0 0 10px #ff0000;
-  min-width: 60px;
+  text-shadow: 0 0 8px #ff0000;
+  min-width: 38px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .hz-hud-value.low { color: #ff4400; animation: hz-blink 0.5s step-end infinite; }
 
 .hz-face-sprite {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   image-rendering: pixelated;
-  border: 2px solid #333;
+  border: 1px solid #333;
   flex-shrink: 0;
 }
 
@@ -259,9 +275,9 @@
 /* ── WEAPON BAR ── */
 .hz-weapon-bar {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   align-items: center;
-  flex-shrink: 0;
+  flex: 1;
 }
 
 .hz-weapon-slot {
@@ -269,8 +285,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 62px;
+  width: 40px;
+  height: 44px;
   border: 2px solid;
   border-color: #ffffff #555 #555 #ffffff;
   background: #0d0d0d;
@@ -282,6 +298,7 @@
   gap: 1px;
   padding: 2px 0;
   transition: background 0.05s;
+  flex-shrink: 0;
 }
 
 .hz-weapon-slot.active {
@@ -317,7 +334,7 @@
 
 .hz-wslot-ammo {
   font-family: 'VT323', monospace;
-  font-size: 18px;
+  font-size: 15px;
   color: #666;
   line-height: 1;
 }
@@ -326,14 +343,13 @@
 
 /* ── MINIMAP ── */
 .hz-minimap {
-  position: absolute;
-  top: 4px;
-  right: 120px;
-  width: 80px;
-  height: 80px;
+  width: 44px;
+  height: 44px;
   image-rendering: pixelated;
-  opacity: 0.7;
-  border: 1px solid #333;
+  opacity: 0.85;
+  border: 1px solid #330000;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 /* ── MESSAGES / SUBTITLES ── */
@@ -712,11 +728,10 @@
   .hz-title-press { font-size: clamp(18px, 5vw, 32px); }
   .hz-title-art { font-size: clamp(9px, 2.5vw, 13px); }
   .hz-death-title { font-size: clamp(48px, 14vw, 96px); }
-  .hz-hud-value { font-size: 36px; }
-  .hz-minimap { right: 80px; width: 60px; height: 60px; }
-  .hz-weapon-slot { width: 32px; height: 54px; }
-  .hz-wslot-ammo { font-size: 14px; }
-  .hz-wslot-name { font-size: 6px; }
+  .hz-hud-value { font-size: 30px; min-width: 32px; }
+  .hz-weapon-slot { width: 32px; height: 40px; }
+  .hz-wslot-ammo { font-size: 12px; }
+  .hz-wslot-name { font-size: 5px; }
 }
 
 /* ── Cheats overlay ─────────────────────────────────────────────────────── */
