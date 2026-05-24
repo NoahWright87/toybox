@@ -13,6 +13,11 @@ lines on the canvas, and show the incoming approach path for that object.
 - Draw trail as a series of line segments at ~10% opacity
 - Trails fade after a few seconds or reset when selection changes
 - Runs continuously while option is enabled (background Matter.js world)
+- **Plunger special case**: ball should not bounce off it — instead launch FROM it
+  upward. Use random velocity 0→max (simulates full range of pull strengths).
+- **Other launch objects** (VUK, etc.): use fixed configured velocity, not random.
+- The ghost ball secondary world should exclude the plunger body from collision so
+  the ball launches cleanly through the lane entrance.
 
 ### Heatmap Mode
 Aggregate many ghost ball runs into a color-coded overlay on the board.
