@@ -14,6 +14,7 @@ const HANDLE_R = 9;
 const SNAP = 4;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
+const BALL_R = 10; // matches game physics
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -237,6 +238,8 @@ function moveItems(board: Board, items: SelItem[], dbx: number, dby: number): Bo
     slingshots: board.slingshots.map((sl, i) => movedSlings.has(i) ? { ...sl, x: snap(sl.x + dbx), y: snap(sl.y + dby) } : sl),
     targets: board.targets.map((t, i) => movedTargets.has(i) ? { ...t, x: snap(t.x + dbx), y: snap(t.y + dby) } : t),
     plunger: movedPlunger ? { ...board.plunger, x: snap(board.plunger.x + dbx) } : board.plunger,
+    ballStartX: movedPlunger ? snap(board.ballStartX + dbx) : board.ballStartX,
+    ballStartY: movedPlunger ? snap(board.ballStartY + dby) : board.ballStartY,
   };
 }
 
@@ -352,6 +355,12 @@ const IconDelete = () => (
   <svg viewBox="0 0 20 20" width="18" height="18" stroke="currentColor" strokeWidth="2.5">
     <line x1="4" y1="4" x2="16" y2="16"/>
     <line x1="16" y1="4" x2="4" y2="16"/>
+  </svg>
+);
+
+const IconPlay = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
+    <polygon points="4,2 18,10 4,18"/>
   </svg>
 );
 
@@ -475,19 +484,38 @@ function drawScene(
     ctx.fillStyle = sel ? "#ffd700" : "#d0d0d0"; ctx.fill();
   });
 
-  // Plunger lane
+  // Plunger lane + rod
   const pl = board.plunger;
   const plSel = isSel("plunger", 0);
-  ctx.fillStyle = plSel ? "rgba(255,200,100,0.4)" : "rgba(200,150,255,0.3)";
-  ctx.strokeStyle = plSel ? "#ffcc00" : "#a080e0";
-  ctx.lineWidth = plSel ? 2 : 1;
-  ctx.beginPath(); ctx.rect((pl.x - 15), pl.topY, 20, pl.bottomY - pl.topY); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = plSel ? "#ffcc00" : "#a080e0";
-  ctx.font = "5px 'Press Start 2P'"; ctx.textAlign = "center";
-  ctx.fillText("P", pl.x, pl.topY + 10);
+  // Selection highlight (dashed ring around full lane)
   if (plSel) {
-    ctx.fillStyle = "#ffcc00"; ctx.font = "4px 'Press Start 2P'";
-    ctx.fillText(`PWR ${(pl.launchPower ?? 1.0).toFixed(1)}×`, pl.x, pl.topY + 22);
+    ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.strokeRect(pl.x - BALL_R - 10, pl.topY, BALL_R * 2 + 20, pl.bottomY - pl.topY);
+    ctx.setLineDash([]);
+  }
+  // Left divider rail
+  ctx.fillStyle = plSel ? "#664400" : "#2a1050";
+  ctx.fillRect(pl.x - BALL_R - 8, pl.topY, 6, pl.bottomY - pl.topY);
+  // Right rail (thin)
+  ctx.fillRect(pl.x + BALL_R + 2, pl.topY, 4, pl.bottomY - pl.topY);
+  // Rod body (at rest = full height, shows how it looks in game when not charging)
+  const rodTop = board.ballStartY + BALL_R + 2;
+  const rodBottom = pl.bottomY - 4;
+  ctx.fillStyle = plSel ? "#d0b060" : "#909090";
+  ctx.fillRect(pl.x - BALL_R, rodTop, BALL_R * 2, rodBottom - rodTop);
+  ctx.fillStyle = plSel ? "#f0d080" : "#d0d0d0"; // highlight
+  ctx.fillRect(pl.x - BALL_R, rodTop, 3, rodBottom - rodTop);
+  ctx.fillStyle = plSel ? "#a08040" : "#606060"; // shadow
+  ctx.fillRect(pl.x + BALL_R - 3, rodTop, 3, rodBottom - rodTop);
+  ctx.fillStyle = plSel ? "#e0c070" : "#c0c0c0"; // face cap
+  ctx.fillRect(pl.x - BALL_R, rodTop, BALL_R * 2, 3);
+  // Label
+  ctx.fillStyle = plSel ? "#ffcc00" : "#a080e0";
+  ctx.font = "5px 'Press Start 2P'"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("PLG", pl.x - 4, pl.topY + 3);
+  if (plSel) {
+    ctx.font = "4px 'Press Start 2P'";
+    ctx.fillText(`×${(pl.launchPower ?? 1.0).toFixed(1)}`, pl.x - 4, pl.topY + 12);
   }
 
   // Ball start
@@ -571,6 +599,7 @@ export default function PinballEditor() {
   const [testPlay, setTestPlay] = useState(false);
   const [showProps, setShowProps] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [ghostBalls, setGhostBalls] = useState(false);
 
   const viewRef = useRef(view); viewRef.current = view;
   const boardRef = useRef(board); boardRef.current = board;
@@ -690,9 +719,11 @@ export default function PinballEditor() {
         { label: "Zoom In   +", onClick: zoomIn },
         { label: "Zoom Out  −", onClick: zoomOut },
         { label: "Fit Board  F", onClick: fitToScreen },
+        { separator: true },
+        { label: "Ghost Ball Preview", checked: ghostBalls, onClick: () => setGhostBalls(v => !v) },
       ],
     },
-  ], [handleImport, handleClearAll, handleResetToClassic, deleteSelected, duplicateSelected, zoomIn, zoomOut, fitToScreen]);
+  ], [handleImport, handleClearAll, handleResetToClassic, deleteSelected, duplicateSelected, zoomIn, zoomOut, fitToScreen, ghostBalls]);
 
   useWindowMenus(menus);
 
@@ -976,33 +1007,22 @@ export default function PinballEditor() {
     return () => window.removeEventListener("pointerdown", close);
   }, [contextMenu]);
 
-  // ── Properties modal ─────────────────────────────────────────────────────────
+  // ── Properties helpers ────────────────────────────────────────────────────────
 
-  const renderPropsModal = () => {
-    if (!showProps) return null;
-    const s = selected.length === 1 ? selected[0] : null;
-    if (!s) return null;
+  const numField = (label: string, val: number, onChange: (v: number) => void) => (
+    <div className="pbed__field" key={label}>
+      <label>{label}</label>
+      <input type="number" value={val} step="any" onChange={ev => onChange(Number(ev.target.value))} />
+    </div>
+  );
+  const strField = (label: string, val: string, onChange: (v: string) => void) => (
+    <div className="pbed__field" key={label}>
+      <label>{label}</label>
+      <input type="text" value={val} onChange={ev => onChange(ev.target.value)} />
+    </div>
+  );
 
-    const numField = (label: string, val: number, onChange: (v: number) => void) => (
-      <div className="pbed__field" key={label}>
-        <label>{label}</label>
-        <input type="number" value={val} step="any" onChange={ev => onChange(Number(ev.target.value))} />
-      </div>
-    );
-    const strField = (label: string, val: string, onChange: (v: string) => void) => (
-      <div className="pbed__field" key={label}>
-        <label>{label}</label>
-        <input type="text" value={val} onChange={ev => onChange(ev.target.value)} />
-      </div>
-    );
-
-    const canDelete = s.kind !== "plunger";
-    const deleteEl = () => {
-      if (!canDelete) return;
-      setBoard(prev => deleteItems(prev, [s]));
-      setSelected([]); setShowProps(false);
-    };
-
+  const getPropsFor = (s: SelItem): { title: string; fields: React.ReactNode; canDelete: boolean } => {
     let fields: React.ReactNode = null;
     let title = "";
 
@@ -1070,6 +1090,20 @@ export default function PinballEditor() {
       </>;
     }
 
+    return { title, fields, canDelete: s.kind !== "plunger" };
+  };
+
+  // ── Properties modal (small screens) ─────────────────────────────────────────
+
+  const renderPropsModal = () => {
+    if (!showProps) return null;
+    const s = selected.length === 1 ? selected[0] : null;
+    if (!s) return null;
+    const { title, fields, canDelete } = getPropsFor(s);
+    const deleteEl = () => {
+      setBoard(prev => deleteItems(prev, [s]));
+      setSelected([]); setShowProps(false);
+    };
     return (
       <div className="pbed__modal-backdrop" onClick={() => setShowProps(false)}>
         <div className="pbed__modal" onClick={e => e.stopPropagation()}>
@@ -1089,10 +1123,26 @@ export default function PinballEditor() {
 
   const canvasMode = tool === null ? "pan" : tool === "select" ? "select" : tool === "delete" ? "delete" : "place";
 
+  // Sidebar content — shown on large screens, replaces modal
+  const sidebarItem = selected.length === 1 ? selected[0] : null;
+  const sidebarProps = sidebarItem ? getPropsFor(sidebarItem) : null;
+
   return (
     <div className="pbed">
-      {/* Tool bar */}
+      {/* Tool bar — horizontal on small, vertical on large */}
       <div className="pbed__toolbar">
+        {/* Test Play — always first / topmost */}
+        <button
+          className="pbed__tool-btn pbed__tool-btn--play"
+          onClick={() => setTestPlay(true)}
+          title="Test Play"
+        >
+          <IconPlay />
+          <span>Play</span>
+        </button>
+
+        <div className="pbed__toolbar-sep" />
+
         <button
           className={`pbed__tool-btn${tool === null ? " pbed__tool-btn--active" : ""}`}
           onClick={() => { setTool(null); setSelected([]); }}
@@ -1114,32 +1164,55 @@ export default function PinballEditor() {
         ))}
       </div>
 
-      {/* Canvas area */}
-      <div className="pbed__canvas-area" ref={containerRef}>
-        <canvas
-          ref={canvasRef}
-          className={`pbed__canvas pbed__canvas--${canvasMode}`}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerCancel}
-          onWheel={onWheel}
-          onContextMenu={onContextMenu}
-          style={{ touchAction: "none" }}
-        />
+      {/* Center row: canvas + sidebar */}
+      <div className="pbed__center">
+        {/* Canvas area */}
+        <div className="pbed__canvas-area" ref={containerRef}>
+          <canvas
+            ref={canvasRef}
+            className={`pbed__canvas pbed__canvas--${canvasMode}`}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            onWheel={onWheel}
+            onContextMenu={onContextMenu}
+            style={{ touchAction: "none" }}
+          />
 
-        {/* ✏️ FAB — bottom-left so it never overlaps the zoom buttons (bottom-right) */}
-        {selected.length === 1 && !showProps && (
-          <button className="pbed__props-fab" onClick={() => setShowProps(true)} title="Edit properties">
-            ✏️
-          </button>
-        )}
+          {/* ✏️ FAB — hidden on large screens (sidebar replaces it) */}
+          {selected.length === 1 && !showProps && (
+            <button className="pbed__props-fab" onClick={() => setShowProps(true)} title="Edit properties">
+              ✏️
+            </button>
+          )}
 
-        {/* Zoom buttons — bottom-right */}
-        <div className="pbed__zoom-btns">
-          <button className="pbed__zoom-btn" onClick={zoomIn}  title="Zoom in (+)">+</button>
-          <button className="pbed__zoom-btn" onClick={fitToScreen} title="Fit board (F)">FIT</button>
-          <button className="pbed__zoom-btn" onClick={zoomOut} title="Zoom out (−)">−</button>
+          {/* Zoom buttons — bottom-right */}
+          <div className="pbed__zoom-btns">
+            <button className="pbed__zoom-btn" onClick={zoomIn}  title="Zoom in (+)">+</button>
+            <button className="pbed__zoom-btn" onClick={fitToScreen} title="Fit board (F)">FIT</button>
+            <button className="pbed__zoom-btn" onClick={zoomOut} title="Zoom out (−)">−</button>
+          </div>
+        </div>
+
+        {/* Properties sidebar — visible on large screens only */}
+        <div className="pbed__sidebar">
+          {sidebarProps ? (
+            <>
+              <div className="pbed__sidebar-header">{sidebarProps.title}</div>
+              <div className="pbed__sidebar-body">{sidebarProps.fields}</div>
+              {sidebarProps.canDelete && (
+                <div className="pbed__sidebar-footer">
+                  <button className="pbed__delete-btn" onClick={() => {
+                    setBoard(prev => deleteItems(prev, [sidebarItem!]));
+                    setSelected([]);
+                  }}>DELETE</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="pbed__sidebar-empty">Select an object to edit its properties</div>
+          )}
         </div>
       </div>
 
@@ -1179,7 +1252,7 @@ export default function PinballEditor() {
         </div>
       )}
 
-      {/* Properties modal */}
+      {/* Properties modal (small screens) */}
       {renderPropsModal()}
 
       {/* Test play overlay */}

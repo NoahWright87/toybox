@@ -410,9 +410,11 @@ export default function Pinball({ board, onQuit }: Props) {
         Matter.Body.setAngularVelocity(f.body, (f.angle - prevAngle) * 60);
       }
 
-      // Plunger charge
+      // Plunger charge + move ball down with the rod
       if (st.phase === "launching" && plungerRef.current) {
         st.plungerCharge = Math.min(1, st.plungerCharge + 0.025);
+        const pullMax = Math.min(36, (board.plunger.bottomY - board.ballStartY) * 0.3);
+        Matter.Body.setPosition(ball, { x: board.plunger.x, y: board.ballStartY + st.plungerCharge * pullMax });
       }
 
       // Physics
@@ -570,23 +572,28 @@ export default function Pinball({ board, onQuit }: Props) {
         ctx.fill();
       }
 
-      // Plunger lane divider
+      // Plunger lane + visual rod
       const pl = board.plunger;
-      ctx.fillStyle = "#0d0028";
-      ctx.fillRect(pl.x - BALL_R - 10, pl.topY, 5, pl.bottomY - pl.topY);
+      // Left divider rail between main field and plunger lane
+      ctx.fillStyle = "#1a0040";
+      ctx.fillRect(pl.x - BALL_R - 8, pl.topY, 6, pl.bottomY - pl.topY);
 
-      // Plunger charge meter
+      // Plunger rod: silver rectangle below the ball that retracts as charge increases
       if (st.phase === "ready" || st.phase === "launching") {
-        const mH = 60;
-        const mY = pl.bottomY - mH - 10;
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillRect(pl.x - 6, mY, 12, mH);
-        if (st.plungerCharge > 0) {
-          const fillH = mH * st.plungerCharge;
-          const r = Math.round(255 * st.plungerCharge);
-          const g = Math.round(200 * (1 - st.plungerCharge));
-          ctx.fillStyle = `rgb(${r},${g},0)`;
-          ctx.fillRect(pl.x - 5, mY + mH - fillH, 10, fillH);
+        const rodTop = ball.position.y + BALL_R + 2;
+        const rodBottom = pl.bottomY - 4;
+        const rodFullH = rodBottom - rodTop;
+        const rodH = rodFullH * (1 - st.plungerCharge);
+        if (rodH > 1) {
+          const rodY = rodBottom - rodH; // rod base is at bottom, shrinks upward as charge grows
+          ctx.fillStyle = "#909090";
+          ctx.fillRect(pl.x - BALL_R, rodY, BALL_R * 2, rodH);
+          ctx.fillStyle = "#d0d0d0"; // left highlight
+          ctx.fillRect(pl.x - BALL_R, rodY, 3, rodH);
+          ctx.fillStyle = "#606060"; // right shadow
+          ctx.fillRect(pl.x + BALL_R - 3, rodY, 3, rodH);
+          ctx.fillStyle = "#c0c0c0"; // rod face (cap)
+          ctx.fillRect(pl.x - BALL_R, rodY, BALL_R * 2, 3);
         }
       }
 

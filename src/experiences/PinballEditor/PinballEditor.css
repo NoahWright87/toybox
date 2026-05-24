@@ -8,10 +8,20 @@
   user-select: none;
 }
 
+/* ── Center row (canvas + sidebar) ────────────────────────────────────────── */
+
+.pbed__center {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
 /* ── Tool bar ──────────────────────────────────────────────────────────────── */
 
 .pbed__toolbar {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 2px;
   padding: 3px 4px;
@@ -26,6 +36,15 @@
 }
 
 .pbed__toolbar::-webkit-scrollbar { display: none; }
+
+/* Divider between play button and tool buttons */
+.pbed__toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: #808080;
+  margin: 2px 2px;
+  flex-shrink: 0;
+}
 
 .pbed__tool-btn {
   display: flex;
@@ -56,6 +75,18 @@
 }
 
 .pbed__tool-btn--danger { color: #cc0000; }
+
+/* Green play button */
+.pbed__tool-btn--play {
+  color: #004400;
+  background: #88cc44;
+  border-color: #ccff88 #336600 #336600 #ccff88;
+}
+
+.pbed__tool-btn--play:active {
+  background: #669933;
+  border-color: #336600 #ccff88 #ccff88 #336600;
+}
 
 /* ── Canvas area ───────────────────────────────────────────────────────────── */
 
@@ -336,3 +367,95 @@
 }
 
 .pbed__overlay-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ── Properties sidebar ────────────────────────────────────────────────────── */
+
+/* Hidden on small screens; shown at ≥900px */
+.pbed__sidebar {
+  display: none;
+}
+
+.pbed__sidebar-header {
+  padding: 4px 6px;
+  background: #000080;
+  color: #fff;
+  font-size: 6px;
+  flex-shrink: 0;
+}
+
+.pbed__sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  align-content: start;
+}
+
+.pbed__sidebar-footer {
+  padding: 6px;
+  border-top: 1px solid #808080;
+  flex-shrink: 0;
+}
+
+.pbed__sidebar-empty {
+  padding: 10px 8px;
+  font-size: 5px;
+  color: #555;
+  line-height: 1.8;
+}
+
+/* ── Large-screen responsive layout (≥900px) ───────────────────────────────── */
+
+@media (min-width: 900px) {
+  /* Rotate toolbar to vertical strip on the left */
+  .pbed {
+    flex-direction: row;
+  }
+
+  .pbed__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-bottom: none;
+    border-right: 2px solid #808080;
+    padding: 4px 3px;
+    width: 58px;
+  }
+
+  .pbed__toolbar-sep {
+    width: auto;
+    height: 1px;
+    margin: 2px 0;
+  }
+
+  /* Stack icon + label vertically (already the default flex-direction: column) */
+  .pbed__tool-btn {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* Center row fills the remaining space */
+  .pbed__center {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Show sidebar */
+  .pbed__sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 200px;
+    flex-shrink: 0;
+    background: #c0c0c0;
+    border-left: 2px solid #808080;
+    overflow: hidden;
+  }
+
+  /* FAB is redundant on large screens — sidebar handles properties */
+  .pbed__props-fab {
+    display: none;
+  }
+}

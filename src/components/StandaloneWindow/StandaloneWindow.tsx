@@ -35,20 +35,27 @@ export default function StandaloneWindow({ title, icon, helpContent, fullscreen,
     navigate("/doors97", { state: { skipBoot: true } });
   }
 
-  const fileMenu: MenuBarMenu = {
-    label: "File",
-    items: [{ label: "Exit to Doors", onClick: exitToDoors }],
-  };
-
+  const exitItem = { label: "Exit to Doors", onClick: exitToDoors };
   const helpMenu: MenuBarMenu | null = helpContent
     ? { label: "Help", items: [{ label: "Keyboard Shortcuts", onClick: () => setShowHelp(true) }] }
     : null;
 
-  const menus: MenuBarMenu[] = [
-    fileMenu,
-    ...(dynamicMenus ?? []),
-    ...(helpMenu ? [helpMenu] : []),
-  ];
+  // If dynamic menus include a "File" menu, inject "Exit to Doors" at the bottom of it.
+  // Otherwise prepend a standalone File menu so the exit option is always reachable.
+  let menus: MenuBarMenu[];
+  if (dynamicMenus && dynamicMenus.some(m => m.label === "File")) {
+    menus = [
+      ...dynamicMenus.map(m =>
+        m.label === "File"
+          ? { ...m, items: [...m.items, { separator: true as const }, exitItem] }
+          : m
+      ),
+      ...(helpMenu ? [helpMenu] : []),
+    ];
+  } else {
+    const fileMenu: MenuBarMenu = { label: "File", items: [exitItem] };
+    menus = [fileMenu, ...(dynamicMenus ?? []), ...(helpMenu ? [helpMenu] : [])];
+  }
 
   return (
     <div className={`standalone-page${fullscreen ? " standalone-page--fullscreen" : ""}`}>
