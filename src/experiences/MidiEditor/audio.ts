@@ -1,4 +1,5 @@
 import type { OscWaveform } from './types';
+import { loadSoundFont as sf2Load, isSoundFontReady, playSfNote } from './sf2';
 
 let ctx: AudioContext | null = null;
 
@@ -19,7 +20,13 @@ export function midiToHz(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-// Proper ADSR: attack → sustain at full vol → release at end of note
+export { isSoundFontReady };
+
+export function loadSoundFont(url: string): Promise<void> {
+  return sf2Load(url);
+}
+
+// Plays a note via soundfont sample (if loaded and gmProgram set) or oscillator fallback.
 export function playNote(
   pitch: number,
   velocity: number,
@@ -29,9 +36,15 @@ export function playNote(
   gain = 1,
   attack = 0.01,
   release = 0.1,
+  gmProgram?: number,
 ): void {
-  const c   = getCtx();
-  const t   = when ?? c.currentTime;
+  const c = getCtx();
+  const t = when ?? c.currentTime;
+
+  if (gmProgram !== undefined && isSoundFontReady()) {
+    playSfNote(gmProgram, pitch, velocity, durationSec, c, t, gain);
+    return;
+  }
   const vol = (velocity / 127) * 0.22 * Math.max(0, Math.min(1, gain));
 
   const atkDur   = Math.min(attack, durationSec * 0.4);

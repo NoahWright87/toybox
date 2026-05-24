@@ -284,6 +284,16 @@ This reports:
 3. Verify every new `b` word either already exists as a hub OR you are also adding outgoing edges for it
 4. Run the TypeScript build check — `pairs.ts` is plain data but the build will catch syntax errors
 
+## Dependency policy — supply chain safety
+
+This project is intentionally minimal on npm dependencies to reduce supply-chain risk. Before adding any new package:
+
+1. **Prefer writing it ourselves** — if a feature can be implemented in a few hundred lines using only Web/Node built-ins, do that rather than pulling in a library. See `src/experiences/MidiEditor/sf2.ts` as an example: a full SF2 soundfont parser written in-house instead of using an npm library.
+2. **Vet every new package** — check weekly download counts (prefer 100 k+/week), number of contributors, transitive dependency count, last release date, and known CVEs before adding.
+3. **Pin to exact versions** — use `"1.2.3"` not `"^1.2.3"` or `"~1.2.3"` in `package.json` so the lockfile is the only source of truth and a future patch release cannot be weaponized.
+4. **Commit the lockfile** — `package-lock.json` must always be committed and up to date.
+5. **Binary assets (fonts, images, SF2 soundfont files) are not executable code** — they carry no supply-chain risk in the npm sense, but document the download source and SHA-256 in a comment or adjacent README when adding them.
+
 ## Known conventions
 
 - Commits reference the feature or PR (see git log for style)
