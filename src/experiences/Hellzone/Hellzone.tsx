@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
-import { QUIPS, QuipKey, SubtitleCategory, SubtitleSettings, pickRandom, pickLockedDoorQuip } from "./quips";
+import { QUIPS, QuipKey, SubtitleCategory, SubtitleSettings, EXIT_QUIPS, pickRandom, pickLockedDoorQuip } from "./quips";
 import "./Hellzone.css";
 
 const WEAPON_SLOT_DATA = [
@@ -442,6 +442,7 @@ export default function Hellzone() {
     let cheatBuffer = '';
     let cheatClearTimer = 0;
     let showCheatsMenu = false;
+    let showExitConfirm = false;
     let longPressTriggered = false;
 
     // ── Sprites ─────────────────────────────────────────────────────────────────
@@ -543,6 +544,27 @@ export default function Hellzone() {
     function quitToTos() {
       if (document.pointerLockElement) document.exitPointerLock();
       navigateRef.current("/ns-tos");
+    }
+
+    function showExitModal() {
+      if (document.pointerLockElement) document.exitPointerLock();
+      const quip = pickRandom(EXIT_QUIPS);
+      const modal = root.querySelector<HTMLElement>('.hz-exit-modal');
+      if (!modal) return;
+      const promptEl = modal.querySelector<HTMLElement>('.hz-exit-prompt');
+      const stayEl   = modal.querySelector<HTMLElement>('.hz-exit-stay');
+      const quitEl   = modal.querySelector<HTMLElement>('.hz-exit-quit');
+      if (promptEl) promptEl.textContent = quip.prompt;
+      if (stayEl)   stayEl.textContent   = quip.stay;
+      if (quitEl)   quitEl.textContent   = quip.quit;
+      modal.style.display = 'flex';
+      showExitConfirm = true;
+    }
+
+    function hideExitModal() {
+      const modal = root.querySelector<HTMLElement>('.hz-exit-modal');
+      if (modal) modal.style.display = 'none';
+      showExitConfirm = false;
     }
 
     // ── Level init ─────────────────────────────────────────────────────────────
@@ -1982,13 +2004,14 @@ export default function Hellzone() {
         if (wMap[e.code]) switchWeapon(wMap[e.code]);
       }
       if (e.code === "Escape") {
+        if (showExitConfirm) { hideExitModal(); return; }
         if (gameState === "playing") {
           setScreen("title");
           if (document.pointerLockElement) document.exitPointerLock();
         } else if (showCheatsMenu) {
           showCheatsMenu = false; updateCheatsMenu();
         } else {
-          quitToTos();
+          showExitModal();
         }
         return;
       }
@@ -2111,11 +2134,12 @@ export default function Hellzone() {
     if (fabEsc) {
       const doEsc = (ev: Event) => {
         ev.preventDefault();
+        if (showExitConfirm) { hideExitModal(); return; }
         if (gameState === "playing") {
           setScreen("title");
           if (document.pointerLockElement) document.exitPointerLock();
         } else {
-          quitToTos();
+          showExitModal();
         }
       };
       fabEsc.addEventListener("touchstart", doEsc, { passive: false });
@@ -2196,6 +2220,22 @@ export default function Hellzone() {
       const fn = () => { showCheatsMenu = false; updateCheatsMenu(); };
       cheatCloseBtn.addEventListener('click', fn);
       fabCleanups.push(() => cheatCloseBtn.removeEventListener('click', fn));
+    }
+
+    // Exit confirmation modal buttons
+    const exitStayBtn = root.querySelector<HTMLElement>('.hz-exit-stay');
+    const exitQuitBtn = root.querySelector<HTMLElement>('.hz-exit-quit');
+    if (exitStayBtn) {
+      const fn = (ev: Event) => { ev.preventDefault(); hideExitModal(); };
+      exitStayBtn.addEventListener('click', fn);
+      exitStayBtn.addEventListener('touchstart', fn, { passive: false });
+      fabCleanups.push(() => { exitStayBtn.removeEventListener('click', fn); exitStayBtn.removeEventListener('touchstart', fn); });
+    }
+    if (exitQuitBtn) {
+      const fn = (ev: Event) => { ev.preventDefault(); quitToTos(); };
+      exitQuitBtn.addEventListener('click', fn);
+      exitQuitBtn.addEventListener('touchstart', fn, { passive: false });
+      fabCleanups.push(() => { exitQuitBtn.removeEventListener('click', fn); exitQuitBtn.removeEventListener('touchstart', fn); });
     }
 
     function showTouchOverlay() {
@@ -2328,6 +2368,18 @@ export default function Hellzone() {
   return (
     <div className="hellzone-root" ref={rootRef}>
       <div className="hellzone-wrapper">
+
+        {/* Exit confirmation modal — overlays all screens */}
+        <div className="hz-exit-modal" style={{ display: 'none' }}>
+          <div className="hz-exit-panel">
+            <div className="hz-exit-title">QUIT TO NS-TOS?</div>
+            <div className="hz-exit-prompt"></div>
+            <div className="hz-exit-buttons">
+              <button className="hz-exit-stay"></button>
+              <button className="hz-exit-quit"></button>
+            </div>
+          </div>
+        </div>
 
         {/* Title screen */}
         <div className="hz-title-screen">

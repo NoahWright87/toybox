@@ -71,7 +71,29 @@ export function pickLockedDoorQuip(color: string): Quip {
   return { text: line.text.replace('{color}', color.toUpperCase()), audio: line.audio };
 }
 
-// ── Quip content ──────────────────────────────────────────────────────────────
+// ── Exit confirmation quips ───────────────────────────────────────────────────
+// Shown when the player tries to quit mid-session (classic 90s quit-heckle).
+
+export interface ExitQuip {
+  prompt: string;  // the heckle / question
+  stay: string;    // "I'm staying" button label
+  quit: string;    // "I'm really quitting" button label
+}
+
+export const EXIT_QUIPS: ExitQuip[] = [
+  { prompt: "LEAVING ALREADY? THE CATS ARE WINNING.", stay: "NOT ON MY WATCH!", quit: "LET THEM WIN." },
+  { prompt: "WHAT, SCARED OF A FEW CATS?", stay: "NEVER!", quit: "...MAYBE." },
+  { prompt: "THE WOLF DOES NOT QUIT.", stay: "THAT'S RIGHT.", quit: "THIS WOLF DOES." },
+  { prompt: "YOU'D REALLY RATHER LOOK AT A FAKE COMMAND PROMPT?", stay: "YOU'RE RIGHT. STAY.", quit: "ACTUALLY YES." },
+  { prompt: "SERIOUSLY? NOW?", stay: "FINE. BACK TO HUNTING.", quit: "SERIOUSLY." },
+  { prompt: "BUT WE WERE JUST GETTING STARTED!", stay: "YOU'RE RIGHT, LET'S GO.", quit: "LATER." },
+  { prompt: "THE CATS WILL CELEBRATE WHEN YOU LEAVE.", stay: "OVER MY DEAD BODY.", quit: "FINE, LET THEM." },
+  { prompt: "ONE MORE ROOM. JUST ONE MORE.", stay: "OKAY, ONE MORE.", quit: "I LIED." },
+  { prompt: "YOU CALL YOURSELF A WOLF?", stay: "I AM A WOLF!", quit: "A TIRED WOLF." },
+  { prompt: "EXIT TO WHERE? THE SAME COMPUTER?", stay: "FAIR POINT. STAYING.", quit: "I LIKE TERMINALS." },
+  { prompt: "YOUR KILL COUNT IS EMBARRASSINGLY LOW FOR A QUITTER.", stay: "RUDE. BUT FINE. STAYING.", quit: "GOODBYE." },
+  { prompt: "THE NEXT LEVEL HAS EXTRA CATS. YOU'LL MISS IT.", stay: "OH, NOW I'M STAYING.", quit: "SOUNDS TERRIBLE." },
+];
 
 export const QUIPS: Record<QuipKey, Quip[]> = {
   // General kill (fired at combat lull; weapon-specific variants are mixed in)
