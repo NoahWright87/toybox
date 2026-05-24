@@ -251,10 +251,14 @@ export default function Hellzone() {
         for (let x = 3; x <= 22; x++)
           grid[y][x] = TILE_EMPTY;
 
-      // Hallway A→B
+      // Hallway A→B (3 tiles wide)
       for (let y = 13; y <= 19; y++)
         for (let x = 10; x <= 12; x++)
           grid[y][x] = TILE_EMPTY;
+      // 3-wide door at hallway entrance — tests multi-tile door grouping
+      grid[13][10] = TILE_DOOR;
+      grid[13][11] = TILE_DOOR;
+      grid[13][12] = TILE_DOOR;
 
       // Room B: patrol range
       for (let y = 20; y <= 34; y++)
@@ -904,8 +908,11 @@ export default function Hellzone() {
           // The door panel is drawn on top and covers the still-closed portion.
           if (openProg > 0 && door) {
             const behind = castRay(rayAngle, door.group.id);
+            const bPerp = behind.dist * Math.cos(rayAngle - player.angle);
+            // Update zBuffer to behind depth so sprites in the open corridor
+            // aren't culled by the door's (closer) depth — fixes pop-in on open.
+            zBuffer[x] = bPerp;
             if (behind.hit) {
-              const bPerp = behind.dist * Math.cos(rayAngle - player.angle);
               const bWallH = (SCREEN_H / bPerp) * 0.8;
               const bTop = (SCREEN_H - bWallH) / 2;
               const bFog = Math.max(0, 1 - bPerp / MAX_DEPTH);
