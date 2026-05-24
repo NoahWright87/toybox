@@ -5,9 +5,9 @@ import {
   type Pattern, type Track, type Note, type DrumType, type OscWaveform,
   DRUM_LABELS, DRUM_PITCHES, PIANO_MIN, PIANO_MAX,
   isBlackPitch, pitchName, makeNoteId, createInitialPattern, TRACK_COLORS,
-  drumPitchLabel, DEFAULT_DRUM_ROWS,
+  drumPitchLabel, DEFAULT_DRUM_ROWS, GM_PROGRAMS,
 } from './types';
-import { resumeAudio, playNote, playDrum } from './audio';
+import { resumeAudio, playNote, playDrum, loadSoundFont, isSoundFontReady } from './audio';
 import './MidiEditor.css';
 
 // ── Layout & zoom constants ────────────────────────────────────────────────────
@@ -111,22 +111,60 @@ interface InstrumentModalProps {
   onDelete: () => void;
 }
 
+const GM_GROUPS = [
+  { label: 'Piano',        start: 0   },
+  { label: 'Chr Perc',     start: 8   },
+  { label: 'Organ',        start: 16  },
+  { label: 'Guitar',       start: 24  },
+  { label: 'Bass',         start: 32  },
+  { label: 'Strings',      start: 40  },
+  { label: 'Ensemble',     start: 48  },
+  { label: 'Brass',        start: 56  },
+  { label: 'Reed',         start: 64  },
+  { label: 'Pipe',         start: 72  },
+  { label: 'Synth Lead',   start: 80  },
+  { label: 'Synth Pad',    start: 88  },
+  { label: 'Synth FX',     start: 96  },
+  { label: 'Ethnic',       start: 104 },
+  { label: 'Percussive',   start: 112 },
+  { label: 'Sound FX',     start: 120 },
+];
+
 function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: InstrumentModalProps) {
   const [name,     setName]     = useState(track.name);
   const [color,    setColor]    = useState(track.color);
   const [waveform, setWaveform] = useState(track.waveform);
   const [volume,   setVolume]   = useState(Math.round(track.volume * 100));
+  const [sfMode,   setSfMode]   = useState(track.gmProgram !== undefined);
+  const [gmProg,   setGmProg]   = useState(track.gmProgram ?? 0);
 
-  function save() { onSave({ name, color, waveform, volume: volume / 100 }); }
+  function save() {
+    onSave({ name, color, waveform, volume: volume / 100, gmProgram: sfMode ? gmProg : undefined });
+  }
 
   function previewSound() {
     resumeAudio();
     if (track.isDrum) {
-      const pitch = track.drumRows?.[0] ?? 36;
-      playDrum(pitch, 100);
+      playDrum(track.drumRows?.[0] ?? 36, 100);
     } else {
-      playNote(60, 100, 1.0, waveform, undefined, volume / 100, track.attack, track.release);
+      playNote(60, 100, 1.5, waveform, undefined, volume / 100, track.attack, track.release, sfMode ? gmProg : undefined);
     }
+  }
+
+  // Build GM instrument list rows (group headers + instrument items)
+  const gmRows: Array<{ type: 'group'; label: string } | { type: 'inst'; prog: number; label: string }> = [];
+  let groupIdx = 0;
+  for (let prog = 0; prog < GM_PROGRAMS.length; prog++) {
+    const nextGroup = GM_GROUPS[groupIdx + 1];
+    if (!nextGroup || prog < nextGroup.start) {
+      // still in current group — emit item
+    } else {
+      groupIdx++;
+    }
+    if (prog === GM_GROUPS[groupIdx].start) {
+      gmRows.push({ type: 'group', label: GM_GROUPS[groupIdx].label });
+    }
+    gmRows.push({ type: 'inst', prog, label: GM_PROGRAMS[prog] });
   }
 
   return (
@@ -163,19 +201,54 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
           </div>
 
           {!track.isDrum && (
-            <div className="me-modal__row">
-              <label className="me-label">SYNTH</label>
-              <select
-                className="me-select"
-                value={waveform}
-                onChange={e => setWaveform(e.target.value as OscWaveform)}
-              >
-                <option value="sine">Sine</option>
-                <option value="triangle">Triangle</option>
-                <option value="square">Square</option>
-                <option value="sawtooth">Sawtooth</option>
-              </select>
-            </div>
+            <>
+              <div className="me-modal__row">
+                <label className="me-label">SOURCE</label>
+                <div className="me-source-toggle">
+                  <button
+                    className={`me-source-btn${!sfMode ? ' me-source-btn--active' : ''}`}
+                    onClick={() => setSfMode(false)}
+                  >OSC</button>
+                  <button
+                    className={`me-source-btn${sfMode ? ' me-source-btn--active' : ''}`}
+                    onClick={() => setSfMode(true)}
+                  >MIDI{!isSoundFontReady() ? '…' : ''}</button>
+                </div>
+              </div>
+
+              {!sfMode && (
+                <div className="me-modal__row">
+                  <label className="me-label">WAVE</label>
+                  <select
+                    className="me-select"
+                    value={waveform}
+                    onChange={e => setWaveform(e.target.value as OscWaveform)}
+                  >
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="square">Square</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </div>
+              )}
+
+              {sfMode && (
+                <div className="me-modal__row me-modal__row--col">
+                  <label className="me-label">INSTRUMENT — {GM_PROGRAMS[gmProg]}</label>
+                  <div className="me-inst-picker">
+                    {gmRows.map((row, i) =>
+                      row.type === 'group'
+                        ? <div key={i} className="me-inst-group">{row.label}</div>
+                        : <button
+                            key={row.prog}
+                            className={`me-inst-item${row.prog === gmProg ? ' me-inst-item--active' : ''}`}
+                            onClick={() => setGmProg(row.prog)}
+                          >{row.label}</button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="me-modal__row">
@@ -189,12 +262,7 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
 
           <div className="me-modal__row">
             <label className="me-label">PREVIEW</label>
-            <button className="me-btn me-btn--sm" onClick={previewSound}>🔊 Play</button>
-          </div>
-
-          <div className="me-modal__row me-modal__row--dim">
-            <label className="me-label">SOUND</label>
-            <span className="me-label me-label--dim">Upload sample (coming soon)</span>
+            <button className="me-btn me-btn--sm" onClick={previewSound}>Play</button>
           </div>
         </div>
 
@@ -848,7 +916,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       track.notes.forEach((note: Note) => {
         if (note.startStep !== step || note.startStep >= total) return;
         if (track.isDrum) playDrum(note.pitch, note.velocity);
-        else playNote(note.pitch, note.velocity, note.durationSteps * stepDur, track.waveform, undefined, track.volume, track.attack, track.release);
+        else playNote(note.pitch, note.velocity, note.durationSteps * stepDur, track.waveform, undefined, track.volume, track.attack, track.release, track.gmProgram);
       });
     });
     stepRef.current = (step + 1) % total;
@@ -864,6 +932,9 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   }, [tick]);
 
   useEffect(() => () => { stopPlayback(); }, [stopPlayback]);
+
+  // Load soundfont in background on mount
+  useEffect(() => { loadSoundFont('/TimGM6mb.sf2').catch(() => { /* non-fatal */ }); }, []);
 
   // ── Global pointer events (resize + drag-paint for touch) ─────────────────────
 
@@ -1005,7 +1076,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const previewPitch = useCallback((track: Track, pitch: number) => {
     resumeAudio();
-    playNote(pitch, 100, 0.35, track.waveform, undefined, track.volume);
+    playNote(pitch, 100, 0.35, track.waveform, undefined, track.volume, track.attack, track.release, track.gmProgram);
   }, []);
 
   const previewDrum = useCallback((pitch: number) => {
