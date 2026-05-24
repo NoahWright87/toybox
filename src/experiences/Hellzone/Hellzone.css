@@ -15,8 +15,10 @@
 
 .hellzone-wrapper {
   position: relative;
-  width: min(100vw, calc((100vh - 72px) * 16 / 9));
+  width: min(100vw, calc((100vh - 96px) * 16 / 9));
   image-rendering: pixelated;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── TITLE SCREEN ── */
@@ -116,15 +118,14 @@
 /* ── DEATH SCREEN ── */
 .hz-death-screen {
   display: none;
-  width: 100%;
-  aspect-ratio: 16/9;
   background: #000;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   border: 2px solid #c00;
   position: absolute;
-  top: 0; left: 0;
+  inset: 0;
+  z-index: 20;
 }
 
 .hz-death-title {
@@ -171,6 +172,20 @@
   display: none;
   flex-direction: column;
   width: 100%;
+  position: relative;
+}
+
+/* ── TOP BAR (minimap sits above the canvas) ── */
+.hz-top-bar {
+  width: 100%;
+  height: 48px;
+  background: #0d0d0d;
+  border-bottom: 1px solid #1a0000;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 8px;
+  box-sizing: border-box;
 }
 
 .hz-render-canvas {
@@ -185,14 +200,14 @@
 /* ── HUD ── */
 .hz-hud {
   width: 100%;
-  height: 72px;
+  height: 48px;
   background: #111;
-  border-top: 3px solid #c00;
+  border-top: 2px solid #c00;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 10px;
-  position: relative;
+  padding: 0 8px;
+  gap: 8px;
+  box-sizing: border-box;
 }
 
 .hz-hud-panel {
@@ -212,21 +227,22 @@
 
 .hz-hud-value {
   font-family: 'VT323', monospace;
-  font-size: 44px;
+  font-size: 36px;
   color: #c00;
   line-height: 1;
-  text-shadow: 0 0 10px #ff0000;
-  min-width: 60px;
+  text-shadow: 0 0 8px #ff0000;
+  min-width: 38px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .hz-hud-value.low { color: #ff4400; animation: hz-blink 0.5s step-end infinite; }
 
 .hz-face-sprite {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   image-rendering: pixelated;
-  border: 2px solid #333;
+  border: 1px solid #333;
   flex-shrink: 0;
 }
 
@@ -256,19 +272,87 @@
   margin-top: 4px;
 }
 
-/* ── MINIMAP ── */
-.hz-minimap {
-  position: absolute;
-  top: 4px;
-  right: 120px;
-  width: 80px;
-  height: 80px;
-  image-rendering: pixelated;
-  opacity: 0.7;
-  border: 1px solid #333;
+/* ── WEAPON BAR ── */
+.hz-weapon-bar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  flex: 1;
 }
 
-/* ── MESSAGES ── */
+.hz-weapon-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 44px;
+  border: 2px solid;
+  border-color: #ffffff #555 #555 #ffffff;
+  background: #0d0d0d;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  gap: 1px;
+  padding: 2px 0;
+  transition: background 0.05s;
+  flex-shrink: 0;
+}
+
+.hz-weapon-slot.active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #1a0800;
+  cursor: default;
+}
+
+.hz-weapon-slot.unowned {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.hz-weapon-slot:not(.unowned):not(.active):hover {
+  background: #1a0a00;
+  border-color: #888 #333 #333 #888;
+}
+
+.hz-wslot-num {
+  font-size: 7px;
+  color: #550000;
+  line-height: 1;
+}
+.hz-weapon-slot.active .hz-wslot-num { color: #ff6600; }
+
+.hz-wslot-name {
+  font-size: 7px;
+  color: #666;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+.hz-weapon-slot.active .hz-wslot-name { color: #aa2200; }
+
+.hz-wslot-ammo {
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  color: #666;
+  line-height: 1;
+}
+.hz-weapon-slot.active .hz-wslot-ammo { color: #ff6600; }
+.hz-wslot-ammo.low { color: #ff4400; animation: hz-blink 0.5s step-end infinite; }
+
+/* ── MINIMAP ── */
+.hz-minimap {
+  width: 44px;
+  height: 44px;
+  image-rendering: pixelated;
+  opacity: 0.85;
+  border: 1px solid #330000;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* ── MESSAGES / SUBTITLES ── */
 .hz-message {
   position: absolute;
   top: 8px;
@@ -282,6 +366,114 @@
   opacity: 0;
   transition: opacity 0.3s;
   white-space: nowrap;
+}
+/* Player (wolf) voice — warm gold */
+.hz-message.hz-subtitle--player {
+  color: #ffdd44;
+  text-shadow: 0 0 8px #cc8800;
+}
+/* System / pickup info — bright yellow (default, same as base) */
+.hz-message.hz-subtitle--info {
+  color: #ffff00;
+  text-shadow: 0 0 8px #ff0;
+}
+/* Enemy attack telegraph — red, larger, always shown */
+.hz-message.hz-subtitle--monster-tell {
+  color: #ff4444;
+  text-shadow: 0 0 10px #ff0000;
+  font-size: 24px;
+}
+/* Enemy ambient voice — orange */
+.hz-message.hz-subtitle--monster-voice {
+  color: #ff8844;
+  text-shadow: 0 0 8px #cc4400;
+}
+
+/* ── EXIT CONFIRMATION — full terminal screen ── */
+.hz-exit-modal {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.hz-exit-modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,0,0,0.03) 2px, rgba(255,0,0,0.03) 4px);
+  pointer-events: none;
+}
+.hz-exit-screen {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  width: min(480px, 94%);
+}
+.hz-exit-rule {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: #600;
+  letter-spacing: 2px;
+  width: 100%;
+}
+.hz-exit-heading {
+  font-family: 'VT323', monospace;
+  font-size: 32px;
+  color: #ff2200;
+  letter-spacing: 4px;
+  text-shadow: 0 0 12px #ff2200;
+}
+.hz-exit-prompt {
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  color: #c00;
+  line-height: 1.4;
+  margin: 8px 0 4px;
+}
+.hz-exit-choices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+}
+.hz-exit-stay,
+.hz-exit-quit {
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 1px;
+  text-align: left;
+  transition: color 0.1s, text-shadow 0.1s;
+}
+.hz-exit-stay {
+  color: #888;
+}
+.hz-exit-stay:hover,
+.hz-exit-stay:focus {
+  color: #fff;
+  text-shadow: 0 0 8px #fff;
+  outline: none;
+}
+.hz-exit-quit {
+  color: #555;
+}
+.hz-exit-quit:hover,
+.hz-exit-quit:focus {
+  color: #ff4444;
+  text-shadow: 0 0 8px #ff4444;
+  outline: none;
 }
 
 /* ── CROSSHAIR ── */
@@ -457,17 +649,17 @@
 .hz-fab-sl   { width: 60px; height: 48px; left: 4px;   bottom: 80px;  }
 .hz-fab-sr   { width: 60px; height: 48px; left: 130px; bottom: 80px;  }
 
-/* Turn */
-.hz-fab-tl { width: 54px; height: 44px; left: 200px; bottom: 80px; }
-.hz-fab-tr { width: 54px; height: 44px; left: 260px; bottom: 80px; }
+/* Turn: right-anchored so they never overlap the FIRE/USE column */
+.hz-fab-tl { width: 52px; height: 44px; right: 166px; left: auto; bottom: 80px; }
+.hz-fab-tr { width: 52px; height: 44px; right: 106px;  left: auto; bottom: 80px; }
 
-/* FIRE */
+/* FIRE: tall rectangle, bottom-right */
 .hz-fab-shoot {
-  width: 90px;
-  height: 90px;
-  right: 16px;
-  bottom: 60px;
-  border-radius: 50%;
+  width: 82px;
+  height: 78px;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 8px;
   font-size: 18px;
   letter-spacing: 1px;
   border-width: 3px;
@@ -484,6 +676,14 @@
 .hz-fab-map {
   width: 54px; height: 36px;
   top: 12px; right: 12px;
+  font-size: 14px; letter-spacing: 1px;
+}
+
+/* USE (door interaction): shorter rectangle stacked above FIRE */
+.hz-fab-use {
+  width: 82px; height: 46px;
+  right: 8px;
+  bottom: 94px;
   font-size: 14px; letter-spacing: 1px;
 }
 
@@ -528,6 +728,71 @@
   .hz-title-press { font-size: clamp(18px, 5vw, 32px); }
   .hz-title-art { font-size: clamp(9px, 2.5vw, 13px); }
   .hz-death-title { font-size: clamp(48px, 14vw, 96px); }
-  .hz-hud-value { font-size: 36px; }
-  .hz-minimap { right: 80px; width: 60px; height: 60px; }
+  .hz-hud-value { font-size: 30px; min-width: 32px; }
+  .hz-weapon-slot { width: 32px; height: 40px; }
+  .hz-wslot-ammo { font-size: 12px; }
+  .hz-wslot-name { font-size: 5px; }
+}
+
+/* ── Cheats overlay ─────────────────────────────────────────────────────── */
+.hz-cheats-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+.hz-cheats-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+}
+.hz-cheats-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #cc4400;
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #808080;
+  margin-bottom: 2px;
+}
+.hz-cheat-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.hz-cheat-btn:active,
+.hz-cheat-btn.active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffcc88;
+  color: #cc4400;
+}
+.hz-cheat-close {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  color: #444;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 5px 10px;
+  cursor: pointer;
+  text-align: center;
+  margin-top: 4px;
+}
+.hz-cheat-close:active {
+  border-color: #808080 #ffffff #ffffff #808080;
 }
