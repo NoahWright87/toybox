@@ -240,6 +240,29 @@
   background: #d4d0c8;
 }
 
+/* Round corners toggle button */
+.ns-art__round-corner-btn {
+  width: 38px;
+  height: 18px;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #000;
+}
+
+.ns-art__round-corner-btn:active,
+.ns-art__round-corner-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
 /* ── Canvas area ─────────────────────────────────────────────────────────── */
 
 .ns-art__canvas-area {

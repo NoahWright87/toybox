@@ -158,7 +158,11 @@ function bresenhamLine(
   }
 }
 
-function applyColor(ctx: CanvasRenderingContext2D, color: string, size: number) {
+function applyColor(
+  ctx: CanvasRenderingContext2D,
+  color: string, size: number,
+  lineJoin: CanvasLineJoin = "round",
+) {
   if (color === "transparent") {
     ctx.globalCompositeOperation = "destination-out";
     ctx.strokeStyle = "rgba(0,0,0,1)";
@@ -169,8 +173,8 @@ function applyColor(ctx: CanvasRenderingContext2D, color: string, size: number) 
     ctx.fillStyle   = color;
   }
   ctx.lineWidth = size;
-  ctx.lineCap   = "round";
-  ctx.lineJoin  = "round";
+  ctx.lineCap   = lineJoin === "miter" ? "butt" : "round";
+  ctx.lineJoin  = lineJoin;
 }
 
 function resetCtx(ctx: CanvasRenderingContext2D) {
@@ -191,16 +195,17 @@ function strokeRect(
   ctx: CanvasRenderingContext2D,
   x0: number, y0: number, x1: number, y1: number,
   outlineColor: string, fillColor: string,
-  size: number, mode: FillMode,
+  size: number, mode: FillMode, roundCorners: boolean,
 ) {
   const x = Math.min(x0,x1), y = Math.min(y0,y1);
   const w = Math.abs(x1-x0), h = Math.abs(y1-y0);
+  const join: CanvasLineJoin = roundCorners ? "round" : "miter";
   if ((mode === "filled" || mode === "both") && w > 0 && h > 0) {
-    applyColor(ctx, fillColor, size);
+    applyColor(ctx, fillColor, size, join);
     ctx.fillRect(x, y, w, h);
   }
   if (mode === "outline" || mode === "both") {
-    applyColor(ctx, outlineColor, size);
+    applyColor(ctx, outlineColor, size, join);
     ctx.strokeRect(x, y, w, h);
   }
   resetCtx(ctx);
@@ -266,6 +271,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [brushSize,      setBrushSize]     = useState<BrushSize>(1);
   const [brushShape,     setBrushShape]    = useState<BrushShape>("square");
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
+  const [roundCorners,   setRoundCorners]  = useState(false);
   const [zoom,           setZoom]          = useState<ZoomLevel>(1);
   const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 100, h: 100 });
   const [status,         setStatus]        = useState("Ready");
@@ -296,10 +302,11 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const snapshotRef         = useRef<ImageData | null>(null);
   const undoRef             = useRef<ImageData[]>([]);
   const sprayRef            = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeColorRef      = useRef("#000000");
-  const activeFillColorRef  = useRef("#ffffff");
-  const activeSizeRef       = useRef<number>(1);
-  const activeBrushShapeRef = useRef<BrushShape>("square");
+  const activeColorRef       = useRef("#000000");
+  const activeFillColorRef   = useRef("#ffffff");
+  const activeSizeRef        = useRef<number>(1);
+  const activeBrushShapeRef  = useRef<BrushShape>("square");
+  const activeRoundCornersRef = useRef(false);
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
@@ -886,13 +893,14 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       return;
     }
 
-    isDrawingRef.current        = true;
-    startRef.current            = { x, y };
-    lastRef.current             = { x, y };
-    activeColorRef.current      = strokeColor;
-    activeFillColorRef.current  = isSecondary ? primaryColor : secondaryColor;
-    activeSizeRef.current       = brushSize;
-    activeBrushShapeRef.current = brushShape;
+    isDrawingRef.current         = true;
+    startRef.current             = { x, y };
+    lastRef.current              = { x, y };
+    activeColorRef.current       = strokeColor;
+    activeFillColorRef.current   = isSecondary ? primaryColor : secondaryColor;
+    activeSizeRef.current        = brushSize;
+    activeBrushShapeRef.current  = brushShape;
+    activeRoundCornersRef.current = roundCorners;
 
     if (tool === "brush" || tool === "eraser") {
       pushUndo();
@@ -910,7 +918,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       pushUndo();
       snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
-  }, [tool, primaryColor, secondaryColor, brushSize, brushShape, pushUndo, scheduleAutoSave]);
+  }, [tool, primaryColor, secondaryColor, brushSize, brushShape, roundCorners, pushUndo, scheduleAutoSave]);
 
   const continueDrawing = useCallback((x: number, y: number) => {
     if (!isDrawingRef.current) return;
@@ -921,6 +929,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const fillCol = activeFillColorRef.current;
     const size    = activeSizeRef.current;
     const shape   = activeBrushShapeRef.current;
+    const rc      = activeRoundCornersRef.current;
 
     if (tool === "brush") {
       bresenhamLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size, shape);
@@ -932,7 +941,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       ctx.putImageData(snapshotRef.current, 0, 0);
       const { x: sx, y: sy } = startRef.current;
       if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
-      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode, rc);
       else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
     }
     lastRef.current = { x, y };
@@ -949,12 +958,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const color   = activeColorRef.current;
     const fillCol = activeFillColorRef.current;
     const size    = activeSizeRef.current;
+    const rc      = activeRoundCornersRef.current;
 
     if (snapshotRef.current) {
       ctx.putImageData(snapshotRef.current, 0, 0);
       const { x: sx, y: sy } = startRef.current;
       if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
-      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode, rc);
       else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
       snapshotRef.current = null;
     }
@@ -1093,9 +1103,10 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
   useWindowMenus(artMenus);
 
-  const showFillMode   = tool === "rect" || tool === "oval";
-  const showBrushShape = tool === "brush" || tool === "eraser";
-  const gridActive     = showGrid && zoom >= 4;
+  const showFillMode    = tool === "rect" || tool === "oval";
+  const showBrushShape  = tool === "brush" || tool === "eraser";
+  const showRoundCorner = tool === "rect";
+  const gridActive      = showGrid && zoom >= 4;
 
   // ── Rename strip helpers ──────────────────────────────────────────────
 
@@ -1284,6 +1295,17 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
                   </button>
                 ))}
               </div>
+            </>
+          )}
+
+          {showRoundCorner && (
+            <>
+              <div className="ns-art__toolbox-sep" />
+              <button
+                className={`ns-art__round-corner-btn${roundCorners ? " ns-art__round-corner-btn--active" : ""}`}
+                title="Round corners"
+                onClick={() => setRoundCorners(v => !v)}
+              >◱</button>
             </>
           )}
 
