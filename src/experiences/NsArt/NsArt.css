@@ -365,6 +365,28 @@
   z-index: 1;
 }
 
+/* Selection marquee — marching ants */
+/* Marching-ants selection marquee */
+.ns-art__marquee {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+  box-sizing: border-box;
+  background-image:
+    repeating-linear-gradient(0deg,   #000 0, #000 4px, transparent 4px, transparent 8px),
+    repeating-linear-gradient(90deg,  #000 0, #000 4px, transparent 4px, transparent 8px),
+    repeating-linear-gradient(180deg, #000 0, #000 4px, transparent 4px, transparent 8px),
+    repeating-linear-gradient(270deg, #000 0, #000 4px, transparent 4px, transparent 8px);
+  background-size: 1px 8px, 8px 1px, 1px 8px, 8px 1px;
+  background-position: 0 0, 0 0, 100% 0, 0 100%;
+  background-repeat: repeat-y, repeat-x, repeat-y, repeat-x;
+  animation: ns-art-march-bg 0.5s linear infinite;
+}
+
+@keyframes ns-art-march-bg {
+  to { background-position: 0 -8px, 8px 0, 100% 8px, -8px 100%; }
+}
+
 /* ── Frame navigator bar — always visible ────────────────────────────────── */
 
 .ns-art__frame-nav {

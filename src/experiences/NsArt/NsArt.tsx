@@ -8,7 +8,8 @@ import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Tool = "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval";
+type Tool = "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "select";
+type SelectPhase = "idle" | "selecting" | "selected" | "moving";
 type ZoomLevel = 1 | 2 | 4 | 8 | 16;
 type BrushShape = "square" | "round";
 type FillMode = "outline" | "filled" | "both";
@@ -70,6 +71,7 @@ const TOOLS: { id: Tool; label: string; title: string }[] = [
   { id: "line",   label: "╱",  title: "Line"                                   },
   { id: "rect",   label: "▭",  title: "Rectangle"                              },
   { id: "oval",   label: "⬭",  title: "Oval"                                   },
+  { id: "select", label: "⬚",  title: "Select — drag to select, then drag to move, Delete to clear" },
 ];
 
 const ZOOM_IN:  Record<number, ZoomLevel> = { 1: 2, 2: 4, 4: 8,  8: 16, 16: 16 };
@@ -289,6 +291,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
   const [roundCorners,   setRoundCorners]  = useState(false);
   const [zoom,           setZoom]          = useState<ZoomLevel>(1);
+  const [selectRect,     setSelectRect]    = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [selectPhase,    setSelectPhase]   = useState<SelectPhase>("idle");
   const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 100, h: 100 });
   const [status,         setStatus]        = useState("Ready");
   const [confirmState,   setConfirmState]  = useState<ConfirmState | null>(null);
@@ -324,6 +328,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const activeBrushShapeRef   = useRef<BrushShape>("square");
   const activeRoundCornersRef = useRef(false);
   const shiftKeyRef           = useRef(false);
+
+  // Selection tool refs
+  const selectPhaseRef       = useRef<SelectPhase>("idle");
+  const selectRectRef        = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const selectionDataRef     = useRef<ImageData | null>(null);
+  const preSelectionSnapRef  = useRef<ImageData | null>(null);
+  const moveOffsetRef        = useRef({ x: 0, y: 0 });
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
@@ -862,6 +873,48 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
       if (e.altKey && e.key === "ArrowLeft")  { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current - 1); }
       if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current + 1); }
+
+      // Selection: Delete clears selected area; Escape cancels move or deselects
+      if ((e.key === "Delete" || e.key === "Backspace") && selectPhaseRef.current === "selected") {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas || !selectRectRef.current) return;
+        const sel = selectRectRef.current;
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(sel.x, sel.y, sel.w, sel.h);
+        selectionDataRef.current   = null;
+        preSelectionSnapRef.current = null;
+        selectRectRef.current  = null;
+        selectPhaseRef.current = "idle";
+        setSelectRect(null);
+        setSelectPhase("idle");
+        isDirtyRef.current = true;
+      }
+      if (e.key === "Escape") {
+        const phase = selectPhaseRef.current;
+        if (phase === "moving" && preSelectionSnapRef.current && selectionDataRef.current) {
+          e.preventDefault();
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext("2d")!;
+          ctx.putImageData(preSelectionSnapRef.current, 0, 0);
+          // Restore original selection data position (stored in pre-move snapshot)
+          const snap = preSelectionSnapRef.current;
+          selectPhaseRef.current = "selected";
+          setSelectPhase("selected");
+          preSelectionSnapRef.current = snap;
+          isDrawingRef.current = false;
+        } else if (phase === "selected" || phase === "selecting") {
+          e.preventDefault();
+          isDrawingRef.current   = false;
+          selectRectRef.current  = null;
+          selectPhaseRef.current = "idle";
+          selectionDataRef.current   = null;
+          preSelectionSnapRef.current = null;
+          setSelectRect(null);
+          setSelectPhase("idle");
+        }
+      }
     }
     function onKeyUp(e: KeyboardEvent) {
       if (e.key === "Shift") {
@@ -925,6 +978,54 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       return;
     }
 
+    if (tool === "select") {
+      const sel = selectRectRef.current;
+      const phase = selectPhaseRef.current;
+      if (phase === "selected" && sel && x >= sel.x && x < sel.x + sel.w && y >= sel.y && y < sel.y + sel.h) {
+        // Click inside existing selection → start moving
+        selectPhaseRef.current = "moving";
+        setSelectPhase("moving");
+        moveOffsetRef.current = { x: x - sel.x, y: y - sel.y };
+        isDrawingRef.current = true;
+        startRef.current = { x, y };
+        lastRef.current  = { x, y };
+        // Capture the pixels we're moving and erase them from canvas
+        if (!selectionDataRef.current) {
+          selectionDataRef.current = ctx.getImageData(sel.x, sel.y, sel.w, sel.h);
+        }
+        ctx.clearRect(sel.x, sel.y, sel.w, sel.h);
+        preSelectionSnapRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // Restore vacated area to transparent (already cleared)
+      } else {
+        // Click outside selection or no selection → deselect and start new selection
+        if (phase === "moving" || phase === "selected") {
+          // Commit move if in-progress
+          const prevSel = selectRectRef.current;
+          if (phase === "moving" && selectionDataRef.current && prevSel) {
+            ctx.putImageData(selectionDataRef.current, prevSel.x, prevSel.y);
+          }
+          selectionDataRef.current   = null;
+          preSelectionSnapRef.current = null;
+          selectRectRef.current  = null;
+          selectPhaseRef.current = "idle";
+          setSelectRect(null);
+          setSelectPhase("idle");
+          isDirtyRef.current = true;
+          scheduleAutoSave();
+          renderOnionRef.current();
+        }
+        pushUndo();
+        selectPhaseRef.current = "selecting";
+        setSelectPhase("selecting");
+        selectRectRef.current = { x, y, w: 0, h: 0 };
+        setSelectRect({ x, y, w: 0, h: 0 });
+        isDrawingRef.current = true;
+        startRef.current = { x, y };
+        lastRef.current  = { x, y };
+      }
+      return;
+    }
+
     isDrawingRef.current         = true;
     startRef.current             = { x, y };
     lastRef.current              = { x, y };
@@ -963,6 +1064,27 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const shape   = activeBrushShapeRef.current;
     const rc      = activeRoundCornersRef.current;
 
+    if (tool === "select") {
+      const phase = selectPhaseRef.current;
+      if (phase === "selecting") {
+        const { x: sx, y: sy } = startRef.current;
+        const rx = Math.min(sx, x), ry = Math.min(sy, y);
+        const rw = Math.abs(x - sx), rh = Math.abs(y - sy);
+        selectRectRef.current = { x: rx, y: ry, w: rw, h: rh };
+        setSelectRect({ x: rx, y: ry, w: rw, h: rh });
+      } else if (phase === "moving" && selectionDataRef.current && preSelectionSnapRef.current && selectRectRef.current) {
+        const off = moveOffsetRef.current;
+        const sel = selectRectRef.current;
+        const nx = x - off.x, ny = y - off.y;
+        ctx.putImageData(preSelectionSnapRef.current, 0, 0);
+        ctx.putImageData(selectionDataRef.current, nx, ny);
+        selectRectRef.current = { ...sel, x: nx, y: ny };
+        setSelectRect({ ...sel, x: nx, y: ny });
+      }
+      lastRef.current = { x, y };
+      return;
+    }
+
     if (tool === "brush") {
       bresenhamLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size, shape);
     } else if (tool === "eraser") {
@@ -993,6 +1115,39 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx     = canvas.getContext("2d")!;
+
+    if (tool === "select") {
+      const phase = selectPhaseRef.current;
+      if (phase === "selecting") {
+        const { x: sx, y: sy } = startRef.current;
+        const rx = Math.min(sx, x), ry = Math.min(sy, y);
+        const rw = Math.abs(x - sx), rh = Math.abs(y - sy);
+        if (rw > 0 && rh > 0) {
+          const finalRect = { x: rx, y: ry, w: rw, h: rh };
+          selectRectRef.current  = finalRect;
+          selectPhaseRef.current = "selected";
+          setSelectRect(finalRect);
+          setSelectPhase("selected");
+          selectionDataRef.current   = ctx.getImageData(rx, ry, rw, rh);
+          preSelectionSnapRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } else {
+          selectRectRef.current  = null;
+          selectPhaseRef.current = "idle";
+          setSelectRect(null);
+          setSelectPhase("idle");
+        }
+      } else if (phase === "moving") {
+        // Commit move
+        selectPhaseRef.current = "selected";
+        setSelectPhase("selected");
+        preSelectionSnapRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        isDirtyRef.current = true;
+        scheduleAutoSave();
+        renderOnionRef.current();
+      }
+      return;
+    }
+
     const color   = activeColorRef.current;
     const fillCol = activeFillColorRef.current;
     const size    = activeSizeRef.current;
@@ -1364,7 +1519,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               className={`ns-art__canvas${isPlaying ? " ns-art__canvas--playing" : ""}`}
               width={canvasSize.w}
               height={canvasSize.h}
-              style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
+              style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom, cursor: tool === "select" ? "crosshair" : undefined }}
               onMouseDown={onMouseDown}
               onMouseMove={onMouseMove}
               onMouseUp={onMouseUp}
@@ -1382,6 +1537,19 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               height={canvasSize.h}
               style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
             />
+            {/* Selection marquee overlay */}
+            {selectRect && selectRect.w > 0 && selectRect.h > 0 && (
+              <div
+                className="ns-art__marquee"
+                style={{
+                  left:   selectRect.x * zoom,
+                  top:    selectRect.y * zoom,
+                  width:  selectRect.w * zoom,
+                  height: selectRect.h * zoom,
+                  cursor: selectPhase === "selected" ? "move" : "crosshair",
+                }}
+              />
+            )}
           </div>
 
           {/* Zoom controls */}
