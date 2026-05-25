@@ -1,6 +1,6 @@
 import {
   useRef, useState, useEffect, useCallback,
-  useLayoutEffect, forwardRef, useImperativeHandle, useMemo,
+  forwardRef, useImperativeHandle, useMemo,
 } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -52,10 +52,11 @@ const DEFAULT_PALETTE: string[] = [
 ];
 
 const CANVAS_PRESETS: CanvasSize[] = [
-  { w: 160, h: 120 },
+  { w:  64, h:  64 },
+  { w: 100, h: 100 },
+  { w: 128, h: 128 },
+  { w: 200, h: 200 },
   { w: 320, h: 240 },
-  { w: 640, h: 480 },
-  { w: 800, h: 600 },
 ];
 
 const BRUSH_SIZES = [1, 3, 5, 8] as const;
@@ -251,7 +252,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   ref,
 ) {
   const canvasRef          = useRef<HTMLCanvasElement>(null);
-  const canvasAreaRef      = useRef<HTMLDivElement>(null);
   const onionCanvasRef     = useRef<HTMLCanvasElement>(null);
   const primaryPickerRef   = useRef<HTMLInputElement>(null);
   const secondaryPickerRef = useRef<HTMLInputElement>(null);
@@ -267,7 +267,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [brushShape,     setBrushShape]    = useState<BrushShape>("square");
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
   const [zoom,           setZoom]          = useState<ZoomLevel>(1);
-  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 320, h: 240 });
+  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 100, h: 100 });
   const [status,         setStatus]        = useState("Ready");
   const [confirmState,   setConfirmState]  = useState<ConfirmState | null>(null);
   const [editingSwatchIdx, setEditingSwatchIdx] = useState<number | null>(null);
@@ -283,6 +283,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [isPlaying,     setIsPlaying]     = useState(false);
   const [playFps,       setPlayFps]       = useState(8);
   const [showGrid,      setShowGrid]      = useState(false);
+  const [showSizeDlg,   setShowSizeDlg]  = useState(false);
+  const [sizeInputW,    setSizeInputW]   = useState(100);
+  const [sizeInputH,    setSizeInputH]   = useState(100);
   const [renamingStrip, setRenamingStrip] = useState<number | null>(null);
   const [renameValue,   setRenameValue]   = useState("");
 
@@ -381,20 +384,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       }
     },
   }), [exportCurrentFrame]);
-
-  // ── Auto-size canvas to fit space on mount ─────────────────────────────
-
-  useLayoutEffect(() => {
-    const el = canvasAreaRef.current;
-    if (!el) return;
-    const availW = el.clientWidth  - 16;
-    const availH = el.clientHeight - 16;
-    let best = CANVAS_PRESETS[0];
-    for (const p of CANVAS_PRESETS) {
-      if (p.w <= availW && p.h <= availH) best = p;
-    }
-    setCanvasSize(best);
-  }, []);
 
   // ── Init canvas to white when size changes ─────────────────────────────
 
@@ -1067,11 +1056,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     {
       label: "Format",
       items: [
-        ...CANVAS_PRESETS.map(p => ({
-          label:   `${p.w}×${p.h}`,
-          checked: canvasSize.w === p.w && canvasSize.h === p.h,
-          onClick: () => handleSizeSelect(p),
-        })),
+        { label: "Canvas Size...", onClick: () => { setSizeInputW(canvasSize.w); setSizeInputH(canvasSize.h); setShowSizeDlg(true); } },
         { separator: true },
         { label: "Pixel Grid", checked: showGrid, onClick: () => setShowGrid(v => !v) },
       ],
@@ -1100,7 +1085,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     },
   ], [
     newCanvas, exportCurrentFrame, exportSpriteSheet, undo,
-    canvasSize, handleSizeSelect, showGrid,
+    canvasSize, showGrid,
     addFrame, deleteFrame, frameCount,
     addStrip, deleteStrip, strips, currentStrip,
     onionSkin, onionOpacity, onionRange,
@@ -1146,6 +1131,55 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
                   {btn.label}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Canvas size dialog ── */}
+      {showSizeDlg && (
+        <div className="ns-art__overlay">
+          <div className="ns-art__dialog ns-art__dialog--size">
+            <div className="ns-art__dialog-titlebar">
+              <span>Canvas Size</span>
+            </div>
+            <div className="ns-art__dialog-body">
+              <div className="ns-art__size-presets">
+                {CANVAS_PRESETS.map(p => (
+                  <button
+                    key={`${p.w}x${p.h}`}
+                    className={`ns-art__size-preset${sizeInputW === p.w && sizeInputH === p.h ? " ns-art__size-preset--active" : ""}`}
+                    onClick={() => { setSizeInputW(p.w); setSizeInputH(p.h); }}
+                  >{p.w}×{p.h}</button>
+                ))}
+              </div>
+              <div className="ns-art__size-custom">
+                <label className="ns-art__size-label">
+                  W
+                  <input
+                    className="ns-art__size-input"
+                    type="number" min="1" max="2048"
+                    value={sizeInputW}
+                    onChange={e => setSizeInputW(Math.max(1, Math.min(2048, parseInt(e.target.value) || 1)))}
+                  />
+                </label>
+                <label className="ns-art__size-label">
+                  H
+                  <input
+                    className="ns-art__size-input"
+                    type="number" min="1" max="2048"
+                    value={sizeInputH}
+                    onChange={e => setSizeInputH(Math.max(1, Math.min(2048, parseInt(e.target.value) || 1)))}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="ns-art__dialog-btns">
+              <button
+                className="ns-art__dialog-btn ns-art__dialog-btn--primary"
+                onClick={() => { setShowSizeDlg(false); handleSizeSelect({ w: sizeInputW, h: sizeInputH }); }}
+              >OK</button>
+              <button className="ns-art__dialog-btn" onClick={() => setShowSizeDlg(false)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -1256,7 +1290,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         </div>
 
         {/* Canvas scroll area */}
-        <div className="ns-art__canvas-area" ref={canvasAreaRef}>
+        <div className="ns-art__canvas-area">
           <div
             className={`ns-art__canvas-wrap${gridActive ? " ns-art__canvas-wrap--grid" : ""}`}
             style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom, ...(gridActive ? { "--grid-cell": `${zoom}px` } as React.CSSProperties : {}) }}

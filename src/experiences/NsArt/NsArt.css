@@ -648,3 +648,52 @@
 .ns-art__dialog-btn--primary:active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
 }
+
+/* Canvas size dialog */
+.ns-art__dialog--size { min-width: 200px; }
+
+.ns-art__size-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ns-art__size-preset {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 4px 6px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+
+.ns-art__size-preset--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
+.ns-art__size-custom {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.ns-art__size-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ns-art__size-input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  width: 52px;
+  padding: 2px 4px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
