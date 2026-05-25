@@ -240,23 +240,59 @@
   background: #d4d0c8;
 }
 
-/* Zoom label */
-.ns-art__zoom-label {
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  color: #000080;
-  text-align: center;
-  padding: 2px 0;
-}
-
 /* ── Canvas area ─────────────────────────────────────────────────────────── */
 
 .ns-art__canvas-area {
   flex: 1;
   overflow: auto;
   background: #808080;
-  padding: 8px;
+  padding: 8px 8px 0;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+/* Zoom bar below canvas */
+.ns-art__zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+  background: #808080;
+  flex-shrink: 0;
+}
+
+.ns-art__zoom-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 2px 8px;
+  cursor: pointer;
+  color: #000;
+  line-height: 1;
+  min-width: 22px;
+  text-align: center;
+}
+
+.ns-art__zoom-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.ns-art__zoom-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+.ns-art__zoom-level {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #ffffff;
+  min-width: 24px;
+  text-align: center;
 }
 
 .ns-art__canvas-wrap {

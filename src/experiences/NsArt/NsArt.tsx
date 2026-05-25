@@ -8,7 +8,8 @@ import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Tool = "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "zoom";
+type Tool = "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval";
+type ZoomLevel = 1 | 2 | 4 | 8 | 16;
 type BrushShape = "square" | "round";
 type FillMode = "outline" | "filled" | "both";
 interface CanvasSize { w: number; h: number }
@@ -68,8 +69,10 @@ const TOOLS: { id: Tool; label: string; title: string }[] = [
   { id: "line",   label: "╱",  title: "Line"                                   },
   { id: "rect",   label: "▭",  title: "Rectangle"                              },
   { id: "oval",   label: "⬭",  title: "Oval"                                   },
-  { id: "zoom",   label: "🔍",  title: "Zoom — click cycles sizes; right-click reverses" },
 ];
+
+const ZOOM_IN:  Record<number, ZoomLevel> = { 1: 2, 2: 4, 4: 8,  8: 16, 16: 16 };
+const ZOOM_OUT: Record<number, ZoomLevel> = { 1: 1, 2: 1, 4: 2,  8: 4,  16: 8  };
 
 const LS_KEY = "ns-art-backup";
 
@@ -263,7 +266,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [brushSize,      setBrushSize]     = useState<BrushSize>(1);
   const [brushShape,     setBrushShape]    = useState<BrushShape>("square");
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
-  const [zoom,           setZoom]          = useState(1);
+  const [zoom,           setZoom]          = useState<ZoomLevel>(1);
   const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 320, h: 240 });
   const [status,         setStatus]        = useState("Ready");
   const [confirmState,   setConfirmState]  = useState<ConfirmState | null>(null);
@@ -882,15 +885,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
 
-    if (tool === "zoom") {
-      if (isSecondary) {
-        setZoom(z => z === 1 ? 4 : z / 2);
-      } else {
-        setZoom(z => z === 4 ? 1 : z * 2);
-      }
-      return;
-    }
-
     const strokeColor = isSecondary ? secondaryColor : primaryColor;
 
     if (tool === "fill") {
@@ -1253,12 +1247,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
             </>
           )}
 
-          {zoom > 1 && (
-            <>
-              <div className="ns-art__toolbox-sep" />
-              <div className="ns-art__zoom-label">{zoom}×</div>
-            </>
-          )}
         </div>
 
         {/* Canvas scroll area */}
@@ -1290,6 +1278,23 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               height={canvasSize.h}
               style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
             />
+          </div>
+
+          {/* Zoom controls */}
+          <div className="ns-art__zoom-bar">
+            <button
+              className="ns-art__zoom-btn"
+              onClick={() => setZoom(ZOOM_OUT[zoom])}
+              disabled={zoom === 1}
+              title="Zoom out"
+            >−</button>
+            <span className="ns-art__zoom-level">{zoom}×</span>
+            <button
+              className="ns-art__zoom-btn"
+              onClick={() => setZoom(ZOOM_IN[zoom])}
+              disabled={zoom === 16}
+              title="Zoom in"
+            >+</button>
           </div>
         </div>
       </div>
