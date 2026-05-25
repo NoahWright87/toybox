@@ -308,6 +308,19 @@
   background-color: #fff;
 }
 
+/* Pixel grid overlay — CSS only, never drawn into canvas data */
+.ns-art__canvas-wrap--grid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background-image:
+    repeating-linear-gradient(0deg,   rgba(0,0,0,0.25) 0px, transparent 1px),
+    repeating-linear-gradient(90deg,  rgba(0,0,0,0.25) 0px, transparent 1px);
+  background-size: var(--grid-cell) var(--grid-cell);
+}
+
 .ns-art__canvas {
   display: block;
   cursor: crosshair;

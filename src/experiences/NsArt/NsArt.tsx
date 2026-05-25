@@ -282,6 +282,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [onionRange,    setOnionRange]    = useState<OnionRange>(1);
   const [isPlaying,     setIsPlaying]     = useState(false);
   const [playFps,       setPlayFps]       = useState(8);
+  const [showGrid,      setShowGrid]      = useState(false);
   const [renamingStrip, setRenamingStrip] = useState<number | null>(null);
   const [renameValue,   setRenameValue]   = useState("");
 
@@ -1065,11 +1066,15 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     },
     {
       label: "Format",
-      items: CANVAS_PRESETS.map(p => ({
-        label:   `${p.w}×${p.h}`,
-        checked: canvasSize.w === p.w && canvasSize.h === p.h,
-        onClick: () => handleSizeSelect(p),
-      })),
+      items: [
+        ...CANVAS_PRESETS.map(p => ({
+          label:   `${p.w}×${p.h}`,
+          checked: canvasSize.w === p.w && canvasSize.h === p.h,
+          onClick: () => handleSizeSelect(p),
+        })),
+        { separator: true },
+        { label: "Pixel Grid", checked: showGrid, onClick: () => setShowGrid(v => !v) },
+      ],
     },
     {
       label: "Animation",
@@ -1095,7 +1100,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     },
   ], [
     newCanvas, exportCurrentFrame, exportSpriteSheet, undo,
-    canvasSize, handleSizeSelect,
+    canvasSize, handleSizeSelect, showGrid,
     addFrame, deleteFrame, frameCount,
     addStrip, deleteStrip, strips, currentStrip,
     onionSkin, onionOpacity, onionRange,
@@ -1105,6 +1110,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
   const showFillMode   = tool === "rect" || tool === "oval";
   const showBrushShape = tool === "brush" || tool === "eraser";
+  const gridActive     = showGrid && zoom >= 4;
 
   // ── Rename strip helpers ──────────────────────────────────────────────
 
@@ -1252,8 +1258,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         {/* Canvas scroll area */}
         <div className="ns-art__canvas-area" ref={canvasAreaRef}>
           <div
-            className="ns-art__canvas-wrap"
-            style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
+            className={`ns-art__canvas-wrap${gridActive ? " ns-art__canvas-wrap--grid" : ""}`}
+            style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom, ...(gridActive ? { "--grid-cell": `${zoom}px` } as React.CSSProperties : {}) }}
           >
             <canvas
               ref={canvasRef}
