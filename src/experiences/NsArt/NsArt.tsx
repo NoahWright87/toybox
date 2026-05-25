@@ -187,8 +187,24 @@ function strokeLine(
   color: string, size: number,
 ) {
   applyColor(ctx, color, size);
-  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  // 0.5px offset lands strokes on pixel centres for 1px lines
+  const off = size === 1 ? 0.5 : 0;
+  ctx.beginPath(); ctx.moveTo(x0 + off, y0 + off); ctx.lineTo(x1 + off, y1 + off); ctx.stroke();
   resetCtx(ctx);
+}
+
+function snapTo45(x0: number, y0: number, x1: number, y1: number): { x: number; y: number } {
+  const dx = x1 - x0, dy = y1 - y0;
+  const angle = Math.atan2(dy, dx);
+  const snap  = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+  const dist  = Math.sqrt(dx * dx + dy * dy);
+  return { x: Math.round(x0 + dist * Math.cos(snap)), y: Math.round(y0 + dist * Math.sin(snap)) };
+}
+
+function snapToSquare(x0: number, y0: number, x1: number, y1: number): { x: number; y: number } {
+  const dx = x1 - x0, dy = y1 - y0;
+  const side = Math.sign(dx) * Math.min(Math.abs(dx), Math.abs(dy));
+  return { x: x0 + side, y: y0 + Math.sign(dy) * Math.abs(side) };
 }
 
 function strokeRect(
@@ -302,11 +318,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const snapshotRef         = useRef<ImageData | null>(null);
   const undoRef             = useRef<ImageData[]>([]);
   const sprayRef            = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeColorRef       = useRef("#000000");
-  const activeFillColorRef   = useRef("#ffffff");
-  const activeSizeRef        = useRef<number>(1);
-  const activeBrushShapeRef  = useRef<BrushShape>("square");
+  const activeColorRef        = useRef("#000000");
+  const activeFillColorRef    = useRef("#ffffff");
+  const activeSizeRef         = useRef<number>(1);
+  const activeBrushShapeRef   = useRef<BrushShape>("square");
   const activeRoundCornersRef = useRef(false);
+  const shiftKeyRef           = useRef(false);
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
@@ -320,11 +337,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const stripsRef        = useRef<Strip[]>([{ name: "Strip 1" }]);
   const isPlayingRef     = useRef(false);
   const playIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const renderOnionRef      = useRef<() => void>(() => {});
-  const saveFrameRef        = useRef<() => void>(() => {});
-  const loadFrameRef        = useRef<(s: number, f: number) => void>(() => {});
-  const scheduleAutoSaveRef = useRef<() => void>(() => {});
-  const pendingRestoreRef   = useRef<PendingRestore | null>(null);
+  const renderOnionRef        = useRef<() => void>(() => {});
+  const saveFrameRef          = useRef<() => void>(() => {});
+  const loadFrameRef          = useRef<(s: number, f: number) => void>(() => {});
+  const scheduleAutoSaveRef   = useRef<() => void>(() => {});
+  const continueDrawingRef    = useRef<(x: number, y: number) => void>(() => {});
+  const pendingRestoreRef     = useRef<PendingRestore | null>(null);
 
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
   useEffect(() => { currentStripRef.current  = currentStrip;  }, [currentStrip]);
@@ -836,13 +854,27 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   // ── Keyboard shortcuts ────────────────────────────────────────────────
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        shiftKeyRef.current = true;
+        if (isDrawingRef.current) continueDrawingRef.current(lastRef.current.x, lastRef.current.y);
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
       if (e.altKey && e.key === "ArrowLeft")  { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current - 1); }
       if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current + 1); }
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        shiftKeyRef.current = false;
+        if (isDrawingRef.current) continueDrawingRef.current(lastRef.current.x, lastRef.current.y);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup",   onKeyUp);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup",   onKeyUp);
+    };
   }, [undo, navigateTo]);
 
   // ── beforeunload guard ────────────────────────────────────────────────
@@ -940,12 +972,18 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     } else if (snapshotRef.current) {
       ctx.putImageData(snapshotRef.current, 0, 0);
       const { x: sx, y: sy } = startRef.current;
-      if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
-      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode, rc);
-      else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
+      const shift = shiftKeyRef.current;
+      let ex = x, ey = y;
+      if (shift && tool === "line") { const s = snapTo45(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (shift && tool === "rect") { const s = snapToSquare(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (tool === "line")      strokeLine(ctx, sx, sy, ex, ey, color, size);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode, rc);
+      else if (tool === "oval") strokeOval(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode);
     }
     lastRef.current = { x, y };
   }, [tool, brushSize, fillMode]);
+
+  useEffect(() => { continueDrawingRef.current = continueDrawing; }, [continueDrawing]);
 
   const endDrawing = useCallback((x: number, y: number) => {
     if (!isDrawingRef.current) return;
@@ -963,9 +1001,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     if (snapshotRef.current) {
       ctx.putImageData(snapshotRef.current, 0, 0);
       const { x: sx, y: sy } = startRef.current;
-      if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
-      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode, rc);
-      else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
+      const shift = shiftKeyRef.current;
+      let ex = x, ey = y;
+      if (shift && tool === "line") { const s = snapTo45(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (shift && tool === "rect") { const s = snapToSquare(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (tool === "line")      strokeLine(ctx, sx, sy, ex, ey, color, size);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode, rc);
+      else if (tool === "oval") strokeOval(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode);
       snapshotRef.current = null;
     }
 
