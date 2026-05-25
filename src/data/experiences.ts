@@ -115,9 +115,16 @@ export const experiences: Experience[] = [
   {
     id: "hell",
     title: "HELL",
-    description: "A 1994 shareware FPS. Procedural BSP maps, raycaster engine, 3 enemy types. © Ego Software Inc.",
+    description: "A 1994 shareware FPS. Procedural room-accretion maps, raycaster engine, 3 enemy types. © Ego Software Inc.",
     category: "game",
     path: "/hell",
+  },
+  {
+    id: "hell-map-editor",
+    title: "Hell Map Editor",
+    description: "Procedural dungeon map generator for Hellzone. Room accretion, layered key system, configurable topologies.",
+    category: "game",
+    path: "/hell-map-editor",
   },
   {
     id: "pool",
