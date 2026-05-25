@@ -8,7 +8,8 @@ import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Tool = "pencil" | "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "zoom";
+type Tool = "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "zoom";
+type BrushShape = "square" | "round";
 type FillMode = "outline" | "filled" | "both";
 interface CanvasSize { w: number; h: number }
 
@@ -56,19 +57,18 @@ const CANVAS_PRESETS: CanvasSize[] = [
   { w: 800, h: 600 },
 ];
 
-const BRUSH_SIZES = [2, 5, 10] as const;
+const BRUSH_SIZES = [1, 3, 5, 8] as const;
 type BrushSize = typeof BRUSH_SIZES[number];
 
 const TOOLS: { id: Tool; label: string; title: string }[] = [
-  { id: "pencil", label: "✏️", title: "Pencil (1px)"                  },
-  { id: "brush",  label: "🖌️", title: "Brush"                         },
-  { id: "spray",  label: "🫧",  title: "Spray Can"                     },
-  { id: "eraser", label: "🧼",  title: "Eraser"                        },
-  { id: "fill",   label: "🪣",  title: "Fill"                          },
-  { id: "line",   label: "╱",  title: "Line"                          },
-  { id: "rect",   label: "▭",  title: "Rectangle"                     },
-  { id: "oval",   label: "⬭",  title: "Oval"                          },
-  { id: "zoom",   label: "🔍",  title: "Zoom — click cycles 1×→2×→4×→1×; right-click reverses" },
+  { id: "brush",  label: "🖌️", title: "Brush — left=primary, right=secondary" },
+  { id: "spray",  label: "🫧",  title: "Spray Can"                              },
+  { id: "eraser", label: "🧼",  title: "Eraser"                                 },
+  { id: "fill",   label: "🪣",  title: "Fill"                                   },
+  { id: "line",   label: "╱",  title: "Line"                                   },
+  { id: "rect",   label: "▭",  title: "Rectangle"                              },
+  { id: "oval",   label: "⬭",  title: "Oval"                                   },
+  { id: "zoom",   label: "🔍",  title: "Zoom — click cycles sizes; right-click reverses" },
 ];
 
 const LS_KEY = "ns-art-backup";
@@ -108,6 +108,50 @@ function floodFill(ctx: CanvasRenderingContext2D, sx: number, sy: number, fillCo
     if (y < h - 1) stack.push(i + w * 4);
   }
   ctx.putImageData(imageData, 0, 0);
+}
+
+// Hard-edged stamp at a single canvas pixel — no anti-aliasing
+function stampPixel(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  color: string, size: number, shape: BrushShape,
+) {
+  const half = Math.floor(size / 2);
+  if (color === "transparent") {
+    ctx.clearRect(x - half, y - half, size, size);
+    return;
+  }
+  ctx.fillStyle = color;
+  if (shape === "round" && size > 2) {
+    const r = half;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy <= r * r + r * 0.5) ctx.fillRect(x + dx, y + dy, 1, 1);
+      }
+    }
+  } else {
+    ctx.fillRect(x - half, y - half, size, size);
+  }
+}
+
+// Bresenham line — stamps hard pixels with no anti-aliasing
+function bresenhamLine(
+  ctx: CanvasRenderingContext2D,
+  x0: number, y0: number, x1: number, y1: number,
+  color: string, size: number, shape: BrushShape,
+) {
+  let cx = Math.round(x0), cy = Math.round(y0);
+  const ex = Math.round(x1), ey = Math.round(y1);
+  const dx = Math.abs(ex - cx), dy = Math.abs(ey - cy);
+  const sx = cx < ex ? 1 : -1, sy = cy < ey ? 1 : -1;
+  let err = dx - dy;
+  for (;;) {
+    stampPixel(ctx, cx, cy, color, size, shape);
+    if (cx === ex && cy === ey) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; cx += sx; }
+    if (e2 < dx)  { err += dx; cy += sy; }
+  }
 }
 
 function applyColor(ctx: CanvasRenderingContext2D, color: string, size: number) {
@@ -182,14 +226,19 @@ function strokeOval(
 
 function doSpray(canvas: HTMLCanvasElement, x: number, y: number, color: string, size: number) {
   const ctx = canvas.getContext("2d")!;
-  applyColor(ctx, color, 1);
   const radius = size * 5, density = size * 4;
-  for (let i = 0; i < density; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r     = Math.random() * radius;
-    ctx.fillRect(Math.round(x + Math.cos(angle)*r), Math.round(y + Math.sin(angle)*r), 1, 1);
+  if (color === "transparent") {
+    for (let i = 0; i < density; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * radius;
+      ctx.clearRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r), 1, 1);
+    }
+  } else {
+    ctx.fillStyle = color;
+    for (let i = 0; i < density; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * radius;
+      ctx.fillRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r), 1, 1);
+    }
   }
-  resetCtx(ctx);
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -207,11 +256,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const stripRenameRef     = useRef<HTMLInputElement>(null);
 
   // Drawing state
-  const [tool,           setTool]          = useState<Tool>("pencil");
+  const [tool,           setTool]          = useState<Tool>("brush");
   const [palette,        setPalette]       = useState<string[]>(() => [...DEFAULT_PALETTE]);
   const [primaryColor,   setPrimaryColor]  = useState("#000000");
   const [secondaryColor, setSecondaryColor]= useState("#ffffff");
-  const [brushSize,      setBrushSize]     = useState<BrushSize>(2);
+  const [brushSize,      setBrushSize]     = useState<BrushSize>(1);
+  const [brushShape,     setBrushShape]    = useState<BrushShape>("square");
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
   const [zoom,           setZoom]          = useState(1);
   const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 320, h: 240 });
@@ -242,6 +292,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const activeColorRef      = useRef("#000000");
   const activeFillColorRef  = useRef("#ffffff");
   const activeSizeRef       = useRef<number>(1);
+  const activeBrushShapeRef = useRef<BrushShape>("square");
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
@@ -851,22 +902,18 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       return;
     }
 
-    isDrawingRef.current       = true;
-    startRef.current           = { x, y };
-    lastRef.current            = { x, y };
-    activeColorRef.current     = strokeColor;
-    activeFillColorRef.current = secondaryColor;
-    activeSizeRef.current      = tool === "pencil" ? 1 : brushSize;
+    isDrawingRef.current        = true;
+    startRef.current            = { x, y };
+    lastRef.current             = { x, y };
+    activeColorRef.current      = strokeColor;
+    activeFillColorRef.current  = isSecondary ? primaryColor : secondaryColor;
+    activeSizeRef.current       = brushSize;
+    activeBrushShapeRef.current = brushShape;
 
-    if (tool === "pencil" || tool === "brush" || tool === "eraser") {
+    if (tool === "brush" || tool === "eraser") {
       pushUndo();
       const ec = tool === "eraser" ? "transparent" : strokeColor;
-      const es = tool === "pencil" ? 1 : brushSize;
-      applyColor(ctx, ec, es);
-      ctx.beginPath();
-      ctx.arc(x, y, es / 2, 0, Math.PI * 2);
-      ctx.fill();
-      resetCtx(ctx);
+      stampPixel(ctx, x, y, ec, brushSize, brushShape);
     } else if (tool === "spray") {
       pushUndo();
       doSpray(canvas, x, y, strokeColor, brushSize);
@@ -879,7 +926,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       pushUndo();
       snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
-  }, [tool, primaryColor, secondaryColor, brushSize, pushUndo, scheduleAutoSave]);
+  }, [tool, primaryColor, secondaryColor, brushSize, brushShape, pushUndo, scheduleAutoSave]);
 
   const continueDrawing = useCallback((x: number, y: number) => {
     if (!isDrawingRef.current) return;
@@ -889,11 +936,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const color   = activeColorRef.current;
     const fillCol = activeFillColorRef.current;
     const size    = activeSizeRef.current;
+    const shape   = activeBrushShapeRef.current;
 
-    if (tool === "pencil" || tool === "brush") {
-      strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size);
+    if (tool === "brush") {
+      bresenhamLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size, shape);
     } else if (tool === "eraser") {
-      strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, "transparent", brushSize);
+      bresenhamLine(ctx, lastRef.current.x, lastRef.current.y, x, y, "transparent", size, shape);
     } else if (tool === "spray") {
       doSpray(canvas, x, y, color, brushSize);
     } else if (snapshotRef.current) {
@@ -1061,7 +1109,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
   useWindowMenus(artMenus);
 
-  const showFillMode = tool === "rect" || tool === "oval";
+  const showFillMode   = tool === "rect" || tool === "oval";
+  const showBrushShape = tool === "brush" || tool === "eraser";
 
   // ── Rename strip helpers ──────────────────────────────────────────────
 
@@ -1165,10 +1214,26 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
                 title={`Size ${s}px`}
                 onClick={() => setBrushSize(s)}
               >
-                <span className="ns-art__dot" style={{ width: s + 4, height: s + 4 }} />
+                <span className="ns-art__dot" style={{ width: Math.min(s + 3, 14), height: Math.min(s + 3, 14) }} />
               </button>
             ))}
           </div>
+
+          {showBrushShape && (
+            <>
+              <div className="ns-art__toolbox-sep" />
+              <div className="ns-art__shape-btns">
+                <button
+                  className={`ns-art__shape-btn${brushShape === "square" ? " ns-art__shape-btn--active" : ""}`}
+                  title="Square stamp" onClick={() => setBrushShape("square")}
+                >□</button>
+                <button
+                  className={`ns-art__shape-btn${brushShape === "round" ? " ns-art__shape-btn--active" : ""}`}
+                  title="Round stamp" onClick={() => setBrushShape("round")}
+                >○</button>
+              </div>
+            </>
+          )}
 
           {showFillMode && (
             <>

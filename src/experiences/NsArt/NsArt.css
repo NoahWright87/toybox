@@ -182,6 +182,34 @@
   flex-shrink: 0;
 }
 
+/* Brush shape toggle */
+.ns-art__shape-btns {
+  display: flex;
+  gap: 2px;
+}
+
+.ns-art__shape-btn {
+  width: 18px;
+  height: 18px;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #000;
+}
+
+.ns-art__shape-btn:active,
+.ns-art__shape-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
 /* Fill mode buttons */
 .ns-art__fill-modes {
   display: flex;
