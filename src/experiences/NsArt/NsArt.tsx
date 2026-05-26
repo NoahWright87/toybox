@@ -268,6 +268,49 @@ function doSpray(canvas: HTMLCanvasElement, x: number, y: number, color: string,
   }
 }
 
+// ── FrameThumbnail ─────────────────────────────────────────────────────────
+
+function FrameThumbnail({
+  data, frameW, frameH, active, onClick,
+}: {
+  data: ImageData | null;
+  frameW: number;
+  frameH: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const THUMB_H = 40;
+  const thumbW = Math.max(1, Math.round((frameW / frameH) * THUMB_H));
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    if (data) {
+      const tmp = document.createElement("canvas");
+      tmp.width = frameW; tmp.height = frameH;
+      tmp.getContext("2d")!.putImageData(data, 0, 0);
+      ctx.clearRect(0, 0, thumbW, THUMB_H);
+      ctx.drawImage(tmp, 0, 0, thumbW, THUMB_H);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, thumbW, THUMB_H);
+    }
+  }, [data, frameW, frameH, thumbW]);
+
+  return (
+    <canvas
+      ref={ref}
+      className={`ns-art__thumb${active ? " ns-art__thumb--active" : ""}`}
+      width={thumbW}
+      height={THUMB_H}
+      onClick={onClick}
+      title={`Frame ${active ? "(current)" : ""}`}
+    />
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
@@ -308,8 +351,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [onionRange,    setOnionRange]    = useState<OnionRange>(1);
   const [isPlaying,     setIsPlaying]     = useState(false);
   const [playFps,       setPlayFps]       = useState(8);
-  const [showGrid,      setShowGrid]      = useState(false);
-  const [showSizeDlg,   setShowSizeDlg]  = useState(false);
+  const [showGrid,        setShowGrid]      = useState(false);
+  const [thumbRevision,   setThumbRevision] = useState(0);
+  const [showSizeDlg,     setShowSizeDlg]  = useState(false);
   const [sizeInputW,    setSizeInputW]   = useState(100);
   const [sizeInputH,    setSizeInputH]   = useState(100);
   const [renamingStrip, setRenamingStrip] = useState<number | null>(null);
@@ -353,6 +397,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const loadFrameRef          = useRef<(s: number, f: number) => void>(() => {});
   const scheduleAutoSaveRef   = useRef<() => void>(() => {});
   const continueDrawingRef    = useRef<(x: number, y: number) => void>(() => {});
+  const bumpThumbRef          = useRef<() => void>(() => {});
   const pendingRestoreRef     = useRef<PendingRestore | null>(null);
 
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
@@ -591,6 +636,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     loadFrameRef.current(clampedStrip, clampedFrame);
     undoRef.current = [];
     renderOnionRef.current();
+    bumpThumbRef.current();
   }, []);
 
   // ── Onion skin ────────────────────────────────────────────────────────
@@ -1106,6 +1152,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   }, [tool, brushSize, fillMode]);
 
   useEffect(() => { continueDrawingRef.current = continueDrawing; }, [continueDrawing]);
+  useEffect(() => { bumpThumbRef.current = () => setThumbRevision(v => v + 1); }, []);
 
   const endDrawing = useCallback((x: number, y: number) => {
     if (!isDrawingRef.current) return;
@@ -1169,6 +1216,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     isDirtyRef.current = true;
     scheduleAutoSave();
     renderOnionRef.current();
+    saveFrameRef.current();
+    bumpThumbRef.current();
   }, [tool, fillMode, scheduleAutoSave]);
 
   // ── Mouse / Touch handlers ────────────────────────────────────────────
@@ -1395,34 +1444,48 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
       {/* ── Strip tab bar ── */}
       <div className="ns-art__strip-bar">
-        {strips.map((strip, i) => (
+        {strips.map((strip, si) => (
           <div
-            key={i}
-            className={`ns-art__strip-tab${currentStrip === i ? " ns-art__strip-tab--active" : ""}`}
-            onClick={() => { if (renamingStrip !== i) navigateTo(i, currentFrame); }}
+            key={si}
+            className={`ns-art__strip-tab${currentStrip === si ? " ns-art__strip-tab--active" : ""}`}
+            onClick={() => { if (renamingStrip !== si) navigateTo(si, currentFrame); }}
             onDoubleClick={() => {
-              setRenamingStrip(i);
+              setRenamingStrip(si);
               setRenameValue(strip.name);
               setTimeout(() => stripRenameRef.current?.focus(), 20);
             }}
             title={`${strip.name}  (double-click to rename)`}
           >
-            {renamingStrip === i ? (
-              <input
-                ref={stripRenameRef}
-                className="ns-art__strip-rename"
-                value={renameValue}
-                onChange={e => setRenameValue(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={e => {
-                  if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
-                  if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
-                }}
-                onClick={e => e.stopPropagation()}
-              />
-            ) : (
-              strip.name
-            )}
+            <div className="ns-art__strip-label">
+              {renamingStrip === si ? (
+                <input
+                  ref={stripRenameRef}
+                  className="ns-art__strip-rename"
+                  value={renameValue}
+                  onChange={e => setRenameValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={e => {
+                    if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
+                    if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
+                  }}
+                  onClick={e => e.stopPropagation()}
+                />
+              ) : (
+                strip.name
+              )}
+            </div>
+            <div className="ns-art__strip-filmstrip" onClick={e => e.stopPropagation()}>
+              {Array.from({ length: frameCount }, (_, fi) => (
+                <FrameThumbnail
+                  key={`${thumbRevision}-${si}-${fi}`}
+                  data={framesDataRef.current[si]?.[fi] ?? null}
+                  frameW={canvasSize.w}
+                  frameH={canvasSize.h}
+                  active={currentStrip === si && currentFrame === fi}
+                  onClick={() => navigateTo(si, fi)}
+                />
+              ))}
+            </div>
           </div>
         ))}
         <button className="ns-art__strip-add" onClick={addStrip} title="Add strip">+</button>

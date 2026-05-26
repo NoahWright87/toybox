@@ -32,14 +32,16 @@
   border: 2px solid;
   border-bottom: none;
   border-color: #ffffff #808080 transparent #ffffff;
-  padding: 4px 10px;
+  padding: 4px 6px;
   cursor: pointer;
-  white-space: nowrap;
   color: #404040;
   min-width: 48px;
-  text-align: center;
+  text-align: left;
   position: relative;
   bottom: -2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .ns-art__strip-tab--active {
@@ -47,6 +49,31 @@
   color: #000;
   border-color: #ffffff #808080 #d4d0c8 #ffffff;
   z-index: 1;
+}
+
+.ns-art__strip-label {
+  white-space: nowrap;
+  font-size: 6px;
+}
+
+.ns-art__strip-filmstrip {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  max-width: 320px;
+}
+
+.ns-art__thumb {
+  flex-shrink: 0;
+  cursor: pointer;
+  display: block;
+  border: 2px solid transparent;
+  image-rendering: pixelated;
+  background: #808080;
+}
+
+.ns-art__thumb--active {
+  border-color: #ff6b00;
 }
 
 .ns-art__strip-tab:hover:not(.ns-art__strip-tab--active) {
