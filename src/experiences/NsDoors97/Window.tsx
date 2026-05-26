@@ -41,12 +41,24 @@ function useIsPortrait() {
   return isPortrait;
 }
 
+function getViewportSize() {
+  // visualViewport tracks the shrinking visible area on mobile (browser chrome appearing)
+  return {
+    w: window.visualViewport?.width  ?? window.innerWidth,
+    h: window.visualViewport?.height ?? window.innerHeight,
+  };
+}
+
 function useViewportSize() {
-  const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  const [size, setSize] = useState(getViewportSize);
   useEffect(() => {
-    const handler = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    const handler = () => setSize(getViewportSize());
     window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    window.visualViewport?.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("resize", handler);
+      window.visualViewport?.removeEventListener("resize", handler);
+    };
   }, []);
   return size;
 }
@@ -69,7 +81,7 @@ export default function Window({
 }: WindowProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const isPortrait = useIsPortrait();
-  const { w: viewportWidth } = useViewportSize();
+  const { w: viewportWidth, h: viewportHeight } = useViewportSize();
 
   // Dynamic menus registered by child apps via useWindowMenus
   const [dynamicMenus, setDynamicMenus] = useState<MenuBarMenu[] | null>(null);
@@ -96,6 +108,41 @@ export default function Window({
       setSize((prev) => ({ ...prev, width: width ?? DEFAULT_WIDTH }));
     }
   }, [width]);
+
+  // Stable refs so the clamp effect can read current pos/size without listing them as deps
+  const posRef  = useRef(pos);
+  const sizeRef = useRef(size);
+  useEffect(() => { posRef.current  = pos;  }, [pos]);
+  useEffect(() => { sizeRef.current = size; }, [size]);
+
+  // Clamp window to viewport on every resize: prefer repositioning, resize only if needed
+  useEffect(() => {
+    if (isPortrait || isMaximized) return;
+    const availW = viewportWidth;
+    const availH = viewportHeight - TASKBAR_HEIGHT;
+
+    const { x, y }              = posRef.current;
+    const { width: w, height: h } = sizeRef.current;
+
+    let nx = x, ny = y, nw = w;
+
+    // Resize only if the window is wider than the available space
+    if (nw > availW) {
+      nw = Math.max(MIN_WIDTH, availW);
+      hasSizeRef.current = true;
+    }
+
+    // Prefer moving the window; clamp right edge, then left edge
+    if (nx + nw > availW) nx = Math.max(0, availW - nw);
+    if (nx < 0) nx = 0;
+
+    // Clamp bottom edge (prefer moving up; only applies when height is explicit)
+    if (h !== null && ny + h > availH) ny = Math.max(0, availH - h);
+    if (ny < 0) ny = 0;
+
+    if (nx !== x || ny !== y) setPos({ x: nx, y: ny });
+    if (nw !== w) setSize((prev) => ({ ...prev, width: nw }));
+  }, [viewportWidth, viewportHeight, isPortrait, isMaximized]);
 
   const windowWidth = size.width;
   const scale = Math.min(1, (viewportWidth - 8) / windowWidth);
