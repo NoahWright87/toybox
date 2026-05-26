@@ -379,6 +379,11 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [animPanelMode,   setAnimPanelMode]   = useState<AnimPanelMode>("all");
   const [isToolPickerOpen, setIsToolPickerOpen] = useState(false);
   const [dragOverStripIdx, setDragOverStripIdx] = useState<number | null>(null);
+  const [paletteGridCols, setPaletteGridCols] = useState(2);
+  const [paletteGridRows, setPaletteGridRows] = useState(2);
+  const [activeSlots, setActiveSlots] = useState<string[]>(() => DEFAULT_PALETTE.slice(0, 4));
+  const [showPaletteDlg, setShowPaletteDlg] = useState(false);
+  const [selectedSlotIdx, setSelectedSlotIdx] = useState<number | null>(null);
 
   // Animation state
   const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
@@ -811,12 +816,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     renderOnionRef.current();
   }, []);
 
-  const deleteFrame = useCallback(() => {
+  const deleteFrame = useCallback((frameIdxParam?: number) => {
     if (isPlayingRef.current || frameCountRef.current <= 1) return;
-    const frame    = currentFrameRef.current;
+    const frame    = frameIdxParam ?? currentFrameRef.current;
     for (const row of framesDataRef.current) row.splice(frame, 1);
     const newCount = frameCountRef.current - 1;
-    const newFrame = Math.min(frame, newCount - 1);
+    const newFrame = Math.min(currentFrameRef.current, newCount - 1);
     frameCountRef.current  = newCount;
     currentFrameRef.current = newFrame;
     setFrameCount(newCount);
@@ -849,9 +854,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     renderOnionRef.current();
   }, []);
 
-  const deleteStrip = useCallback(() => {
+  const deleteStrip = useCallback((stripIdxParam?: number) => {
     if (isPlayingRef.current || stripsRef.current.length <= 1) return;
-    const strip     = currentStripRef.current;
+    const strip     = stripIdxParam ?? currentStripRef.current;
     framesDataRef.current.splice(strip, 1);
     const newStrips = stripsRef.current.filter((_, i) => i !== strip);
     const newIdx    = Math.min(strip, newStrips.length - 1);
@@ -1588,6 +1593,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         { label: "Range: 1 Frame",  checked: onionRange === 1,      onClick: () => setOnionRange(1) },
         { label: "Range: 2 Frames", checked: onionRange === 2,      onClick: () => setOnionRange(2) },
         { separator: true },
+        { label: "FPS: 4",  checked: playFps === 4,  onClick: () => setPlayFps(4)  },
+        { label: "FPS: 8",  checked: playFps === 8,  onClick: () => setPlayFps(8)  },
+        { label: "FPS: 12", checked: playFps === 12, onClick: () => setPlayFps(12) },
+        { label: "FPS: 15", checked: playFps === 15, onClick: () => setPlayFps(15) },
+        { label: "FPS: 24", checked: playFps === 24, onClick: () => setPlayFps(24) },
+        { separator: true },
         { label: "Show: All Strips",    checked: animPanelMode === "all",     onClick: () => setAnimPanelMode("all")     },
         { label: "Show: Current Strip", checked: animPanelMode === "current", onClick: () => setAnimPanelMode("current") },
         { label: "Show: None",          checked: animPanelMode === "hidden",  onClick: () => setAnimPanelMode("hidden")  },
@@ -1599,7 +1610,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     addFrame, deleteFrame, frameCount,
     addStrip, deleteStrip, strips, currentStrip,
     onionSkin, onionOpacity, onionRange,
-    animPanelMode,
+    playFps, animPanelMode,
   ]);
 
   useWindowMenus(artMenus);
@@ -1695,146 +1706,225 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         </div>
       )}
 
+      {/* ── Palette editor dialog ── */}
+      {showPaletteDlg && (
+        <div className="ns-art__overlay" onClick={() => setShowPaletteDlg(false)}>
+          <div className="ns-art__dialog ns-art__palette-dlg" onClick={e => e.stopPropagation()}>
+            <div className="ns-art__dialog-titlebar">
+              <span className="ns-art__dialog-icon">🎨</span>
+              <span>Palette Editor</span>
+            </div>
+            <div className="ns-art__dialog-body">
+
+              {/* Grid size selector */}
+              <div className="ns-art__pal-sizes">
+                {([{ c: 1, r: 2 }, { c: 2, r: 2 }, { c: 3, r: 2 }, { c: 3, r: 3 }]).map(({ c, r }) => (
+                  <button
+                    key={`${c}x${r}`}
+                    className={`ns-art__pal-size-btn${paletteGridCols === c && paletteGridRows === r ? " ns-art__pal-size-btn--active" : ""}`}
+                    onClick={() => {
+                      const newCount = c * r;
+                      setPaletteGridCols(c);
+                      setPaletteGridRows(r);
+                      setActiveSlots(prev => {
+                        if (newCount <= prev.length) return prev.slice(0, newCount);
+                        const needed = newCount - prev.length;
+                        const extras = DEFAULT_PALETTE.filter(p => !prev.includes(p)).slice(0, needed);
+                        return [...prev, ...extras];
+                      });
+                      setSelectedSlotIdx(idx => (idx !== null && idx >= newCount) ? null : idx);
+                    }}
+                  >{c}×{r}</button>
+                ))}
+              </div>
+
+              {/* Active slots */}
+              <p className="ns-art__pal-hint">Your palette — click a slot to select it</p>
+              <div
+                className="ns-art__pal-active-grid"
+                style={{ gridTemplateColumns: `repeat(${paletteGridCols}, 1fr)` }}
+              >
+                {activeSlots.map((color, i) => (
+                  <button
+                    key={i}
+                    className={`ns-art__pal-active-cell${selectedSlotIdx === i ? " ns-art__pal-active-cell--sel" : ""}`}
+                    style={color !== "transparent" ? { background: color } : undefined}
+                    data-transparent={color === "transparent" || undefined}
+                    onClick={() => setSelectedSlotIdx(i === selectedSlotIdx ? null : i)}
+                    title={`Slot ${i + 1}: ${color}`}
+                  />
+                ))}
+              </div>
+
+              {/* Full palette */}
+              <p className="ns-art__pal-hint">All colors — click to assign to selected slot{"\n"}(double-click to edit a color)</p>
+              <div className="ns-art__pal-full-grid">
+                {palette.map((color, i) => (
+                  <button
+                    key={i}
+                    className={`ns-art__pal-full-cell${selectedSlotIdx !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
+                    style={{ background: color }}
+                    onClick={() => {
+                      if (selectedSlotIdx === null) return;
+                      setActiveSlots(prev => prev.map((c, j) => j === selectedSlotIdx ? color : c));
+                      setSelectedSlotIdx(null);
+                    }}
+                    onDoubleClick={() => openSwatchEditor(i)}
+                    title={`${color}${selectedSlotIdx !== null ? " — click to assign" : ""}\ndouble-click to edit`}
+                  />
+                ))}
+                <button
+                  className={`ns-art__pal-full-cell ns-art__pal-full-cell--transparent${selectedSlotIdx !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
+                  onClick={() => {
+                    if (selectedSlotIdx === null) return;
+                    setActiveSlots(prev => prev.map((c, j) => j === selectedSlotIdx ? "transparent" : c));
+                    setSelectedSlotIdx(null);
+                  }}
+                  title="Transparent"
+                />
+              </div>
+
+            </div>
+            <div className="ns-art__dialog-btns">
+              <button className="ns-art__dialog-btn ns-art__dialog-btn--primary" onClick={() => setShowPaletteDlg(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Animation panel ── */}
       <div className="ns-art__anim-panel">
+        <div className="ns-art__anim-body" data-rev={thumbRevision}>
 
-        {/* Always-visible header: frame nav + playback + collapse toggle */}
-        <div className="ns-art__anim-header">
-          <div className="ns-art__anim-nav">
-            <button
-              className="ns-art__anim-nav-btn"
-              onClick={() => navigateTo(currentStrip, currentFrame - 1)}
-              disabled={isPlaying || currentFrame === 0}
-              title="Previous frame (Alt+←)"
-            >◀</button>
-            <span className="ns-art__anim-pos">
-              {strips[currentStrip]?.name ?? "Strip 1"} · {currentFrame + 1}/{frameCount}
-            </span>
-            <button
-              className="ns-art__anim-nav-btn"
-              onClick={() => navigateTo(currentStrip, currentFrame + 1)}
-              disabled={isPlaying || currentFrame === frameCount - 1}
-              title="Next frame (Alt+→)"
-            >▶</button>
-          </div>
+          {/* Strips area — hidden when animPanelMode === "hidden" */}
+          {animPanelMode !== "hidden" && (
+            <div className="ns-art__anim-strips">
+              {displayedStrips.map(([si, strip]) => {
+                const isFirstRow = si === displayedStrips[0]?.[0];
+                return (
+                  <div
+                    key={si}
+                    className={`ns-art__strip-row${dragOverStripIdx === si ? " ns-art__strip-row--over" : ""}`}
+                    onDragOver={animPanelMode === "all" ? (e) => { e.preventDefault(); setDragOverStripIdx(si); } : undefined}
+                    onDragLeave={animPanelMode === "all" ? () => setDragOverStripIdx(null) : undefined}
+                    onDrop={animPanelMode === "all" ? (e) => {
+                      e.preventDefault();
+                      const from = parseInt(e.dataTransfer.getData("strip-idx"));
+                      if (!isNaN(from)) reorderStrip(from, si);
+                      setDragOverStripIdx(null);
+                    } : undefined}
+                  >
+                    {animPanelMode === "all" && (
+                      <div
+                        className="ns-art__strip-handle"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("strip-idx", String(si))}
+                        title="Drag to reorder"
+                      >⠿</div>
+                    )}
 
-          <div className="ns-art__anim-controls">
-            {onionSkin && !isPlaying && <span className="ns-art__anim-onion" title="Onion skin on">👁</span>}
+                    <div className="ns-art__strip-name-cell">
+                      {renamingStrip === si ? (
+                        <input
+                          ref={stripRenameRef}
+                          className="ns-art__strip-rename"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={e => {
+                            if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
+                            if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
+                          }}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className={`ns-art__strip-name${currentStrip === si ? " ns-art__strip-name--active" : ""}`}
+                          onClick={() => navigateTo(si, currentFrame)}
+                          onDoubleClick={() => {
+                            setRenamingStrip(si);
+                            setRenameValue(strip.name);
+                            setTimeout(() => stripRenameRef.current?.focus(), 20);
+                          }}
+                          title={`${strip.name} · double-click to rename`}
+                        >{strip.name}</span>
+                      )}
+                    </div>
+
+                    <div className="ns-art__strip-frames">
+                      {Array.from({ length: frameCount }, (_, fi) => (
+                        <span key={fi} className={`ns-art__frame-slot${isFirstRow ? " ns-art__frame-slot--top" : ""}`}>
+                          {isFirstRow && frameCount > 1 && (
+                            <button
+                              className="ns-art__del-frame-btn"
+                              onClick={() => deleteFrame(fi)}
+                              disabled={isPlaying}
+                              title={`Delete frame ${fi + 1} (all strips)`}
+                            >−</button>
+                          )}
+                          <div className="ns-art__frame-thumb-row">
+                            <FrameThumbnail
+                              data={framesDataRef.current[si]?.[fi] ?? null}
+                              frameW={canvasSize.w}
+                              frameH={canvasSize.h}
+                              active={currentStrip === si && currentFrame === fi}
+                              onClick={() => navigateTo(si, fi)}
+                            />
+                            {fi < frameCount - 1 && (
+                              <div className="ns-art__frame-insert">
+                                <button
+                                  className="ns-art__frame-insert-btn"
+                                  onClick={() => insertFrame(fi)}
+                                  title="Insert frame here"
+                                >+</button>
+                              </div>
+                            )}
+                          </div>
+                        </span>
+                      ))}
+                      <button
+                        className="ns-art__add-frame-end"
+                        onClick={addFrame}
+                        disabled={isPlaying}
+                        title="Add frame at end"
+                      >+</button>
+                    </div>
+
+                    {/* Delete strip */}
+                    <button
+                      className="ns-art__del-strip-btn"
+                      onClick={() => deleteStrip(si)}
+                      disabled={isPlaying || strips.length <= 1}
+                      title={`Delete strip "${strip.name}"`}
+                    >−</button>
+                  </div>
+                );
+              })}
+
+              {animPanelMode === "all" && (
+                <button className="ns-art__add-strip-btn" onClick={addStrip} disabled={isPlaying}>
+                  + Add Strip
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Right sidebar: play + collapse */}
+          <div className="ns-art__anim-sidebar">
             <button
               className={`ns-art__anim-play${isPlaying ? " ns-art__anim-play--stop" : ""}`}
               onClick={isPlaying ? stopPlay : startPlay}
               disabled={frameCount < 2}
               title={isPlaying ? "Stop" : "Play animation"}
             >{isPlaying ? "■" : "▶"}</button>
-            <input
-              className="ns-art__fps-input"
-              type="number" min="1" max="60"
-              value={playFps}
-              onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1 && v <= 60) setPlayFps(v); }}
-              title="Frames per second"
-            />
-            <span className="ns-art__fps-unit">fps</span>
             <button
               className="ns-art__anim-collapse"
               onClick={() => setAnimPanelMode(m => m === "all" ? "current" : m === "current" ? "hidden" : "all")}
               title={`Strip view: ${animPanelMode}`}
-            >
-              {animPanelMode === "all" ? "≡" : animPanelMode === "current" ? "─" : "·"}
-            </button>
+            >{animPanelMode === "all" ? "≡" : animPanelMode === "current" ? "─" : "·"}</button>
           </div>
+
         </div>
-
-        {/* Collapsible strip rows */}
-        {animPanelMode !== "hidden" && (
-          <div className="ns-art__anim-body" data-rev={thumbRevision}>
-            {displayedStrips.map(([si, strip]) => (
-              <div
-                key={si}
-                className={`ns-art__strip-row${dragOverStripIdx === si ? " ns-art__strip-row--over" : ""}`}
-                onDragOver={animPanelMode === "all" ? (e) => { e.preventDefault(); setDragOverStripIdx(si); } : undefined}
-                onDragLeave={animPanelMode === "all" ? () => setDragOverStripIdx(null) : undefined}
-                onDrop={animPanelMode === "all" ? (e) => {
-                  e.preventDefault();
-                  const from = parseInt(e.dataTransfer.getData("strip-idx"));
-                  if (!isNaN(from)) reorderStrip(from, si);
-                  setDragOverStripIdx(null);
-                } : undefined}
-              >
-                {animPanelMode === "all" && (
-                  <div
-                    className="ns-art__strip-handle"
-                    draggable
-                    onDragStart={(e) => e.dataTransfer.setData("strip-idx", String(si))}
-                    title="Drag to reorder"
-                  >⠿</div>
-                )}
-
-                <div className="ns-art__strip-name-cell">
-                  {renamingStrip === si ? (
-                    <input
-                      ref={stripRenameRef}
-                      className="ns-art__strip-rename"
-                      value={renameValue}
-                      onChange={e => setRenameValue(e.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={e => {
-                        if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
-                        if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
-                      }}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span
-                      className={`ns-art__strip-name${currentStrip === si ? " ns-art__strip-name--active" : ""}`}
-                      onClick={() => navigateTo(si, currentFrame)}
-                      onDoubleClick={() => {
-                        setRenamingStrip(si);
-                        setRenameValue(strip.name);
-                        setTimeout(() => stripRenameRef.current?.focus(), 20);
-                      }}
-                      title={`${strip.name} · double-click to rename`}
-                    >{strip.name}</span>
-                  )}
-                </div>
-
-                <div className="ns-art__strip-frames">
-                  {Array.from({ length: frameCount }, (_, fi) => (
-                    <span key={fi} className="ns-art__frame-slot">
-                      <FrameThumbnail
-                        data={framesDataRef.current[si]?.[fi] ?? null}
-                        frameW={canvasSize.w}
-                        frameH={canvasSize.h}
-                        active={currentStrip === si && currentFrame === fi}
-                        onClick={() => navigateTo(si, fi)}
-                      />
-                      {fi < frameCount - 1 && (
-                        <div className="ns-art__frame-insert">
-                          <button
-                            className="ns-art__frame-insert-btn"
-                            onClick={() => insertFrame(fi)}
-                            title="Insert frame here"
-                          >+</button>
-                        </div>
-                      )}
-                    </span>
-                  ))}
-                  <button
-                    className="ns-art__add-frame-end"
-                    onClick={addFrame}
-                    disabled={isPlaying}
-                    title="Add frame at end"
-                  >+</button>
-                </div>
-              </div>
-            ))}
-
-            {animPanelMode === "all" && (
-              <button className="ns-art__add-strip-btn" onClick={addStrip} disabled={isPlaying}>
-                + Add Strip
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* ── Canvas (scrollable) ── */}
@@ -1888,22 +1978,21 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       <div className="ns-art__bottom">
 
         {/* Left: palette + swatches + tool launcher + compact options */}
-        <div className="ns-art__bottom-left">
-
-          {/* Primary / secondary swatches */}
+        {/* Left: swatch-box + active palette */}
+        <div className="ns-art__color-section">
           <div className="ns-art__swatch-box">
             <div
               className="ns-art__swatch ns-art__swatch--secondary"
               style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
               data-transparent={secondaryColor === "transparent" || undefined}
-              title="Secondary color — right-click palette to change"
+              title="Secondary color — right-click to change"
               onClick={() => secondaryPickerRef.current?.click()}
             />
             <div
               className="ns-art__swatch ns-art__swatch--primary"
               style={primaryColor !== "transparent" ? { background: primaryColor } : undefined}
               data-transparent={primaryColor === "transparent" || undefined}
-              title="Primary color — left-click palette to change"
+              title="Primary color — left-click to change"
               onClick={() => primaryPickerRef.current?.click()}
             />
             <input ref={primaryPickerRef}   type="color" className="ns-art__hidden-picker"
@@ -1914,29 +2003,33 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               onChange={e => setSecondaryColor(e.target.value)} />
           </div>
 
-          {/* Palette */}
-          <div className="ns-art__palette">
-            {palette.map((color, i) => (
+          {/* Active palette grid */}
+          <div
+            className="ns-art__active-palette"
+            style={{ gridTemplateColumns: `repeat(${paletteGridCols}, 44px)` }}
+          >
+            {activeSlots.map((color, i) => (
               <button
                 key={i}
-                className={`ns-art__pal-swatch${color === primaryColor ? " ns-art__pal-swatch--pri" : ""}${color === secondaryColor ? " ns-art__pal-swatch--sec" : ""}`}
-                style={{ background: color }}
-                title={`${color}  (double-click to edit)`}
+                className={`ns-art__active-swatch${color === primaryColor ? " ns-art__active-swatch--pri" : ""}${color === secondaryColor ? " ns-art__active-swatch--sec" : ""}`}
+                style={color !== "transparent" ? { background: color } : undefined}
+                data-transparent={color === "transparent" || undefined}
                 onClick={() => setPrimaryColor(color)}
                 onContextMenu={e => { e.preventDefault(); setSecondaryColor(color); }}
-                onDoubleClick={() => openSwatchEditor(i)}
+                title={`${color} — L: primary  R: secondary`}
               />
             ))}
-            <button
-              className={`ns-art__pal-swatch ns-art__pal-swatch--transparent${primaryColor === "transparent" ? " ns-art__pal-swatch--pri" : ""}${secondaryColor === "transparent" ? " ns-art__pal-swatch--sec" : ""}`}
-              title="Transparent / erases to alpha"
-              onClick={() => setPrimaryColor("transparent")}
-              onContextMenu={e => { e.preventDefault(); setSecondaryColor("transparent"); }}
-            />
-            <input ref={swatchPickerRef} type="color" className="ns-art__hidden-picker" onChange={onSwatchColorChange} />
           </div>
+        </div>
 
-          {/* Tool launcher + compact options */}
+        {/* Center: palette editor + tool section */}
+        <div className="ns-art__center-section">
+          <button
+            className="ns-art__palette-btn"
+            onClick={() => { setShowPaletteDlg(true); setSelectedSlotIdx(null); }}
+            title="Edit palette"
+          >🎨</button>
+
           <div className="ns-art__tool-section">
             <div ref={toolLauncherRef} className="ns-art__tool-launcher">
               {isToolPickerOpen && (
@@ -1958,35 +2051,24 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
               >{currentToolDef.label}</button>
             </div>
 
-            {/* Compact options */}
             <div className="ns-art__tool-opts">
-              {/* Brush/line size spinner */}
               <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
                 <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
                 <span className="ns-art__spin-val">{brushSize}</span>
                 <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
               </div>
-
               {showFillMode && (
-                <button
-                  className="ns-art__opt-btn"
+                <button className="ns-art__opt-btn"
                   onClick={() => setFillMode(m => m === "outline" ? "filled" : m === "filled" ? "both" : "outline")}
                   title={`Fill mode: ${fillMode}`}
-                >
-                  {fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}
-                </button>
+                >{fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}</button>
               )}
-
               {showBrushShape && (
-                <button
-                  className="ns-art__opt-btn"
+                <button className="ns-art__opt-btn"
                   onClick={() => setBrushShape(s => s === "square" ? "round" : "square")}
                   title={`Brush tip: ${brushShape}`}
-                >
-                  {brushShape === "square" ? "□" : "○"}
-                </button>
+                >{brushShape === "square" ? "□" : "○"}</button>
               )}
-
               {showRoundCorner && (
                 <button
                   className={`ns-art__opt-btn${roundCorners ? " ns-art__opt-btn--active" : ""}`}
@@ -2010,12 +2092,15 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           />
           <div className="ns-art__zoom-row">
             <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_OUT[z])} disabled={zoom === 1}  title="Zoom out">−</button>
-            <button className="ns-art__zoom-btn ns-art__zoom-btn--fit" onClick={fitCanvas} title={`Fit canvas in view  (${zoom}×)`}>fit</button>
+            <button className="ns-art__zoom-btn ns-art__zoom-btn--fit" onClick={fitCanvas} title={`Fit (${zoom}×)`}>fit</button>
             <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_IN[z])}  disabled={zoom === 16} title="Zoom in">+</button>
           </div>
         </div>
 
       </div>
+
+      {/* Always-rendered hidden pickers */}
+      <input ref={swatchPickerRef} type="color" className="ns-art__hidden-picker" onChange={onSwatchColorChange} />
     </div>
   );
 });
