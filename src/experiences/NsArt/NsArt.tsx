@@ -215,18 +215,38 @@ function strokeRect(
   outlineColor: string, fillColor: string,
   size: number, mode: FillMode, roundCorners: boolean,
 ) {
-  const x = Math.min(x0,x1), y = Math.min(y0,y1);
-  const w = Math.abs(x1-x0), h = Math.abs(y1-y0);
-  const join: CanvasLineJoin = roundCorners ? "round" : "miter";
-  if ((mode === "filled" || mode === "both") && w > 0 && h > 0) {
-    applyColor(ctx, fillColor, size, join);
-    ctx.fillRect(x, y, w, h);
+  const x = Math.min(x0, x1), y = Math.min(y0, y1);
+  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  if (w <= 0 || h <= 0) return;
+
+  if (mode === "filled" || mode === "both") {
+    if (fillColor === "transparent") ctx.clearRect(x, y, w, h);
+    else { ctx.fillStyle = fillColor; ctx.fillRect(x, y, w, h); }
   }
+
   if (mode === "outline" || mode === "both") {
-    applyColor(ctx, outlineColor, size, join);
-    ctx.strokeRect(x, y, w, h);
+    if (roundCorners) {
+      // Round-corner mode: user opted in, accept anti-aliasing
+      applyColor(ctx, outlineColor, size, "round");
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      resetCtx(ctx);
+    } else {
+      // Hard-pixel outline: draw 4 sides with fillRect (no anti-aliasing)
+      const sw = size;
+      const plotR = (px: number, py: number, pw: number, ph: number) => {
+        if (pw <= 0 || ph <= 0) return;
+        if (outlineColor === "transparent") ctx.clearRect(px, py, pw, ph);
+        else { ctx.fillStyle = outlineColor; ctx.fillRect(px, py, pw, ph); }
+      };
+      plotR(x, y, w, sw);                              // top
+      plotR(x, y + h - sw, w, sw);                    // bottom
+      const innerH = h - 2 * sw;
+      if (innerH > 0) {
+        plotR(x, y + sw, sw, innerH);                 // left
+        plotR(x + w - sw, y + sw, sw, innerH);        // right
+      }
+    }
   }
-  resetCtx(ctx);
 }
 
 function strokeOval(
@@ -235,20 +255,56 @@ function strokeOval(
   outlineColor: string, fillColor: string,
   size: number, mode: FillMode,
 ) {
-  const cx = (x0+x1)/2, cy = (y0+y1)/2;
-  const rx = Math.max(1, Math.abs(x1-x0)/2);
-  const ry = Math.max(1, Math.abs(y1-y0)/2);
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+
+  // Degenerate: too small to be an oval
+  if (rx < 0.5 && ry < 0.5) {
+    stampPixel(ctx, Math.round(cx), Math.round(cy), outlineColor, size, "square");
+    return;
+  }
+
+  const ryI = Math.max(1, Math.round(ry));
+  const rxI = Math.max(1, Math.round(rx));
+
+  // Fill: scanline across every row inside the ellipse
   if (mode === "filled" || mode === "both") {
-    applyColor(ctx, fillColor, size);
-    ctx.fill();
+    for (let dy = -ryI; dy <= ryI; dy++) {
+      const t = ry > 0 ? dy / ry : 0;
+      if (t * t > 1) continue;
+      const dx = rx * Math.sqrt(1 - t * t);
+      const xl = Math.round(cx - dx), xr = Math.round(cx + dx);
+      const fw = xr - xl + 1;
+      if (fw <= 0) continue;
+      const py = Math.round(cy + dy);
+      if (fillColor === "transparent") ctx.clearRect(xl, py, fw, 1);
+      else { ctx.fillStyle = fillColor; ctx.fillRect(xl, py, fw, 1); }
+    }
   }
+
+  // Outline: row scan for near-horizontal portions + column scan for near-vertical portions
   if (mode === "outline" || mode === "both") {
-    applyColor(ctx, outlineColor, size);
-    ctx.stroke();
+    // Row scan — plots left and right edge pixel of each row
+    for (let dy = -ryI; dy <= ryI; dy++) {
+      const t = ry > 0 ? dy / ry : 0;
+      if (t * t > 1) continue;
+      const dx = rx * Math.sqrt(1 - t * t);
+      const lx = Math.round(cx - dx), rx2 = Math.round(cx + dx);
+      const py = Math.round(cy + dy);
+      stampPixel(ctx, lx, py, outlineColor, size, "square");
+      if (rx2 !== lx) stampPixel(ctx, rx2, py, outlineColor, size, "square");
+    }
+    // Column scan — fills in top and bottom edge pixels where the curve is steep
+    for (let dx = -rxI; dx <= rxI; dx++) {
+      const t = rx > 0 ? dx / rx : 0;
+      if (t * t > 1) continue;
+      const dy = ry * Math.sqrt(1 - t * t);
+      const px = Math.round(cx + dx);
+      const ty = Math.round(cy - dy), by = Math.round(cy + dy);
+      stampPixel(ctx, px, ty, outlineColor, size, "square");
+      if (by !== ty) stampPixel(ctx, px, by, outlineColor, size, "square");
+    }
   }
-  resetCtx(ctx);
 }
 
 function doSpray(canvas: HTMLCanvasElement, x: number, y: number, color: string, size: number) {
