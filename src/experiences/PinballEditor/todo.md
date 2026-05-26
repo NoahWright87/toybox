@@ -2,7 +2,7 @@
 
 ## Physics Visualization
 
-### ✅ Ghost Ball Trajectory Preview — DONE
+### ✅ Ghost Ball Trajectory Preview — DONE (streaming live via Web Worker)
 When an element is selected and "Preview Physics" is enabled in the View menu,
 spawn ghost balls in a ring around the selected object, aimed inward. They run
 in a secondary Matter.js world (not the game world), leave low-opacity trail
