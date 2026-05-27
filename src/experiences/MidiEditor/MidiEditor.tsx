@@ -141,6 +141,120 @@ function downloadJson(song: Song) {
   URL.revokeObjectURL(url);
 }
 
+function exportToMidi(song: Song, selectedClipId: string): void {
+  const PPQ = 480;
+  const { stepsPerBeat, beatsPerBar, bpm } = song;
+  const stepsPerBar = stepsPerBeat * beatsPerBar;
+  const microsecondsPerBeat = Math.round(60_000_000 / bpm);
+
+  // If arrangement is empty, treat selected clip as placed at bar 0
+  const blocks: Array<{ clipId: string; startBar: number }> =
+    song.arrangement.length > 0
+      ? song.arrangement
+      : [{ clipId: selectedClipId, startBar: 0 }];
+
+  const maxSlots = Math.max(...song.clips.map(c => c.tracks.length), 0);
+  if (maxSlots === 0) return;
+
+  type SlotMeta = { isDrum: boolean; gmProgram?: number; name: string };
+  const slotMeta: SlotMeta[] = Array.from({ length: maxSlots }, (_, i) => {
+    for (const clip of song.clips) {
+      if (i < clip.tracks.length) {
+        const t = clip.tracks[i];
+        return { isDrum: t.isDrum, gmProgram: t.gmProgram, name: t.name };
+      }
+    }
+    return { isDrum: false, name: `Track ${i + 1}` };
+  });
+
+  // Assign MIDI channels — drums always on 9, melodic on 0-8, 10-15
+  const slotChannel: number[] = [];
+  let melodicCh = 0;
+  for (let s = 0; s < maxSlots; s++) {
+    if (slotMeta[s].isDrum) {
+      slotChannel[s] = 9;
+    } else {
+      if (melodicCh === 9) melodicCh++;
+      slotChannel[s] = Math.min(15, melodicCh++);
+    }
+  }
+
+  type MidiEv = { tick: number; isOff: boolean; pitch: number; velocity: number; ch: number };
+  const slotEvents: MidiEv[][] = Array.from({ length: maxSlots }, () => []);
+
+  for (const block of blocks) {
+    const clip = song.clips.find(c => c.id === block.clipId);
+    if (!clip) continue;
+    const blockStartStep = block.startBar * stepsPerBar;
+
+    clip.tracks.forEach((track, slot) => {
+      if (slot >= maxSlots || track.muted) return;
+      const ch    = slotChannel[slot];
+      const shift = track.isDrum ? 0 : (track.octaveOffset ?? 0);
+      for (const note of track.notes) {
+        const t0 = Math.round((blockStartStep + note.startStep) * PPQ / stepsPerBeat);
+        const t1 = Math.round((blockStartStep + note.startStep + note.durationSteps) * PPQ / stepsPerBeat);
+        const p  = Math.max(0, Math.min(127, note.pitch + shift));
+        slotEvents[slot].push({ tick: t0, isOff: false, pitch: p, velocity: note.velocity & 0x7F, ch });
+        slotEvents[slot].push({ tick: t1, isOff: true,  pitch: p, velocity: 64,                  ch });
+      }
+    });
+  }
+
+  // Sort by tick; note-offs before note-ons at the same tick
+  slotEvents.forEach(evs => evs.sort((a, b) => a.tick - b.tick || (a.isOff ? -1 : 1)));
+
+  function vlq(n: number): number[] {
+    const out: number[] = [n & 0x7F];
+    let rest = n >>> 7;
+    while (rest > 0) { out.unshift((rest & 0x7F) | 0x80); rest >>>= 7; }
+    return out;
+  }
+  const u16 = (n: number): number[] => [(n >> 8) & 0xFF, n & 0xFF];
+  const u32 = (n: number): number[] => [(n >>> 24) & 0xFF, (n >>> 16) & 0xFF, (n >>> 8) & 0xFF, n & 0xFF];
+  const mtrk = (data: number[]): Uint8Array => new Uint8Array([0x4D, 0x54, 0x72, 0x6B, ...u32(data.length), ...data]);
+
+  const numTracks = 1 + maxSlots;
+  const header = new Uint8Array([0x4D, 0x54, 0x68, 0x64, ...u32(6), ...u16(1), ...u16(numTracks), ...u16(PPQ)]);
+
+  const tempoData: number[] = [
+    ...vlq(0), 0xFF, 0x51, 0x03,
+    (microsecondsPerBeat >> 16) & 0xFF, (microsecondsPerBeat >> 8) & 0xFF, microsecondsPerBeat & 0xFF,
+    ...vlq(0), 0xFF, 0x58, 0x04, beatsPerBar, 2, 24, 8,
+    ...vlq(0), 0xFF, 0x2F, 0x00,
+  ];
+
+  const instrTracks = slotEvents.map((evs, slot) => {
+    const meta = slotMeta[slot];
+    const ch   = slotChannel[slot];
+    const data: number[] = [];
+    const nameBytes = meta.name.split('').map(c => c.charCodeAt(0)).slice(0, 32);
+    data.push(...vlq(0), 0xFF, 0x03, nameBytes.length, ...nameBytes);
+    if (!meta.isDrum && meta.gmProgram !== undefined) {
+      data.push(...vlq(0), 0xC0 | ch, meta.gmProgram & 0x7F);
+    }
+    let curTick = 0;
+    for (const ev of evs) {
+      const delta = ev.tick - curTick; curTick = ev.tick;
+      data.push(...vlq(delta), (ev.isOff ? 0x80 : 0x90) | ch, ev.pitch, ev.velocity);
+    }
+    data.push(...vlq(0), 0xFF, 0x2F, 0x00);
+    return mtrk(data);
+  });
+
+  const all = [header, mtrk(tempoData), ...instrTracks];
+  const total = all.reduce((n, c) => n + c.length, 0);
+  const buf = new Uint8Array(total);
+  let pos = 0;
+  for (const chunk of all) { buf.set(chunk, pos); pos += chunk.length; }
+
+  const blob = new Blob([buf], { type: 'audio/midi' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'toybox-song.mid'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Build note map ──────────────────────────────────────────────────────────────
 
 function buildNoteMap(track: Track): Map<string, string> {
@@ -369,6 +483,28 @@ function LoadDialog({ onLoad, onClose }: LoadDialogProps) {
   );
 }
 
+// ── Confirm dialog ─────────────────────────────────────────────────────────────
+
+function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="me-modal-backdrop" onPointerDown={onCancel}>
+      <div className="me-modal" onPointerDown={e => e.stopPropagation()}>
+        <div className="me-modal__title">
+          <span>Confirm</span>
+          <button className="me-modal__close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="me-modal__body">
+          <p className="me-label">{message}</p>
+        </div>
+        <div className="me-modal__footer">
+          <button className="me-btn" onClick={onCancel}>Cancel</button>
+          <button className="me-btn me-btn--primary" onClick={onConfirm}>OK</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Transport bar ──────────────────────────────────────────────────────────────
 
 interface TransportProps {
@@ -385,7 +521,6 @@ interface TransportProps {
   onStepsPerBeatChange: (spb: number) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onNew: () => void;
   onToolChange: (t: EditTool) => void;
   onViewChange: (v: AppView) => void;
   onSelectClip: (clipId: string) => void;
@@ -394,7 +529,7 @@ interface TransportProps {
 function Transport({
   song, selectedClipId, isPlaying, zoomIdx, tool, view,
   onPlay, onStop, onBpmChange, onBarsChange, onStepsPerBeatChange,
-  onZoomIn, onZoomOut, onNew, onToolChange, onViewChange, onSelectClip,
+  onZoomIn, onZoomOut, onToolChange, onViewChange, onSelectClip,
 }: TransportProps) {
   function nudge(delta: number) { onBpmChange(Math.max(40, Math.min(240, song.bpm + delta))); }
 
@@ -477,10 +612,6 @@ function Transport({
             onChange={e => onBpmChange(Number(e.target.value))} />
           <button className="me-btn me-btn--sm" onPointerDown={() => nudge(5)}>+</button>
         </div>
-
-        <div className="me-transport__sep" />
-
-        <button className="me-btn me-btn--sm" onPointerDown={onNew} title={view === 'pattern' ? 'New blank clip' : 'New blank song'}>NEW</button>
 
         <span className="me-label me-label--dim">SPC=play{view === 'pattern' ? ' S/D/P=tool' : ''}</span>
       </div>
@@ -838,6 +969,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const modalOrigRef = useRef<Partial<Track> | null>(null);
   const [showSave,      setShowSave]      = useState(false);
   const [showLoad,      setShowLoad]      = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ fn: () => void } | null>(null);
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set<string>());
 
   const selectedClip = song.clips.find(c => c.id === selectedClipId) ?? song.clips[0];
@@ -1370,10 +1502,12 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   }, []);
 
   const newSong = useCallback(() => {
-    stopPlayback();
-    const s = createInitialSong();
-    setSong(s);
-    setSelectedClipId(s.clips[0].id);
+    setPendingAction({ fn: () => {
+      stopPlayback();
+      const s = createInitialSong();
+      setSong(s);
+      setSelectedClipId(s.clips[0].id);
+    }});
   }, [stopPlayback]);
 
   const newClip = useCallback(() => {
@@ -1420,6 +1554,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         { label: 'Save to Library…',   onClick: () => setShowSave(true) },
         { label: 'Load from Library…', onClick: () => setShowLoad(true) },
         { label: 'Download JSON',      onClick: () => downloadJson(songRef.current) },
+        { label: 'Download MIDI',      onClick: () => exportToMidi(songRef.current, selectedClipIdRef.current) },
         ...(onQuit ? [{ separator: true as const }, { label: 'Close', onClick: onQuit }] : []),
       ],
     },
@@ -1476,7 +1611,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         onStepsPerBeatChange={spb => { stopPlayback(); setSong(s => ({ ...s, stepsPerBeat: spb })); }}
         onZoomIn={() => setZoomIdx(i => Math.min(i + 1, ZOOM_PRESETS.length - 1))}
         onZoomOut={() => setZoomIdx(i => Math.max(i - 1, 0))}
-        onNew={() => view === 'pattern' ? newClip() : newSong()}
         onToolChange={setTool}
         onViewChange={v => { stopPlayback(); setView(v); }}
         onSelectClip={id => { setSelectedClipId(id); setView('pattern'); }}
@@ -1558,6 +1692,13 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       </div>
 
       {/* Overlays */}
+      {pendingAction && (
+        <ConfirmDialog
+          message="Start a new song? Your current work will be cleared."
+          onConfirm={() => { pendingAction.fn(); setPendingAction(null); }}
+          onCancel={() => setPendingAction(null)}
+        />
+      )}
       {modalTrack && (
         <InstrumentModal
           track={modalTrack}
