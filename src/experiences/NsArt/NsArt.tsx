@@ -1,6 +1,6 @@
 import {
   useRef, useState, useEffect, useCallback,
-  useLayoutEffect, forwardRef, useImperativeHandle, useMemo,
+  forwardRef, useImperativeHandle, useMemo,
 } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -8,8 +8,12 @@ import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Tool = "pencil" | "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "zoom";
+type Tool = "brush" | "spray" | "eraser" | "fill" | "line" | "rect" | "oval" | "select";
+type SelectPhase = "idle" | "selecting" | "selected" | "moving";
+type ZoomLevel = 1 | 2 | 4 | 8 | 16;
+type BrushShape = "square" | "round";
 type FillMode = "outline" | "filled" | "both";
+type AnimPanelMode = "all" | "current" | "hidden";
 interface CanvasSize { w: number; h: number }
 
 interface DialogButton { label: string; onClick: () => void; primary?: boolean }
@@ -50,28 +54,32 @@ const DEFAULT_PALETTE: string[] = [
 ];
 
 const CANVAS_PRESETS: CanvasSize[] = [
-  { w: 160, h: 120 },
+  { w:  64, h:  64 },
+  { w: 100, h: 100 },
+  { w: 128, h: 128 },
+  { w: 200, h: 200 },
   { w: 320, h: 240 },
-  { w: 640, h: 480 },
-  { w: 800, h: 600 },
 ];
-
-const BRUSH_SIZES = [2, 5, 10] as const;
-type BrushSize = typeof BRUSH_SIZES[number];
 
 const TOOLS: { id: Tool; label: string; title: string }[] = [
-  { id: "pencil", label: "✏️", title: "Pencil (1px)"                  },
-  { id: "brush",  label: "🖌️", title: "Brush"                         },
-  { id: "spray",  label: "🫧",  title: "Spray Can"                     },
-  { id: "eraser", label: "🧼",  title: "Eraser"                        },
-  { id: "fill",   label: "🪣",  title: "Fill"                          },
-  { id: "line",   label: "╱",  title: "Line"                          },
-  { id: "rect",   label: "▭",  title: "Rectangle"                     },
-  { id: "oval",   label: "⬭",  title: "Oval"                          },
-  { id: "zoom",   label: "🔍",  title: "Zoom — click cycles 1×→2×→4×→1×; right-click reverses" },
+  { id: "brush",  label: "🖌️", title: "Brush — left=primary, right=secondary" },
+  { id: "spray",  label: "🫧",  title: "Spray Can"                              },
+  { id: "eraser", label: "🧼",  title: "Eraser"                                 },
+  { id: "fill",   label: "🪣",  title: "Fill"                                   },
+  { id: "line",   label: "╱",  title: "Line"                                   },
+  { id: "rect",   label: "▭",  title: "Rectangle"                              },
+  { id: "oval",   label: "⬭",  title: "Oval"                                   },
+  { id: "select", label: "⬚",  title: "Select — drag to select, then drag to move, Delete to clear" },
 ];
 
+const ZOOM_IN:  Record<number, ZoomLevel> = { 1: 2, 2: 4, 4: 8,  8: 16, 16: 16 };
+const ZOOM_OUT: Record<number, ZoomLevel> = { 1: 1, 2: 1, 4: 2,  8: 4,  16: 8  };
+const ZOOM_LEVELS: ZoomLevel[] = [16, 8, 4, 2, 1];
+
 const LS_KEY = "ns-art-backup";
+
+const MINIMAP_MAX_W = 120;
+const MINIMAP_MAX_H = 72;
 
 // ── Canvas utilities ───────────────────────────────────────────────────────
 
@@ -110,7 +118,53 @@ function floodFill(ctx: CanvasRenderingContext2D, sx: number, sy: number, fillCo
   ctx.putImageData(imageData, 0, 0);
 }
 
-function applyColor(ctx: CanvasRenderingContext2D, color: string, size: number) {
+function stampPixel(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  color: string, size: number, shape: BrushShape,
+) {
+  const half = Math.floor(size / 2);
+  if (color === "transparent") {
+    ctx.clearRect(x - half, y - half, size, size);
+    return;
+  }
+  ctx.fillStyle = color;
+  if (shape === "round" && size > 2) {
+    const r = half;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy <= r * r + r * 0.5) ctx.fillRect(x + dx, y + dy, 1, 1);
+      }
+    }
+  } else {
+    ctx.fillRect(x - half, y - half, size, size);
+  }
+}
+
+function bresenhamLine(
+  ctx: CanvasRenderingContext2D,
+  x0: number, y0: number, x1: number, y1: number,
+  color: string, size: number, shape: BrushShape,
+) {
+  let cx = Math.round(x0), cy = Math.round(y0);
+  const ex = Math.round(x1), ey = Math.round(y1);
+  const dx = Math.abs(ex - cx), dy = Math.abs(ey - cy);
+  const sx = cx < ex ? 1 : -1, sy = cy < ey ? 1 : -1;
+  let err = dx - dy;
+  for (;;) {
+    stampPixel(ctx, cx, cy, color, size, shape);
+    if (cx === ex && cy === ey) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; cx += sx; }
+    if (e2 < dx)  { err += dx; cy += sy; }
+  }
+}
+
+function applyColor(
+  ctx: CanvasRenderingContext2D,
+  color: string, size: number,
+  lineJoin: CanvasLineJoin = "round",
+) {
   if (color === "transparent") {
     ctx.globalCompositeOperation = "destination-out";
     ctx.strokeStyle = "rgba(0,0,0,1)";
@@ -121,8 +175,8 @@ function applyColor(ctx: CanvasRenderingContext2D, color: string, size: number) 
     ctx.fillStyle   = color;
   }
   ctx.lineWidth = size;
-  ctx.lineCap   = "round";
-  ctx.lineJoin  = "round";
+  ctx.lineCap   = lineJoin === "miter" ? "butt" : "round";
+  ctx.lineJoin  = lineJoin;
 }
 
 function resetCtx(ctx: CanvasRenderingContext2D) {
@@ -135,27 +189,61 @@ function strokeLine(
   color: string, size: number,
 ) {
   applyColor(ctx, color, size);
-  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  const off = size === 1 ? 0.5 : 0;
+  ctx.beginPath(); ctx.moveTo(x0 + off, y0 + off); ctx.lineTo(x1 + off, y1 + off); ctx.stroke();
   resetCtx(ctx);
+}
+
+function snapTo45(x0: number, y0: number, x1: number, y1: number): { x: number; y: number } {
+  const dx = x1 - x0, dy = y1 - y0;
+  const angle = Math.atan2(dy, dx);
+  const snap  = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+  const dist  = Math.sqrt(dx * dx + dy * dy);
+  return { x: Math.round(x0 + dist * Math.cos(snap)), y: Math.round(y0 + dist * Math.sin(snap)) };
+}
+
+function snapToSquare(x0: number, y0: number, x1: number, y1: number): { x: number; y: number } {
+  const dx = x1 - x0, dy = y1 - y0;
+  const side = Math.sign(dx) * Math.min(Math.abs(dx), Math.abs(dy));
+  return { x: x0 + side, y: y0 + Math.sign(dy) * Math.abs(side) };
 }
 
 function strokeRect(
   ctx: CanvasRenderingContext2D,
   x0: number, y0: number, x1: number, y1: number,
   outlineColor: string, fillColor: string,
-  size: number, mode: FillMode,
+  size: number, mode: FillMode, roundCorners: boolean,
 ) {
-  const x = Math.min(x0,x1), y = Math.min(y0,y1);
-  const w = Math.abs(x1-x0), h = Math.abs(y1-y0);
-  if ((mode === "filled" || mode === "both") && w > 0 && h > 0) {
-    applyColor(ctx, fillColor, size);
-    ctx.fillRect(x, y, w, h);
+  const x = Math.min(x0, x1), y = Math.min(y0, y1);
+  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  if (w <= 0 || h <= 0) return;
+
+  if (mode === "filled" || mode === "both") {
+    if (fillColor === "transparent") ctx.clearRect(x, y, w, h);
+    else { ctx.fillStyle = fillColor; ctx.fillRect(x, y, w, h); }
   }
+
   if (mode === "outline" || mode === "both") {
-    applyColor(ctx, outlineColor, size);
-    ctx.strokeRect(x, y, w, h);
+    if (roundCorners) {
+      applyColor(ctx, outlineColor, size, "round");
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      resetCtx(ctx);
+    } else {
+      const sw = size;
+      const plotR = (px: number, py: number, pw: number, ph: number) => {
+        if (pw <= 0 || ph <= 0) return;
+        if (outlineColor === "transparent") ctx.clearRect(px, py, pw, ph);
+        else { ctx.fillStyle = outlineColor; ctx.fillRect(px, py, pw, ph); }
+      };
+      plotR(x, y, w, sw);
+      plotR(x, y + h - sw, w, sw);
+      const innerH = h - 2 * sw;
+      if (innerH > 0) {
+        plotR(x, y + sw, sw, innerH);
+        plotR(x + w - sw, y + sw, sw, innerH);
+      }
+    }
   }
-  resetCtx(ctx);
 }
 
 function strokeOval(
@@ -164,32 +252,94 @@ function strokeOval(
   outlineColor: string, fillColor: string,
   size: number, mode: FillMode,
 ) {
-  const cx = (x0+x1)/2, cy = (y0+y1)/2;
-  const rx = Math.max(1, Math.abs(x1-x0)/2);
-  const ry = Math.max(1, Math.abs(y1-y0)/2);
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+
+  if (rx < 0.5 && ry < 0.5) {
+    stampPixel(ctx, Math.round(cx), Math.round(cy), outlineColor, size, "square");
+    return;
+  }
+
+  const ryI = Math.max(1, Math.round(ry));
+  const rxI = Math.max(1, Math.round(rx));
+
   if (mode === "filled" || mode === "both") {
-    applyColor(ctx, fillColor, size);
-    ctx.fill();
+    for (let dy = -ryI; dy <= ryI; dy++) {
+      const t = ry > 0 ? dy / ry : 0;
+      if (t * t > 1) continue;
+      const dx = rx * Math.sqrt(1 - t * t);
+      const xl = Math.round(cx - dx), xr = Math.round(cx + dx);
+      const fw = xr - xl + 1;
+      if (fw <= 0) continue;
+      const py = Math.round(cy + dy);
+      if (fillColor === "transparent") ctx.clearRect(xl, py, fw, 1);
+      else { ctx.fillStyle = fillColor; ctx.fillRect(xl, py, fw, 1); }
+    }
   }
+
   if (mode === "outline" || mode === "both") {
-    applyColor(ctx, outlineColor, size);
-    ctx.stroke();
+    for (let dy = -ryI; dy <= ryI; dy++) {
+      const t = ry > 0 ? dy / ry : 0;
+      if (t * t > 1) continue;
+      const dx = rx * Math.sqrt(1 - t * t);
+      const lx = Math.round(cx - dx), rx2 = Math.round(cx + dx);
+      const py = Math.round(cy + dy);
+      stampPixel(ctx, lx, py, outlineColor, size, "square");
+      if (rx2 !== lx) stampPixel(ctx, rx2, py, outlineColor, size, "square");
+    }
+    for (let dx = -rxI; dx <= rxI; dx++) {
+      const t = rx > 0 ? dx / rx : 0;
+      if (t * t > 1) continue;
+      const dy = ry * Math.sqrt(1 - t * t);
+      const px = Math.round(cx + dx);
+      const ty = Math.round(cy - dy), by = Math.round(cy + dy);
+      stampPixel(ctx, px, ty, outlineColor, size, "square");
+      if (by !== ty) stampPixel(ctx, px, by, outlineColor, size, "square");
+    }
   }
-  resetCtx(ctx);
 }
 
-function doSpray(canvas: HTMLCanvasElement, x: number, y: number, color: string, size: number) {
-  const ctx = canvas.getContext("2d")!;
-  applyColor(ctx, color, 1);
-  const radius = size * 5, density = size * 4;
-  for (let i = 0; i < density; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r     = Math.random() * radius;
-    ctx.fillRect(Math.round(x + Math.cos(angle)*r), Math.round(y + Math.sin(angle)*r), 1, 1);
-  }
-  resetCtx(ctx);
+// ── FrameThumbnail ─────────────────────────────────────────────────────────
+
+function FrameThumbnail({
+  data, frameW, frameH, active, onClick,
+}: {
+  data: ImageData | null;
+  frameW: number;
+  frameH: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const THUMB_H = 40;
+  const thumbW = Math.max(1, Math.round((frameW / frameH) * THUMB_H));
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    if (data) {
+      const tmp = document.createElement("canvas");
+      tmp.width = frameW; tmp.height = frameH;
+      tmp.getContext("2d")!.putImageData(data, 0, 0);
+      ctx.clearRect(0, 0, thumbW, THUMB_H);
+      ctx.drawImage(tmp, 0, 0, thumbW, THUMB_H);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, thumbW, THUMB_H);
+    }
+  }, [data, frameW, frameH, thumbW]);
+
+  return (
+    <canvas
+      ref={ref}
+      className={`ns-art__thumb${active ? " ns-art__thumb--active" : ""}`}
+      width={thumbW}
+      height={THUMB_H}
+      onClick={onClick}
+      title={`Frame${active ? " (current)" : ""}`}
+    />
+  );
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -198,26 +348,39 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   { onBackupSaved }: NsArtProps,
   ref,
 ) {
+  // DOM refs
   const canvasRef          = useRef<HTMLCanvasElement>(null);
-  const canvasAreaRef      = useRef<HTMLDivElement>(null);
   const onionCanvasRef     = useRef<HTMLCanvasElement>(null);
   const primaryPickerRef   = useRef<HTMLInputElement>(null);
   const secondaryPickerRef = useRef<HTMLInputElement>(null);
   const swatchPickerRef    = useRef<HTMLInputElement>(null);
   const stripRenameRef     = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const minimapCanvasRef   = useRef<HTMLCanvasElement>(null);
+  const toolLauncherRef    = useRef<HTMLDivElement>(null);
 
   // Drawing state
-  const [tool,           setTool]          = useState<Tool>("pencil");
+  const [tool,           setTool]          = useState<Tool>("brush");
   const [palette,        setPalette]       = useState<string[]>(() => [...DEFAULT_PALETTE]);
   const [primaryColor,   setPrimaryColor]  = useState("#000000");
   const [secondaryColor, setSecondaryColor]= useState("#ffffff");
-  const [brushSize,      setBrushSize]     = useState<BrushSize>(2);
+  const [brushSize,      setBrushSize]     = useState(1);
+  const [brushShape,     setBrushShape]    = useState<BrushShape>("square");
   const [fillMode,       setFillMode]      = useState<FillMode>("outline");
-  const [zoom,           setZoom]          = useState(1);
-  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 320, h: 240 });
-  const [status,         setStatus]        = useState("Ready");
+  const [roundCorners,   setRoundCorners]  = useState(false);
+  const [zoom,           setZoom]          = useState<ZoomLevel>(1);
+  const [selectRect,     setSelectRect]    = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [selectPhase,    setSelectPhase]   = useState<SelectPhase>("idle");
+  const [canvasSize,     setCanvasSize]    = useState<CanvasSize>({ w: 100, h: 100 });
   const [confirmState,   setConfirmState]  = useState<ConfirmState | null>(null);
   const [editingSwatchIdx, setEditingSwatchIdx] = useState<number | null>(null);
+
+  // UI state
+  const [animPanelMode,   setAnimPanelMode]   = useState<AnimPanelMode>("all");
+  const [isToolPickerOpen, setIsToolPickerOpen] = useState(false);
+  const [dragOverStripIdx, setDragOverStripIdx] = useState<number | null>(null);
+  const [showPaletteDlg, setShowPaletteDlg] = useState(false);
+  const [paletteTarget, setPaletteTarget] = useState<"primary" | "secondary" | null>(null);
 
   // Animation state
   const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
@@ -229,6 +392,11 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [onionRange,    setOnionRange]    = useState<OnionRange>(1);
   const [isPlaying,     setIsPlaying]     = useState(false);
   const [playFps,       setPlayFps]       = useState(8);
+  const [showGrid,      setShowGrid]      = useState(false);
+  const [thumbRevision, setThumbRevision] = useState(0);
+  const [showSizeDlg,   setShowSizeDlg]  = useState(false);
+  const [sizeInputW,    setSizeInputW]   = useState(100);
+  const [sizeInputH,    setSizeInputH]   = useState(100);
   const [renamingStrip, setRenamingStrip] = useState<number | null>(null);
   const [renameValue,   setRenameValue]   = useState("");
 
@@ -239,15 +407,24 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const snapshotRef         = useRef<ImageData | null>(null);
   const undoRef             = useRef<ImageData[]>([]);
   const sprayRef            = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeColorRef      = useRef("#000000");
-  const activeFillColorRef  = useRef("#ffffff");
-  const activeSizeRef       = useRef<number>(1);
+  const activeColorRef        = useRef("#000000");
+  const activeFillColorRef    = useRef("#ffffff");
+  const activeSizeRef         = useRef<number>(1);
+  const activeBrushShapeRef   = useRef<BrushShape>("square");
+  const activeRoundCornersRef = useRef(false);
+  const shiftKeyRef           = useRef(false);
+
+  // Selection tool refs
+  const selectPhaseRef       = useRef<SelectPhase>("idle");
+  const selectRectRef        = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const selectionDataRef     = useRef<ImageData | null>(null);
+  const preSelectionSnapRef  = useRef<ImageData | null>(null);
+  const moveOffsetRef        = useRef({ x: 0, y: 0 });
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
 
-  // Animation refs (stable, avoid stale closures)
-  // framesDataRef[stripIdx][frameIdx] = ImageData | null  (null = blank white)
+  // Animation refs
   const framesDataRef    = useRef<(ImageData | null)[][]>([[null]]);
   const currentStripRef  = useRef(0);
   const currentFrameRef  = useRef(0);
@@ -255,11 +432,21 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const stripsRef        = useRef<Strip[]>([{ name: "Strip 1" }]);
   const isPlayingRef     = useRef(false);
   const playIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const renderOnionRef      = useRef<() => void>(() => {});
-  const saveFrameRef        = useRef<() => void>(() => {});
-  const loadFrameRef        = useRef<(s: number, f: number) => void>(() => {});
-  const scheduleAutoSaveRef = useRef<() => void>(() => {});
-  const pendingRestoreRef   = useRef<PendingRestore | null>(null);
+  const renderOnionRef        = useRef<() => void>(() => {});
+  const saveFrameRef          = useRef<() => void>(() => {});
+  const loadFrameRef          = useRef<(s: number, f: number) => void>(() => {});
+  const scheduleAutoSaveRef   = useRef<() => void>(() => {});
+  const continueDrawingRef    = useRef<(x: number, y: number) => void>(() => {});
+  const bumpThumbRef          = useRef<() => void>(() => {});
+  const pendingRestoreRef     = useRef<PendingRestore | null>(null);
+
+  // New navigation/minimap refs
+  const minimapDraggingRef      = useRef(false);
+  const minimapDragOffsetRef    = useRef({ x: 0, y: 0 });
+  const zoomRef                 = useRef<ZoomLevel>(1);
+  const pendingScrollAdjustRef  = useRef<{ canvasX: number; canvasY: number; cursorX: number; cursorY: number } | null>(null);
+  const containerSizeRef        = useRef({ w: 0, h: 0 });
+  const renderMinimapRef        = useRef<() => void>(() => {});
 
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
   useEffect(() => { currentStripRef.current  = currentStrip;  }, [currentStrip]);
@@ -267,6 +454,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   useEffect(() => { frameCountRef.current    = frameCount;    }, [frameCount]);
   useEffect(() => { stripsRef.current        = strips;        }, [strips]);
   useEffect(() => { isPlayingRef.current     = isPlaying;     }, [isPlaying]);
+  useEffect(() => { zoomRef.current          = zoom;          }, [zoom]);
 
   // ── Frame data helpers ─────────────────────────────────────────────────
 
@@ -297,11 +485,12 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   useEffect(() => { saveFrameRef.current = saveCurrentFrame; }, [saveCurrentFrame]);
   useEffect(() => { loadFrameRef.current = loadFrame;        }, [loadFrame]);
 
-  // ── Expose imperative handle ───────────────────────────────────────────
+  // ── Export helpers ─────────────────────────────────────────────────────
 
   const exportCurrentFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    saveFrameRef.current();
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
     a.download = `ns-art-s${currentStripRef.current + 1}-f${currentFrameRef.current + 1}.png`;
@@ -327,21 +516,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     },
   }), [exportCurrentFrame]);
 
-  // ── Auto-size canvas to fit space on mount ─────────────────────────────
-
-  useLayoutEffect(() => {
-    const el = canvasAreaRef.current;
-    if (!el) return;
-    const availW = el.clientWidth  - 16;
-    const availH = el.clientHeight - 16;
-    let best = CANVAS_PRESETS[0];
-    for (const p of CANVAS_PRESETS) {
-      if (p.w <= availW && p.h <= availH) best = p;
-    }
-    setCanvasSize(best);
-  }, []);
-
-  // ── Init canvas to white when size changes ─────────────────────────────
+  // ── Init canvas ────────────────────────────────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -352,7 +527,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     undoRef.current = [];
     isDirtyRef.current = false;
 
-    // Apply a pending full-restore if sizes now match
     const pending = pendingRestoreRef.current;
     if (pending && pending.frameW === canvas.width && pending.frameH === canvas.height) {
       pendingRestoreRef.current = null;
@@ -371,7 +545,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     }
   }, [canvasSize]);
 
-  // ── Load full backup from localStorage once on mount ──────────────────
+  // ── Load backup ────────────────────────────────────────────────────────
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -379,7 +553,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       if (!raw || !canvasRef.current) return;
       try {
         const backup = JSON.parse(raw);
-        if (backup.version !== 2) return; // ignore old single-frame format
+        if (backup.version !== 2) return;
         const { frameW, frameH, strips: savedStrips, frames: savedUrls } = backup;
         if (!Array.isArray(savedStrips) || !Array.isArray(savedUrls)) return;
         const fc = (savedUrls[0] as unknown[])?.length ?? 1;
@@ -414,7 +588,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
             frameH,
           };
           if (canvas.width === frameW && canvas.height === frameH) {
-            // Sizes match — apply now
             framesDataRef.current   = pending.frames;
             stripsRef.current       = pending.strips;
             frameCountRef.current   = pending.frameCount;
@@ -431,24 +604,23 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
             isDirtyRef.current = false;
             renderOnionRef.current();
           } else {
-            // Sizes differ — trigger resize; canvasSize effect will apply restore
             pendingRestoreRef.current = pending;
             setCanvasSize({ w: frameW, h: frameH });
           }
         });
-      } catch { /* corrupt backup — ignore */ }
+      } catch { /* corrupt */ }
     }, 100);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-save all frames to localStorage ──────────────────────────────
+  // ── Auto-save ──────────────────────────────────────────────────────────
 
   const scheduleAutoSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      saveFrameRef.current(); // ensure current frame is flushed to store
+      saveFrameRef.current();
 
       const fw = canvas.width, fh = canvas.height;
       const tmp = document.createElement("canvas");
@@ -472,7 +644,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           frames: framesUrls,
         }));
         onBackupSavedRef.current?.();
-      } catch { /* storage full — skip */ }
+      } catch { /* storage full */ }
     }, 2000);
   }, []);
 
@@ -496,6 +668,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     canvas.getContext("2d")!.putImageData(prev, 0, 0);
     isDirtyRef.current = true;
     renderOnionRef.current();
+    renderMinimapRef.current();
   }, []);
 
   // ── Navigation ────────────────────────────────────────────────────────
@@ -511,6 +684,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     loadFrameRef.current(clampedStrip, clampedFrame);
     undoRef.current = [];
     renderOnionRef.current();
+    bumpThumbRef.current();
   }, []);
 
   // ── Onion skin ────────────────────────────────────────────────────────
@@ -541,14 +715,11 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       const d = tinted.data;
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i+1], b = d[i+2];
-        // Treat near-white (background) as transparent so it doesn't bleed through
         if (r > 240 && g > 240 && b > 240) { d[i+3] = 0; continue; }
         if (delta < 0) {
-          // Previous frame → red tint
           d[i+1] = Math.floor(g * 0.15);
           d[i+2] = Math.floor(b * 0.15);
         } else {
-          // Next frame → blue/teal tint
           d[i]   = Math.floor(r * 0.15);
           d[i+1] = Math.floor(g * 0.6);
         }
@@ -620,12 +791,35 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     renderOnionRef.current();
   }, []);
 
-  const deleteFrame = useCallback(() => {
+  const insertFrame = useCallback((afterIdx: number) => {
+    if (isPlayingRef.current) return;
+    saveFrameRef.current();
+    const insertAt = afterIdx + 1;
+    const newCount = frameCountRef.current + 1;
+    for (const row of framesDataRef.current) row.splice(insertAt, 0, null);
+    frameCountRef.current  = newCount;
+    currentFrameRef.current = insertAt;
+    setFrameCount(newCount);
+    setCurrentFrame(insertAt);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d")!;
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    undoRef.current = [];
+    isDirtyRef.current = true;
+    scheduleAutoSaveRef.current();
+    renderOnionRef.current();
+  }, []);
+
+  const deleteFrame = useCallback((frameIdxParam?: number) => {
     if (isPlayingRef.current || frameCountRef.current <= 1) return;
-    const frame    = currentFrameRef.current;
+    const frame    = frameIdxParam ?? currentFrameRef.current;
     for (const row of framesDataRef.current) row.splice(frame, 1);
     const newCount = frameCountRef.current - 1;
-    const newFrame = Math.min(frame, newCount - 1);
+    const newFrame = Math.min(currentFrameRef.current, newCount - 1);
     frameCountRef.current  = newCount;
     currentFrameRef.current = newFrame;
     setFrameCount(newCount);
@@ -658,9 +852,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     renderOnionRef.current();
   }, []);
 
-  const deleteStrip = useCallback(() => {
+  const deleteStrip = useCallback((stripIdxParam?: number) => {
     if (isPlayingRef.current || stripsRef.current.length <= 1) return;
-    const strip     = currentStripRef.current;
+    const strip     = stripIdxParam ?? currentStripRef.current;
     framesDataRef.current.splice(strip, 1);
     const newStrips = stripsRef.current.filter((_, i) => i !== strip);
     const newIdx    = Math.min(strip, newStrips.length - 1);
@@ -675,7 +869,30 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     renderOnionRef.current();
   }, []);
 
-  // ── New ───────────────────────────────────────────────────────────────
+  const reorderStrip = useCallback((from: number, to: number) => {
+    if (from === to) return;
+    saveFrameRef.current();
+    const ns = [...stripsRef.current];
+    const nf = [...framesDataRef.current];
+    const [ms] = ns.splice(from, 1);
+    const [mf] = nf.splice(from, 1);
+    ns.splice(to, 0, ms);
+    nf.splice(to, 0, mf);
+    stripsRef.current = ns;
+    framesDataRef.current = nf;
+    setStrips(ns);
+    const curr = currentStripRef.current;
+    let newCurr = curr;
+    if (curr === from) newCurr = to;
+    else if (from < curr && curr <= to) newCurr = curr - 1;
+    else if (to <= curr && curr < from) newCurr = curr + 1;
+    currentStripRef.current = newCurr;
+    setCurrentStrip(newCurr);
+    isDirtyRef.current = true;
+    scheduleAutoSaveRef.current();
+  }, []);
+
+  // ── New canvas ─────────────────────────────────────────────────────────
 
   const newCanvas = useCallback(() => {
     const doNew = () => {
@@ -785,21 +1002,71 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   // ── Keyboard shortcuts ────────────────────────────────────────────────
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        shiftKeyRef.current = true;
+        if (isDrawingRef.current) continueDrawingRef.current(lastRef.current.x, lastRef.current.y);
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
       if (e.altKey && e.key === "ArrowLeft")  { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current - 1); }
       if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); navigateTo(currentStripRef.current, currentFrameRef.current + 1); }
+
+      if ((e.key === "Delete" || e.key === "Backspace") && selectPhaseRef.current === "selected") {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas || !selectRectRef.current) return;
+        const sel = selectRectRef.current;
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(sel.x, sel.y, sel.w, sel.h);
+        selectionDataRef.current   = null;
+        preSelectionSnapRef.current = null;
+        selectRectRef.current  = null;
+        selectPhaseRef.current = "idle";
+        setSelectRect(null);
+        setSelectPhase("idle");
+        isDirtyRef.current = true;
+      }
+      if (e.key === "Escape") {
+        const phase = selectPhaseRef.current;
+        if (phase === "moving" && preSelectionSnapRef.current && selectionDataRef.current) {
+          e.preventDefault();
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          canvas.getContext("2d")!.putImageData(preSelectionSnapRef.current, 0, 0);
+          selectPhaseRef.current = "selected";
+          setSelectPhase("selected");
+        } else if (phase === "selected") {
+          e.preventDefault();
+          selectRectRef.current  = null;
+          selectPhaseRef.current = "idle";
+          setSelectRect(null);
+          setSelectPhase("idle");
+          selectionDataRef.current   = null;
+          preSelectionSnapRef.current = null;
+        }
+        setIsToolPickerOpen(false);
+      }
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        shiftKeyRef.current = false;
+        if (isDrawingRef.current) continueDrawingRef.current(lastRef.current.x, lastRef.current.y);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup",   onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup",   onKeyUp);
+    };
   }, [undo, navigateTo]);
 
-  // ── beforeunload guard ────────────────────────────────────────────────
+  // ── Before-unload guard ───────────────────────────────────────────────
 
   useEffect(() => {
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (isDirtyRef.current) { e.preventDefault(); e.returnValue = ""; }
-    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) { e.preventDefault(); }
+    };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
@@ -831,15 +1098,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
 
-    if (tool === "zoom") {
-      if (isSecondary) {
-        setZoom(z => z === 1 ? 4 : z / 2);
-      } else {
-        setZoom(z => z === 4 ? 1 : z * 2);
-      }
-      return;
-    }
-
     const strokeColor = isSecondary ? secondaryColor : primaryColor;
 
     if (tool === "fill") {
@@ -848,63 +1106,154 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       isDirtyRef.current = true;
       scheduleAutoSave();
       renderOnionRef.current();
+      renderMinimapRef.current();
       return;
     }
 
-    isDrawingRef.current       = true;
-    startRef.current           = { x, y };
-    lastRef.current            = { x, y };
-    activeColorRef.current     = strokeColor;
-    activeFillColorRef.current = secondaryColor;
-    activeSizeRef.current      = tool === "pencil" ? 1 : brushSize;
+    if (tool === "select") {
+      const sel = selectRectRef.current;
+      const phase = selectPhaseRef.current;
+      if (phase === "selected" && sel && x >= sel.x && x < sel.x + sel.w && y >= sel.y && y < sel.y + sel.h) {
+        selectPhaseRef.current = "moving";
+        setSelectPhase("moving");
+        moveOffsetRef.current = { x: x - sel.x, y: y - sel.y };
+        isDrawingRef.current = true;
+        startRef.current = { x, y };
+        lastRef.current  = { x, y };
+        if (!selectionDataRef.current) {
+          selectionDataRef.current = ctx.getImageData(sel.x, sel.y, sel.w, sel.h);
+        }
+        ctx.clearRect(sel.x, sel.y, sel.w, sel.h);
+        preSelectionSnapRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } else {
+        if (phase === "moving" || phase === "selected") {
+          const prevSel = selectRectRef.current;
+          if (phase === "moving" && selectionDataRef.current && prevSel) {
+            ctx.putImageData(selectionDataRef.current, prevSel.x, prevSel.y);
+          }
+          selectionDataRef.current   = null;
+          preSelectionSnapRef.current = null;
+          selectRectRef.current  = null;
+          selectPhaseRef.current = "idle";
+          setSelectRect(null);
+          setSelectPhase("idle");
+          isDirtyRef.current = true;
+          scheduleAutoSave();
+          renderOnionRef.current();
+        }
+        pushUndo();
+        isDrawingRef.current = true;
+        selectPhaseRef.current = "selecting";
+        setSelectPhase("selecting");
+        startRef.current = { x, y };
+        lastRef.current  = { x, y };
+        selectRectRef.current = null;
+        setSelectRect(null);
+      }
+      return;
+    }
 
-    if (tool === "pencil" || tool === "brush" || tool === "eraser") {
-      pushUndo();
-      const ec = tool === "eraser" ? "transparent" : strokeColor;
-      const es = tool === "pencil" ? 1 : brushSize;
-      applyColor(ctx, ec, es);
-      ctx.beginPath();
-      ctx.arc(x, y, es / 2, 0, Math.PI * 2);
-      ctx.fill();
-      resetCtx(ctx);
-    } else if (tool === "spray") {
-      pushUndo();
-      doSpray(canvas, x, y, strokeColor, brushSize);
-      const cc = strokeColor, cs = brushSize;
-      sprayRef.current = setInterval(() => {
-        if (!isDrawingRef.current || !canvasRef.current) return;
-        doSpray(canvasRef.current, lastRef.current.x, lastRef.current.y, cc, cs);
-      }, 50);
+    pushUndo();
+    isDrawingRef.current = true;
+    startRef.current = { x, y };
+    lastRef.current  = { x, y };
+
+    if (tool !== "line" && tool !== "rect" && tool !== "oval") {
+      snapshotRef.current = null;
     } else {
-      pushUndo();
       snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
-  }, [tool, primaryColor, secondaryColor, brushSize, pushUndo, scheduleAutoSave]);
+
+    if (tool === "brush") {
+      stampPixel(ctx, x, y, strokeColor, brushSize, brushShape);
+    } else if (tool === "eraser") {
+      stampPixel(ctx, x, y, "transparent", brushSize, brushShape);
+    } else if (tool === "spray") {
+      activeColorRef.current = strokeColor;
+      activeSizeRef.current  = brushSize;
+      const doSpray = (canvas: HTMLCanvasElement, cx: number, cy: number, color: string, radius: number) => {
+        const ctx = canvas.getContext("2d")!;
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * 2 * Math.PI;
+          const r = Math.random() * radius;
+          stampPixel(ctx, Math.round(cx + r * Math.cos(a)), Math.round(cy + r * Math.sin(a)), color, 1, "square");
+        }
+      };
+      sprayRef.current = setInterval(() => {
+        doSpray(canvas, lastRef.current.x, lastRef.current.y, activeColorRef.current, activeSizeRef.current);
+      }, 50);
+    }
+
+    activeColorRef.current        = strokeColor;
+    activeFillColorRef.current    = isSecondary ? primaryColor : secondaryColor;
+    activeSizeRef.current         = brushSize;
+    activeBrushShapeRef.current   = brushShape;
+    activeRoundCornersRef.current = roundCorners;
+  }, [tool, brushSize, brushShape, primaryColor, secondaryColor, roundCorners, fillMode, pushUndo, scheduleAutoSave]);
+
+  const doSpray = useCallback((canvas: HTMLCanvasElement, cx: number, cy: number, color: string, radius: number) => {
+    const ctx = canvas.getContext("2d")!;
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * 2 * Math.PI;
+      const r = Math.random() * radius;
+      stampPixel(ctx, Math.round(cx + r * Math.cos(a)), Math.round(cy + r * Math.sin(a)), color, 1, "square");
+    }
+  }, []);
 
   const continueDrawing = useCallback((x: number, y: number) => {
     if (!isDrawingRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx     = canvas.getContext("2d")!;
-    const color   = activeColorRef.current;
+    const ctx   = canvas.getContext("2d")!;
+    const color = activeColorRef.current;
+    const size  = activeSizeRef.current;
+    const shape = activeBrushShapeRef.current;
+    const rc    = activeRoundCornersRef.current;
     const fillCol = activeFillColorRef.current;
-    const size    = activeSizeRef.current;
 
-    if (tool === "pencil" || tool === "brush") {
-      strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size);
+    if (tool === "select") {
+      const phase = selectPhaseRef.current;
+      if (phase === "selecting") {
+        const { x: sx, y: sy } = startRef.current;
+        const rx = Math.min(sx, x), ry = Math.min(sy, y);
+        const rw = Math.abs(x - sx), rh = Math.abs(y - sy);
+        selectRectRef.current = { x: rx, y: ry, w: rw, h: rh };
+        setSelectRect({ x: rx, y: ry, w: rw, h: rh });
+      } else if (phase === "moving" && selectionDataRef.current && preSelectionSnapRef.current && selectRectRef.current) {
+        const off = moveOffsetRef.current;
+        const sel = selectRectRef.current;
+        const nx = x - off.x, ny = y - off.y;
+        ctx.putImageData(preSelectionSnapRef.current, 0, 0);
+        ctx.putImageData(selectionDataRef.current, nx, ny);
+        selectRectRef.current = { ...sel, x: nx, y: ny };
+        setSelectRect({ ...sel, x: nx, y: ny });
+      }
+      lastRef.current = { x, y };
+      return;
+    }
+
+    if (tool === "brush") {
+      bresenhamLine(ctx, lastRef.current.x, lastRef.current.y, x, y, color, size, shape);
     } else if (tool === "eraser") {
-      strokeLine(ctx, lastRef.current.x, lastRef.current.y, x, y, "transparent", brushSize);
+      bresenhamLine(ctx, lastRef.current.x, lastRef.current.y, x, y, "transparent", size, shape);
     } else if (tool === "spray") {
       doSpray(canvas, x, y, color, brushSize);
     } else if (snapshotRef.current) {
       ctx.putImageData(snapshotRef.current, 0, 0);
       const { x: sx, y: sy } = startRef.current;
-      if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
-      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
-      else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
+      const shift = shiftKeyRef.current;
+      let ex = x, ey = y;
+      if (shift && tool === "line") { const s = snapTo45(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (shift && tool === "rect") { const s = snapToSquare(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (tool === "line")      strokeLine(ctx, sx, sy, ex, ey, color, size);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode, rc);
+      else if (tool === "oval") strokeOval(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode);
     }
     lastRef.current = { x, y };
-  }, [tool, brushSize, fillMode]);
+  }, [tool, brushSize, fillMode, doSpray]);
+
+  useEffect(() => { continueDrawingRef.current = continueDrawing; }, [continueDrawing]);
+  useEffect(() => { bumpThumbRef.current = () => setThumbRevision(v => v + 1); }, []);
 
   const endDrawing = useCallback((x: number, y: number) => {
     if (!isDrawingRef.current) return;
@@ -914,22 +1263,62 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx     = canvas.getContext("2d")!;
+
+    if (tool === "select") {
+      const phase = selectPhaseRef.current;
+      if (phase === "selecting") {
+        const { x: sx, y: sy } = startRef.current;
+        const rx = Math.min(sx, x), ry = Math.min(sy, y);
+        const rw = Math.abs(x - sx), rh = Math.abs(y - sy);
+        if (rw > 0 && rh > 0) {
+          const finalRect = { x: rx, y: ry, w: rw, h: rh };
+          selectRectRef.current  = finalRect;
+          selectPhaseRef.current = "selected";
+          setSelectRect(finalRect);
+          setSelectPhase("selected");
+          selectionDataRef.current   = ctx.getImageData(rx, ry, rw, rh);
+          preSelectionSnapRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } else {
+          selectRectRef.current  = null;
+          selectPhaseRef.current = "idle";
+          setSelectRect(null);
+          setSelectPhase("idle");
+        }
+      } else if (phase === "moving") {
+        selectPhaseRef.current = "selected";
+        setSelectPhase("selected");
+        preSelectionSnapRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        isDirtyRef.current = true;
+        scheduleAutoSave();
+        renderOnionRef.current();
+      }
+      return;
+    }
+
     const color   = activeColorRef.current;
     const fillCol = activeFillColorRef.current;
     const size    = activeSizeRef.current;
+    const rc      = activeRoundCornersRef.current;
 
     if (snapshotRef.current) {
       ctx.putImageData(snapshotRef.current, 0, 0);
       const { x: sx, y: sy } = startRef.current;
-      if (tool === "line")      strokeLine(ctx, sx, sy, x, y, color, size);
-      else if (tool === "rect") strokeRect(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
-      else if (tool === "oval") strokeOval(ctx, sx, sy, x, y, color, fillCol, size, fillMode);
+      const shift = shiftKeyRef.current;
+      let ex = x, ey = y;
+      if (shift && tool === "line") { const s = snapTo45(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (shift && tool === "rect") { const s = snapToSquare(sx, sy, x, y); ex = s.x; ey = s.y; }
+      if (tool === "line")      strokeLine(ctx, sx, sy, ex, ey, color, size);
+      else if (tool === "rect") strokeRect(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode, rc);
+      else if (tool === "oval") strokeOval(ctx, sx, sy, ex, ey, color, fillCol, size, fillMode);
       snapshotRef.current = null;
     }
 
     isDirtyRef.current = true;
     scheduleAutoSave();
     renderOnionRef.current();
+    saveFrameRef.current();
+    bumpThumbRef.current();
+    renderMinimapRef.current();
   }, [tool, fillMode, scheduleAutoSave]);
 
   // ── Mouse / Touch handlers ────────────────────────────────────────────
@@ -952,7 +1341,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const rect = canvas.getBoundingClientRect();
     const ax = Math.floor((e.clientX - rect.left) / zoom);
     const ay = Math.floor((e.clientY - rect.top)  / zoom);
-    setStatus(`${ax}, ${ay}`);
     continueDrawing(ax, ay);
   }, [continueDrawing, zoom]);
 
@@ -967,7 +1355,6 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   }, [endDrawing, zoom]);
 
   const onMouseLeave = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    setStatus("Ready");
     onMouseUp(e);
   }, [onMouseUp]);
 
@@ -986,10 +1373,10 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     if (e.touches.length === 0 || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const t    = e.touches[0];
-    const x = Math.floor((t.clientX - rect.left) / zoom);
-    const y = Math.floor((t.clientY - rect.top)  / zoom);
-    setStatus(`${x}, ${y}`);
-    continueDrawing(x, y);
+    continueDrawing(
+      Math.floor((t.clientX - rect.left) / zoom),
+      Math.floor((t.clientY - rect.top)  / zoom),
+    );
   }, [continueDrawing, zoom]);
 
   const onTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -1000,8 +1387,181 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       Math.floor((t.clientX - rect.left) / zoom),
       Math.floor((t.clientY - rect.top)  / zoom),
     );
-    setStatus("Ready");
   }, [endDrawing, zoom]);
+
+  // ── Mini-map ──────────────────────────────────────────────────────────
+
+  const renderMinimap = useCallback(() => {
+    const mmCanvas = minimapCanvasRef.current;
+    const mainCanvas = canvasRef.current;
+    const container = scrollContainerRef.current;
+    if (!mmCanvas || !mainCanvas || !container) return;
+
+    const fw = canvasSize.w, fh = canvasSize.h;
+    const mmScale = Math.min(MINIMAP_MAX_W / fw, MINIMAP_MAX_H / fh);
+    const mmW = Math.max(1, Math.round(fw * mmScale));
+    const mmH = Math.max(1, Math.round(fh * mmScale));
+
+    if (mmCanvas.width !== mmW || mmCanvas.height !== mmH) {
+      mmCanvas.width = mmW;
+      mmCanvas.height = mmH;
+    }
+
+    const ctx = mmCanvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, mmW, mmH);
+    ctx.drawImage(mainCanvas, 0, 0, mmW, mmH);
+
+    // Draw orange viewport rect only when scrollable
+    const cW = container.clientWidth, cH = container.clientHeight;
+    if (fw * zoom > cW || fh * zoom > cH) {
+      const rx = (container.scrollLeft / zoom) * mmScale;
+      const ry = (container.scrollTop  / zoom) * mmScale;
+      const rw = (cW / zoom) * mmScale;
+      const rh = (cH / zoom) * mmScale;
+      ctx.strokeStyle = "#ff6b00";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
+        Math.max(0, rx) + 0.5,
+        Math.max(0, ry) + 0.5,
+        Math.min(rw - 1, mmW - Math.max(0, rx) - 1),
+        Math.min(rh - 1, mmH - Math.max(0, ry) - 1),
+      );
+    }
+  }, [canvasSize, zoom]);
+
+  useEffect(() => { renderMinimapRef.current = renderMinimap; }, [renderMinimap]);
+  useEffect(() => { renderMinimapRef.current(); }, [renderMinimap]);
+
+  // ── Wheel zoom (ctrl/meta = zoom, plain = pan) ────────────────────────
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const handler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const oldZoom = zoomRef.current;
+        const newZoom = e.deltaY < 0 ? ZOOM_IN[oldZoom] : ZOOM_OUT[oldZoom];
+        if (newZoom === oldZoom) return;
+        const rect = container.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left;
+        const cursorY = e.clientY - rect.top;
+        const canvasX = (container.scrollLeft + cursorX) / oldZoom;
+        const canvasY = (container.scrollTop  + cursorY) / oldZoom;
+        pendingScrollAdjustRef.current = { canvasX, canvasY, cursorX, cursorY };
+        setZoom(newZoom);
+      }
+    };
+    container.addEventListener("wheel", handler, { passive: false });
+    return () => container.removeEventListener("wheel", handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cursor-centered scroll adjust after zoom state settles
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const adj = pendingScrollAdjustRef.current;
+    if (!container || !adj) return;
+    pendingScrollAdjustRef.current = null;
+    container.scrollLeft = Math.max(0, adj.canvasX * zoom - adj.cursorX);
+    container.scrollTop  = Math.max(0, adj.canvasY * zoom - adj.cursorY);
+  }, [zoom]);
+
+  // Scroll events → update minimap viewport rect
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const handler = () => renderMinimapRef.current();
+    container.addEventListener("scroll", handler, { passive: true });
+    return () => container.removeEventListener("scroll", handler);
+  }, []);
+
+  // Container size changes (for fit-zoom)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      containerSizeRef.current = { w: width, h: height };
+      renderMinimapRef.current();
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  const fitCanvas = useCallback(() => {
+    const { w: cw, h: ch } = containerSizeRef.current;
+    if (!cw || !ch) return;
+    const best = ZOOM_LEVELS.find(z => canvasSize.w * z <= cw && canvasSize.h * z <= ch) ?? 1;
+    setZoom(best);
+    const container = scrollContainerRef.current;
+    if (container) { container.scrollLeft = 0; container.scrollTop = 0; }
+  }, [canvasSize]);
+
+  // ── Mini-map pointer (drag to pan) ────────────────────────────────────
+
+  const scrollToMinimapPoint = useCallback((clientX: number, clientY: number) => {
+    const mmCanvas = minimapCanvasRef.current;
+    const container = scrollContainerRef.current;
+    if (!mmCanvas || !container || !mmCanvas.width) return;
+    const rect = mmCanvas.getBoundingClientRect();
+    const mx = ((clientX - rect.left) / rect.width) * mmCanvas.width;
+    const my = ((clientY - rect.top)  / rect.height) * mmCanvas.height;
+    const mmScale = mmCanvas.width / canvasSize.w;
+    const canvasX = mx / mmScale - minimapDragOffsetRef.current.x;
+    const canvasY = my / mmScale - minimapDragOffsetRef.current.y;
+    const viewW = container.clientWidth  / zoom;
+    const viewH = container.clientHeight / zoom;
+    container.scrollLeft = Math.max(0, (canvasX - viewW / 2) * zoom);
+    container.scrollTop  = Math.max(0, (canvasY - viewH / 2) * zoom);
+  }, [canvasSize, zoom]);
+
+  const handleMinimapPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    minimapDraggingRef.current = true;
+    // Compute offset so dragging moves the viewport rect, not snapping its center
+    const mmCanvas = minimapCanvasRef.current;
+    const container = scrollContainerRef.current;
+    if (mmCanvas && container && mmCanvas.width) {
+      const rect = mmCanvas.getBoundingClientRect();
+      const mx = ((e.clientX - rect.left) / rect.width) * mmCanvas.width;
+      const my = ((e.clientY - rect.top)  / rect.height) * mmCanvas.height;
+      const mmScale = mmCanvas.width / canvasSize.w;
+      const clickCanvasX = mx / mmScale;
+      const clickCanvasY = my / mmScale;
+      const viewCenterX = (container.scrollLeft + container.clientWidth  / 2) / zoom;
+      const viewCenterY = (container.scrollTop  + container.clientHeight / 2) / zoom;
+      minimapDragOffsetRef.current = {
+        x: clickCanvasX - viewCenterX,
+        y: clickCanvasY - viewCenterY,
+      };
+    } else {
+      minimapDragOffsetRef.current = { x: 0, y: 0 };
+    }
+    scrollToMinimapPoint(e.clientX, e.clientY);
+  }, [scrollToMinimapPoint, canvasSize, zoom]);
+
+  const handleMinimapPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!minimapDraggingRef.current) return;
+    scrollToMinimapPoint(e.clientX, e.clientY);
+  }, [scrollToMinimapPoint]);
+
+  const handleMinimapPointerUp = useCallback(() => {
+    minimapDraggingRef.current = false;
+  }, []);
+
+  // ── Tool picker close on outside click ────────────────────────────────
+
+  useEffect(() => {
+    if (!isToolPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!toolLauncherRef.current?.contains(e.target as Node)) {
+        setIsToolPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isToolPickerOpen]);
 
   // ── Menu bar ──────────────────────────────────────────────────────────
 
@@ -1011,8 +1571,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       items: [
         { label: "New", onClick: newCanvas },
         { separator: true },
-        { label: "Export Current Frame", onClick: exportCurrentFrame },
-        { label: "Export Sprite Sheet PNG", onClick: exportSpriteSheet },
+        { label: "Export Current Frame",    onClick: exportCurrentFrame },
+        { label: "Export Sprite Sheet PNG", onClick: exportSpriteSheet  },
       ],
     },
     {
@@ -1022,12 +1582,21 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       ],
     },
     {
+      label: "View",
+      items: [
+        { label: "Fit Canvas", onClick: fitCanvas },
+        { separator: true },
+        { label: "Zoom In",  onClick: () => setZoom(z => ZOOM_IN[z]),  disabled: zoom >= 16 },
+        { label: "Zoom Out", onClick: () => setZoom(z => ZOOM_OUT[z]), disabled: zoom <= 1  },
+        { separator: true },
+        { label: "Pixel Grid", checked: showGrid, onClick: () => setShowGrid(v => !v) },
+      ],
+    },
+    {
       label: "Format",
-      items: CANVAS_PRESETS.map(p => ({
-        label:   `${p.w}×${p.h}`,
-        checked: canvasSize.w === p.w && canvasSize.h === p.h,
-        onClick: () => handleSizeSelect(p),
-      })),
+      items: [
+        { label: "Canvas Size...", onClick: () => { setSizeInputW(canvasSize.w); setSizeInputH(canvasSize.h); setShowSizeDlg(true); } },
+      ],
     },
     {
       label: "Animation",
@@ -1049,29 +1618,51 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         { label: "Opacity 75%",     checked: onionOpacity === 0.75, onClick: () => setOnionOpacity(0.75) },
         { label: "Range: 1 Frame",  checked: onionRange === 1,      onClick: () => setOnionRange(1) },
         { label: "Range: 2 Frames", checked: onionRange === 2,      onClick: () => setOnionRange(2) },
+        { separator: true },
+        { label: "FPS: 4",  checked: playFps === 4,  onClick: () => setPlayFps(4)  },
+        { label: "FPS: 8",  checked: playFps === 8,  onClick: () => setPlayFps(8)  },
+        { label: "FPS: 12", checked: playFps === 12, onClick: () => setPlayFps(12) },
+        { label: "FPS: 15", checked: playFps === 15, onClick: () => setPlayFps(15) },
+        { label: "FPS: 24", checked: playFps === 24, onClick: () => setPlayFps(24) },
+        { separator: true },
+        { label: "Show: All Strips",    checked: animPanelMode === "all",     onClick: () => setAnimPanelMode("all")     },
+        { label: "Show: Current Strip", checked: animPanelMode === "current", onClick: () => setAnimPanelMode("current") },
+        { label: "Show: None",          checked: animPanelMode === "hidden",  onClick: () => setAnimPanelMode("hidden")  },
       ],
     },
   ], [
     newCanvas, exportCurrentFrame, exportSpriteSheet, undo,
-    canvasSize, handleSizeSelect,
+    fitCanvas, zoom, showGrid,
     addFrame, deleteFrame, frameCount,
     addStrip, deleteStrip, strips, currentStrip,
     onionSkin, onionOpacity, onionRange,
+    playFps, animPanelMode,
   ]);
 
   useWindowMenus(artMenus);
 
-  const showFillMode = tool === "rect" || tool === "oval";
+  const showFillMode    = tool === "rect" || tool === "oval";
+  const showBrushShape  = tool === "brush" || tool === "eraser";
+  const showRoundCorner = tool === "rect";
+  const gridActive      = showGrid && zoom >= 4;
+  const currentToolDef  = TOOLS.find(t => t.id === tool)!;
 
   // ── Rename strip helpers ──────────────────────────────────────────────
 
   const commitRename = useCallback(() => {
     if (renamingStrip === null) return;
     const trimmed = renameValue.trim() || `Strip ${renamingStrip + 1}`;
-    setStrips(prev => prev.map((s, i) => i === renamingStrip ? { ...s, name: trimmed } : s));
-    stripsRef.current = stripsRef.current.map((s, i) => i === renamingStrip ? { ...s, name: trimmed } : s);
+    const updated = stripsRef.current.map((s, i) => i === renamingStrip ? { ...s, name: trimmed } : s);
+    setStrips(updated);
+    stripsRef.current = updated;
     setRenamingStrip(null);
   }, [renamingStrip, renameValue]);
+
+  // ── Displayed strips in anim panel ────────────────────────────────────
+
+  const displayedStrips: [number, Strip][] = animPanelMode === "all"
+    ? strips.map((s, i) => [i, s] as [number, Strip])
+    : strips[currentStrip] ? [[currentStrip, strips[currentStrip]] as [number, Strip]] : [];
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -1102,257 +1693,404 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         </div>
       )}
 
-      {/* ── Strip tab bar ── */}
-      <div className="ns-art__strip-bar">
-        {strips.map((strip, i) => (
-          <div
-            key={i}
-            className={`ns-art__strip-tab${currentStrip === i ? " ns-art__strip-tab--active" : ""}`}
-            onClick={() => { if (renamingStrip !== i) navigateTo(i, currentFrame); }}
-            onDoubleClick={() => {
-              setRenamingStrip(i);
-              setRenameValue(strip.name);
-              setTimeout(() => stripRenameRef.current?.focus(), 20);
-            }}
-            title={`${strip.name}  (double-click to rename)`}
-          >
-            {renamingStrip === i ? (
-              <input
-                ref={stripRenameRef}
-                className="ns-art__strip-rename"
-                value={renameValue}
-                onChange={e => setRenameValue(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={e => {
-                  if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
-                  if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
-                }}
-                onClick={e => e.stopPropagation()}
-              />
-            ) : (
-              strip.name
-            )}
-          </div>
-        ))}
-        <button className="ns-art__strip-add" onClick={addStrip} title="Add strip">+</button>
-      </div>
-
-      {/* ── Workspace ── */}
-      <div className="ns-art__workspace">
-
-        {/* Tool palette */}
-        <div className="ns-art__toolbox">
-          <div className="ns-art__tool-grid">
-            {TOOLS.map(t => (
-              <button
-                key={t.id}
-                className={`ns-art__tool${tool === t.id ? " ns-art__tool--active" : ""}`}
-                title={t.title}
-                onClick={() => setTool(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="ns-art__toolbox-sep" />
-
-          <div className="ns-art__size-dots">
-            {BRUSH_SIZES.map(s => (
-              <button
-                key={s}
-                className={`ns-art__size-dot-btn${brushSize === s ? " ns-art__size-dot-btn--active" : ""}`}
-                title={`Size ${s}px`}
-                onClick={() => setBrushSize(s)}
-              >
-                <span className="ns-art__dot" style={{ width: s + 4, height: s + 4 }} />
-              </button>
-            ))}
-          </div>
-
-          {showFillMode && (
-            <>
-              <div className="ns-art__toolbox-sep" />
-              <div className="ns-art__fill-modes">
-                {(["outline", "filled", "both"] as FillMode[]).map(m => (
+      {/* ── Canvas size dialog ── */}
+      {showSizeDlg && (
+        <div className="ns-art__overlay">
+          <div className="ns-art__dialog ns-art__dialog--size">
+            <div className="ns-art__dialog-titlebar"><span>Canvas Size</span></div>
+            <div className="ns-art__dialog-body">
+              <div className="ns-art__size-presets">
+                {CANVAS_PRESETS.map(p => (
                   <button
-                    key={m}
-                    className={`ns-art__fill-btn${fillMode === m ? " ns-art__fill-btn--active" : ""}`}
-                    title={`${m} — outline=primary, fill=secondary`}
-                    onClick={() => setFillMode(m)}
-                  >
-                    {m === "outline" ? "□" : m === "filled" ? "■" : "▣"}
-                  </button>
+                    key={`${p.w}x${p.h}`}
+                    className={`ns-art__size-preset${sizeInputW === p.w && sizeInputH === p.h ? " ns-art__size-preset--active" : ""}`}
+                    onClick={() => { setSizeInputW(p.w); setSizeInputH(p.h); }}
+                  >{p.w}×{p.h}</button>
                 ))}
               </div>
-            </>
-          )}
-
-          {zoom > 1 && (
-            <>
-              <div className="ns-art__toolbox-sep" />
-              <div className="ns-art__zoom-label">{zoom}×</div>
-            </>
-          )}
-        </div>
-
-        {/* Canvas scroll area */}
-        <div className="ns-art__canvas-area" ref={canvasAreaRef}>
-          <div
-            className="ns-art__canvas-wrap"
-            style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
-          >
-            <canvas
-              ref={canvasRef}
-              className={`ns-art__canvas${isPlaying ? " ns-art__canvas--playing" : ""}`}
-              width={canvasSize.w}
-              height={canvasSize.h}
-              style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
-              onMouseDown={onMouseDown}
-              onMouseMove={onMouseMove}
-              onMouseUp={onMouseUp}
-              onMouseLeave={onMouseLeave}
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
-              onContextMenu={e => e.preventDefault()}
-            />
-            {/* Onion skin overlay */}
-            <canvas
-              ref={onionCanvasRef}
-              className="ns-art__onion-overlay"
-              width={canvasSize.w}
-              height={canvasSize.h}
-              style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
-            />
+              <div className="ns-art__size-custom">
+                <label className="ns-art__size-label">W
+                  <input className="ns-art__size-input" type="number" min="1" max="2048"
+                    value={sizeInputW}
+                    onChange={e => setSizeInputW(Math.max(1, Math.min(2048, parseInt(e.target.value) || 1)))}
+                  />
+                </label>
+                <label className="ns-art__size-label">H
+                  <input className="ns-art__size-input" type="number" min="1" max="2048"
+                    value={sizeInputH}
+                    onChange={e => setSizeInputH(Math.max(1, Math.min(2048, parseInt(e.target.value) || 1)))}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="ns-art__dialog-btns">
+              <button className="ns-art__dialog-btn ns-art__dialog-btn--primary"
+                onClick={() => { setShowSizeDlg(false); handleSizeSelect({ w: sizeInputW, h: sizeInputH }); }}>OK</button>
+              <button className="ns-art__dialog-btn" onClick={() => setShowSizeDlg(false)}>Cancel</button>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* ── Palette picker dialog ── */}
+      {showPaletteDlg && (
+        <div className="ns-art__overlay" onClick={() => setShowPaletteDlg(false)}>
+          <div className="ns-art__dialog ns-art__palette-dlg" onClick={e => e.stopPropagation()}>
+            <div className="ns-art__dialog-titlebar">
+              <span className="ns-art__dialog-icon">🎨</span>
+              <span>Choose Colors</span>
+            </div>
+            <div className="ns-art__dialog-body">
+
+              {/* Primary / Secondary slots */}
+              <p className="ns-art__pal-hint">Tap a slot, then pick a color below</p>
+              <div className="ns-art__pal-active-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                <button
+                  className={`ns-art__pal-active-cell ns-art__pal-active-cell--labeled${paletteTarget === "primary" ? " ns-art__pal-active-cell--sel" : ""}`}
+                  style={primaryColor !== "transparent" ? { background: primaryColor } : undefined}
+                  data-transparent={primaryColor === "transparent" || undefined}
+                  onClick={() => setPaletteTarget(t => t === "primary" ? null : "primary")}
+                  title="Primary color (1)"
+                ><span className="ns-art__pal-slot-label">1</span></button>
+                <button
+                  className={`ns-art__pal-active-cell ns-art__pal-active-cell--labeled${paletteTarget === "secondary" ? " ns-art__pal-active-cell--sel" : ""}`}
+                  style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
+                  data-transparent={secondaryColor === "transparent" || undefined}
+                  onClick={() => setPaletteTarget(t => t === "secondary" ? null : "secondary")}
+                  title="Secondary color (2)"
+                ><span className="ns-art__pal-slot-label">2</span></button>
+              </div>
+
+              {/* Full palette */}
+              <p className="ns-art__pal-hint">{paletteTarget !== null ? "Tap a color to assign" : "Tap a slot above first"}{"\n"}(double-tap any color to edit it)</p>
+              <div className="ns-art__pal-full-grid">
+                {palette.map((color, i) => (
+                  <button
+                    key={i}
+                    className={`ns-art__pal-full-cell${paletteTarget !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
+                    style={{ background: color }}
+                    onClick={() => {
+                      if (paletteTarget === null) return;
+                      if (paletteTarget === "primary") setPrimaryColor(color);
+                      else setSecondaryColor(color);
+                      setPaletteTarget(null);
+                    }}
+                    onDoubleClick={() => openSwatchEditor(i)}
+                    title={`${color}${paletteTarget !== null ? " — tap to assign" : ""}\ndouble-tap to edit`}
+                  />
+                ))}
+                <button
+                  className={`ns-art__pal-full-cell ns-art__pal-full-cell--transparent${paletteTarget !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
+                  onClick={() => {
+                    if (paletteTarget === null) return;
+                    if (paletteTarget === "primary") setPrimaryColor("transparent");
+                    else setSecondaryColor("transparent");
+                    setPaletteTarget(null);
+                  }}
+                  title="Transparent"
+                />
+              </div>
+
+            </div>
+            <div className="ns-art__dialog-btns">
+              <button className="ns-art__dialog-btn ns-art__dialog-btn--primary" onClick={() => setShowPaletteDlg(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Animation panel ── */}
+      <div className="ns-art__anim-panel">
+        <div className="ns-art__anim-body" data-rev={thumbRevision}>
+
+          {/* Strips area — hidden when animPanelMode === "hidden" */}
+          {animPanelMode !== "hidden" && (
+            <div className="ns-art__anim-strips">
+              {displayedStrips.map(([si, strip]) => {
+                const isFirstRow = si === displayedStrips[0]?.[0];
+                return (
+                  <div
+                    key={si}
+                    className={`ns-art__strip-row${dragOverStripIdx === si ? " ns-art__strip-row--over" : ""}`}
+                    onDragOver={animPanelMode === "all" ? (e) => { e.preventDefault(); setDragOverStripIdx(si); } : undefined}
+                    onDragLeave={animPanelMode === "all" ? () => setDragOverStripIdx(null) : undefined}
+                    onDrop={animPanelMode === "all" ? (e) => {
+                      e.preventDefault();
+                      const from = parseInt(e.dataTransfer.getData("strip-idx"));
+                      if (!isNaN(from)) reorderStrip(from, si);
+                      setDragOverStripIdx(null);
+                    } : undefined}
+                  >
+                    {animPanelMode === "all" && (
+                      <div
+                        className="ns-art__strip-handle"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("strip-idx", String(si))}
+                        title="Drag to reorder"
+                      >⠿</div>
+                    )}
+
+                    <div className="ns-art__strip-name-cell">
+                      {renamingStrip === si ? (
+                        <input
+                          ref={stripRenameRef}
+                          className="ns-art__strip-rename"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={e => {
+                            if (e.key === "Enter")  { e.preventDefault(); commitRename(); }
+                            if (e.key === "Escape") { e.preventDefault(); setRenamingStrip(null); }
+                          }}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className={`ns-art__strip-name${currentStrip === si ? " ns-art__strip-name--active" : ""}`}
+                          onClick={() => navigateTo(si, currentFrame)}
+                          onDoubleClick={() => {
+                            setRenamingStrip(si);
+                            setRenameValue(strip.name);
+                            setTimeout(() => stripRenameRef.current?.focus(), 20);
+                          }}
+                          title={`${strip.name} · double-click to rename`}
+                        >{strip.name}</span>
+                      )}
+                    </div>
+
+                    <div className="ns-art__strip-frames">
+                      {Array.from({ length: frameCount }, (_, fi) => (
+                        <span key={fi} className={`ns-art__frame-slot${isFirstRow ? " ns-art__frame-slot--top" : ""}`}>
+                          {isFirstRow && frameCount > 1 && (
+                            <button
+                              className="ns-art__del-frame-btn"
+                              onClick={() => deleteFrame(fi)}
+                              disabled={isPlaying}
+                              title={`Delete frame ${fi + 1} (all strips)`}
+                            >−</button>
+                          )}
+                          <div className="ns-art__frame-thumb-row">
+                            <FrameThumbnail
+                              data={framesDataRef.current[si]?.[fi] ?? null}
+                              frameW={canvasSize.w}
+                              frameH={canvasSize.h}
+                              active={currentStrip === si && currentFrame === fi}
+                              onClick={() => navigateTo(si, fi)}
+                            />
+                            {fi < frameCount - 1 && (
+                              <div className="ns-art__frame-insert">
+                                <button
+                                  className="ns-art__frame-insert-btn"
+                                  onClick={() => insertFrame(fi)}
+                                  title="Insert frame here"
+                                >+</button>
+                              </div>
+                            )}
+                          </div>
+                        </span>
+                      ))}
+                      <button
+                        className="ns-art__add-frame-end"
+                        onClick={addFrame}
+                        disabled={isPlaying}
+                        title="Add frame at end"
+                      >+</button>
+                    </div>
+
+                    {/* Delete strip */}
+                    <button
+                      className="ns-art__del-strip-btn"
+                      onClick={() => deleteStrip(si)}
+                      disabled={isPlaying || strips.length <= 1}
+                      title={`Delete strip "${strip.name}"`}
+                    >−</button>
+                  </div>
+                );
+              })}
+
+              {animPanelMode === "all" && (
+                <button className="ns-art__add-strip-btn" onClick={addStrip} disabled={isPlaying}>
+                  + Add Strip
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Right sidebar: play + collapse */}
+          <div className="ns-art__anim-sidebar">
+            <button
+              className={`ns-art__anim-play${isPlaying ? " ns-art__anim-play--stop" : ""}`}
+              onClick={isPlaying ? stopPlay : startPlay}
+              disabled={frameCount < 2}
+              title={isPlaying ? "Stop" : "Play animation"}
+            >{isPlaying ? "■" : "▶"}</button>
+            <button
+              className="ns-art__anim-collapse"
+              onClick={() => setAnimPanelMode(m => m === "all" ? "current" : m === "current" ? "hidden" : "all")}
+              title={`Strip view: ${animPanelMode}`}
+            >{animPanelMode === "all" ? "≡" : animPanelMode === "current" ? "─" : "·"}</button>
+          </div>
+
+        </div>
       </div>
 
-      {/* ── Frame nav bar — always visible ── */}
-      <div className="ns-art__frame-nav">
-        <button
-          className="ns-art__frame-nav-btn"
-          onClick={() => navigateTo(currentStrip, currentFrame - 1)}
-          disabled={isPlaying || currentFrame === 0}
-          title="Previous frame (Alt+←)"
-        >◀</button>
-
-        <span className="ns-art__frame-nav-label">
-          Frame&nbsp;{currentFrame + 1}&nbsp;/&nbsp;{frameCount}
-        </span>
-
-        <button
-          className="ns-art__frame-nav-btn"
-          onClick={() => navigateTo(currentStrip, currentFrame + 1)}
-          disabled={isPlaying || currentFrame === frameCount - 1}
-          title="Next frame (Alt+→)"
-        >▶</button>
-
-        <button
-          className="ns-art__frame-nav-btn ns-art__frame-nav-btn--add"
-          onClick={addFrame}
-          disabled={isPlaying}
-          title="Add frame"
-        >+</button>
-
-        <div className="ns-art__frame-nav-sep" />
-
-        <button
-          className={`ns-art__frame-nav-btn ns-art__frame-nav-btn--play${isPlaying ? " ns-art__frame-nav-btn--stop" : ""}`}
-          onClick={isPlaying ? stopPlay : startPlay}
-          disabled={frameCount < 2}
-          title={isPlaying ? "Stop playback" : "Play animation"}
-        >{isPlaying ? "■" : "▶"}</button>
-
-        <label className="ns-art__fps-label">
-          fps
-          <input
-            className="ns-art__fps-input"
-            type="number"
-            min="1"
-            max="60"
-            value={playFps}
-            onChange={e => {
-              const v = parseInt(e.target.value);
-              if (!isNaN(v) && v >= 1 && v <= 60) setPlayFps(v);
-            }}
+      {/* ── Canvas (scrollable) ── */}
+      <div ref={scrollContainerRef} className="ns-art__canvas-area">
+        <div
+          className={`ns-art__canvas-wrap${gridActive ? " ns-art__canvas-wrap--grid" : ""}`}
+          style={{
+            width: canvasSize.w * zoom,
+            height: canvasSize.h * zoom,
+            ...(gridActive ? { "--grid-cell": `${zoom}px` } as React.CSSProperties : {}),
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            className={`ns-art__canvas${isPlaying ? " ns-art__canvas--playing" : ""}`}
+            width={canvasSize.w}
+            height={canvasSize.h}
+            style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom, cursor: tool === "select" ? "crosshair" : undefined }}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseLeave}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onContextMenu={e => e.preventDefault()}
           />
-        </label>
-
-        {onionSkin && !isPlaying && (
-          <span className="ns-art__frame-nav-onion">· onion</span>
-        )}
-
-        <span className="ns-art__frame-nav-info">
-          {canvasSize.w}×{canvasSize.h}
-        </span>
+          <canvas
+            ref={onionCanvasRef}
+            className="ns-art__onion-overlay"
+            width={canvasSize.w}
+            height={canvasSize.h}
+            style={{ width: canvasSize.w * zoom, height: canvasSize.h * zoom }}
+          />
+          {selectRect && selectRect.w > 0 && selectRect.h > 0 && (
+            <div
+              className="ns-art__marquee"
+              style={{
+                left:   selectRect.x * zoom,
+                top:    selectRect.y * zoom,
+                width:  selectRect.w * zoom,
+                height: selectRect.h * zoom,
+                cursor: selectPhase === "selected" ? "move" : "crosshair",
+              }}
+            />
+          )}
+        </div>
       </div>
 
-      {/* ── Bottom: color pickers + palette + status ── */}
+      {/* ── Bottom bar ── */}
       <div className="ns-art__bottom">
 
-        {/* Primary / secondary swatches */}
-        <div className="ns-art__swatch-box">
-          <div
-            className="ns-art__swatch ns-art__swatch--secondary"
-            style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
-            data-transparent={secondaryColor === "transparent" || undefined}
-            title="Secondary color — fills shapes, right-click palette to change"
-            onClick={() => secondaryPickerRef.current?.click()}
-          />
-          <div
-            className="ns-art__swatch ns-art__swatch--primary"
+        {/* 🎨 palette picker button — far left */}
+        <button
+          className="ns-art__palette-btn"
+          onClick={() => { setShowPaletteDlg(true); setPaletteTarget(null); }}
+          title="Choose colors"
+        >🎨</button>
+
+        {/* Primary (1) + Secondary (2) color slots, stacked */}
+        <div className="ns-art__color-stack">
+          <button
+            className="ns-art__color-slot"
             style={primaryColor !== "transparent" ? { background: primaryColor } : undefined}
             data-transparent={primaryColor === "transparent" || undefined}
-            title="Primary color — outlines & freehand, left-click palette to change"
             onClick={() => primaryPickerRef.current?.click()}
-          />
-          <input
-            ref={primaryPickerRef}
-            type="color"
-            className="ns-art__hidden-picker"
-            value={primaryColor !== "transparent" ? primaryColor : "#000000"}
-            onChange={e => setPrimaryColor(e.target.value)}
-          />
-          <input
-            ref={secondaryPickerRef}
-            type="color"
-            className="ns-art__hidden-picker"
-            value={secondaryColor !== "transparent" ? secondaryColor : "#ffffff"}
-            onChange={e => setSecondaryColor(e.target.value)}
-          />
-        </div>
-
-        {/* Palette */}
-        <div className="ns-art__palette">
-          {palette.map((color, i) => (
-            <button
-              key={i}
-              className={`ns-art__pal-swatch${color === primaryColor ? " ns-art__pal-swatch--pri" : ""}${color === secondaryColor ? " ns-art__pal-swatch--sec" : ""}`}
-              style={{ background: color }}
-              title={`${color}  (double-click to edit)`}
-              onClick={() => setPrimaryColor(color)}
-              onContextMenu={e => { e.preventDefault(); setSecondaryColor(color); }}
-              onDoubleClick={() => openSwatchEditor(i)}
-            />
-          ))}
+            title="Primary color — tap for custom picker"
+          ><span className="ns-art__color-slot-label">1</span></button>
           <button
-            className={`ns-art__pal-swatch ns-art__pal-swatch--transparent${primaryColor === "transparent" ? " ns-art__pal-swatch--pri" : ""}${secondaryColor === "transparent" ? " ns-art__pal-swatch--sec" : ""}`}
-            title="Transparent / erases to alpha"
-            onClick={() => setPrimaryColor("transparent")}
-            onContextMenu={e => { e.preventDefault(); setSecondaryColor("transparent"); }}
-          />
-          <input
-            ref={swatchPickerRef}
-            type="color"
-            className="ns-art__hidden-picker"
-            onChange={onSwatchColorChange}
-          />
+            className="ns-art__color-slot"
+            style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
+            data-transparent={secondaryColor === "transparent" || undefined}
+            onClick={() => secondaryPickerRef.current?.click()}
+            title="Secondary color — tap for custom picker"
+          ><span className="ns-art__color-slot-label">2</span></button>
+          <input ref={primaryPickerRef}   type="color" className="ns-art__hidden-picker"
+            value={primaryColor   !== "transparent" ? primaryColor   : "#000000"}
+            onChange={e => setPrimaryColor(e.target.value)} />
+          <input ref={secondaryPickerRef} type="color" className="ns-art__hidden-picker"
+            value={secondaryColor !== "transparent" ? secondaryColor : "#ffffff"}
+            onChange={e => setSecondaryColor(e.target.value)} />
         </div>
 
-        <div className="ns-art__status">{status}</div>
+        {/* Undo */}
+        <button className="ns-art__bottom-undo" onClick={undo} title="Undo (Ctrl+Z)">↩</button>
+
+        {/* Minimap + zoom — grows to fill center */}
+        <div className="ns-art__bottom-map">
+          <canvas
+            ref={minimapCanvasRef}
+            className="ns-art__minimap"
+            onPointerDown={handleMinimapPointerDown}
+            onPointerMove={handleMinimapPointerMove}
+            onPointerUp={handleMinimapPointerUp}
+            title="Mini-map — drag to pan"
+          />
+          <div className="ns-art__zoom-btns">
+            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_OUT[z])} disabled={zoom === 1}  title="Zoom out">−</button>
+            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_IN[z])}  disabled={zoom === 16} title="Zoom in">+</button>
+          </div>
+        </div>
+
+        {/* Tool options — size always shown; shape/fill/corner stacked below */}
+        <div className="ns-art__tool-opts">
+          <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
+            <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
+            <span className="ns-art__spin-val">{brushSize}</span>
+            <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
+          </div>
+          {(showFillMode || showBrushShape || showRoundCorner) && (
+            <div className="ns-art__opts-row">
+              {showFillMode && (
+                <button className="ns-art__opt-btn"
+                  onClick={() => setFillMode(m => m === "outline" ? "filled" : m === "filled" ? "both" : "outline")}
+                  title={`Fill mode: ${fillMode}`}
+                >{fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}</button>
+              )}
+              {showBrushShape && (
+                <button className="ns-art__opt-btn"
+                  onClick={() => setBrushShape(s => s === "square" ? "round" : "square")}
+                  title={`Brush tip: ${brushShape}`}
+                >{brushShape === "square" ? "□" : "○"}</button>
+              )}
+              {showRoundCorner && (
+                <button
+                  className={`ns-art__opt-btn${roundCorners ? " ns-art__opt-btn--active" : ""}`}
+                  onClick={() => setRoundCorners(v => !v)}
+                  title="Round corners"
+                >◱</button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Tool picker — far right */}
+        <div ref={toolLauncherRef} className="ns-art__tool-launcher">
+          {isToolPickerOpen && (
+            <div className="ns-art__tool-popup">
+              {TOOLS.map(t => (
+                <button
+                  key={t.id}
+                  className={`ns-art__tool-option${tool === t.id ? " ns-art__tool-option--active" : ""}`}
+                  title={t.title}
+                  onClick={() => { setTool(t.id); setIsToolPickerOpen(false); }}
+                >{t.label}</button>
+              ))}
+            </div>
+          )}
+          <button
+            className={`ns-art__tool-current${isToolPickerOpen ? " ns-art__tool-current--open" : ""}`}
+            onClick={() => setIsToolPickerOpen(v => !v)}
+            title={currentToolDef.title}
+          >{currentToolDef.label}</button>
+        </div>
+
       </div>
+
+      {/* Always-rendered hidden pickers */}
+      <input ref={swatchPickerRef} type="color" className="ns-art__hidden-picker" onChange={onSwatchColorChange} />
     </div>
   );
 });
