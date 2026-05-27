@@ -111,7 +111,7 @@
   min-width: 0;
 }
 
-/* Frame slot — default is a row; --top variant adds DEL button above */
+/* Frame slot — default is a row; --top variant stacks DEL button above thumb */
 
 .ns-art__frame-slot {
   display: inline-flex;
@@ -147,19 +147,9 @@
   flex-shrink: 0;
 }
 
-.ns-art__del-frame-btn:hover {
-  background: #d4c0c0;
-  color: #cc0000;
-}
-
-.ns-art__del-frame-btn:active {
-  background: #c09090;
-}
-
-.ns-art__del-frame-btn:disabled {
-  color: #808080;
-  cursor: default;
-}
+.ns-art__del-frame-btn:hover { background: #d4c0c0; color: #cc0000; }
+.ns-art__del-frame-btn:active { background: #c09090; }
+.ns-art__del-frame-btn:disabled { color: #808080; cursor: default; }
 
 /* Hover-reveal insert zone between frames */
 
@@ -192,15 +182,10 @@
   line-height: 1;
 }
 
-.ns-art__frame-slot:hover .ns-art__frame-insert-btn {
-  display: flex;
-}
+.ns-art__frame-slot:hover .ns-art__frame-insert-btn { display: flex; }
+.ns-art__frame-insert-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
 
-.ns-art__frame-insert-btn:active {
-  border-color: #808080 #ffffff #ffffff #808080;
-}
-
-/* Add frame at end of row */
+/* Add frame at end */
 
 .ns-art__add-frame-end {
   font-family: "Press Start 2P", monospace;
@@ -225,7 +210,7 @@
 .ns-art__add-frame-end:active { border-color: #808080 #ffffff #ffffff #808080; }
 .ns-art__add-frame-end:disabled { color: #808080; cursor: default; }
 
-/* DEL strip button at end of each row */
+/* DEL strip button */
 
 .ns-art__del-strip-btn {
   font-family: "Press Start 2P", monospace;
@@ -250,7 +235,7 @@
 .ns-art__del-strip-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
 .ns-art__del-strip-btn:disabled { color: #808080; cursor: default; }
 
-/* Add strip button (below all rows) */
+/* Add strip button */
 
 .ns-art__add-strip-btn {
   font-family: "Press Start 2P", monospace;
@@ -284,7 +269,7 @@
   border-color: #ff6b00;
 }
 
-/* Right sidebar: play + collapse toggle */
+/* Right sidebar: play + collapse */
 
 .ns-art__anim-sidebar {
   flex-shrink: 0;
@@ -350,7 +335,7 @@
   background: #d4d0c8;
 }
 
-/* ── Canvas area (scrollable) ────────────────────────────────────────────── */
+/* ── Canvas area ─────────────────────────────────────────────────────────── */
 
 .ns-art__canvas-area {
   flex: 1;
@@ -374,7 +359,6 @@
   background-color: #fff;
 }
 
-/* Pixel grid overlay — CSS only, never drawn into canvas data */
 .ns-art__canvas-wrap--grid::after {
   content: '';
   position: absolute;
@@ -396,7 +380,6 @@
 
 .ns-art__canvas--playing { cursor: default; }
 
-/* Onion skin overlay */
 .ns-art__onion-overlay {
   position: absolute;
   top: 0;
@@ -406,7 +389,6 @@
   z-index: 1;
 }
 
-/* Selection marquee — marching ants */
 .ns-art__marquee {
   position: absolute;
   pointer-events: none;
@@ -432,118 +414,19 @@
 .ns-art__bottom {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 5px;
+  padding: 5px 6px;
   background: #c0c0c0;
   border-top: 2px solid #808080;
   flex-shrink: 0;
 }
 
-/* Left cluster: swatch-box + active palette */
+/* 🎨 Palette button */
 
-.ns-art__color-section {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-}
-
-/* Primary / secondary swatch overlay */
-.ns-art__swatch-box {
-  position: relative;
-  width: 46px;
-  height: 38px;
-  flex-shrink: 0;
-}
-
-.ns-art__swatch {
-  position: absolute;
-  width: 28px;
-  height: 28px;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  cursor: pointer;
-}
-
-.ns-art__swatch--secondary {
-  bottom: 0;
-  right: 0;
-}
-
-.ns-art__swatch--primary {
-  top: 0;
-  left: 0;
-  border-color: #ffffff #808080 #808080 #ffffff;
-}
-
-.ns-art__swatch[data-transparent] {
-  background-image:
-    linear-gradient(45deg, #ccc 25%, transparent 25%),
-    linear-gradient(-45deg, #ccc 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #ccc 75%),
-    linear-gradient(-45deg, transparent 75%, #ccc 75%);
-  background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
-  background-color: #fff;
-}
-
-/* Active palette: big tappable grid */
-
-.ns-art__active-palette {
-  display: grid;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.ns-art__active-swatch {
-  width: 44px;
-  height: 44px;
-  border: 3px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  cursor: pointer;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.ns-art__active-swatch:hover {
-  border-color: #ffffff #808080 #808080 #ffffff;
-}
-
-.ns-art__active-swatch--pri {
-  border-color: #ffffff #000 #000 #ffffff;
-  box-shadow: inset 0 0 0 1px #000;
-}
-
-.ns-art__active-swatch--sec {
-  border-color: #000 #ffffff #ffffff #000;
-}
-
-.ns-art__active-swatch[data-transparent] {
-  background-image:
-    linear-gradient(45deg, #ccc 25%, transparent 25%),
-    linear-gradient(-45deg, #ccc 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #ccc 75%),
-    linear-gradient(-45deg, transparent 75%, #ccc 75%);
-  background-size: 10px 10px;
-  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
-  background-color: #fff;
-}
-
-/* Center cluster: palette editor button + tool section */
-
-.ns-art__center-section {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-}
-
-/* 🎨 Palette editor button */
 .ns-art__palette-btn {
-  font-size: 22px;
-  width: 44px;
-  height: 44px;
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -561,62 +444,59 @@
   background: #d4d0c8;
 }
 
-/* ── Tool section ────────────────────────────────────────────────────────── */
+/* Primary / Secondary color slots, stacked vertically */
 
-.ns-art__tool-section {
+.ns-art__color-stack {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 3px;
   flex-shrink: 0;
 }
 
-.ns-art__tool-launcher {
+.ns-art__color-slot {
   position: relative;
-  flex-shrink: 0;
-}
-
-/* Popup opens upward */
-.ns-art__tool-popup {
-  position: absolute;
-  bottom: calc(100% + 2px);
-  left: 0;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2px;
-  padding: 4px;
-  z-index: 50;
-}
-
-.ns-art__tool-option {
-  width: 34px;
-  height: 34px;
-  font-family: Arial, sans-serif;
-  font-size: 16px;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  color: #000;
-  line-height: 1;
-}
-
-.ns-art__tool-option:hover { background: #d4d0c8; }
-
-.ns-art__tool-option--active {
+  width: 44px;
+  height: 44px;
+  border: 3px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  background: #d4d0c8;
+  cursor: pointer;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
 }
 
-/* Large current-tool button */
-.ns-art__tool-current {
+.ns-art__color-slot:active {
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.ns-art__color-slot-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 3px;
+  color: #ffffff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ns-art__color-slot[data-transparent] {
+  background-image:
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+  background-color: #fff;
+}
+
+/* Undo button */
+
+.ns-art__bottom-undo {
   width: 44px;
   height: 44px;
   font-family: Arial, sans-serif;
@@ -629,21 +509,67 @@
   align-items: center;
   justify-content: center;
   padding: 0;
+  flex-shrink: 0;
+  line-height: 1;
+  color: #000;
+}
+
+.ns-art__bottom-undo:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* Minimap section — centered, grows to fill */
+
+.ns-art__bottom-map {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.ns-art__minimap {
+  image-rendering: pixelated;
+  cursor: pointer;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  display: block;
+  max-width: 120px;
+  max-height: 72px;
+  touch-action: none;
+}
+
+.ns-art__zoom-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ns-art__zoom-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 4px 8px;
+  cursor: pointer;
   color: #000;
   line-height: 1;
+  min-width: 26px;
+  text-align: center;
+  white-space: nowrap;
 }
 
-.ns-art__tool-current--open {
-  border-color: #808080 #ffffff #ffffff #808080;
-  background: #d4d0c8;
-}
+.ns-art__zoom-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+.ns-art__zoom-btn:disabled { color: #808080; cursor: default; }
+.ns-art__zoom-btn--fit { font-size: 7px; padding: 4px 6px; }
 
-/* Compact tool options */
+/* ── Tool options ────────────────────────────────────────────────────────── */
 
 .ns-art__tool-opts {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .ns-art__size-spin {
@@ -654,11 +580,12 @@
   border-color: #808080 #ffffff #ffffff #808080;
   padding: 2px;
   gap: 2px;
+  flex-shrink: 0;
 }
 
 .ns-art__spin-btn {
-  width: 18px;
-  height: 22px;
+  width: 22px;
+  height: 26px;
   font-size: 14px;
   font-family: monospace;
   background: #c0c0c0;
@@ -673,9 +600,7 @@
   color: #000;
 }
 
-.ns-art__spin-btn:active {
-  border-color: #808080 #ffffff #ffffff #808080;
-}
+.ns-art__spin-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
 
 .ns-art__spin-val {
   font-family: "Press Start 2P", monospace;
@@ -687,10 +612,10 @@
 }
 
 .ns-art__opt-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   font-family: Arial, sans-serif;
-  font-size: 16px;
+  font-size: 17px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -709,107 +634,127 @@
   background: #d4d0c8;
 }
 
-/* ── Mini-map (bottom-right) ─────────────────────────────────────────────── */
+/* ── Tool picker ─────────────────────────────────────────────────────────── */
 
-.ns-art__bottom-right {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+.ns-art__tool-launcher {
+  position: relative;
   flex-shrink: 0;
-  margin-left: auto;
 }
 
-.ns-art__minimap {
-  image-rendering: pixelated;
-  cursor: pointer;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  display: block;
-  max-width: 120px;
-  max-height: 72px;
-}
-
-.ns-art__zoom-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.ns-art__zoom-btn {
-  font-family: "Press Start 2P", monospace;
-  font-size: 8px;
+/* Popup opens upward */
+.ns-art__tool-popup {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  right: 0;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 3px 7px;
-  cursor: pointer;
-  color: #000;
-  line-height: 1;
-  min-width: 22px;
-  text-align: center;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  padding: 4px;
+  z-index: 50;
 }
 
-.ns-art__zoom-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
-.ns-art__zoom-btn:disabled { color: #808080; cursor: default; }
-.ns-art__zoom-btn--fit { font-size: 6px; padding: 3px 6px; }
+.ns-art__tool-option {
+  width: 36px;
+  height: 36px;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #000;
+  line-height: 1;
+}
+
+.ns-art__tool-option:hover { background: #d4d0c8; }
+.ns-art__tool-option--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
+/* Large current-tool button */
+.ns-art__tool-current {
+  width: 48px;
+  height: 48px;
+  font-family: Arial, sans-serif;
+  font-size: 24px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #000;
+  line-height: 1;
+}
+
+.ns-art__tool-current--open {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
 
 /* ── Hidden native color picker ──────────────────────────────────────────── */
 
 .ns-art__hidden-picker { display: none; }
 
-/* ── Palette editor dialog ───────────────────────────────────────────────── */
+/* ── Palette picker dialog ───────────────────────────────────────────────── */
 
 .ns-art__palette-dlg {
-  min-width: 300px;
-  max-width: 420px;
-}
-
-.ns-art__pal-sizes {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-
-.ns-art__pal-size-btn {
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-  padding: 5px 9px;
-  background: #c0c0c0;
-  border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  cursor: pointer;
-  color: #000;
-}
-
-.ns-art__pal-size-btn--active {
-  border-color: #808080 #ffffff #ffffff #808080;
-  background: #d4d0c8;
+  min-width: 280px;
+  max-width: 380px;
 }
 
 .ns-art__pal-hint {
   font-family: "Press Start 2P", monospace;
   font-size: 6px;
   color: #404040;
-  margin: 0 0 6px 0;
-  line-height: 1.8;
+  margin: 0 0 8px 0;
+  line-height: 1.9;
   white-space: pre-line;
 }
 
 .ns-art__pal-active-grid {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   margin-bottom: 12px;
 }
 
 .ns-art__pal-active-cell {
-  width: 44px;
-  height: 44px;
+  height: 52px;
   border: 3px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   cursor: pointer;
   padding: 0;
   box-sizing: border-box;
+}
+
+.ns-art__pal-active-cell--labeled {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.ns-art__pal-slot-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  padding: 3px 4px;
+  line-height: 1;
+  color: #ffffff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  user-select: none;
 }
 
 .ns-art__pal-active-cell--sel {
@@ -860,7 +805,7 @@
   background-color: #fff;
 }
 
-/* ── Confirm / alert dialog overlay ─────────────────────────────────────── */
+/* ── Dialogs ─────────────────────────────────────────────────────────────── */
 
 .ns-art__overlay {
   position: absolute;

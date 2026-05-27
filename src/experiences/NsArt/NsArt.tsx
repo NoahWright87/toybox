@@ -379,11 +379,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [animPanelMode,   setAnimPanelMode]   = useState<AnimPanelMode>("all");
   const [isToolPickerOpen, setIsToolPickerOpen] = useState(false);
   const [dragOverStripIdx, setDragOverStripIdx] = useState<number | null>(null);
-  const [paletteGridCols, setPaletteGridCols] = useState(2);
-  const [paletteGridRows, setPaletteGridRows] = useState(2);
-  const [activeSlots, setActiveSlots] = useState<string[]>(() => DEFAULT_PALETTE.slice(0, 4));
   const [showPaletteDlg, setShowPaletteDlg] = useState(false);
-  const [selectedSlotIdx, setSelectedSlotIdx] = useState<number | null>(null);
+  const [paletteTarget, setPaletteTarget] = useState<"primary" | "secondary" | null>(null);
 
   // Animation state
   const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
@@ -445,6 +442,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
   // New navigation/minimap refs
   const minimapDraggingRef      = useRef(false);
+  const minimapDragOffsetRef    = useRef({ x: 0, y: 0 });
   const zoomRef                 = useRef<ZoomLevel>(1);
   const pendingScrollAdjustRef  = useRef<{ canvasX: number; canvasY: number; cursorX: number; cursorY: number } | null>(null);
   const containerSizeRef        = useRef({ w: 0, h: 0 });
@@ -1510,8 +1508,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     const mx = ((clientX - rect.left) / rect.width) * mmCanvas.width;
     const my = ((clientY - rect.top)  / rect.height) * mmCanvas.height;
     const mmScale = mmCanvas.width / canvasSize.w;
-    const canvasX = mx / mmScale;
-    const canvasY = my / mmScale;
+    const canvasX = mx / mmScale - minimapDragOffsetRef.current.x;
+    const canvasY = my / mmScale - minimapDragOffsetRef.current.y;
     const viewW = container.clientWidth  / zoom;
     const viewH = container.clientHeight / zoom;
     container.scrollLeft = Math.max(0, (canvasX - viewW / 2) * zoom);
@@ -1521,8 +1519,27 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const handleMinimapPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     minimapDraggingRef.current = true;
+    // Compute offset so dragging moves the viewport rect, not snapping its center
+    const mmCanvas = minimapCanvasRef.current;
+    const container = scrollContainerRef.current;
+    if (mmCanvas && container && mmCanvas.width) {
+      const rect = mmCanvas.getBoundingClientRect();
+      const mx = ((e.clientX - rect.left) / rect.width) * mmCanvas.width;
+      const my = ((e.clientY - rect.top)  / rect.height) * mmCanvas.height;
+      const mmScale = mmCanvas.width / canvasSize.w;
+      const clickCanvasX = mx / mmScale;
+      const clickCanvasY = my / mmScale;
+      const viewCenterX = (container.scrollLeft + container.clientWidth  / 2) / zoom;
+      const viewCenterY = (container.scrollTop  + container.clientHeight / 2) / zoom;
+      minimapDragOffsetRef.current = {
+        x: clickCanvasX - viewCenterX,
+        y: clickCanvasY - viewCenterY,
+      };
+    } else {
+      minimapDragOffsetRef.current = { x: 0, y: 0 };
+    }
     scrollToMinimapPoint(e.clientX, e.clientY);
-  }, [scrollToMinimapPoint]);
+  }, [scrollToMinimapPoint, canvasSize, zoom]);
 
   const handleMinimapPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!minimapDraggingRef.current) return;
@@ -1706,79 +1723,60 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         </div>
       )}
 
-      {/* ── Palette editor dialog ── */}
+      {/* ── Palette picker dialog ── */}
       {showPaletteDlg && (
         <div className="ns-art__overlay" onClick={() => setShowPaletteDlg(false)}>
           <div className="ns-art__dialog ns-art__palette-dlg" onClick={e => e.stopPropagation()}>
             <div className="ns-art__dialog-titlebar">
               <span className="ns-art__dialog-icon">🎨</span>
-              <span>Palette Editor</span>
+              <span>Choose Colors</span>
             </div>
             <div className="ns-art__dialog-body">
 
-              {/* Grid size selector */}
-              <div className="ns-art__pal-sizes">
-                {([{ c: 1, r: 2 }, { c: 2, r: 2 }, { c: 3, r: 2 }, { c: 3, r: 3 }]).map(({ c, r }) => (
-                  <button
-                    key={`${c}x${r}`}
-                    className={`ns-art__pal-size-btn${paletteGridCols === c && paletteGridRows === r ? " ns-art__pal-size-btn--active" : ""}`}
-                    onClick={() => {
-                      const newCount = c * r;
-                      setPaletteGridCols(c);
-                      setPaletteGridRows(r);
-                      setActiveSlots(prev => {
-                        if (newCount <= prev.length) return prev.slice(0, newCount);
-                        const needed = newCount - prev.length;
-                        const extras = DEFAULT_PALETTE.filter(p => !prev.includes(p)).slice(0, needed);
-                        return [...prev, ...extras];
-                      });
-                      setSelectedSlotIdx(idx => (idx !== null && idx >= newCount) ? null : idx);
-                    }}
-                  >{c}×{r}</button>
-                ))}
-              </div>
-
-              {/* Active slots */}
-              <p className="ns-art__pal-hint">Your palette — click a slot to select it</p>
-              <div
-                className="ns-art__pal-active-grid"
-                style={{ gridTemplateColumns: `repeat(${paletteGridCols}, 1fr)` }}
-              >
-                {activeSlots.map((color, i) => (
-                  <button
-                    key={i}
-                    className={`ns-art__pal-active-cell${selectedSlotIdx === i ? " ns-art__pal-active-cell--sel" : ""}`}
-                    style={color !== "transparent" ? { background: color } : undefined}
-                    data-transparent={color === "transparent" || undefined}
-                    onClick={() => setSelectedSlotIdx(i === selectedSlotIdx ? null : i)}
-                    title={`Slot ${i + 1}: ${color}`}
-                  />
-                ))}
+              {/* Primary / Secondary slots */}
+              <p className="ns-art__pal-hint">Tap a slot, then pick a color below</p>
+              <div className="ns-art__pal-active-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                <button
+                  className={`ns-art__pal-active-cell ns-art__pal-active-cell--labeled${paletteTarget === "primary" ? " ns-art__pal-active-cell--sel" : ""}`}
+                  style={primaryColor !== "transparent" ? { background: primaryColor } : undefined}
+                  data-transparent={primaryColor === "transparent" || undefined}
+                  onClick={() => setPaletteTarget(t => t === "primary" ? null : "primary")}
+                  title="Primary color (1)"
+                ><span className="ns-art__pal-slot-label">1</span></button>
+                <button
+                  className={`ns-art__pal-active-cell ns-art__pal-active-cell--labeled${paletteTarget === "secondary" ? " ns-art__pal-active-cell--sel" : ""}`}
+                  style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
+                  data-transparent={secondaryColor === "transparent" || undefined}
+                  onClick={() => setPaletteTarget(t => t === "secondary" ? null : "secondary")}
+                  title="Secondary color (2)"
+                ><span className="ns-art__pal-slot-label">2</span></button>
               </div>
 
               {/* Full palette */}
-              <p className="ns-art__pal-hint">All colors — click to assign to selected slot{"\n"}(double-click to edit a color)</p>
+              <p className="ns-art__pal-hint">{paletteTarget !== null ? "Tap a color to assign" : "Tap a slot above first"}{"\n"}(double-tap any color to edit it)</p>
               <div className="ns-art__pal-full-grid">
                 {palette.map((color, i) => (
                   <button
                     key={i}
-                    className={`ns-art__pal-full-cell${selectedSlotIdx !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
+                    className={`ns-art__pal-full-cell${paletteTarget !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
                     style={{ background: color }}
                     onClick={() => {
-                      if (selectedSlotIdx === null) return;
-                      setActiveSlots(prev => prev.map((c, j) => j === selectedSlotIdx ? color : c));
-                      setSelectedSlotIdx(null);
+                      if (paletteTarget === null) return;
+                      if (paletteTarget === "primary") setPrimaryColor(color);
+                      else setSecondaryColor(color);
+                      setPaletteTarget(null);
                     }}
                     onDoubleClick={() => openSwatchEditor(i)}
-                    title={`${color}${selectedSlotIdx !== null ? " — click to assign" : ""}\ndouble-click to edit`}
+                    title={`${color}${paletteTarget !== null ? " — tap to assign" : ""}\ndouble-tap to edit`}
                   />
                 ))}
                 <button
-                  className={`ns-art__pal-full-cell ns-art__pal-full-cell--transparent${selectedSlotIdx !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
+                  className={`ns-art__pal-full-cell ns-art__pal-full-cell--transparent${paletteTarget !== null ? " ns-art__pal-full-cell--assignable" : ""}`}
                   onClick={() => {
-                    if (selectedSlotIdx === null) return;
-                    setActiveSlots(prev => prev.map((c, j) => j === selectedSlotIdx ? "transparent" : c));
-                    setSelectedSlotIdx(null);
+                    if (paletteTarget === null) return;
+                    if (paletteTarget === "primary") setPrimaryColor("transparent");
+                    else setSecondaryColor("transparent");
+                    setPaletteTarget(null);
                   }}
                   title="Transparent"
                 />
@@ -1977,111 +1975,43 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       {/* ── Bottom bar ── */}
       <div className="ns-art__bottom">
 
-        {/* Left: palette + swatches + tool launcher + compact options */}
-        {/* Left: swatch-box + active palette */}
-        <div className="ns-art__color-section">
-          <div className="ns-art__swatch-box">
-            <div
-              className="ns-art__swatch ns-art__swatch--secondary"
-              style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
-              data-transparent={secondaryColor === "transparent" || undefined}
-              title="Secondary color — right-click to change"
-              onClick={() => secondaryPickerRef.current?.click()}
-            />
-            <div
-              className="ns-art__swatch ns-art__swatch--primary"
-              style={primaryColor !== "transparent" ? { background: primaryColor } : undefined}
-              data-transparent={primaryColor === "transparent" || undefined}
-              title="Primary color — left-click to change"
-              onClick={() => primaryPickerRef.current?.click()}
-            />
-            <input ref={primaryPickerRef}   type="color" className="ns-art__hidden-picker"
-              value={primaryColor   !== "transparent" ? primaryColor   : "#000000"}
-              onChange={e => setPrimaryColor(e.target.value)} />
-            <input ref={secondaryPickerRef} type="color" className="ns-art__hidden-picker"
-              value={secondaryColor !== "transparent" ? secondaryColor : "#ffffff"}
-              onChange={e => setSecondaryColor(e.target.value)} />
-          </div>
+        {/* 🎨 palette picker button — far left */}
+        <button
+          className="ns-art__palette-btn"
+          onClick={() => { setShowPaletteDlg(true); setPaletteTarget(null); }}
+          title="Choose colors"
+        >🎨</button>
 
-          {/* Active palette grid */}
-          <div
-            className="ns-art__active-palette"
-            style={{ gridTemplateColumns: `repeat(${paletteGridCols}, 44px)` }}
-          >
-            {activeSlots.map((color, i) => (
-              <button
-                key={i}
-                className={`ns-art__active-swatch${color === primaryColor ? " ns-art__active-swatch--pri" : ""}${color === secondaryColor ? " ns-art__active-swatch--sec" : ""}`}
-                style={color !== "transparent" ? { background: color } : undefined}
-                data-transparent={color === "transparent" || undefined}
-                onClick={() => setPrimaryColor(color)}
-                onContextMenu={e => { e.preventDefault(); setSecondaryColor(color); }}
-                title={`${color} — L: primary  R: secondary`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Center: palette editor + tool section */}
-        <div className="ns-art__center-section">
+        {/* Primary (1) + Secondary (2) color slots, stacked */}
+        <div className="ns-art__color-stack">
           <button
-            className="ns-art__palette-btn"
-            onClick={() => { setShowPaletteDlg(true); setSelectedSlotIdx(null); }}
-            title="Edit palette"
-          >🎨</button>
-
-          <div className="ns-art__tool-section">
-            <div ref={toolLauncherRef} className="ns-art__tool-launcher">
-              {isToolPickerOpen && (
-                <div className="ns-art__tool-popup">
-                  {TOOLS.map(t => (
-                    <button
-                      key={t.id}
-                      className={`ns-art__tool-option${tool === t.id ? " ns-art__tool-option--active" : ""}`}
-                      title={t.title}
-                      onClick={() => { setTool(t.id); setIsToolPickerOpen(false); }}
-                    >{t.label}</button>
-                  ))}
-                </div>
-              )}
-              <button
-                className={`ns-art__tool-current${isToolPickerOpen ? " ns-art__tool-current--open" : ""}`}
-                onClick={() => setIsToolPickerOpen(v => !v)}
-                title={currentToolDef.title}
-              >{currentToolDef.label}</button>
-            </div>
-
-            <div className="ns-art__tool-opts">
-              <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
-                <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
-                <span className="ns-art__spin-val">{brushSize}</span>
-                <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
-              </div>
-              {showFillMode && (
-                <button className="ns-art__opt-btn"
-                  onClick={() => setFillMode(m => m === "outline" ? "filled" : m === "filled" ? "both" : "outline")}
-                  title={`Fill mode: ${fillMode}`}
-                >{fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}</button>
-              )}
-              {showBrushShape && (
-                <button className="ns-art__opt-btn"
-                  onClick={() => setBrushShape(s => s === "square" ? "round" : "square")}
-                  title={`Brush tip: ${brushShape}`}
-                >{brushShape === "square" ? "□" : "○"}</button>
-              )}
-              {showRoundCorner && (
-                <button
-                  className={`ns-art__opt-btn${roundCorners ? " ns-art__opt-btn--active" : ""}`}
-                  onClick={() => setRoundCorners(v => !v)}
-                  title="Round corners"
-                >◱</button>
-              )}
-            </div>
-          </div>
+            className="ns-art__color-slot"
+            style={primaryColor !== "transparent" ? { background: primaryColor } : undefined}
+            data-transparent={primaryColor === "transparent" || undefined}
+            onClick={() => primaryPickerRef.current?.click()}
+            title="Primary color — tap for custom picker"
+          ><span className="ns-art__color-slot-label">1</span></button>
+          <button
+            className="ns-art__color-slot"
+            style={secondaryColor !== "transparent" ? { background: secondaryColor } : undefined}
+            data-transparent={secondaryColor === "transparent" || undefined}
+            onClick={() => secondaryPickerRef.current?.click()}
+            title="Secondary color — tap for custom picker"
+          ><span className="ns-art__color-slot-label">2</span></button>
+          <input ref={primaryPickerRef}   type="color" className="ns-art__hidden-picker"
+            value={primaryColor   !== "transparent" ? primaryColor   : "#000000"}
+            onChange={e => setPrimaryColor(e.target.value)} />
+          <input ref={secondaryPickerRef} type="color" className="ns-art__hidden-picker"
+            value={secondaryColor !== "transparent" ? secondaryColor : "#ffffff"}
+            onChange={e => setSecondaryColor(e.target.value)} />
         </div>
 
-        {/* Right: mini-map + zoom */}
-        <div className="ns-art__bottom-right">
+        {/* Undo */}
+        <button className="ns-art__bottom-undo" onClick={undo} title="Undo (Ctrl+Z)">↩</button>
+
+        {/* Minimap flanked by fit and zoom — grows to fill center */}
+        <div className="ns-art__bottom-map">
+          <button className="ns-art__zoom-btn ns-art__zoom-btn--fit" onClick={fitCanvas} title={`Fit canvas (${zoom}×)`}>fit</button>
           <canvas
             ref={minimapCanvasRef}
             className="ns-art__minimap"
@@ -2090,11 +2020,70 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
             onPointerUp={handleMinimapPointerUp}
             title="Mini-map — drag to pan"
           />
-          <div className="ns-art__zoom-row">
-            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_OUT[z])} disabled={zoom === 1}  title="Zoom out">−</button>
-            <button className="ns-art__zoom-btn ns-art__zoom-btn--fit" onClick={fitCanvas} title={`Fit (${zoom}×)`}>fit</button>
-            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_IN[z])}  disabled={zoom === 16} title="Zoom in">+</button>
+          <div className="ns-art__zoom-btns">
+            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_OUT[z])} disabled={zoom === 1}  title="Zoom out (−)">−</button>
+            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_IN[z])}  disabled={zoom === 16} title="Zoom in (+)">+</button>
           </div>
+        </div>
+
+        {/* Tool options — only when relevant */}
+        {(showFillMode || showBrushShape || showRoundCorner) && (
+          <div className="ns-art__tool-opts">
+            <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
+              <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
+              <span className="ns-art__spin-val">{brushSize}</span>
+              <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
+            </div>
+            {showFillMode && (
+              <button className="ns-art__opt-btn"
+                onClick={() => setFillMode(m => m === "outline" ? "filled" : m === "filled" ? "both" : "outline")}
+                title={`Fill mode: ${fillMode}`}
+              >{fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}</button>
+            )}
+            {showBrushShape && (
+              <button className="ns-art__opt-btn"
+                onClick={() => setBrushShape(s => s === "square" ? "round" : "square")}
+                title={`Brush tip: ${brushShape}`}
+              >{brushShape === "square" ? "□" : "○"}</button>
+            )}
+            {showRoundCorner && (
+              <button
+                className={`ns-art__opt-btn${roundCorners ? " ns-art__opt-btn--active" : ""}`}
+                onClick={() => setRoundCorners(v => !v)}
+                title="Round corners"
+              >◱</button>
+            )}
+          </div>
+        )}
+
+        {/* Size spinner always visible */}
+        {!showFillMode && !showBrushShape && !showRoundCorner && (
+          <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
+            <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
+            <span className="ns-art__spin-val">{brushSize}</span>
+            <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
+          </div>
+        )}
+
+        {/* Tool picker — far right */}
+        <div ref={toolLauncherRef} className="ns-art__tool-launcher">
+          {isToolPickerOpen && (
+            <div className="ns-art__tool-popup">
+              {TOOLS.map(t => (
+                <button
+                  key={t.id}
+                  className={`ns-art__tool-option${tool === t.id ? " ns-art__tool-option--active" : ""}`}
+                  title={t.title}
+                  onClick={() => { setTool(t.id); setIsToolPickerOpen(false); }}
+                >{t.label}</button>
+              ))}
+            </div>
+          )}
+          <button
+            className={`ns-art__tool-current${isToolPickerOpen ? " ns-art__tool-current--open" : ""}`}
+            onClick={() => setIsToolPickerOpen(v => !v)}
+            title={currentToolDef.title}
+          >{currentToolDef.label}</button>
         </div>
 
       </div>
