@@ -13,7 +13,7 @@ export const SONG_RULER_H = 24; // ruler height
 
 interface SongViewProps {
   song: Song;
-  playheadRef: React.RefObject<HTMLDivElement | null>;
+  playheadRef: React.RefObject<HTMLDivElement>;
   onToggleBlock: (clipId: string, bar: number) => void;
   onEditClip: (clipId: string) => void;
   onAddClip: () => void;

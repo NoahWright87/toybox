@@ -860,7 +860,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const isPlayingRef   = useRef(false);
   const stepRef        = useRef(0);
   const timerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const playheadRef    = useRef<HTMLDivElement | null>(null);
+  const playheadRef    = useRef<HTMLDivElement>(null);
 
   const paintModeRef       = useRef<PaintState>(null);
   const resizeModeRef      = useRef(false);
