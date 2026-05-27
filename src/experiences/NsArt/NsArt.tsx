@@ -1582,11 +1582,20 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       ],
     },
     {
+      label: "View",
+      items: [
+        { label: "Fit Canvas", onClick: fitCanvas },
+        { separator: true },
+        { label: "Zoom In",  onClick: () => setZoom(z => ZOOM_IN[z]),  disabled: zoom >= 16 },
+        { label: "Zoom Out", onClick: () => setZoom(z => ZOOM_OUT[z]), disabled: zoom <= 1  },
+        { separator: true },
+        { label: "Pixel Grid", checked: showGrid, onClick: () => setShowGrid(v => !v) },
+      ],
+    },
+    {
       label: "Format",
       items: [
         { label: "Canvas Size...", onClick: () => { setSizeInputW(canvasSize.w); setSizeInputH(canvasSize.h); setShowSizeDlg(true); } },
-        { separator: true },
-        { label: "Pixel Grid", checked: showGrid, onClick: () => setShowGrid(v => !v) },
       ],
     },
     {
@@ -1623,7 +1632,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     },
   ], [
     newCanvas, exportCurrentFrame, exportSpriteSheet, undo,
-    canvasSize, showGrid,
+    fitCanvas, zoom, showGrid,
     addFrame, deleteFrame, frameCount,
     addStrip, deleteStrip, strips, currentStrip,
     onionSkin, onionOpacity, onionRange,
@@ -2009,9 +2018,8 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         {/* Undo */}
         <button className="ns-art__bottom-undo" onClick={undo} title="Undo (Ctrl+Z)">↩</button>
 
-        {/* Minimap flanked by fit and zoom — grows to fill center */}
+        {/* Minimap + zoom — grows to fill center */}
         <div className="ns-art__bottom-map">
-          <button className="ns-art__zoom-btn ns-art__zoom-btn--fit" onClick={fitCanvas} title={`Fit canvas (${zoom}×)`}>fit</button>
           <canvas
             ref={minimapCanvasRef}
             className="ns-art__minimap"
@@ -2021,49 +2029,42 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
             title="Mini-map — drag to pan"
           />
           <div className="ns-art__zoom-btns">
-            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_OUT[z])} disabled={zoom === 1}  title="Zoom out (−)">−</button>
-            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_IN[z])}  disabled={zoom === 16} title="Zoom in (+)">+</button>
+            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_OUT[z])} disabled={zoom === 1}  title="Zoom out">−</button>
+            <button className="ns-art__zoom-btn" onClick={() => setZoom(z => ZOOM_IN[z])}  disabled={zoom === 16} title="Zoom in">+</button>
           </div>
         </div>
 
-        {/* Tool options — only when relevant */}
-        {(showFillMode || showBrushShape || showRoundCorner) && (
-          <div className="ns-art__tool-opts">
-            <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
-              <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
-              <span className="ns-art__spin-val">{brushSize}</span>
-              <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
-            </div>
-            {showFillMode && (
-              <button className="ns-art__opt-btn"
-                onClick={() => setFillMode(m => m === "outline" ? "filled" : m === "filled" ? "both" : "outline")}
-                title={`Fill mode: ${fillMode}`}
-              >{fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}</button>
-            )}
-            {showBrushShape && (
-              <button className="ns-art__opt-btn"
-                onClick={() => setBrushShape(s => s === "square" ? "round" : "square")}
-                title={`Brush tip: ${brushShape}`}
-              >{brushShape === "square" ? "□" : "○"}</button>
-            )}
-            {showRoundCorner && (
-              <button
-                className={`ns-art__opt-btn${roundCorners ? " ns-art__opt-btn--active" : ""}`}
-                onClick={() => setRoundCorners(v => !v)}
-                title="Round corners"
-              >◱</button>
-            )}
-          </div>
-        )}
-
-        {/* Size spinner always visible */}
-        {!showFillMode && !showBrushShape && !showRoundCorner && (
+        {/* Tool options — size always shown; shape/fill/corner stacked below */}
+        <div className="ns-art__tool-opts">
           <div className="ns-art__size-spin" title={`Brush size: ${brushSize}px`}>
             <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.max(1, s - 1))}>−</button>
             <span className="ns-art__spin-val">{brushSize}</span>
             <button className="ns-art__spin-btn" onClick={() => setBrushSize(s => Math.min(20, s + 1))}>+</button>
           </div>
-        )}
+          {(showFillMode || showBrushShape || showRoundCorner) && (
+            <div className="ns-art__opts-row">
+              {showFillMode && (
+                <button className="ns-art__opt-btn"
+                  onClick={() => setFillMode(m => m === "outline" ? "filled" : m === "filled" ? "both" : "outline")}
+                  title={`Fill mode: ${fillMode}`}
+                >{fillMode === "outline" ? "□" : fillMode === "filled" ? "■" : "▣"}</button>
+              )}
+              {showBrushShape && (
+                <button className="ns-art__opt-btn"
+                  onClick={() => setBrushShape(s => s === "square" ? "round" : "square")}
+                  title={`Brush tip: ${brushShape}`}
+                >{brushShape === "square" ? "□" : "○"}</button>
+              )}
+              {showRoundCorner && (
+                <button
+                  className={`ns-art__opt-btn${roundCorners ? " ns-art__opt-btn--active" : ""}`}
+                  onClick={() => setRoundCorners(v => !v)}
+                  title="Round corners"
+                >◱</button>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Tool picker — far right */}
         <div ref={toolLauncherRef} className="ns-art__tool-launcher">

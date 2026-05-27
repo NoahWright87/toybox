@@ -413,20 +413,20 @@
 
 .ns-art__bottom {
   display: flex;
-  align-items: center;
+  align-items: stretch;   /* all children fill the bar height */
   gap: 5px;
   padding: 5px 6px;
   background: #c0c0c0;
   border-top: 2px solid #808080;
   flex-shrink: 0;
+  min-height: 72px;
 }
 
-/* 🎨 Palette button */
+/* 🎨 Palette button — tall + narrow */
 
 .ns-art__palette-btn {
-  font-size: 24px;
-  width: 48px;
-  height: 48px;
+  font-size: 22px;
+  width: 34px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -444,19 +444,20 @@
   background: #d4d0c8;
 }
 
-/* Primary / Secondary color slots, stacked vertically */
+/* Primary / Secondary color slots — stretch to fill bar height */
 
 .ns-art__color-stack {
   display: flex;
   flex-direction: column;
   gap: 3px;
   flex-shrink: 0;
+  width: 34px;
 }
 
 .ns-art__color-slot {
   position: relative;
-  width: 44px;
-  height: 44px;
+  flex: 1;
+  min-height: 28px;
   border: 3px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   cursor: pointer;
@@ -474,7 +475,7 @@
 
 .ns-art__color-slot-label {
   font-family: "Press Start 2P", monospace;
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1;
   padding: 2px 3px;
   color: #ffffff;
@@ -494,13 +495,12 @@
   background-color: #fff;
 }
 
-/* Undo button */
+/* Undo button — tall + narrow, same family as palette/tool buttons */
 
 .ns-art__bottom-undo {
-  width: 44px;
-  height: 44px;
+  width: 34px;
   font-family: Arial, sans-serif;
-  font-size: 22px;
+  font-size: 20px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -533,8 +533,8 @@
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   display: block;
-  max-width: 120px;
-  max-height: 72px;
+  max-width: 100px;
+  max-height: 60px;
   touch-action: none;
 }
 
@@ -561,15 +561,22 @@
 
 .ns-art__zoom-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
 .ns-art__zoom-btn:disabled { color: #808080; cursor: default; }
-.ns-art__zoom-btn--fit { font-size: 7px; padding: 4px 6px; }
 
-/* ── Tool options ────────────────────────────────────────────────────────── */
+/* ── Tool options — stacked vertically ──────────────────────────────────── */
 
 .ns-art__tool-opts {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
   flex-shrink: 0;
+}
+
+/* Row of shape/fill/corner buttons that sits below the size spinner */
+.ns-art__opts-row {
+  display: flex;
+  gap: 3px;
 }
 
 .ns-art__size-spin {
@@ -680,12 +687,11 @@
   background: #d4d0c8;
 }
 
-/* Large current-tool button */
+/* Current-tool button — tall + narrow, stretches to bar height */
 .ns-art__tool-current {
-  width: 48px;
-  height: 48px;
+  width: 36px;
   font-family: Arial, sans-serif;
-  font-size: 24px;
+  font-size: 22px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
