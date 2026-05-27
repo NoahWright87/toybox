@@ -69,6 +69,39 @@ export function playNote(
   osc.stop(relEnd + 0.01);
 }
 
+// Starts a note that sustains until the returned stop function is called.
+export function startSustainedNote(
+  pitch: number,
+  waveform: OscWaveform,
+  gain: number,
+  attack: number,
+): () => void {
+  const c = getCtx();
+  const t = c.currentTime;
+  const vol = 0.22 * Math.max(0, Math.min(1, gain));
+  const atkDur = Math.min(attack, 0.05);
+
+  const osc = c.createOscillator();
+  const env = c.createGain();
+  osc.type = waveform as OscillatorType;
+  osc.frequency.value = midiToHz(pitch);
+
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vol, t + atkDur);
+
+  osc.connect(env);
+  env.connect(c.destination);
+  osc.start(t);
+
+  return () => {
+    const now = c.currentTime;
+    env.gain.cancelScheduledValues(now);
+    env.gain.setValueAtTime(env.gain.value, now);
+    env.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    try { osc.stop(now + 0.16); } catch { /* already stopped */ }
+  };
+}
+
 function makeNoiseBuf(c: AudioContext, dur: number): AudioBuffer {
   const len = Math.ceil(c.sampleRate * dur);
   const buf = c.createBuffer(1, len, c.sampleRate);

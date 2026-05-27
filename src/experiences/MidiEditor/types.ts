@@ -1,4 +1,6 @@
 export type OscWaveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
+export type EditTool = 'select' | 'draw' | 'paint';
+export type AppView = 'pattern' | 'song';
 
 // GM instrument names, index = program number 0–127
 export const GM_PROGRAMS: string[] = [
@@ -64,14 +66,40 @@ export interface Track {
   release: number;    // seconds
   collapsed: boolean;
   drumRows?: number[]; // ordered MIDI pitches; only meaningful for drum tracks
+  octaveOffset: number; // semitone shift applied at playback/preview (multiples of 12)
 }
 
+// Legacy format kept for migration only — new saves use Song.
 export interface Pattern {
   bpm: number;
   bars: number;
   beatsPerBar: number;
   stepsPerBeat: number;
   tracks: Track[];
+}
+
+// A Clip is one looping multi-track pattern (the old "Pattern" minus global settings).
+export interface Clip {
+  id: string;
+  name: string;
+  color: string;
+  bars: number;
+  tracks: Track[];
+}
+
+export interface SongBlock {
+  id: string;
+  clipId: string;
+  startBar: number; // 0-indexed bar in the arrangement timeline
+}
+
+export interface Song {
+  bpm: number;
+  beatsPerBar: number;
+  stepsPerBeat: number;
+  clips: Clip[];
+  arrangement: SongBlock[];
+  arrangementBars: number;
 }
 
 export const DRUM_PITCHES = {
@@ -133,18 +161,25 @@ export function pitchName(pitch: number): string {
   return `${names[pitch % 12]}${Math.floor(pitch / 12) - 1}`;
 }
 
-function makeTrack(partial: Omit<Track, 'volume'|'attack'|'release'|'collapsed'>): Track {
-  return { ...partial, volume: 1, attack: 0.01, release: 0.3, collapsed: false };
+function makeTrack(partial: Omit<Track, 'volume'|'attack'|'release'|'collapsed'|'octaveOffset'>): Track {
+  return { ...partial, volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0 };
 }
 
-export function createInitialPattern(): Pattern {
+export function makeDefaultTracks(): Track[] {
+  return [
+    makeTrack({ id: 'drums', name: 'Drums', color: '#c89000', waveform: 'sine',     notes: [], muted: false, isDrum: true,  drumRows: [...DEFAULT_DRUM_ROWS] }),
+    makeTrack({ id: 'lead',  name: 'Lead',  color: '#cc4400', waveform: 'sine',     notes: [], muted: false, isDrum: false }),
+    makeTrack({ id: 'pad',   name: 'Pad',   color: '#5b2d8e', waveform: 'triangle', notes: [], muted: false, isDrum: false }),
+    makeTrack({ id: 'bass',  name: 'Bass',  color: '#228833', waveform: 'sawtooth', notes: [], muted: false, isDrum: false }),
+  ];
+}
+
+export function createInitialSong(): Song {
+  const clipId = makeNoteId();
   return {
-    bpm: 120, bars: 2, beatsPerBar: 4, stepsPerBeat: 4,
-    tracks: [
-      makeTrack({ id: 'drums', name: 'Drums', color: '#c89000', waveform: 'sine',     notes: [], muted: false, isDrum: true,  drumRows: [...DEFAULT_DRUM_ROWS] }),
-      makeTrack({ id: 'lead',  name: 'Lead',  color: '#cc4400', waveform: 'sine',     notes: [], muted: false, isDrum: false }),
-      makeTrack({ id: 'pad',   name: 'Pad',   color: '#5b2d8e', waveform: 'triangle', notes: [], muted: false, isDrum: false }),
-      makeTrack({ id: 'bass',  name: 'Bass',  color: '#228833', waveform: 'sawtooth', notes: [], muted: false, isDrum: false }),
-    ],
+    bpm: 120, beatsPerBar: 4, stepsPerBeat: 4,
+    clips: [{ id: clipId, name: 'Pattern A', color: '#5b2d8e', bars: 2, tracks: makeDefaultTracks() }],
+    arrangement: [],
+    arrangementBars: 16,
   };
 }

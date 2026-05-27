@@ -42,6 +42,25 @@
   margin: 0 2px;
 }
 
+.me-tool-group {
+  display: flex;
+  gap: 0;
+}
+
+.me-tool-group .me-btn + .me-btn {
+  border-left-width: 1px;
+}
+
+/* Octave offset row in track settings */
+.me-octave-btns {
+  display: flex;
+  gap: 0;
+}
+
+.me-octave-btns .me-btn + .me-btn {
+  border-left-width: 1px;
+}
+
 .me-label {
   color: #000;
   white-space: nowrap;
@@ -619,6 +638,24 @@
 
 .me-note-rect:hover { filter: brightness(1.15); }
 
+.me-note-rect--selected {
+  outline: 2px solid #ffffff;
+  outline-offset: -1px;
+  filter: brightness(1.2);
+  z-index: 3;
+}
+
+/* Select-mode grid: pointer cursor instead of crosshair */
+.me-note-grid--select .me-cell {
+  cursor: default;
+}
+.me-note-grid--select .me-note-rect {
+  cursor: grab;
+}
+.me-note-grid--select .me-note-rect:active {
+  cursor: grabbing;
+}
+
 .me-note-resize-handle {
   position: absolute;
   right: 0;
@@ -824,3 +861,196 @@
 
 .me-save-item--load { cursor: default; }
 .me-save-item--load:hover { background: #f8f8f8; }
+
+/* ── Song / Arrangement view ─────────────────────────────────────────────── */
+.me-song-outer {
+  flex: 1;
+  overflow: auto;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.me-song-inner {
+  position: relative;
+}
+
+.me-song-ruler {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #c0c0c0;
+  border-bottom: 2px solid #808080;
+  height: 24px;
+}
+
+.me-song-corner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 2px solid #808080;
+  background: #c0c0c0;
+}
+
+.me-song-length-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.me-song-ruler-steps {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.me-song-ruler-mark {
+  position: absolute;
+  top: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+  border-right: 1px solid #b0b0b0;
+  box-sizing: border-box;
+}
+
+.me-song-row {
+  display: flex;
+  border-bottom: 1px solid #b0b0b0;
+}
+
+.me-song-add-row {
+  background: #c0c0c0;
+}
+
+.me-song-clip-left {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  background: #c0c0c0;
+  border-right: 2px solid #808080;
+  box-sizing: border-box;
+}
+
+.me-song-clip-name {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+  padding: 1px 2px;
+}
+
+.me-song-clip-name:focus {
+  background: #fff;
+  border-color: #808080 #ffffff #ffffff #808080;
+  border-width: 2px;
+  outline: none;
+}
+
+.me-song-clip-btns {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.me-btn--edit {
+  color: #004080;
+  font-size: 5px;
+}
+
+.me-song-row-grid {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.me-song-row-grid--empty {
+  background: repeating-linear-gradient(
+    90deg,
+    #c8c4bc 0px, #c8c4bc 1px,
+    transparent 1px, transparent 48px
+  );
+}
+
+.me-song-cell {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  border-right: 1px solid #b8b4ac;
+}
+
+.me-song-cell--bar4 {
+  border-right-color: #888480;
+}
+
+.me-song-cell--covered {
+  background: transparent;
+  cursor: pointer;
+}
+
+.me-song-block {
+  position: absolute;
+  top: 2px;
+  height: calc(100% - 4px);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  opacity: 0.85;
+}
+
+.me-song-block-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  color: #fff;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+
+.me-song-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #c0c0c0;
+  border-top: 1px solid #808080;
+}
+
+.me-song-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #000;
+}
+
+.me-song-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.me-track-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.3);
+}
