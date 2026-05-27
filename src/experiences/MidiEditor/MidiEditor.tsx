@@ -157,6 +157,7 @@ interface InstrumentModalProps {
   track: Track;
   canDelete: boolean;
   onSave: (updates: Partial<Track>) => void;
+  onApply: (updates: Partial<Track>) => void;
   onClose: () => void;
   onDelete: () => void;
 }
@@ -172,7 +173,7 @@ const GM_GROUPS = [
   { label: 'Percussive', start: 112 }, { label: 'Sound FX', start: 120 },
 ];
 
-function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: InstrumentModalProps) {
+function InstrumentModal({ track, canDelete, onSave, onApply, onClose, onDelete }: InstrumentModalProps) {
   const [name,         setName]         = useState(track.name);
   const [color,        setColor]        = useState(track.color);
   const [waveform,     setWaveform]     = useState(track.waveform);
@@ -180,6 +181,15 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
   const [sfMode,       setSfMode]       = useState(track.gmProgram !== undefined);
   const [gmProg,       setGmProg]       = useState(track.gmProgram ?? 0);
   const [octaveOffset, setOctaveOffset] = useState(track.octaveOffset ?? 0);
+
+  // Keep a ref so applyWith can compose the full update using current values
+  const pbRef = useRef({ waveform, sfMode, gmProg, volume, octaveOffset });
+  pbRef.current = { waveform, sfMode, gmProg, volume, octaveOffset };
+
+  function applyWith(patch: Partial<{ waveform: OscWaveform; sfMode: boolean; gmProg: number; volume: number; octaveOffset: number }>) {
+    const m = { ...pbRef.current, ...patch };
+    onApply({ waveform: m.waveform, volume: m.volume / 100, gmProgram: m.sfMode ? m.gmProg : undefined, octaveOffset: m.octaveOffset });
+  }
 
   function save() {
     onSave({ name, color, waveform, volume: volume / 100, gmProgram: sfMode ? gmProg : undefined, octaveOffset });
@@ -229,14 +239,14 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
               <div className="me-modal__row">
                 <label className="me-label">SOURCE</label>
                 <div className="me-source-toggle">
-                  <button className={`me-source-btn${!sfMode ? ' me-source-btn--active' : ''}`} onClick={() => setSfMode(false)}>OSC</button>
-                  <button className={`me-source-btn${sfMode ? ' me-source-btn--active' : ''}`} onClick={() => setSfMode(true)}>MIDI{!isSoundFontReady() ? '…' : ''}</button>
+                  <button className={`me-source-btn${!sfMode ? ' me-source-btn--active' : ''}`} onClick={() => { setSfMode(false); applyWith({ sfMode: false }); }}>OSC</button>
+                  <button className={`me-source-btn${sfMode ? ' me-source-btn--active' : ''}`} onClick={() => { setSfMode(true); applyWith({ sfMode: true }); }}>MIDI{!isSoundFontReady() ? '…' : ''}</button>
                 </div>
               </div>
               {!sfMode && (
                 <div className="me-modal__row">
                   <label className="me-label">WAVE</label>
-                  <select className="me-select" value={waveform} onChange={e => setWaveform(e.target.value as OscWaveform)}>
+                  <select className="me-select" value={waveform} onChange={e => { const w = e.target.value as OscWaveform; setWaveform(w); applyWith({ waveform: w }); }}>
                     <option value="sine">Sine</option>
                     <option value="triangle">Triangle</option>
                     <option value="square">Square</option>
@@ -252,7 +262,7 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
                       row.type === 'group'
                         ? <div key={i} className="me-inst-group">{row.label}</div>
                         : <button key={row.prog} className={`me-inst-item${row.prog === gmProg ? ' me-inst-item--active' : ''}`}
-                            onClick={() => setGmProg(row.prog)}>{row.label}</button>
+                            onClick={() => { setGmProg(row.prog); applyWith({ gmProg: row.prog }); }}>{row.label}</button>
                     )}
                   </div>
                 </div>
@@ -262,7 +272,7 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
                 <div className="me-octave-btns">
                   {[-3,-2,-1,0,1,2,3].map(v => (
                     <button key={v} className={`me-btn me-btn--sm${octaveOffset === v ? ' me-btn--primary' : ''}`}
-                      onClick={() => setOctaveOffset(v)}>{v > 0 ? `+${v}` : `${v}`}</button>
+                      onClick={() => { setOctaveOffset(v); applyWith({ octaveOffset: v }); }}>{v > 0 ? `+${v}` : `${v}`}</button>
                   ))}
                 </div>
               </div>
@@ -270,7 +280,7 @@ function InstrumentModal({ track, canDelete, onSave, onClose, onDelete }: Instru
           )}
           <div className="me-modal__row">
             <label className="me-label">VOL {volume}%</label>
-            <input type="range" min={0} max={100} value={volume} onChange={e => setVolume(Number(e.target.value))} className="me-slider" />
+            <input type="range" min={0} max={100} value={volume} onChange={e => { const v = Number(e.target.value); setVolume(v); applyWith({ volume: v }); }} className="me-slider" />
           </div>
           <div className="me-modal__row">
             <label className="me-label">PREVIEW</label>
@@ -825,6 +835,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const [zoomIdx,       setZoomIdx]       = useState(loadZoomIdx);
   const [tool,          setTool]          = useState<EditTool>('paint');
   const [modalTid,      setModalTid]      = useState<string | null>(null);
+  const modalOrigRef = useRef<Partial<Track> | null>(null);
   const [showSave,      setShowSave]      = useState(false);
   const [showLoad,      setShowLoad]      = useState(false);
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set<string>());
@@ -1512,7 +1523,10 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
                 paintModeRef={paintModeRef}
                 lastNoteDurationRef={lastNoteDurationRef}
                 onToggleCollapse={() => toggleCollapse(track.id)}
-                onGear={() => setModalTid(track.id)}
+                onGear={() => {
+                  modalOrigRef.current = { waveform: track.waveform, volume: track.volume, gmProgram: track.gmProgram, octaveOffset: track.octaveOffset };
+                  setModalTid(track.id);
+                }}
                 onMute={() => muteTrack(track.id)}
                 onAddNote={(pitch, step, duration, noteId) => addNote(track.id, pitch, step, duration, noteId)}
                 onAddDrumNote={(pitch, step) => addNote(track.id, pitch, step)}
@@ -1548,9 +1562,13 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         <InstrumentModal
           track={modalTrack}
           canDelete={(selectedClip?.tracks.length ?? 0) > 1}
-          onSave={updates => { updateTrack(modalTrack.id, updates); setModalTid(null); }}
-          onClose={() => setModalTid(null)}
-          onDelete={() => { deleteTrack(modalTrack.id); setModalTid(null); }}
+          onApply={updates => updateTrack(modalTrack.id, updates)}
+          onSave={updates => { modalOrigRef.current = null; updateTrack(modalTrack.id, updates); setModalTid(null); }}
+          onClose={() => {
+            if (modalOrigRef.current) { updateTrack(modalTrack.id, modalOrigRef.current); modalOrigRef.current = null; }
+            setModalTid(null);
+          }}
+          onDelete={() => { modalOrigRef.current = null; deleteTrack(modalTrack.id); setModalTid(null); }}
         />
       )}
       {showSave && (
