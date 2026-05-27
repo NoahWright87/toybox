@@ -42,6 +42,25 @@
   margin: 0 2px;
 }
 
+.me-tool-group {
+  display: flex;
+  gap: 0;
+}
+
+.me-tool-group .me-btn + .me-btn {
+  border-left-width: 1px;
+}
+
+/* Octave offset row in track settings */
+.me-octave-btns {
+  display: flex;
+  gap: 0;
+}
+
+.me-octave-btns .me-btn + .me-btn {
+  border-left-width: 1px;
+}
+
 .me-label {
   color: #000;
   white-space: nowrap;
@@ -618,6 +637,24 @@
 }
 
 .me-note-rect:hover { filter: brightness(1.15); }
+
+.me-note-rect--selected {
+  outline: 2px solid #ffffff;
+  outline-offset: -1px;
+  filter: brightness(1.2);
+  z-index: 3;
+}
+
+/* Select-mode grid: pointer cursor instead of crosshair */
+.me-note-grid--select .me-cell {
+  cursor: default;
+}
+.me-note-grid--select .me-note-rect {
+  cursor: grab;
+}
+.me-note-grid--select .me-note-rect:active {
+  cursor: grabbing;
+}
 
 .me-note-resize-handle {
   position: absolute;

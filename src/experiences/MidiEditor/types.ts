@@ -1,4 +1,5 @@
 export type OscWaveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
+export type EditTool = 'select' | 'draw' | 'paint';
 
 // GM instrument names, index = program number 0–127
 export const GM_PROGRAMS: string[] = [
@@ -64,6 +65,7 @@ export interface Track {
   release: number;    // seconds
   collapsed: boolean;
   drumRows?: number[]; // ordered MIDI pitches; only meaningful for drum tracks
+  octaveOffset: number; // semitone shift applied at playback/preview (multiples of 12)
 }
 
 export interface Pattern {
@@ -133,8 +135,8 @@ export function pitchName(pitch: number): string {
   return `${names[pitch % 12]}${Math.floor(pitch / 12) - 1}`;
 }
 
-function makeTrack(partial: Omit<Track, 'volume'|'attack'|'release'|'collapsed'>): Track {
-  return { ...partial, volume: 1, attack: 0.01, release: 0.3, collapsed: false };
+function makeTrack(partial: Omit<Track, 'volume'|'attack'|'release'|'collapsed'|'octaveOffset'>): Track {
+  return { ...partial, volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0 };
 }
 
 export function createInitialPattern(): Pattern {
