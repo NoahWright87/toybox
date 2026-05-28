@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import "./SoundRecorder.css";
+
+// Find Sound Recorder's FS folder by its known path
+function getSoundDirId(): string | undefined {
+  const node = fsStore.getNodeByPath("C:\\Programs\\Accessories\\Sound Recorder");
+  return node?.kind === "folder" ? node.id : undefined;
+}
 
 // ── IndexedDB helpers ──────────────────────────────────────────────────────────
 
@@ -82,22 +89,6 @@ function draftTimestamp(): string {
   if (!raw) return "unknown time";
   const d = new Date(parseInt(raw, 10));
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-// ── localStorage: saved sound file names (for desktop icons) ──────────────────
-
-const LS_SOUNDS = "ns97_sound_names";
-
-export function lsGetSoundNames(): string[] {
-  try { return JSON.parse(localStorage.getItem(LS_SOUNDS) ?? "[]") as string[]; }
-  catch { return []; }
-}
-
-function lsAddSoundName(name: string): void {
-  const names = lsGetSoundNames();
-  if (!names.includes(name)) {
-    localStorage.setItem(LS_SOUNDS, JSON.stringify([...names, name]));
-  }
 }
 
 // ── WAV export: 8-bit, 8 kHz, mono (authentic lo-fi) ─────────────────────────
@@ -590,10 +581,21 @@ export default function SoundRecorder({
   }
 
   function handleOpenFile() {
-    idbListNames().then(names => {
-      setOpenDlgFiles(names);
+    const soundDirId = getSoundDirId();
+    if (soundDirId) {
+      // List .wav files registered in the FS
+      const wavNames = fsStore.getChildren(soundDirId)
+        .filter((n) => n.kind === "file" && (n as { fileType: string }).fileType === "wav")
+        .map((n) => n.name);
+      setOpenDlgFiles(wavNames);
       setShowOpenDlg(true);
-    }).catch(() => setStatusMsg("Error reading saved files"));
+    } else {
+      // Fallback: query IDB directly (no FS folder found)
+      idbListNames().then(names => {
+        setOpenDlgFiles(names.filter(n => !n.startsWith("__")));
+        setShowOpenDlg(true);
+      }).catch(() => setStatusMsg("Error reading saved files"));
+    }
   }
 
   function handleOpenFileSelect(name: string) {
@@ -660,7 +662,11 @@ export default function SoundRecorder({
     const saveName = name.endsWith(".wav") ? name : `${name}.wav`;
     setShowSaveDlg(false);
     idbSave(saveName, samplesRef.current, srRef.current).then(() => {
-      lsAddSoundName(saveName);
+      // Register a metadata node in the FS so the file appears in the browser
+      const soundDirId = getSoundDirId();
+      if (soundDirId) {
+        fsStore.ensureFile(soundDirId, saveName, { fileType: "wav", appId: "sound-recorder" });
+      }
       setFileName(saveName);
       fileNameRef.current = saveName;
       setStatusMsg("Saved");

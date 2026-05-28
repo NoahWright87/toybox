@@ -1,14 +1,16 @@
 // Well-known folder IDs — stable across reloads, used for direct navigation
-export const ROOT_ID      = "fs:root";
-export const DESKTOP_ID   = "fs:desktop";
-export const DUMPSTER_ID  = "fs:dumpster";
-export const DOCUMENTS_ID = "fs:documents";
-export const PROGRAMS_ID  = "fs:programs";
-export const GAMES_ID     = "fs:games";
-export const ACC_ID       = "fs:accessories";
-export const SYSTEM_ID    = "fs:system";
-export const DOWNLOADS_ID = "fs:downloads";
-export const EGO_ID       = "fs:ego";
+export const ROOT_ID          = "fs:root";
+export const DESKTOP_ID       = "fs:desktop";
+export const DUMPSTER_ID      = "fs:dumpster";
+export const DOCUMENTS_ID     = "fs:documents";
+export const PROGRAMS_ID      = "fs:programs";
+export const GAMES_ID         = "fs:games";
+export const ACC_ID           = "fs:accessories";
+export const SYSTEM_ID        = "fs:system";
+export const DOWNLOADS_ID     = "fs:downloads";
+export const EGO_ID           = "fs:ego";
+// Stable IDs for app-owned files that need reliable direct access
+export const NS_ART_BACKUP_ID = "fs:nsart-backup";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

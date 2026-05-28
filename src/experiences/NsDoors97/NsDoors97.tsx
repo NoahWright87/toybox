@@ -574,6 +574,29 @@ export default function NsDoors97() {
         );
         return;
       }
+      // .wav files in the SR folder should open SR loaded with that recording
+      if (file.fileType === "wav" && file.appId === "sound-recorder") {
+        const winId = `sound-recorder:${file.name}`;
+        setOpenWindows((prev) => {
+          if (prev.some((w) => w.id === winId)) {
+            maxZ++;
+            setActiveWindowId(winId);
+            return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+          }
+          const offset = (windowSeq % 8) * 32;
+          windowSeq++;
+          maxZ++;
+          setActiveWindowId(winId);
+          return [...prev, {
+            id: winId, title: file.name, icon: "🎵",
+            content: { type: "sound-recorder" as const, fileName: file.name },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 420, minimized: false,
+          }];
+        });
+        return;
+      }
       openWindow(file.appId);
       return;
     }

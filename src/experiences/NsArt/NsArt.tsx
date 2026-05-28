@@ -4,6 +4,8 @@ import {
 } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
+import { NS_ART_BACKUP_ID } from "../NsDoors97/filesystem/types";
 import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -549,7 +551,14 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
   useEffect(() => {
     const t = setTimeout(() => {
-      const raw = localStorage.getItem(LS_KEY);
+      // Prefer FS backup; fall back to legacy localStorage, migrating on first read
+      const fsContent = fsStore.getFile(NS_ART_BACKUP_ID)?.content;
+      const legacy = !fsContent ? localStorage.getItem(LS_KEY) : null;
+      if (legacy) {
+        fsStore.writeFile(NS_ART_BACKUP_ID, legacy);
+        localStorage.removeItem(LS_KEY);
+      }
+      const raw = fsContent || legacy;
       if (!raw || !canvasRef.current) return;
       try {
         const backup = JSON.parse(raw);
@@ -636,7 +645,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       );
 
       try {
-        localStorage.setItem(LS_KEY, JSON.stringify({
+        fsStore.writeFile(NS_ART_BACKUP_ID, JSON.stringify({
           version: 2,
           frameW: fw,
           frameH: fh,

@@ -2,6 +2,7 @@ import type { FileSystemStore } from "./FileSystemStore";
 import {
   ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
+  NS_ART_BACKUP_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -383,6 +384,7 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const nsartDir = store.createFolder(ACC_ID, "NS Art");
   store.createFile(nsartDir.id, "NS Art.exe", { fileType: "exe", appId: "nsart" });
+  store.createFile(nsartDir.id, "Untitled.nsart", { id: NS_ART_BACKUP_ID, fileType: "dat", appId: "nsart" });
 
   const soundDir = store.createFolder(ACC_ID, "Sound Recorder");
   store.createFile(soundDir.id, "Sound Recorder.exe", { fileType: "exe", appId: "sound-recorder" });

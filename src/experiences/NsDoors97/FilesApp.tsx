@@ -151,6 +151,12 @@ export default function FilesApp({
       return;
     }
 
+    // Sound recordings — open in Sound Recorder with the specific file loaded
+    if (file.fileType === "wav" && file.appId === "sound-recorder") {
+      onOpenFSNode?.(file.id);
+      return;
+    }
+
     // Executables with an app ID
     if (file.appId) {
       if (file.appId === "tos-only") {

@@ -1,6 +1,6 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
-  ROOT_ID, DUMPSTER_ID,
+  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -173,6 +173,23 @@ export class FileSystemStore {
     return shortcut;
   }
 
+  ensureFile(
+    parentId: string,
+    name: string,
+    options: {
+      content?: string;
+      mimeType?: string;
+      fileType?: FSFileType;
+      appId?: string;
+      system?: boolean;
+      readonly?: boolean;
+    } = {}
+  ): FSFile {
+    const existing = this.findChild(parentId, name);
+    if (existing?.kind === "file") return existing;
+    return this.createFile(parentId, name, options);
+  }
+
   writeFile(id: string, content: string, mimeType?: string): void {
     const node = this.nodes.get(id);
     if (!node || node.kind !== "file") return;
@@ -283,12 +300,42 @@ export class FileSystemStore {
       try {
         const entries = JSON.parse(raw) as [string, FSNode][];
         this.nodes = new Map<string, FSNode>(entries);
+        this.migrate();
         return;
       } catch {
         console.warn("[FS] Corrupt data, re-seeding");
       }
     }
     this.batch(() => seedFileSystem(this));
+  }
+
+  private migrate(): void {
+    let changed = false;
+
+    // Ensure NS Art backup file exists with its stable ID
+    if (!this.nodes.has(NS_ART_BACKUP_ID)) {
+      const nsArtDir = this.getNodeByPath("C:\\Programs\\Accessories\\NS Art");
+      if (nsArtDir?.kind === "folder") {
+        const file: FSFile = {
+          id: NS_ART_BACKUP_ID,
+          kind: "file",
+          name: "Untitled.nsart",
+          parentId: nsArtDir.id,
+          createdAt: Date.now(),
+          modifiedAt: Date.now(),
+          fileType: "dat",
+          content: "",
+          mimeType: "application/json",
+          system: false,
+          readonly: false,
+          appId: "nsart",
+        };
+        this.nodes.set(NS_ART_BACKUP_ID, file);
+        changed = true;
+      }
+    }
+
+    if (changed) this.save();
   }
 }
 
