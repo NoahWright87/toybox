@@ -199,12 +199,127 @@ Key points:
 
 ## NS Doors 97 — key details
 
-NS Doors 97 is the flagship experience. It simulates a 1990s desktop:
+NS Doors 97 is the flagship experience. It simulates a 1990s desktop OS (a Noahsoft parody of Windows 95/98):
 - Draggable windows (`react-draggable`)
-- Desktop icons, taskbar with Start menu
+- Desktop icons driven by the real virtual filesystem (see below)
+- Taskbar with Start menu, clock
 - Screensaver system (activates after idle timeout)
-- Built-in apps: file browser, About Noahsoft dialog, simulated internet browser, Tic-Tac-Toe window
+- Built-in apps: file browser (My Doors), Recycle Bin, About dialog, simulated browser, Notebook, NS Art, Sound Recorder, MIDI Editor, NS-TOS terminal, all games
 - All windows use Win95-style chrome: title bar (orange/brown gradient), close/min/max buttons, beveled borders
+
+## Unified Virtual Filesystem — architecture and rules
+
+**This is the single most important system in Doors 97.** Everything that persists data goes through it. No exceptions.
+
+### Philosophy: NS Doors 97 is hackable
+
+This is intentional design. Users can open files in the fake OS and make changes that have real effects:
+- **Scores** — SCORES.DAT files are plaintext JSON in each game's folder. Open in Notebook, edit the number, save. Your score changes. This is a feature.
+- **Config/INI files** — `win.ini` and `system.ini` in `C:\System\` are (progressively) wired to real OS behavior. Agents should wire up settings rather than leaving them decorative. Example: `[Desktop] Wallpaper=...` should change the desktop wallpaper.
+- **Desktop** — users can add/remove shortcuts, files, and folders on the desktop. The system icons (My Doors, Dumpster) are protected (`system: true`) and cannot be deleted.
+- **App assets (future)** — bundled assets (HELL sprites, wallpapers, sound effects) have FS counterparts. If a user draws a new sprite in NS Art and saves it at the right FS path, the game uses their version on next load. Detection is path-based: non-empty FS file content wins over the bundled file.
+
+### Architecture
+
+| Layer | What |
+|---|---|
+| `FileSystemStore` | Singleton. Flat `Map<string, FSNode>`. Persists to localStorage via `StorageAdapter`. |
+| `StorageAdapter` | Interface: `getItem/setItem/removeItem`. `LocalStorageAdapter` is current impl. Swap for IndexedDB by changing the constructor arg — never bypass it with direct `localStorage` calls. |
+| `FSProvider` + `useFS()` | React context. `FSProvider` subscribes to `fsStore` and re-renders on any change. Use `useFS()` inside the NS Doors 97 component tree. |
+| Direct singleton access | Components outside `FSProvider` (standalone pages, game components) import `fsStore` directly and call it without reactivity. |
+| `seed.ts` | Creates the full C:\ tree on first load (batch call, ~1 save). |
+| `migrate()` | Runs after every load. Adds stable-ID nodes that may have been added after initial seeding. **When you add a new stable-ID node, add it to both `seed.ts` AND `migrate()`.** |
+
+### The mandatory rule
+
+**Every new app or experience that saves any data MUST use `fsStore`. No direct `localStorage` calls, no custom IndexedDB stores, no other mechanism.** If audio data is too large for the FS (Sound Recorder), store it in IDB but register a metadata FSFile in the FS so it appears in the file browser.
+
+### Well-known folder IDs (from `filesystem/types.ts`)
+
+```
+ROOT_ID      = "fs:root"         C:\
+DESKTOP_ID   = "fs:desktop"      drives desktop icon rendering
+DUMPSTER_ID  = "fs:dumpster"     Recycle Bin
+DOCUMENTS_ID = "fs:documents"
+PROGRAMS_ID  = "fs:programs"
+GAMES_ID     = "fs:games"
+ACC_ID       = "fs:accessories"
+SYSTEM_ID    = "fs:system"
+DOWNLOADS_ID = "fs:downloads"
+EGO_ID       = "fs:ego"          HELL game folder
+```
+
+### Stable file IDs (app-owned files that need direct access)
+
+```
+NS_ART_BACKUP_ID = "fs:nsart-backup"   NS Art auto-save
+DH_SCORES_ID     = "fs:scores-dh"      Duck & Learn SCORES.DAT
+TR_SCORES_ID     = "fs:scores-tr"      Typing Racer SCORES.DAT
+```
+
+Add new stable IDs here when an app needs to find a specific file without traversing the tree.
+
+### How to integrate a new app
+
+1. Decide what the FS node(s) look like: which folder they live in, what `fileType` they use, whether they need a stable ID.
+2. Add any stable IDs to `types.ts` and create the file in both `seed.ts` (for new installs) and `migrate()` (for existing sessions).
+3. In the component: use `fsStore.writeFile(id, content)` to save, `fsStore.getFile(id)?.content` to load. Check FS first, then any legacy storage key, then delete the legacy key (one-time migration).
+4. If the file needs to open with a specific app when double-clicked from FilesApp, set `appId` on the FSFile.
+
+### Key API
+
+```typescript
+// Queries
+fsStore.getNode(id)          // FSNode | undefined
+fsStore.getFile(id)          // FSFile | undefined
+fsStore.getChildren(folderId)  // sorted: folders first, then alpha
+fsStore.getPath(id)          // "C:\\Documents\\todo.txt"
+fsStore.getNodeByPath(path)  // resolves "C:\\..." path string to a node
+fsStore.findChild(folderId, name)  // case-insensitive name lookup
+
+// Mutations
+fsStore.createFile(parentId, name, options?)   // options: fileType, appId, content, readonly, system, id
+fsStore.createFolder(parentId, name, options?) // options: system, id
+fsStore.createShortcut(parentId, name, options?) // options: targetAppId, targetFilePath, system, id
+fsStore.ensureFile(parentId, name, options?)   // find-or-create
+fsStore.writeFile(id, content)  // update content, triggers re-render
+fsStore.deleteNode(id)          // moves to Dumpster (unless already there → permanentDelete)
+fsStore.emptyDumpster()
+fsStore.batch(fn)               // defer save/emit until after fn
+```
+
+### FSNode types
+
+```typescript
+type FSFileType = "text"|"exe"|"bat"|"sys"|"scr"|"drv"|"tmp"|"zip"|"bmp"|"png"|"ini"|"wav"|"dat"|"lnk"
+
+interface FSFile     { kind:"file",     ..., fileType, content:string, readonly, appId? }
+interface FSFolder   { kind:"folder",   ..., parentId: string|null, system }
+interface FSShortcut { kind:"shortcut", ..., targetAppId?, targetFilePath?, system }
+```
+
+- Shortcuts with `system: true` cannot be deleted by users.
+- `appId` on a file determines which app opens it when double-clicked in the file browser.
+- A `.wav` file with `appId: "sound-recorder"` opens Sound Recorder pre-loaded with that recording.
+
+### Current integrations at a glance
+
+| App | FS path | Stable ID | Notes |
+|---|---|---|---|
+| NS Art backup | `C:\Programs\Accessories\NS Art\Untitled.nsart` | `NS_ART_BACKUP_ID` | Full JSON backup content stored in FS |
+| Sound recordings | `C:\Programs\Accessories\Sound Recorder\*.wav` | — | Metadata node only; audio stays in IDB |
+| Duck & Learn scores | `C:\Programs\Games\Duck & Learn\SCORES.DAT` | `DH_SCORES_ID` | JSON array, hackable in Notebook |
+| Typing Racer score | `C:\Programs\Games\Typing Racer\SCORES.DAT` | `TR_SCORES_ID` | Single integer string |
+| Notebook files | anywhere in `C:\` | — | Full text content in FS |
+| Desktop shortcuts | `C:\Desktop\` | — | Created when Notebook/SoundRecorder saves |
+
+### Future vision (preserve these for future agents)
+
+1. **StorageAdapter swap** — Swap `LocalStorageAdapter` for an IndexedDB adapter when storage needs grow. Change the constructor; all app code stays the same.
+2. **Asset override system** — Bundled repo files (sprites in `/public/`, wallpapers) have FS counterparts seeded as stubs. When the FS file has non-empty content, the game/app uses it instead of the bundled file. Path-based detection.
+3. **Config file wiring** — `win.ini`/`system.ini` entries should progressively affect real OS behavior. Wire them up; don't leave them decorative.
+4. **NS-TOS as a real shell** — Expand terminal commands (COPY, MOVE, more piping) to operate on the real FS.
+5. **All new apps** — Any new app or feature that persists state must integrate with the FS. Do not add standalone localStorage keys.
 
 ## Before finishing any task
 
