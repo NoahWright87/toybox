@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ROOT, type FsFolder, type FsFile } from "../NsDoors97/fileSystem";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
+import { ROOT_ID, type FSFile } from "../NsDoors97/filesystem/types";
 import "./NsToS.css";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -10,7 +11,7 @@ interface TerminalLine {
   error?: boolean;
 }
 
-// ── Boot sequence lines (simulates CONFIG.SYS + AUTOEXEC.BAT running) ─────────
+// ── Boot sequence lines ────────────────────────────────────────────────────────
 
 const BOOT_LINES: string[] = [
   "NS-TOS Version 7.22",
@@ -28,21 +29,8 @@ const BOOT_LINES: string[] = [
 
 // ── Filesystem helpers ────────────────────────────────────────────────────────
 
-function getFolder(cwd: string[]): FsFolder | null {
-  let node: FsFolder = ROOT;
-  for (const seg of cwd) {
-    const child = node.children.find(
-      (c) => c.kind === "folder" && c.name.toLowerCase() === seg.toLowerCase()
-    );
-    if (!child || child.kind !== "folder") return null;
-    node = child;
-  }
-  return node;
-}
-
-function promptStr(cwd: string[]): string {
-  if (cwd.length === 0) return "C:\\>";
-  return `C:\\${cwd.join("\\")}\\>`;
+function promptStr(cwdId: string): string {
+  return fsStore.getPath(cwdId) + ">";
 }
 
 // ── Retro date/time (real time, date shifted 30 years back) ──────────────────
@@ -52,19 +40,13 @@ function retroDate(): string {
   const retro = new Date(now);
   retro.setFullYear(now.getFullYear() - 30);
   return retro.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+    weekday: "short", month: "short", day: "numeric", year: "numeric",
   });
 }
 
 function retroTime(): string {
   return new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
+    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
   });
 }
 
@@ -74,53 +56,42 @@ export default function NsToS() {
   const navigate = useNavigate();
   const [lines, setLines] = useState<TerminalLine[]>([]);
   const [ready, setReady] = useState(false);
-  const [cwd, setCwd] = useState<string[]>([]);
+  const [cwdId, setCwdId] = useState<string>(ROOT_ID);
   const [input, setInput] = useState("");
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom whenever lines change
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [lines]);
 
-  // Boot sequence — type out lines with small delays
+  // Boot sequence
   useEffect(() => {
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
-
     let delay = 0;
     for (const text of BOOT_LINES) {
       delay += 45 + Math.random() * 35;
       const d = delay;
-      timers.push(
-        setTimeout(() => {
-          if (!cancelled) setLines((prev) => [...prev, { text }]);
-        }, d)
-      );
+      timers.push(setTimeout(() => {
+        if (!cancelled) setLines((prev) => [...prev, { text }]);
+      }, d));
     }
-
-    timers.push(
-      setTimeout(() => {
-        if (!cancelled) setReady(true);
-      }, delay + 60)
-    );
-
+    timers.push(setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, delay + 60));
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
     };
   }, []);
 
-  // Focus the input when the terminal is ready
   useEffect(() => {
-    if (ready && inputRef.current) {
-      inputRef.current.focus();
-    }
+    if (ready && inputRef.current) inputRef.current.focus();
   }, [ready]);
 
   const addLines = useCallback((newLines: TerminalLine[]) => {
@@ -133,21 +104,21 @@ export default function NsToS() {
     (raw: string) => {
       const trimmed = raw.trim();
       if (!trimmed) {
-        addLines([{ text: `${promptStr(cwd)}` }]);
+        addLines([{ text: promptStr(cwdId) }]);
         return;
       }
 
       setCmdHistory((prev) => [trimmed, ...prev].slice(0, 50));
       setHistoryIdx(-1);
-
-      // Echo the command line
-      addLines([{ text: `${promptStr(cwd)}${trimmed}` }]);
+      addLines([{ text: `${promptStr(cwdId)}${trimmed}` }]);
 
       // Normalize "CD.." → "CD .."
       const normalized = trimmed.replace(/^(cd)(\.\.+)$/i, "$1 $2");
-      const parts = normalized.split(/\s+/);
-      const cmd = parts[0].toUpperCase();
-      const args = parts.slice(1);
+      // Split on first whitespace only so "ECHO hello world" stays intact
+      const spaceIdx = normalized.indexOf(" ");
+      const cmd = (spaceIdx === -1 ? normalized : normalized.slice(0, spaceIdx)).toUpperCase();
+      const argStr = spaceIdx === -1 ? "" : normalized.slice(spaceIdx + 1);
+      const args = argStr.split(/\s+/).filter(Boolean);
 
       switch (cmd) {
         case "CLS": {
@@ -162,12 +133,16 @@ export default function NsToS() {
             { text: "Available commands:" },
             { text: "" },
             { text: "  CLS             Clear the screen" },
-            { text: "  CD [dir]        Change directory  (CD.. to go up, CD \\ for root)" },
+            { text: "  CD [dir]        Change directory  (supports multi-level: cd Programs\\Games)" },
             { text: "  DATE            Display the current date" },
+            { text: "  DEL [file]      Delete a file (moves to Recycle Bin)" },
             { text: "  DIR             List files in current directory" },
             { text: "  DOORS           Launch NS Doors 97" },
-            { text: "  ECHO [text]     Display a message" },
+            { text: "  ECHO [text]     Display a message (ECHO text > file.txt writes a file)" },
             { text: "  HELP            Display this help text" },
+            { text: "  MKDIR [dir]     Create a new directory" },
+            { text: "  REN [old] [new] Rename a file or folder" },
+            { text: "  RMDIR [dir]     Remove an empty directory" },
             { text: "  TIME            Display the current time" },
             { text: "  TYPE [file]     Display contents of a text file" },
             { text: "  VER             Display NS-TOS version" },
@@ -187,51 +162,55 @@ export default function NsToS() {
         }
 
         case "DATE": {
-          addLines([
-            { text: "" },
-            { text: `Current date is: ${retroDate()}` },
-            { text: "" },
-          ]);
+          addLines([{ text: "" }, { text: `Current date is: ${retroDate()}` }, { text: "" }]);
           break;
         }
 
         case "TIME": {
-          addLines([
-            { text: "" },
-            { text: `Current time is: ${retroTime()}` },
-            { text: "" },
-          ]);
+          addLines([{ text: "" }, { text: `Current time is: ${retroTime()}` }, { text: "" }]);
           break;
         }
 
         case "ECHO": {
-          const msg = args.join(" ");
-          addLines([{ text: msg || "ECHO is on." }, { text: "" }]);
+          // Handle ECHO text > filename
+          const redirectIdx = argStr.lastIndexOf(">");
+          if (redirectIdx !== -1) {
+            const text = argStr.slice(0, redirectIdx).trim();
+            const filename = argStr.slice(redirectIdx + 1).trim();
+            if (!filename) {
+              addLines([{ text: "Syntax error.", error: true }, { text: "" }]);
+              break;
+            }
+            const existing = fsStore.findChild(cwdId, filename);
+            if (existing && existing.kind === "file") {
+              fsStore.writeFile(existing.id, text);
+            } else if (!existing) {
+              fsStore.createFile(cwdId, filename, { fileType: "text", content: text });
+            } else {
+              addLines([{ text: `Cannot write to "${filename}": not a file.`, error: true }, { text: "" }]);
+              break;
+            }
+            addLines([{ text: "" }]);
+            break;
+          }
+          addLines([{ text: argStr || "ECHO is on." }, { text: "" }]);
           break;
         }
 
         case "DIR": {
-          const folder = getFolder(cwd);
-          if (!folder) {
-            addLines([{ text: "Invalid directory.", error: true }, { text: "" }]);
-            break;
-          }
+          const children = fsStore.getChildren(cwdId);
+          const dirPath = fsStore.getPath(cwdId) + "\\";
           const dateStr = retroDate();
-          const dirPath = cwd.length === 0 ? "C:\\" : `C:\\${cwd.join("\\")}\\`;
-          addLines([
-            { text: "" },
-            { text: ` Directory of ${dirPath}` },
-            { text: "" },
-          ]);
-          for (const node of folder.children) {
+          addLines([{ text: "" }, { text: ` Directory of ${dirPath}` }, { text: "" }]);
+          for (const node of children) {
             if (node.kind === "folder") {
               addLines([{ text: `${dateStr}    <DIR>    ${node.name}` }]);
             } else {
               addLines([{ text: `${dateStr}             ${node.name}` }]);
             }
           }
-          const dirCount = folder.children.filter((n) => n.kind === "folder").length;
-          const fileCount = folder.children.filter((n) => n.kind === "file").length;
+          const dirCount = children.filter((n) => n.kind === "folder").length;
+          const fileCount = children.length - dirCount;
           addLines([
             { text: "" },
             { text: `       ${fileCount} file(s)     ${dirCount} dir(s)` },
@@ -241,70 +220,68 @@ export default function NsToS() {
         }
 
         case "CD": {
-          const arg = args[0] ?? "";
+          const arg = argStr.trim();
 
           if (!arg || arg === ".") {
             addLines([{ text: "" }]);
             break;
           }
 
-          // Go to root
+          // Root shortcuts
           if (arg === "\\" || arg.toUpperCase() === "C:\\" || arg.toUpperCase() === "C:") {
-            setCwd([]);
+            setCwdId(ROOT_ID);
             addLines([{ text: "" }]);
             break;
           }
 
-          // Go up
-          if (arg === ".." || arg.startsWith("..")) {
-            setCwd((prev) => prev.slice(0, -1));
-            addLines([{ text: "" }]);
-            break;
+          // Walk through path segments (supports multi-level: Programs\Games)
+          const isAbsolute = /^C:[\\\/]/i.test(arg) || arg.startsWith("\\");
+          const segments = arg
+            .replace(/^C:[\\\/]/i, "")
+            .replace(/^[\\\/]/, "")
+            .split(/[\\\/]/);
+
+          let currentId = isAbsolute ? ROOT_ID : cwdId;
+          let failed = false;
+
+          for (const seg of segments) {
+            if (!seg || seg === ".") continue;
+            if (seg === "..") {
+              const node = fsStore.getNode(currentId);
+              currentId = node?.parentId ?? ROOT_ID;
+              continue;
+            }
+            const child = fsStore.findChild(currentId, seg);
+            if (!child || child.kind !== "folder") {
+              failed = true;
+              break;
+            }
+            currentId = child.id;
           }
 
-          // Navigate into a child folder
-          const folder = getFolder(cwd);
-          const target = folder?.children.find(
-            (c) => c.kind === "folder" && c.name.toLowerCase() === arg.toLowerCase()
-          );
-          if (!target || target.kind !== "folder") {
-            addLines([
-              { text: `Invalid directory - "${arg}"`, error: true },
-              { text: "" },
-            ]);
+          if (failed) {
+            addLines([{ text: `Invalid directory - "${arg}"`, error: true }, { text: "" }]);
             break;
           }
-          setCwd((prev) => [...prev, target.name]);
+          setCwdId(currentId);
           addLines([{ text: "" }]);
           break;
         }
 
         case "TYPE": {
-          const filename = args.join(" ");
+          const filename = argStr.trim();
           if (!filename) {
-            addLines([
-              { text: "Required parameter missing.", error: true },
-              { text: "" },
-            ]);
+            addLines([{ text: "Required parameter missing.", error: true }, { text: "" }]);
             break;
           }
-          const folder = getFolder(cwd);
-          const file = folder?.children.find(
-            (c): c is FsFile =>
-              c.kind === "file" && c.name.toLowerCase() === filename.toLowerCase()
-          );
-          if (!file) {
-            addLines([
-              { text: `File not found - "${filename}"`, error: true },
-              { text: "" },
-            ]);
+          const child = fsStore.findChild(cwdId, filename);
+          if (!child || child.kind !== "file") {
+            addLines([{ text: `File not found - "${filename}"`, error: true }, { text: "" }]);
             break;
           }
+          const file = child as FSFile;
           if (!file.content) {
-            addLines([
-              { text: "This file type cannot be displayed.", error: true },
-              { text: "" },
-            ]);
+            addLines([{ text: "This file type cannot be displayed.", error: true }, { text: "" }]);
             break;
           }
           addLines([
@@ -312,6 +289,94 @@ export default function NsToS() {
             ...file.content.split("\n").map((t) => ({ text: t })),
             { text: "" },
           ]);
+          break;
+        }
+
+        case "MKDIR":
+        case "MD": {
+          const dirname = argStr.trim();
+          if (!dirname) {
+            addLines([{ text: "Required parameter missing.", error: true }, { text: "" }]);
+            break;
+          }
+          if (fsStore.findChild(cwdId, dirname)) {
+            addLines([{ text: `A subdirectory or file "${dirname}" already exists.`, error: true }, { text: "" }]);
+            break;
+          }
+          fsStore.createFolder(cwdId, dirname);
+          addLines([{ text: "" }]);
+          break;
+        }
+
+        case "RMDIR":
+        case "RD": {
+          const dirname = argStr.trim();
+          if (!dirname) {
+            addLines([{ text: "Required parameter missing.", error: true }, { text: "" }]);
+            break;
+          }
+          const rmdirTarget = fsStore.findChild(cwdId, dirname);
+          if (!rmdirTarget || rmdirTarget.kind !== "folder") {
+            addLines([{ text: `Directory not found - "${dirname}"`, error: true }, { text: "" }]);
+            break;
+          }
+          if (rmdirTarget.system) {
+            addLines([{ text: "Access denied.", error: true }, { text: "" }]);
+            break;
+          }
+          if (fsStore.getChildren(rmdirTarget.id).length > 0) {
+            addLines([{ text: "Directory is not empty.", error: true }, { text: "" }]);
+            break;
+          }
+          fsStore.deleteNode(rmdirTarget.id);
+          addLines([{ text: "" }]);
+          break;
+        }
+
+        case "DEL":
+        case "ERASE": {
+          const filename = argStr.trim();
+          if (!filename) {
+            addLines([{ text: "Required parameter missing.", error: true }, { text: "" }]);
+            break;
+          }
+          const delTarget = fsStore.findChild(cwdId, filename);
+          if (!delTarget) {
+            addLines([{ text: `File not found - "${filename}"`, error: true }, { text: "" }]);
+            break;
+          }
+          if (delTarget.system) {
+            addLines([{ text: "Access denied.", error: true }, { text: "" }]);
+            break;
+          }
+          if (delTarget.kind === "folder") {
+            addLines([{ text: `Cannot delete directory with DEL. Use RMDIR.`, error: true }, { text: "" }]);
+            break;
+          }
+          fsStore.deleteNode(delTarget.id);
+          addLines([{ text: "" }]);
+          break;
+        }
+
+        case "REN":
+        case "RENAME": {
+          if (args.length < 2) {
+            addLines([{ text: "Required parameter missing.", error: true }, { text: "" }]);
+            break;
+          }
+          const oldName = args[0];
+          const newName = args.slice(1).join(" ");
+          const renTarget = fsStore.findChild(cwdId, oldName);
+          if (!renTarget) {
+            addLines([{ text: `File not found - "${oldName}"`, error: true }, { text: "" }]);
+            break;
+          }
+          if (renTarget.system) {
+            addLines([{ text: "Access denied.", error: true }, { text: "" }]);
+            break;
+          }
+          fsStore.renameNode(renTarget.id, newName);
+          addLines([{ text: "" }]);
           break;
         }
 
@@ -326,11 +391,7 @@ export default function NsToS() {
         }
 
         case "DELTREE": {
-          addLines([
-            { text: "" },
-            { text: "Delete everything? Let's not." },
-            { text: "" },
-          ]);
+          addLines([{ text: "" }, { text: "Delete everything? Let's not." }, { text: "" }]);
           break;
         }
 
@@ -348,18 +409,21 @@ export default function NsToS() {
         }
 
         case "DOORS": {
-          addLines([
-            { text: "" },
-            { text: "Loading NS Doors 97..." },
-            { text: "" },
-          ]);
-          setTimeout(() => {
-            navigate("/", { state: { fromTos: true } });
-          }, 800);
+          addLines([{ text: "" }, { text: "Loading NS Doors 97..." }, { text: "" }]);
+          setTimeout(() => navigate("/", { state: { fromTos: true } }), 800);
           break;
         }
 
         case "HELL.EXE": {
+          const hellFile = fsStore.findChild(cwdId, "HELL.EXE");
+          if (!hellFile || hellFile.kind !== "file") {
+            addLines([
+              { text: `Bad command or file name - "${trimmed}"` },
+              { text: `HINT: Navigate to the EGO folder first. Try: cd EGO` },
+              { text: "" },
+            ]);
+            break;
+          }
           addLines([
             { text: "" },
             { text: "HELL v0.3 — EGO SOFTWARE INC." },
@@ -380,15 +444,12 @@ export default function NsToS() {
         }
 
         default: {
-          addLines([
-            { text: `Bad command or file name - "${trimmed}"` },
-            { text: "" },
-          ]);
+          addLines([{ text: `Bad command or file name - "${trimmed}"` }, { text: "" }]);
           break;
         }
       }
     },
-    [cwd, addLines, navigate]
+    [cwdId, addLines, navigate]
   );
 
   // ── Keyboard handling ─────────────────────────────────────────────────────
@@ -416,12 +477,12 @@ export default function NsToS() {
         setHistoryIdx(-1);
       } else if (e.key === "c" && e.ctrlKey) {
         e.preventDefault();
-        addLines([{ text: `${promptStr(cwd)}${input}^C` }, { text: "" }]);
+        addLines([{ text: `${promptStr(cwdId)}${input}^C` }, { text: "" }]);
         setInput("");
         setHistoryIdx(-1);
       }
     },
-    [input, processCommand, historyIdx, cmdHistory, cwd, addLines]
+    [input, processCommand, historyIdx, cmdHistory, cwdId, addLines]
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -434,13 +495,13 @@ export default function NsToS() {
             key={i}
             className={`ns-tos__line${line.error ? " ns-tos__line--error" : ""}`}
           >
-            {line.text || " "}
+            {line.text || " "}
           </div>
         ))}
       </div>
       {ready && (
         <div className="ns-tos__input-row">
-          <span className="ns-tos__prompt">{promptStr(cwd)}</span>
+          <span className="ns-tos__prompt">{promptStr(cwdId)}</span>
           <input
             ref={inputRef}
             className="ns-tos__input"

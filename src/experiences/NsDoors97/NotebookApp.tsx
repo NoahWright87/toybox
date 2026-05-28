@@ -2,71 +2,56 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useOsDialog } from "./OsDialog";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { fsStore } from "./filesystem/FileSystemStore";
 import "./NotebookApp.css";
 
 interface NotebookAppProps {
-  filePath: string;
+  fileId: string;
   fileName: string;
-  initialContent: string;
-  onFileSaved?: (filePath: string, fileName: string) => void;
+  onFileSaved?: (fileId: string, fileName: string) => void;
 }
 
-const STORAGE_PREFIX = "ns97_notebook_";
-
-function storageKey(path: string) {
-  return STORAGE_PREFIX + path;
-}
-
-export default function NotebookApp({ filePath, fileName, initialContent, onFileSaved }: NotebookAppProps) {
+export default function NotebookApp({ fileId, fileName, onFileSaved }: NotebookAppProps) {
   const { showDialog } = useOsDialog();
-  const isNewFile = filePath === "(new file)";
 
-  const [content, setContent] = useState(() => {
-    if (isNewFile) return "";
-    const saved = localStorage.getItem(storageKey(filePath));
-    return saved !== null ? saved : initialContent;
-  });
+  const fsFile = fsStore.getFile(fileId);
+  const isReadOnly = fsFile?.readonly ?? false;
+  const filePath = fsStore.getPath(fileId);
 
+  const [content, setContent] = useState(() => fsStore.getFile(fileId)?.content ?? "");
   const [dirty, setDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [wordWrap, setWordWrap] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Reset when a different file is opened in the same window (shouldn't normally happen,
-  // but guards against edge cases)
-  const prevPathRef = useRef(filePath);
+  // Reset when a different file is opened in the same window
+  const prevIdRef = useRef(fileId);
   useEffect(() => {
-    if (prevPathRef.current !== filePath) {
-      prevPathRef.current = filePath;
-      const saved = localStorage.getItem(storageKey(filePath));
-      setContent(saved !== null ? saved : initialContent);
+    if (prevIdRef.current !== fileId) {
+      prevIdRef.current = fileId;
+      setContent(fsStore.getFile(fileId)?.content ?? "");
       setDirty(false);
       setLastSaved(null);
     }
-  }, [filePath, initialContent]);
+  }, [fileId]);
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setContent(e.target.value);
     setDirty(true);
   }
 
-  // Capture latest content via ref so save() stays stable
   const contentRef = useRef(content);
   contentRef.current = content;
 
   const save = useCallback(() => {
-    localStorage.setItem(storageKey(filePath), contentRef.current);
+    fsStore.writeFile(fileId, contentRef.current);
     setDirty(false);
-    const now = new Date();
-    setLastSaved(now.toLocaleTimeString());
+    setLastSaved(new Date().toLocaleTimeString());
     showDialog(`File saved.\n\n${fileName}`, { title: "Notebook", icon: "💾" });
-    onFileSaved?.(filePath, fileName);
-  }, [filePath, fileName, showDialog, onFileSaved]);
+    onFileSaved?.(fileId, fileName);
+  }, [fileId, fileName, showDialog, onFileSaved]);
 
   const toggleWordWrap = useCallback(() => setWordWrap((w) => !w), []);
-
-  const isReadOnly = !isNewFile && initialContent !== undefined &&
-    (filePath.includes("System\\") || filePath.includes("Drivers\\") || filePath.includes("Temp\\"));
 
   const menus = useMemo<MenuBarMenu[]>(() => [
     {
@@ -90,10 +75,7 @@ export default function NotebookApp({ filePath, fileName, initialContent, onFile
 
   return (
     <div className="nsnb-window">
-      {/* ── Path bar ── */}
       <div className="nsnb-pathbar nsnb-sunken">{filePath}</div>
-
-      {/* ── Text area ── */}
       <textarea
         ref={textareaRef}
         className={`nsnb-editor${wordWrap ? "" : " nsnb-editor--nowrap"}`}
@@ -103,8 +85,6 @@ export default function NotebookApp({ filePath, fileName, initialContent, onFile
         spellCheck={false}
         aria-label={`Editing ${fileName}`}
       />
-
-      {/* ── Status bar ── */}
       <div className="nsnb-statusbar nsnb-sunken">
         <span>{lineCount} line{lineCount !== 1 ? "s" : ""}</span>
         <span className="nsnb-statusbar__sep">|</span>
