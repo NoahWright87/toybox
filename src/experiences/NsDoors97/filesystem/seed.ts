@@ -2,7 +2,7 @@ import type { FileSystemStore } from "./FileSystemStore";
 import {
   ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
-  NS_ART_BACKUP_ID,
+  NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -359,7 +359,7 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const dhDir = store.createFolder(GAMES_ID, "Duck & Learn");
   store.createFile(dhDir.id, "Duck & Learn.exe", { fileType: "exe", appId: "duckhunt" });
-  store.createFile(dhDir.id, "SCORES.DAT",       { fileType: "dat", content: "" });
+  store.createFile(dhDir.id, "SCORES.DAT",       { fileType: "dat", content: "", id: DH_SCORES_ID });
 
   const bfDir = store.createFolder(GAMES_ID, "Bomb Finder");
   store.createFile(bfDir.id, "Bomb Finder.exe", { fileType: "exe", appId: "bombfinder" });
@@ -370,6 +370,10 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const pegDir = store.createFolder(GAMES_ID, "Peg Solitaire");
   store.createFile(pegDir.id, "Peg Solitaire.exe", { fileType: "exe", appId: "peg-solitaire" });
+
+  const trDir = store.createFolder(GAMES_ID, "Typing Racer");
+  store.createFile(trDir.id, "Typing Racer.exe", { fileType: "exe", appId: "typing-racer" });
+  store.createFile(trDir.id, "SCORES.DAT",       { fileType: "dat", content: "", id: TR_SCORES_ID });
 
   // Stub / unimplemented games (no appId — opens "not a valid NS Doors application")
   store.createFile(GAMES_ID, "Solitaire.exe",   { fileType: "exe" });
@@ -439,6 +443,21 @@ export function seedFileSystem(store: FileSystemStore): void {
     content: "@ECHO OFF\nECHO HELL is already installed.\nECHO Launch NS-TOS and type HELL.EXE to play.\n",
     readonly: true,
   });
+
+  const spritesDir = store.createFolder(EGO_ID, "SPRITES");
+  const spriteNames = [
+    "ENEMY0.BMP", "ENEMY1.BMP", "ENEMY2.BMP", "ENEMY_DEAD.BMP",
+    "GUN_PISTOL.BMP", "GUN_CLAWS.BMP", "GUN_FLAMET.BMP",
+    "GUN_WOOFER.BMP", "GUN_TENNIS.BMP",
+    "KEY_RED.BMP", "KEY_BLUE.BMP", "KEY_GREEN.BMP",
+    "KEY_ORANGE.BMP", "KEY_PURPLE.BMP", "KEY_YELLOW.BMP",
+    "PICKUP_HP.BMP", "PICKUP_AMM.BMP", "PICKUP_FUEL.BMP",
+    "FLAME.BMP", "IMPACT_W.BMP", "IMPACT_E.BMP",
+    "TARGET.BMP", "TARGET_D.BMP",
+  ];
+  for (const name of spriteNames) {
+    store.createFile(spritesDir.id, name, { fileType: "bmp", readonly: true });
+  }
 
   // ── Recycle Bin (Dumpster) ────────────────────────────────────────────────
   store.createFolder(ROOT_ID, "Recycle Bin", { id: DUMPSTER_ID, system: true });

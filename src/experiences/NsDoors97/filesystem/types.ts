@@ -11,6 +11,8 @@ export const DOWNLOADS_ID     = "fs:downloads";
 export const EGO_ID           = "fs:ego";
 // Stable IDs for app-owned files that need reliable direct access
 export const NS_ART_BACKUP_ID = "fs:nsart-backup";
+export const DH_SCORES_ID     = "fs:scores-dh";
+export const TR_SCORES_ID     = "fs:scores-tr";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

@@ -1,6 +1,6 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
-  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID,
+  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -316,21 +316,65 @@ export class FileSystemStore {
     if (!this.nodes.has(NS_ART_BACKUP_ID)) {
       const nsArtDir = this.getNodeByPath("C:\\Programs\\Accessories\\NS Art");
       if (nsArtDir?.kind === "folder") {
-        const file: FSFile = {
-          id: NS_ART_BACKUP_ID,
-          kind: "file",
-          name: "Untitled.nsart",
-          parentId: nsArtDir.id,
-          createdAt: Date.now(),
-          modifiedAt: Date.now(),
-          fileType: "dat",
-          content: "",
-          mimeType: "application/json",
-          system: false,
-          readonly: false,
-          appId: "nsart",
-        };
-        this.nodes.set(NS_ART_BACKUP_ID, file);
+        this.nodes.set(NS_ART_BACKUP_ID, {
+          id: NS_ART_BACKUP_ID, kind: "file", name: "Untitled.nsart",
+          parentId: nsArtDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "application/json",
+          system: false, readonly: false, appId: "nsart",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Duck & Learn SCORES.DAT exists with its stable ID
+    if (!this.nodes.has(DH_SCORES_ID)) {
+      const dhDir = this.getNodeByPath("C:\\Programs\\Games\\Duck & Learn");
+      if (dhDir?.kind === "folder") {
+        const existing = this.findChild(dhDir.id, "SCORES.DAT");
+        if (existing?.kind === "file") {
+          // Re-register existing file under stable ID (keeping its content)
+          this.nodes.delete(existing.id);
+          this.nodes.set(DH_SCORES_ID, { ...existing, id: DH_SCORES_ID });
+        } else {
+          this.nodes.set(DH_SCORES_ID, {
+            id: DH_SCORES_ID, kind: "file", name: "SCORES.DAT",
+            parentId: dhDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "dat", content: "", mimeType: "text/plain",
+            system: false, readonly: false,
+          } as FSFile);
+        }
+        changed = true;
+      }
+    }
+
+    // Ensure Typing Racer folder + SCORES.DAT exist
+    if (!this.nodes.has(TR_SCORES_ID)) {
+      let trDir = this.getNodeByPath("C:\\Programs\\Games\\Typing Racer");
+      if (!trDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: "fs:games-tr", kind: "folder", name: "Typing Racer",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:games-tr-exe", {
+            id: "fs:games-tr-exe", kind: "file", name: "Typing Racer.exe",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "exe", content: "", mimeType: "application/octet-stream",
+            system: false, readonly: false, appId: "typing-racer",
+          } as FSFile);
+          trDir = folder;
+        }
+      }
+      if (trDir?.kind === "folder") {
+        this.nodes.set(TR_SCORES_ID, {
+          id: TR_SCORES_ID, kind: "file", name: "SCORES.DAT",
+          parentId: trDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
         changed = true;
       }
     }
