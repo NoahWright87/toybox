@@ -13,6 +13,7 @@ export const EGO_ID           = "fs:ego";
 export const NS_ART_BACKUP_ID = "fs:nsart-backup";
 export const DH_SCORES_ID     = "fs:scores-dh";
 export const TR_SCORES_ID     = "fs:scores-tr";
+export const SYSTEM_INI_ID    = "fs:system-ini";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

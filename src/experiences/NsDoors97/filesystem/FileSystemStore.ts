@@ -1,6 +1,6 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
-  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID,
+  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -377,6 +377,119 @@ export class FileSystemStore {
         } as FSFile);
         changed = true;
       }
+    }
+
+    // Rename win.ini → doors.ini for existing sessions
+    const winIni = this.getNodeByPath("C:\\System\\win.ini");
+    if (winIni?.kind === "file") {
+      const doorsIniContent = `; doors.ini — Noahsoft configuration placeholder\n; Future home of user preferences, registered app associations,\n; and other settings too important to put in system.ini but\n; too silly not to customize.\n;\n; "A mind is like a computer: it works best when you clear the cache." — Gerald\n;\n; Coming in NS Doors 98:\n;   [FavoriteJokes]   JokeCount=0\n;   [WallpaperMood]   Monday=sad  Friday=happy\n;   [Gerald]          CalledToday=no\n`;
+      // Replace win.ini with doors.ini
+      this.nodes.delete(winIni.id);
+      this.nodes.set("fs:sys-doors-ini", {
+        id: "fs:sys-doors-ini", kind: "file", name: "doors.ini",
+        parentId: winIni.parentId, createdAt: Date.now(), modifiedAt: Date.now(),
+        fileType: "ini", content: doorsIniContent, mimeType: "text/plain",
+        system: false, readonly: false,
+      } as FSFile);
+      changed = true;
+    }
+
+    // Ensure system.ini has a stable ID and is editable; add [Desktop]/[Screen] if missing
+    if (!this.nodes.has(SYSTEM_INI_ID)) {
+      const sysDir = this.getNodeByPath("C:\\System");
+      if (sysDir?.kind === "folder") {
+        const existing = this.findChild(sysDir.id, "system.ini");
+        let content = existing?.kind === "file" ? existing.content : "";
+        // Append Desktop/Screen sections if not present
+        if (!content.includes("[Desktop]")) {
+          content += "\n[Desktop]\n; Background: noahsoft, solid, or wallpaper\nBackground=solid\n; Color used when Background=solid\nColor=#cc4400\n; Wallpaper preset: sunset, arch, or (None)\nWallpaper=(None)\n; WallpaperFit: cover or contain\nWallpaperFit=cover\n";
+        }
+        if (!content.includes("[Screen]")) {
+          content += "\n[Screen]\n; ScreenSaverActive: 0=off, 1=on\nScreenSaverActive=0\n; ScreenSaverTimeout in minutes (0=disabled)\nScreenSaverTimeout=1\n; ScreenSaver: starfield, fireworks, bouncing-shapes, scrolling-text,\n;              bouncing-polygons, raining-emojis, or (None)\nScreenSaver=(None)\n";
+        }
+        if (existing?.kind === "file") {
+          this.nodes.delete(existing.id);
+          this.nodes.set(SYSTEM_INI_ID, { ...existing, id: SYSTEM_INI_ID, content, readonly: false });
+        } else {
+          this.nodes.set(SYSTEM_INI_ID, {
+            id: SYSTEM_INI_ID, kind: "file", name: "system.ini",
+            parentId: sysDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "ini", content, mimeType: "text/plain",
+            system: false, readonly: false,
+          } as FSFile);
+        }
+        changed = true;
+      }
+    }
+
+    // Ensure EGO/SPRITES contains PNG stubs (replace old BMP stubs if present)
+    const spritesDir = this.getNodeByPath("C:\\EGO\\SPRITES");
+    if (spritesDir?.kind === "folder") {
+      const spriteNames = [
+        "enemy-0.png", "enemy-1.png", "enemy-2.png", "enemy-dead.png",
+        "gun-pistol.png", "gun-claws.png", "gun-flamethrower.png",
+        "gun-subwoofer.png", "gun-woofer.png", "gun-tennis.png",
+        "key-red.png", "key-blue.png", "key-green.png",
+        "key-orange.png", "key-purple.png", "key-yellow.png",
+        "pickup-health.png", "pickup-ammo.png", "pickup-fuel.png",
+        "pickup-bullets.png", "pickup-balls.png",
+        "pickup-weapon-woofer.png", "pickup-weapon-tennis.png", "pickup-weapon-flamethrower.png",
+        "flame-particle.png", "projectile-tennis.png",
+        "impact-wall.png", "impact-enemy.png",
+        "target-dummy.png", "target-dummy-dead.png",
+        "wall-rock.png", "wall-lava.png",
+      ];
+      // Remove any old BMP stubs
+      for (const child of this.getChildren(spritesDir.id)) {
+        if (child.kind === "file" && child.name.endsWith(".BMP")) {
+          this.nodes.delete(child.id);
+          changed = true;
+        }
+      }
+      // Add PNG stubs that don't exist yet
+      for (const name of spriteNames) {
+        if (!this.findChild(spritesDir.id, name)) {
+          const id = `fs:ego-spr-${name.replace(/\./g, "-")}`;
+          this.nodes.set(id, {
+            id, kind: "file", name,
+            parentId: spritesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "png", content: "", mimeType: "image/png",
+            system: false, readonly: false,
+          } as FSFile);
+          changed = true;
+        }
+      }
+    }
+
+    // Ensure EGO/SOUNDS folder and WAV stubs exist
+    const egoDir = this.getNodeByPath("C:\\EGO");
+    if (egoDir?.kind === "folder" && !this.getNodeByPath("C:\\EGO\\SOUNDS")) {
+      const sDirId = "fs:ego-sounds";
+      const newSoundsDir: FSFolder = {
+        id: sDirId, kind: "folder", name: "SOUNDS",
+        parentId: egoDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+        system: false,
+      };
+      this.nodes.set(sDirId, newSoundsDir);
+      const soundNames = [
+        "intro.wav", "shoot.wav", "hit-wall.wav", "hit-enemy.wav",
+        "hurt.wav", "death.wav", "level-complete.wav",
+        "pickup.wav", "pickup-weapon.wav", "weapon-switch.wav",
+        "alert.wav", "door-open.wav",
+        "shoot-subwoofer.wav", "shoot-woofer.wav", "swipe-claws.wav", "hit-claws.wav",
+        "shoot-tennis.wav", "bounce-tennis.wav",
+        "shoot-flamethrower.wav", "burning.wav",
+      ];
+      for (const name of soundNames) {
+        const sid = `fs:ego-snd-${name.replace(/\./g, "-")}`;
+        this.nodes.set(sid, {
+          id: sid, kind: "file", name,
+          parentId: sDirId, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "wav", content: "", mimeType: "audio/wav",
+          system: false, readonly: false,
+        } as FSFile);
+      }
+      changed = true;
     }
 
     if (changed) this.save();

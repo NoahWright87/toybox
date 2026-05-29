@@ -1,3 +1,7 @@
+import { fsStore } from "./filesystem/FileSystemStore";
+import { SYSTEM_INI_ID } from "./filesystem/types";
+import { parseIni, updateIniSection } from "./filesystem/ini";
+
 export type ScreensaverId =
   | "starfield"
   | "fireworks"
@@ -71,12 +75,55 @@ export interface FullScreensaverConfig {
 
 const LS_KEY = "ns-screensaver-config";
 
+const VALID_SS_IDS = new Set<ScreensaverId>([
+  "starfield", "fireworks", "bouncing-shapes",
+  "scrolling-text", "bouncing-polygons", "raining-emojis",
+]);
+
+function parseScreensaverFromIni(content: string): Pick<FullScreensaverConfig, "screensaver" | "waitMinutes"> {
+  const ini = parseIni(content);
+  const s = ini["Screen"] ?? {};
+  const active = s["ScreenSaverActive"] !== "0";
+  const timeout = parseInt(s["ScreenSaverTimeout"] ?? "1", 10);
+  const rawId = s["ScreenSaver"] ?? "(None)";
+  const screensaver: ScreensaverId | null = VALID_SS_IDS.has(rawId as ScreensaverId) ? rawId as ScreensaverId : null;
+  return {
+    screensaver,
+    waitMinutes: active && screensaver ? (isNaN(timeout) ? 1 : timeout) : 0,
+  };
+}
+
 export function loadScreensaverConfig(): FullScreensaverConfig {
   const dflt: FullScreensaverConfig = {
     screensaver: null,
     waitMinutes: 1,
     settings: { ...DEFAULT_SETTINGS },
   };
+  // If system.ini has been explicitly modified, use it for screensaver selection/timeout
+  const sysIni = fsStore.getFile(SYSTEM_INI_ID);
+  if (sysIni && sysIni.modifiedAt > sysIni.createdAt) {
+    const { screensaver, waitMinutes } = parseScreensaverFromIni(sysIni.content);
+    // Per-screensaver settings (speed, count, etc.) remain in localStorage
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      const p = raw ? JSON.parse(raw) as Partial<FullScreensaverConfig & { settings: Partial<AllScreensaverSettings> }> : {};
+      return {
+        screensaver,
+        waitMinutes,
+        settings: {
+          starfield: { ...DEFAULT_SETTINGS.starfield, ...(p.settings?.starfield ?? {}) },
+          fireworks: { ...DEFAULT_SETTINGS.fireworks, ...(p.settings?.fireworks ?? {}) },
+          "bouncing-shapes": { ...DEFAULT_SETTINGS["bouncing-shapes"], ...(p.settings?.["bouncing-shapes"] ?? {}) },
+          "scrolling-text": { ...DEFAULT_SETTINGS["scrolling-text"], ...(p.settings?.["scrolling-text"] ?? {}) },
+          "bouncing-polygons": { ...DEFAULT_SETTINGS["bouncing-polygons"], ...(p.settings?.["bouncing-polygons"] ?? {}) },
+          "raining-emojis": { ...DEFAULT_SETTINGS["raining-emojis"], ...(p.settings?.["raining-emojis"] ?? {}) },
+        },
+      };
+    } catch {
+      return { ...dflt, screensaver, waitMinutes };
+    }
+  }
+  // Fall back to localStorage
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return dflt;
@@ -99,6 +146,19 @@ export function loadScreensaverConfig(): FullScreensaverConfig {
 }
 
 export function saveScreensaverConfig(config: FullScreensaverConfig): void {
+  // Write screensaver selection and timeout to system.ini
+  const sysIni = fsStore.getFile(SYSTEM_INI_ID);
+  if (sysIni) {
+    const active = config.screensaver !== null && config.waitMinutes > 0;
+    const kvs: Record<string, string> = {
+      ScreenSaverActive:  active ? "1" : "0",
+      ScreenSaverTimeout: String(config.waitMinutes),
+      ScreenSaver:        config.screensaver ?? "(None)",
+    };
+    const updated = updateIniSection(sysIni.content, "Screen", kvs);
+    fsStore.writeFile(SYSTEM_INI_ID, updated);
+  }
+  // Also keep localStorage (holds per-screensaver settings)
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(config));
   } catch {}

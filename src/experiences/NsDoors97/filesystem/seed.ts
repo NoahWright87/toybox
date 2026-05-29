@@ -2,7 +2,7 @@ import type { FileSystemStore } from "./FileSystemStore";
 import {
   ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
-  NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID,
+  NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -192,38 +192,17 @@ MODE CON RATE=32 DELAY=1
 ECHO Welcome to NS Doors 97.
 `;
 
-const WIN_INI = `[windows]
-spooler=yes
-load=
-run=
-Beep=yes
-NullPort=None
-BorderWidth=3
-CursorBlinkRate=530
-DoubleClickSpeed=452
-Programs=com exe bat pif
-Documents=txt doc
-
-[Desktop]
-Wallpaper=(None)
-TileWallpaper=0
-WallpaperStyle=0
-Pattern=(None)
-
-[Noahsoft]
-Version=97.2.1
-SerialNumber=NS97-4821-XXXX-9901
-RegisteredUser=Noah Wright
-RegisteredOrganization=Home
-
-[sounds]
-SystemStart=C:\\SYSTEM\\sounds\\startup.wav
-SystemExit=C:\\SYSTEM\\sounds\\shutdown.wav
-SystemHand=C:\\SYSTEM\\sounds\\error.wav
-
-[mci extensions]
-wav=waveaudio
-mid=sequencer
+const DOORS_INI = `; doors.ini — Noahsoft configuration placeholder
+; Future home of user preferences, registered app associations,
+; and other settings too important to put in system.ini but
+; too silly not to customize.
+;
+; "A mind is like a computer: it works best when you clear the cache." — Gerald
+;
+; Coming in NS Doors 98:
+;   [FavoriteJokes]   JokeCount=0
+;   [WallpaperMood]   Monday=sad  Friday=happy
+;   [Gerald]          CalledToday=no
 `;
 
 const SYSTEM_INI = `[boot]
@@ -241,6 +220,25 @@ WinTimeSlice=100,50
 mouse=*vmouse
 keyboard=*vkd
 MaxBPs=768
+
+[Desktop]
+; Background: noahsoft, solid, or wallpaper
+Background=solid
+; Color used when Background=solid
+Color=#cc4400
+; Wallpaper preset: sunset, arch, or (None)
+Wallpaper=(None)
+; WallpaperFit: cover or contain
+WallpaperFit=cover
+
+[Screen]
+; ScreenSaverActive: 0=off, 1=on
+ScreenSaverActive=0
+; ScreenSaverTimeout in minutes (0=disabled)
+ScreenSaverTimeout=1
+; ScreenSaver: starfield, fireworks, bouncing-shapes, scrolling-text,
+;              bouncing-polygons, raining-emojis, or (None)
+ScreenSaver=(None)
 `;
 
 const HELL_README = `HELL v0.3 — SHAREWARE
@@ -413,8 +411,8 @@ export function seedFileSystem(store: FileSystemStore): void {
   store.createFolder(ROOT_ID, "System", { id: SYSTEM_ID });
   store.createFile(SYSTEM_ID, "config.sys",   { fileType: "sys", content: CONFIG_SYS, readonly: true });
   store.createFile(SYSTEM_ID, "autoexec.bat", { fileType: "bat", content: AUTOEXEC,   readonly: true });
-  store.createFile(SYSTEM_ID, "win.ini",      { fileType: "ini", content: WIN_INI,    readonly: true });
-  store.createFile(SYSTEM_ID, "system.ini",   { fileType: "ini", content: SYSTEM_INI, readonly: true });
+  store.createFile(SYSTEM_ID, "doors.ini",    { fileType: "ini", content: DOORS_INI });
+  store.createFile(SYSTEM_ID, "system.ini",   { id: SYSTEM_INI_ID, fileType: "ini", content: SYSTEM_INI });
 
   const driversDir = store.createFolder(SYSTEM_ID, "Drivers");
   store.createFile(driversDir.id, "mouse.drv",   { fileType: "drv" });
@@ -446,17 +444,35 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const spritesDir = store.createFolder(EGO_ID, "SPRITES");
   const spriteNames = [
-    "ENEMY0.BMP", "ENEMY1.BMP", "ENEMY2.BMP", "ENEMY_DEAD.BMP",
-    "GUN_PISTOL.BMP", "GUN_CLAWS.BMP", "GUN_FLAMET.BMP",
-    "GUN_WOOFER.BMP", "GUN_TENNIS.BMP",
-    "KEY_RED.BMP", "KEY_BLUE.BMP", "KEY_GREEN.BMP",
-    "KEY_ORANGE.BMP", "KEY_PURPLE.BMP", "KEY_YELLOW.BMP",
-    "PICKUP_HP.BMP", "PICKUP_AMM.BMP", "PICKUP_FUEL.BMP",
-    "FLAME.BMP", "IMPACT_W.BMP", "IMPACT_E.BMP",
-    "TARGET.BMP", "TARGET_D.BMP",
+    "enemy-0.png", "enemy-1.png", "enemy-2.png", "enemy-dead.png",
+    "gun-pistol.png", "gun-claws.png", "gun-flamethrower.png",
+    "gun-subwoofer.png", "gun-woofer.png", "gun-tennis.png",
+    "key-red.png", "key-blue.png", "key-green.png",
+    "key-orange.png", "key-purple.png", "key-yellow.png",
+    "pickup-health.png", "pickup-ammo.png", "pickup-fuel.png",
+    "pickup-bullets.png", "pickup-balls.png",
+    "pickup-weapon-woofer.png", "pickup-weapon-tennis.png", "pickup-weapon-flamethrower.png",
+    "flame-particle.png", "projectile-tennis.png",
+    "impact-wall.png", "impact-enemy.png",
+    "target-dummy.png", "target-dummy-dead.png",
+    "wall-rock.png", "wall-lava.png",
   ];
   for (const name of spriteNames) {
-    store.createFile(spritesDir.id, name, { fileType: "bmp", readonly: true });
+    store.createFile(spritesDir.id, name, { fileType: "png" });
+  }
+
+  const soundsDir = store.createFolder(EGO_ID, "SOUNDS");
+  const soundNames = [
+    "intro.wav", "shoot.wav", "hit-wall.wav", "hit-enemy.wav",
+    "hurt.wav", "death.wav", "level-complete.wav",
+    "pickup.wav", "pickup-weapon.wav", "weapon-switch.wav",
+    "alert.wav", "door-open.wav",
+    "shoot-subwoofer.wav", "shoot-woofer.wav", "swipe-claws.wav", "hit-claws.wav",
+    "shoot-tennis.wav", "bounce-tennis.wav",
+    "shoot-flamethrower.wav", "burning.wav",
+  ];
+  for (const name of soundNames) {
+    store.createFile(soundsDir.id, name, { fileType: "wav" });
   }
 
   // ── Recycle Bin (Dumpster) ────────────────────────────────────────────────
