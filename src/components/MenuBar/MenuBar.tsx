@@ -7,6 +7,7 @@ export interface MenuBarItem {
   separator?: true;
   disabled?: boolean;
   checked?: boolean;
+  radioGroup?: string; // when set, renders • instead of ✓ (consumer manages exclusivity)
 }
 
 export interface MenuBarMenu {
@@ -68,7 +69,7 @@ export default function MenuBar({ menus }: MenuBarProps) {
                       disabled={item.disabled}
                     >
                       <span className="win95-menubar__check">
-                        {item.checked ? "✓" : ""}
+                        {item.checked ? (item.radioGroup ? "•" : "✓") : ""}
                       </span>
                       <span className="win95-menubar__option-label">
                         {item.label}

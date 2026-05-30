@@ -2,14 +2,20 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useWindowMenus } from '../../components/Window/useWindowMenus';
 import type { MenuBarMenu } from '../../components/MenuBar/MenuBar';
 import {
-  type Song, type Clip, type SongBlock, type Track, type Note,
+  type Song, type Clip, type SongBlock, type Track, type Note, type Bend,
   type DrumType, type OscWaveform, type EditTool, type AppView,
   DRUM_LABELS, DRUM_PITCHES, PIANO_MIN, PIANO_MAX,
-  isBlackPitch, pitchName, makeNoteId, createInitialSong, TRACK_COLORS,
+  isBlackPitch, pitchName, makeNoteId, makeBendId, createInitialSong, TRACK_COLORS,
   drumPitchLabel, DEFAULT_DRUM_ROWS, GM_PROGRAMS, makeDefaultTracks,
 } from './types';
-import { resumeAudio, playNote, playDrum, loadSoundFont, isSoundFontReady, startSustainedNote } from './audio';
+import { resumeAudio, playNote, playDrum, loadSoundFont, isSoundFontReady, startSustainedNote, shapedCurve } from './audio';
 import SongView, { SONG_LEFT_W, SONG_BAR_W } from './SongView';
+import selectIcon    from './icons/select.svg';
+import drawIcon      from './icons/draw.svg';
+import paintIcon     from './icons/paint.svg';
+import eraseNoteIcon from './icons/erase-note.svg';
+import bendIcon      from './icons/bend.svg';
+import eraseBendIcon from './icons/erase-bend.svg';
 import './MidiEditor.css';
 
 // ── Layout & zoom constants ────────────────────────────────────────────────────
@@ -41,6 +47,8 @@ type ResizeState  = { noteId: string; trackId: string; startX: number; origDurat
 type MoveNote     = { trackId: string; origPitch: number; origStep: number };
 type MoveState    = { startClientX: number; startClientY: number; notes: Map<string, MoveNote> };
 type ClipboardNote = { trackId: string; note: Note };
+type BendDisplay  = 'all' | 'lines' | 'indicator';
+type KnobDragState = { bendId: string; trackId: string; startX: number; startCurvature: number };
 
 interface SaveEntry { name: string; song?: Song; pattern?: unknown; savedAt: string }
 
@@ -61,7 +69,7 @@ const STORAGE_SAVES = 'midi-editor-saves';
 const STORAGE_ZOOM  = 'midi-editor-zoom';
 
 function migrateTrack(t: Track): Track {
-  const defaults: Partial<Track> = { volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0 };
+  const defaults: Partial<Track> = { volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0, bends: [] };
   if (t.isDrum && !t.drumRows) defaults.drumRows = [...DEFAULT_DRUM_ROWS];
   return { ...defaults, ...t } as Track;
 }
@@ -141,13 +149,14 @@ function downloadJson(song: Song) {
   URL.revokeObjectURL(url);
 }
 
+const MIDI_BEND_RANGE = 48; // semitones; set via RPN at start of each melodic track
+
 function exportToMidi(song: Song, selectedClipId: string): void {
   const PPQ = 480;
   const { stepsPerBeat, beatsPerBar, bpm } = song;
   const stepsPerBar = stepsPerBeat * beatsPerBar;
   const microsecondsPerBeat = Math.round(60_000_000 / bpm);
 
-  // If arrangement is empty, treat selected clip as placed at bar 0
   const blocks: Array<{ clipId: string; startBar: number }> =
     song.arrangement.length > 0
       ? song.arrangement
@@ -156,18 +165,17 @@ function exportToMidi(song: Song, selectedClipId: string): void {
   const maxSlots = Math.max(...song.clips.map(c => c.tracks.length), 0);
   if (maxSlots === 0) return;
 
-  type SlotMeta = { isDrum: boolean; gmProgram?: number; name: string };
+  type SlotMeta = { isDrum: boolean; gmProgram?: number; name: string; hasBends: boolean };
   const slotMeta: SlotMeta[] = Array.from({ length: maxSlots }, (_, i) => {
     for (const clip of song.clips) {
       if (i < clip.tracks.length) {
         const t = clip.tracks[i];
-        return { isDrum: t.isDrum, gmProgram: t.gmProgram, name: t.name };
+        return { isDrum: t.isDrum, gmProgram: t.gmProgram, name: t.name, hasBends: t.bends.length > 0 };
       }
     }
-    return { isDrum: false, name: `Track ${i + 1}` };
+    return { isDrum: false, name: `Track ${i + 1}`, hasBends: false };
   });
 
-  // Assign MIDI channels — drums always on 9, melodic on 0-8, 10-15
   const slotChannel: number[] = [];
   let melodicCh = 0;
   for (let s = 0; s < maxSlots; s++) {
@@ -179,7 +187,9 @@ function exportToMidi(song: Song, selectedClipId: string): void {
     }
   }
 
-  type MidiEv = { tick: number; isOff: boolean; pitch: number; velocity: number; ch: number };
+  type NoteEv = { kind: 'note'; tick: number; isOff: boolean; pitch: number; velocity: number; ch: number };
+  type BendEv = { kind: 'bend'; tick: number; value: number; ch: number };
+  type MidiEv = NoteEv | BendEv;
   const slotEvents: MidiEv[][] = Array.from({ length: maxSlots }, () => []);
 
   for (const block of blocks) {
@@ -191,18 +201,39 @@ function exportToMidi(song: Song, selectedClipId: string): void {
       if (slot >= maxSlots || track.muted) return;
       const ch    = slotChannel[slot];
       const shift = track.isDrum ? 0 : (track.octaveOffset ?? 0);
+      const noteById = new Map(track.notes.map(n => [n.id, n]));
+
       for (const note of track.notes) {
         const t0 = Math.round((blockStartStep + note.startStep) * PPQ / stepsPerBeat);
         const t1 = Math.round((blockStartStep + note.startStep + note.durationSteps) * PPQ / stepsPerBeat);
         const p  = Math.max(0, Math.min(127, note.pitch + shift));
-        slotEvents[slot].push({ tick: t0, isOff: false, pitch: p, velocity: note.velocity & 0x7F, ch });
-        slotEvents[slot].push({ tick: t1, isOff: true,  pitch: p, velocity: 64,                  ch });
+        slotEvents[slot].push({ kind: 'note', tick: t0, isOff: false, pitch: p, velocity: note.velocity & 0x7F, ch });
+        slotEvents[slot].push({ kind: 'note', tick: t1, isOff: true,  pitch: p, velocity: 64, ch });
+
+        const bend = track.bends.find(b => b.fromNoteId === note.id);
+        if (bend) {
+          const toNote = noteById.get(bend.toNoteId);
+          if (toNote) {
+            const semDelta = (toNote.pitch + shift) - p;
+            const N = 16;
+            const durTicks = t1 - t0;
+            for (let i = 0; i < N; i++) {
+              const q = shapedCurve(i / (N - 1), bend.curvature);
+              const bendVal = Math.round(8192 + (semDelta * q / MIDI_BEND_RANGE) * 8192);
+              const clampedVal = Math.max(0, Math.min(16383, bendVal));
+              slotEvents[slot].push({ kind: 'bend', tick: t0 + Math.round(i * durTicks / (N - 1)), value: clampedVal, ch });
+            }
+            // Reset bend after note ends
+            slotEvents[slot].push({ kind: 'bend', tick: t1 + 1, value: 8192, ch });
+          }
+        }
       }
     });
   }
 
-  // Sort by tick; note-offs before note-ons at the same tick
-  slotEvents.forEach(evs => evs.sort((a, b) => a.tick - b.tick || (a.isOff ? -1 : 1)));
+  slotEvents.forEach(evs => evs.sort((a, b) =>
+    a.tick - b.tick || (a.kind === 'bend' ? -1 : b.kind === 'bend' ? 1 : (a.kind === 'note' && a.isOff ? -1 : 1))
+  ));
 
   function vlq(n: number): number[] {
     const out: number[] = [n & 0x7F];
@@ -233,10 +264,25 @@ function exportToMidi(song: Song, selectedClipId: string): void {
     if (!meta.isDrum && meta.gmProgram !== undefined) {
       data.push(...vlq(0), 0xC0 | ch, meta.gmProgram & 0x7F);
     }
+    // Set pitch bend range via RPN 0 if this track has bends
+    if (!meta.isDrum && meta.hasBends) {
+      data.push(
+        ...vlq(0), 0xB0 | ch, 101, 0,    // RPN MSB
+        ...vlq(0), 0xB0 | ch, 100, 0,    // RPN LSB → selects pitch bend sensitivity
+        ...vlq(0), 0xB0 | ch,   6, MIDI_BEND_RANGE,  // data entry MSB = semitones
+        ...vlq(0), 0xB0 | ch,  38, 0,    // data entry LSB
+        ...vlq(0), 0xB0 | ch, 101, 127,  // deselect RPN
+        ...vlq(0), 0xB0 | ch, 100, 127,
+      );
+    }
     let curTick = 0;
     for (const ev of evs) {
       const delta = ev.tick - curTick; curTick = ev.tick;
-      data.push(...vlq(delta), (ev.isOff ? 0x80 : 0x90) | ch, ev.pitch, ev.velocity);
+      if (ev.kind === 'bend') {
+        data.push(...vlq(delta), 0xE0 | ch, ev.value & 0x7F, (ev.value >> 7) & 0x7F);
+      } else {
+        data.push(...vlq(delta), (ev.isOff ? 0x80 : 0x90) | ch, ev.pitch, ev.velocity);
+      }
     }
     data.push(...vlq(0), 0xFF, 0x2F, 0x00);
     return mtrk(data);
@@ -512,7 +558,6 @@ interface TransportProps {
   selectedClipId: string;
   isPlaying: boolean;
   zoomIdx: number;
-  tool: EditTool;
   view: AppView;
   onPlay: () => void;
   onStop: () => void;
@@ -521,24 +566,18 @@ interface TransportProps {
   onStepsPerBeatChange: (spb: number) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onToolChange: (t: EditTool) => void;
   onViewChange: (v: AppView) => void;
   onSelectClip: (clipId: string) => void;
 }
 
 function Transport({
-  song, selectedClipId, isPlaying, zoomIdx, tool, view,
+  song, selectedClipId, isPlaying, zoomIdx, view,
   onPlay, onStop, onBpmChange, onBarsChange, onStepsPerBeatChange,
-  onZoomIn, onZoomOut, onToolChange, onViewChange, onSelectClip,
+  onZoomIn, onZoomOut, onViewChange, onSelectClip,
 }: TransportProps) {
   function nudge(delta: number) { onBpmChange(Math.max(40, Math.min(240, song.bpm + delta))); }
 
   const selectedClip = song.clips.find(c => c.id === selectedClipId) ?? song.clips[0];
-  const TOOLS: { key: EditTool; label: string }[] = [
-    { key: 'select', label: 'SEL' },
-    { key: 'draw',   label: 'DRAW' },
-    { key: 'paint',  label: 'PAINT' },
-  ];
 
   return (
     <div className="me-transport">
@@ -564,16 +603,6 @@ function Transport({
               <select className="me-select" value={selectedClipId} onChange={e => onSelectClip(e.target.value)}>
                 {song.clips.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-            </div>
-
-            <div className="me-transport__sep" />
-
-            {/* Tools */}
-            <div className="me-tool-group">
-              {TOOLS.map(t => (
-                <button key={t.key} className={`me-btn me-btn--sm${tool === t.key ? ' me-btn--primary' : ''}`}
-                  onPointerDown={() => onToolChange(t.key)}>{t.label}</button>
-              ))}
             </div>
 
             <div className="me-transport__sep" />
@@ -613,7 +642,58 @@ function Transport({
           <button className="me-btn me-btn--sm" onPointerDown={() => nudge(5)}>+</button>
         </div>
 
-        <span className="me-label me-label--dim">SPC=play{view === 'pattern' ? ' S/D/P=tool' : ''}</span>
+        <span className="me-label me-label--dim">SPC=play</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Tool palette ───────────────────────────────────────────────────────────────
+
+const NOTE_TOOLS: { key: EditTool; icon: string; title: string }[] = [
+  { key: 'select',     icon: selectIcon,    title: 'Select (S)' },
+  { key: 'draw',       icon: drawIcon,      title: 'Draw (D)' },
+  { key: 'paint',      icon: paintIcon,     title: 'Paint (P)' },
+  { key: 'erase',      icon: eraseNoteIcon, title: 'Erase Note (E)' },
+];
+
+const BEND_TOOLS: { key: EditTool; icon: string; title: string }[] = [
+  { key: 'bend',       icon: bendIcon,      title: 'Add Bend (B)' },
+  { key: 'erase-bend', icon: eraseBendIcon, title: 'Erase Bend' },
+];
+
+interface ToolPaletteProps {
+  tool: EditTool;
+  onToolChange: (t: EditTool) => void;
+}
+
+function ToolPalette({ tool, onToolChange }: ToolPaletteProps) {
+  return (
+    <div className="me-tool-palette">
+      <div className="me-tool-palette__group">
+        {NOTE_TOOLS.map(t => (
+          <button
+            key={t.key}
+            className={`me-tool-btn${tool === t.key ? ' me-tool-btn--active' : ''}`}
+            onPointerDown={() => onToolChange(t.key)}
+            title={t.title}
+          >
+            <img src={t.icon} alt={t.title} width="24" height="24" draggable={false} />
+          </button>
+        ))}
+      </div>
+      <div className="me-tool-palette__divider" />
+      <div className="me-tool-palette__group">
+        {BEND_TOOLS.map(t => (
+          <button
+            key={t.key}
+            className={`me-tool-btn${tool === t.key ? ' me-tool-btn--active' : ''}`}
+            onPointerDown={() => onToolChange(t.key)}
+            title={t.title}
+          >
+            <img src={t.icon} alt={t.title} width="24" height="24" draggable={false} />
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -632,6 +712,10 @@ interface MelodicGridProps {
   selectedIds: ReadonlySet<string>;
   paintModeRef: React.MutableRefObject<PaintState>;
   lastNoteDurationRef: React.MutableRefObject<number>;
+  bendDraft: { fromNoteId: string; trackId: string } | null;
+  bendDisplay: BendDisplay;
+  eraseHoverNoteId: string | null;
+  eraseBendHoverId: string | null;
   onAddNote: (pitch: number, step: number, duration?: number, noteId?: string) => void;
   onRemoveNote: (noteId: string) => void;
   onStartResize: (noteId: string, startX: number, origDur: number, noteStart: number) => void;
@@ -639,13 +723,21 @@ interface MelodicGridProps {
   onSelectNote: (noteId: string, addToSelection: boolean) => void;
   onDeselectAll: () => void;
   onStartMove: (noteId: string, clientX: number, clientY: number) => void;
+  onNoteClickBend: (noteId: string) => void;
+  onEraseNoteHover: (noteId: string | null) => void;
+  onEraseBendHover: (bendId: string | null) => void;
+  onBendKnobDragStart: (bendId: string, startX: number) => void;
+  onRemoveBend: (bendId: string) => void;
 }
 
 function MelodicGrid({
   track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH, tool,
   selectedIds, paintModeRef, lastNoteDurationRef,
+  bendDraft, bendDisplay, eraseHoverNoteId, eraseBendHoverId,
   onAddNote, onRemoveNote, onStartResize, onPreviewPitch,
   onSelectNote, onDeselectAll, onStartMove,
+  onNoteClickBend, onEraseNoteHover, onEraseBendHover,
+  onBendKnobDragStart, onRemoveBend,
 }: MelodicGridProps) {
   const noteMap   = useMemo(() => buildNoteMap(track), [track]);
   const gridW     = totalSteps * stepW;
@@ -653,9 +745,16 @@ function MelodicGrid({
   const noteRects = useMemo(() => track.notes.filter(n => n.startStep < totalSteps), [track.notes, totalSteps]);
 
   function cellDown(pitch: number, step: number, e: React.PointerEvent) {
-    if (tool === 'select') { onDeselectAll(); return; }
+    if (tool === 'select' || tool === 'bend' || tool === 'erase-bend') {
+      if (tool === 'select') onDeselectAll();
+      return;
+    }
     const existingId = noteMap.get(`${pitch},${step}`);
     if (existingId) {
+      if (tool === 'erase') {
+        onRemoveNote(existingId);
+        return;
+      }
       paintModeRef.current = { action: 'remove', trackId: track.id };
       onRemoveNote(existingId);
     } else if (tool === 'draw') {
@@ -664,14 +763,114 @@ function MelodicGrid({
       onAddNote(pitch, step, dur, newId);
       onPreviewPitch(pitch);
       onStartResize(newId, e.clientX, dur, step);
-    } else {
+    } else if (tool === 'paint') {
       paintModeRef.current = { action: 'add', trackId: track.id };
       onAddNote(pitch, step, lastNoteDurationRef.current);
       onPreviewPitch(pitch);
     }
   }
 
-  const editActive = tool !== 'select';
+  const isBendMode = tool === 'bend';
+  const editActive = tool !== 'select' && tool !== 'bend' && tool !== 'erase-bend';
+
+  // Compute bend SVG overlay
+  const bends = track.bends ?? [];
+  const noteById = useMemo(() => {
+    const m = new Map<string, Note>();
+    track.notes.forEach(n => m.set(n.id, n));
+    return m;
+  }, [track.notes]);
+
+  const bendOverlay = useMemo(() => {
+    if (bendDisplay === 'indicator' || bends.length === 0) return null;
+    const showKnob = bendDisplay === 'all';
+    return bends.map(bend => {
+      const fromNote = noteById.get(bend.fromNoteId);
+      const toNote   = noteById.get(bend.toNoteId);
+      if (!fromNote || !toNote) return null;
+      const fromRow = PITCH_TO_ROW.get(fromNote.pitch);
+      const toRow   = PITCH_TO_ROW.get(toNote.pitch);
+      if (fromRow === undefined || toRow === undefined) return null;
+
+      const x1 = (fromNote.startStep + Math.min(fromNote.durationSteps, totalSteps - fromNote.startStep)) * stepW;
+      const y1 = fromRow * rowH + rowH / 2;
+      const x2 = toNote.startStep * stepW;
+      const y2 = toRow * rowH + rowH / 2;
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const maxOffset = Math.min(60, Math.max(20, len * 0.3));
+      const cpx = mx + bend.curvature * (-dy / len) * maxOffset;
+      const cpy = my + bend.curvature * ( dx / len) * maxOffset;
+      const pathD = `M ${x1} ${y1} Q ${cpx} ${cpy} ${x2} ${y2}`;
+
+      const isEraseHover = eraseBendHoverId === bend.id;
+      const isRelatedToEraseNote = eraseHoverNoteId !== null &&
+        (bend.fromNoteId === eraseHoverNoteId || bend.toNoteId === eraseHoverNoteId);
+      const stroke = (isEraseHover || isRelatedToEraseNote) ? '#cc0000' : '#1a1a1a';
+      const strokeW = (isEraseHover || isRelatedToEraseNote) ? 3 : 2;
+
+      // Knob indicator dot angle: 0 = 12 o'clock, ±1 = ±90°
+      const dotAngle = bend.curvature * (Math.PI / 2);
+      const dotX = mx + 9 * Math.sin(dotAngle);
+      const dotY = my - 9 * Math.cos(dotAngle);
+
+      const canDragKnob = tool === 'select' || tool === 'bend';
+      const canErase    = tool === 'erase-bend';
+
+      return (
+        <g key={bend.id}>
+          <path d={pathD} fill="none" stroke={stroke} strokeWidth={strokeW} strokeLinecap="round" />
+          {showKnob && (
+            <g>
+              <circle
+                cx={mx} cy={my} r={11}
+                fill={isEraseHover ? '#ffc0c0' : '#c0c0c0'}
+                stroke={stroke} strokeWidth={1.5}
+                style={{ cursor: canDragKnob ? 'ew-resize' : canErase ? 'pointer' : 'default' }}
+                onPointerEnter={() => canErase && onEraseBendHover(bend.id)}
+                onPointerLeave={() => canErase && onEraseBendHover(null)}
+                onPointerDown={e => {
+                  e.stopPropagation(); e.preventDefault();
+                  if (canErase) { onRemoveBend(bend.id); return; }
+                  if (canDragKnob) onBendKnobDragStart(bend.id, e.clientX);
+                }}
+              />
+              <circle cx={dotX} cy={dotY} r={2.5} fill="#cc4400" style={{ pointerEvents: 'none' }} />
+            </g>
+          )}
+          {/* Wide invisible hit area on line for erase-bend */}
+          {canErase && (
+            <path
+              d={pathD} fill="none" stroke="transparent" strokeWidth={12}
+              style={{ cursor: 'pointer' }}
+              onPointerEnter={() => onEraseBendHover(bend.id)}
+              onPointerLeave={() => onEraseBendHover(null)}
+              onPointerDown={e => { e.stopPropagation(); e.preventDefault(); onRemoveBend(bend.id); }}
+            />
+          )}
+        </g>
+      );
+    });
+  }, [bends, noteById, stepW, rowH, totalSteps, bendDisplay, eraseBendHoverId, eraseHoverNoteId, tool,
+      onEraseBendHover, onRemoveBend, onBendKnobDragStart]);
+
+  // Indicator arrows on right edge of notes that have bends
+  const bendIndicators = useMemo(() => {
+    if (bendDisplay !== 'indicator' || bends.length === 0) return null;
+    return bends.map(bend => {
+      const fromNote = noteById.get(bend.fromNoteId);
+      if (!fromNote) return null;
+      const fromRow = PITCH_TO_ROW.get(fromNote.pitch);
+      if (fromRow === undefined) return null;
+      const x = (fromNote.startStep + Math.min(fromNote.durationSteps, totalSteps - fromNote.startStep)) * stepW - 6;
+      const y = fromRow * rowH + rowH / 2;
+      return <text key={bend.id} x={x} y={y + 3} fontSize={8} fill="#cc4400" style={{ pointerEvents: 'none' }}>›</text>;
+    });
+  }, [bends, noteById, stepW, rowH, totalSteps, bendDisplay]);
 
   return (
     <div
@@ -711,32 +910,49 @@ function MelodicGrid({
         if (rowIdx === undefined) return null;
         const displayDur = Math.min(note.durationSteps, totalSteps - note.startStep);
         const isSelected = selectedIds.has(note.id);
+        const isEraseHover = tool === 'erase' && eraseHoverNoteId === note.id;
+        const isBendSource = isBendMode && bendDraft?.fromNoteId === note.id;
+        const isBendTarget = isBendMode && bendDraft !== null && bendDraft.trackId === track.id && bendDraft.fromNoteId !== note.id;
+        let noteClass = 'me-note-rect';
+        if (isSelected)    noteClass += ' me-note-rect--selected';
+        if (isBendMode)    noteClass += ' me-note-rect--bend-mode';
+        if (isBendSource)  noteClass += ' me-note-rect--bend-source';
+        if (isBendTarget)  noteClass += ' me-note-rect--bend-target';
+        if (isEraseHover)  noteClass += ' me-note-rect--erase-hover';
         return (
           <div
             key={note.id}
-            className={`me-note-rect${isSelected ? ' me-note-rect--selected' : ''}`}
+            className={noteClass}
             style={{ left: note.startStep * stepW, top: rowIdx * rowH, width: displayDur * stepW, height: rowH, background: track.color }}
             data-note-id={note.id} data-track-id={track.id}
             onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); onRemoveNote(note.id); }}
+            onPointerEnter={() => { if (tool === 'erase') onEraseNoteHover(note.id); }}
+            onPointerLeave={() => { if (tool === 'erase') onEraseNoteHover(null); }}
             onPointerDown={(e: React.PointerEvent) => {
               e.preventDefault(); e.stopPropagation();
               if (tool === 'select') {
                 onSelectNote(note.id, e.ctrlKey || e.metaKey);
                 onStartMove(note.id, e.clientX, e.clientY);
-              } else {
+              } else if (tool === 'erase') {
+                onRemoveNote(note.id);
+              } else if (tool === 'bend') {
+                onNoteClickBend(note.id);
+              } else if (tool !== 'erase-bend') {
                 paintModeRef.current = { action: 'remove', trackId: track.id };
                 onRemoveNote(note.id);
               }
             }}
           >
-            <div
-              className="me-note-resize-handle"
-              onPointerDown={e => {
-                e.stopPropagation(); e.preventDefault();
-                paintModeRef.current = null;
-                onStartResize(note.id, e.clientX, note.durationSteps, note.startStep);
-              }}
-            />
+            {tool !== 'bend' && tool !== 'erase-bend' && tool !== 'erase' && (
+              <div
+                className="me-note-resize-handle"
+                onPointerDown={e => {
+                  e.stopPropagation(); e.preventDefault();
+                  paintModeRef.current = null;
+                  onStartResize(note.id, e.clientX, note.durationSteps, note.startStep);
+                }}
+              />
+            )}
           </div>
         );
       })}
@@ -745,6 +961,14 @@ function MelodicGrid({
           ? <div key={`od-${pitch}`} className="me-row-divider" style={{ top: rowIdx * rowH, width: gridW }} />
           : null
       )}
+      {/* Bend overlay — drawn above notes */}
+      <svg
+        style={{ position: 'absolute', inset: 0, width: gridW, height: gridH, pointerEvents: 'none', overflow: 'visible' }}
+        className={isBendMode || tool === 'erase-bend' ? 'me-bend-svg--active' : ''}
+      >
+        {bendOverlay}
+        {bendIndicators}
+      </svg>
     </div>
   );
 }
@@ -834,6 +1058,10 @@ interface TrackSectionProps {
   selectedIds: ReadonlySet<string>;
   paintModeRef: React.MutableRefObject<PaintState>;
   lastNoteDurationRef: React.MutableRefObject<number>;
+  bendDraft: { fromNoteId: string; trackId: string } | null;
+  bendDisplay: BendDisplay;
+  eraseHoverNoteId: string | null;
+  eraseBendHoverId: string | null;
   onToggleCollapse: () => void;
   onGear: () => void;
   onMute: () => void;
@@ -849,16 +1077,24 @@ interface TrackSectionProps {
   onSelectNote: (noteId: string, addToSelection: boolean) => void;
   onDeselectAll: () => void;
   onStartMove: (noteId: string, clientX: number, clientY: number) => void;
+  onNoteClickBend: (noteId: string) => void;
+  onEraseNoteHover: (noteId: string | null) => void;
+  onEraseBendHover: (bendId: string | null) => void;
+  onBendKnobDragStart: (bendId: string, startX: number) => void;
+  onRemoveBend: (bendId: string) => void;
 }
 
 function TrackSection({
   track, totalSteps, stepsPerBeat, beatsPerBar, stepW, rowH, tool,
   selectedIds, paintModeRef, lastNoteDurationRef,
+  bendDraft, bendDisplay, eraseHoverNoteId, eraseBendHoverId,
   onToggleCollapse, onGear, onMute,
   onAddNote, onAddDrumNote, onRemoveNote, onStartResize,
   onStartPreviewPitch, onStopPreviewPitch, onPreviewDrum,
   onAddDrumPiece, onRemoveDrumPiece,
   onSelectNote, onDeselectAll, onStartMove,
+  onNoteClickBend, onEraseNoteHover, onEraseBendHover,
+  onBendKnobDragStart, onRemoveBend,
 }: TrackSectionProps) {
   const [showAddPiece, setShowAddPiece] = useState(false);
 
@@ -921,9 +1157,14 @@ function TrackSection({
               : <MelodicGrid track={track} totalSteps={totalSteps} stepsPerBeat={stepsPerBeat} beatsPerBar={beatsPerBar}
                   stepW={stepW} rowH={rowH} tool={tool} selectedIds={selectedIds}
                   paintModeRef={paintModeRef} lastNoteDurationRef={lastNoteDurationRef}
+                  bendDraft={bendDraft} bendDisplay={bendDisplay}
+                  eraseHoverNoteId={eraseHoverNoteId} eraseBendHoverId={eraseBendHoverId}
                   onAddNote={onAddNote} onRemoveNote={onRemoveNote} onStartResize={onStartResize}
                   onPreviewPitch={onStartPreviewPitch}
-                  onSelectNote={onSelectNote} onDeselectAll={onDeselectAll} onStartMove={onStartMove} />
+                  onSelectNote={onSelectNote} onDeselectAll={onDeselectAll} onStartMove={onStartMove}
+                  onNoteClickBend={onNoteClickBend} onEraseNoteHover={onEraseNoteHover}
+                  onEraseBendHover={onEraseBendHover} onBendKnobDragStart={onBendKnobDragStart}
+                  onRemoveBend={onRemoveBend} />
             }
           </div>
 
@@ -971,6 +1212,11 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const [showLoad,      setShowLoad]      = useState(false);
   const [pendingAction, setPendingAction] = useState<{ fn: () => void } | null>(null);
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set<string>());
+  const [bendDisplay,   setBendDisplay]   = useState<BendDisplay>('all');
+  const [bendDraft,     setBendDraft]     = useState<{ fromNoteId: string; trackId: string } | null>(null);
+  const [eraseHoverNoteId, setEraseHoverNoteId] = useState<string | null>(null);
+  const [eraseBendHoverId, setEraseBendHoverId] = useState<string | null>(null);
+  const knobDragRef = useRef<KnobDragState | null>(null);
 
   const selectedClip = song.clips.find(c => c.id === selectedClipId) ?? song.clips[0];
 
@@ -1054,6 +1300,21 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     const stepDur = 60 / s.bpm / s.stepsPerBeat;
     movePlayhead(step);
 
+    function fireNote(track: Track, note: Note) {
+      if (track.isDrum) { playDrum(note.pitch, note.velocity); return; }
+      const shift = track.octaveOffset ?? 0;
+      const bend  = track.bends.find(b => b.fromNoteId === note.id);
+      let bendToPitch: number | undefined;
+      let bendCurvature = 0;
+      if (bend) {
+        const toNote = track.notes.find(n => n.id === bend.toNoteId);
+        if (toNote) { bendToPitch = toNote.pitch + shift; bendCurvature = bend.curvature; }
+      }
+      playNote(note.pitch + shift, note.velocity, note.durationSteps * stepDur,
+        track.waveform, undefined, track.volume, track.attack, track.release,
+        track.gmProgram, bendToPitch, bendCurvature);
+    }
+
     if (viewRef.current === 'pattern') {
       // Play selected clip, looped
       const clip = s.clips.find(c => c.id === selectedClipIdRef.current) ?? s.clips[0];
@@ -1061,12 +1322,9 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       const localStep = step % clipTotalSteps;
       clip.tracks.forEach(track => {
         if (track.muted) return;
-        const shift = track.octaveOffset ?? 0;
         track.notes.forEach((note: Note) => {
           if (note.startStep !== localStep || note.startStep >= clipTotalSteps) return;
-          if (track.isDrum) playDrum(note.pitch, note.velocity);
-          else playNote(note.pitch + shift, note.velocity, note.durationSteps * stepDur,
-            track.waveform, undefined, track.volume, track.attack, track.release, track.gmProgram);
+          fireNote(track, note);
         });
       });
       stepRef.current = (step + 1) % clipTotalSteps;
@@ -1083,12 +1341,9 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         const localStep = step - block.startBar * stepsPerBar;
         clip.tracks.forEach(track => {
           if (track.muted) return;
-          const shift = track.octaveOffset ?? 0;
           track.notes.forEach((note: Note) => {
             if (note.startStep !== localStep) return;
-            if (track.isDrum) playDrum(note.pitch, note.velocity);
-            else playNote(note.pitch + shift, note.velocity, note.durationSteps * stepDur,
-              track.waveform, undefined, track.volume, track.attack, track.release, track.gmProgram);
+            fireNote(track, note);
           });
         });
       });
@@ -1207,10 +1462,26 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         const noteId = noteRect.dataset.noteId ?? '';
         if (noteId) {
           setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
-            tracks.map(t => t.id !== pm.trackId ? t : { ...t, notes: t.notes.filter(n => n.id !== noteId) })
+            tracks.map(t => t.id !== pm.trackId ? t : {
+              ...t,
+              notes: t.notes.filter(n => n.id !== noteId),
+              bends: t.bends.filter(b => b.fromNoteId !== noteId && b.toNoteId !== noteId),
+            })
           ));
         }
       }
+    }
+
+    // Knob drag
+    const kd = knobDragRef.current;
+    if (kd) {
+      const delta = (e.clientX - kd.startX) / 100;
+      const newCurvature = Math.max(-1, Math.min(1, kd.startCurvature + delta));
+      setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
+        tracks.map(t => t.id !== kd.trackId ? t : {
+          ...t, bends: t.bends.map(b => b.id !== kd.bendId ? b : { ...b, curvature: newCurvature }),
+        })
+      ));
     }
   };
 
@@ -1226,6 +1497,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     resizeStateRef.current  = null;
     isMoveActiveRef.current = false;
     moveStateRef.current    = null;
+    knobDragRef.current     = null;
     if (sustainedNoteStopRef.current) {
       sustainedNoteStopRef.current();
       sustainedNoteStopRef.current = null;
@@ -1257,9 +1529,12 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         return;
       }
       if (!inInput && !e.ctrlKey && !e.metaKey) {
-        if (e.code === 'KeyS') { setTool('select'); return; }
-        if (e.code === 'KeyD') { setTool('draw');   return; }
-        if (e.code === 'KeyP') { setTool('paint');  return; }
+        if (e.code === 'KeyS') { setTool('select'); setBendDraft(null); return; }
+        if (e.code === 'KeyD') { setTool('draw');   setBendDraft(null); return; }
+        if (e.code === 'KeyP') { setTool('paint');  setBendDraft(null); return; }
+        if (e.code === 'KeyE') { setTool('erase');  setBendDraft(null); return; }
+        if (e.code === 'KeyB') { setTool('bend');                       return; }
+        if (e.code === 'Escape') { setBendDraft(null); return; }
       }
       if ((e.code === 'Delete' || e.code === 'Backspace') && !inInput) {
         const ids = selectedIdsRef.current;
@@ -1336,8 +1611,43 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const removeNote = useCallback((trackId: string, noteId: string) => {
     setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
-      tracks.map(t => t.id !== trackId ? t : { ...t, notes: t.notes.filter(n => n.id !== noteId) })
+      tracks.map(t => t.id !== trackId ? t : {
+        ...t,
+        notes: t.notes.filter(n => n.id !== noteId),
+        bends: t.bends.filter(b => b.fromNoteId !== noteId && b.toNoteId !== noteId),
+      })
     ));
+  }, []);
+
+  const addBend = useCallback((fromTrackId: string, fromNoteId: string, toNoteId: string) => {
+    const id = makeBendId();
+    const newBend: Bend = { id, fromNoteId, toNoteId, curvature: 0 };
+    setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
+      tracks.map(t => t.id !== fromTrackId ? t : {
+        ...t, bends: [...t.bends, newBend],
+      })
+    ));
+  }, []);
+
+  const removeBend = useCallback((trackId: string, bendId: string) => {
+    setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
+      tracks.map(t => t.id !== trackId ? t : { ...t, bends: t.bends.filter(b => b.id !== bendId) })
+    ));
+  }, []);
+
+  const handleNoteClickBend = useCallback((trackId: string, noteId: string) => {
+    setBendDraft(prev => {
+      if (prev === null) return { fromNoteId: noteId, trackId };
+      if (prev.trackId !== trackId || prev.fromNoteId === noteId) return null;
+      addBend(trackId, prev.fromNoteId, noteId);
+      return null;
+    });
+  }, [addBend]);
+
+  const handleBendKnobDragStart = useCallback((trackId: string, bendId: string, startX: number) => {
+    const clip = songRef.current.clips.find(c => c.id === selectedClipIdRef.current) ?? songRef.current.clips[0];
+    const bend = clip?.tracks.find(t => t.id === trackId)?.bends.find(b => b.id === bendId);
+    if (bend) knobDragRef.current = { bendId, trackId, startX, startCurvature: bend.curvature };
   }, []);
 
   const startResize = useCallback((noteId: string, trackId: string, startX: number, origDuration: number, noteStartStep: number) => {
@@ -1390,7 +1700,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         id: makeNoteId(), name: `Track ${clip.tracks.filter(t => !t.isDrum).length + 1}`,
         color: TRACK_COLORS[idx % TRACK_COLORS.length],
         waveform: 'sine', notes: [], muted: false, isDrum: false,
-        volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0,
+        volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0, bends: [],
       };
       return { ...clip, tracks: [...clip.tracks, newTrack] };
     }));
@@ -1405,7 +1715,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         color: TRACK_COLORS[(drumCount + 3) % TRACK_COLORS.length],
         waveform: 'sine', notes: [], muted: false, isDrum: true,
         volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0,
-        drumRows: [...DEFAULT_DRUM_ROWS],
+        drumRows: [...DEFAULT_DRUM_ROWS], bends: [],
       };
       const tracks = [...clip.tracks];
       tracks.splice(lastDrumIdx + 1, 0, newTrack);
@@ -1575,7 +1885,17 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         { label: 'BPM 160', onClick: () => setSong(s => ({ ...s, bpm: 160 })) },
       ],
     },
-  ], [isPlaying, startPlayback, stopPlayback, newSong, newClip, addMelodicTrack, addDrumTrack, onQuit]);
+    {
+      label: 'Display',
+      items: [
+        { label: 'Bends', disabled: true },
+        { separator: true },
+        { label: 'Everything',  checked: bendDisplay === 'all',       radioGroup: 'bend-display', onClick: () => setBendDisplay('all') },
+        { label: 'Lines only',  checked: bendDisplay === 'lines',     radioGroup: 'bend-display', onClick: () => setBendDisplay('lines') },
+        { label: 'Indicator',   checked: bendDisplay === 'indicator', radioGroup: 'bend-display', onClick: () => setBendDisplay('indicator') },
+      ],
+    },
+  ], [isPlaying, startPlayback, stopPlayback, newSong, newClip, addMelodicTrack, addDrumTrack, onQuit, bendDisplay]);
 
   useWindowMenus(menus);
 
@@ -1602,7 +1922,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         selectedClipId={selectedClipId}
         isPlaying={isPlaying}
         zoomIdx={zoomIdx}
-        tool={tool}
         view={view}
         onPlay={startPlayback}
         onStop={stopPlayback}
@@ -1611,7 +1930,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         onStepsPerBeatChange={spb => { stopPlayback(); setSong(s => ({ ...s, stepsPerBeat: spb })); }}
         onZoomIn={() => setZoomIdx(i => Math.min(i + 1, ZOOM_PRESETS.length - 1))}
         onZoomOut={() => setZoomIdx(i => Math.max(i - 1, 0))}
-        onToolChange={setTool}
         onViewChange={v => { stopPlayback(); setView(v); }}
         onSelectClip={id => { setSelectedClipId(id); setView('pattern'); }}
       />
@@ -1656,6 +1974,10 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
                 selectedIds={selectedIds}
                 paintModeRef={paintModeRef}
                 lastNoteDurationRef={lastNoteDurationRef}
+                bendDraft={bendDraft}
+                bendDisplay={bendDisplay}
+                eraseHoverNoteId={eraseHoverNoteId}
+                eraseBendHoverId={eraseBendHoverId}
                 onToggleCollapse={() => toggleCollapse(track.id)}
                 onGear={() => {
                   modalOrigRef.current = { waveform: track.waveform, volume: track.volume, gmProgram: track.gmProgram, octaveOffset: track.octaveOffset };
@@ -1674,6 +1996,11 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
                 onSelectNote={selectNote}
                 onDeselectAll={deselectAll}
                 onStartMove={startMove}
+                onNoteClickBend={noteId => handleNoteClickBend(track.id, noteId)}
+                onEraseNoteHover={setEraseHoverNoteId}
+                onEraseBendHover={setEraseBendHoverId}
+                onBendKnobDragStart={(bendId, startX) => handleBendKnobDragStart(track.id, bendId, startX)}
+                onRemoveBend={bendId => removeBend(track.id, bendId)}
               />
             ))}
 
@@ -1690,6 +2017,9 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
           </div>
         )}
       </div>
+
+      {/* Tool palette — only in pattern view */}
+      {view === 'pattern' && <ToolPalette tool={tool} onToolChange={t => { setTool(t); setBendDraft(null); }} />}
 
       {/* Overlays */}
       {pendingAction && (
