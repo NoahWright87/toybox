@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import "./Blackjack.css";
 import { PlayingCard } from "./PlayingCard";
-import type { Card, DeckSettings } from "./types";
+import type { Card, CardAppearance, DeckSettings } from "./types";
 import { buildDeck } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -66,8 +66,9 @@ interface BlackjackProps {
 
 export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProps) {
   const [deck, setDeck] = useState<Card[]>(() => buildDeck(settings));
-  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
+  const [dealKey, setDealKey] = useState(0);
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
   const [dealerHand, setDealerHand] = useState<Card[]>([]);
   const [holeRevealed, setHoleRevealed] = useState(false);
@@ -90,6 +91,7 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     setPlayerHand(pHand);
     setDealerHand(dHand);
     setHoleRevealed(false);
+    setDealKey((k) => k + 1);
     setOutcome(null);
     setChipDelta(0);
     setDealerDone(false);
@@ -253,7 +255,7 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     ];
     return [
       { label: "Game", items },
-      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+      { label: "Options", items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }] },
     ];
   }, [resetGame, onNewGame, onQuit]);
 
@@ -294,8 +296,8 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     <div className="bj">
       {showDeckModal && (
         <DeckModal
-          cardBack={cardBack}
-          onSelect={setCardBack}
+          appearance={appearance}
+          onUpdate={setAppearance}
           onClose={() => setShowDeckModal(false)}
         />
       )}
@@ -318,7 +320,8 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
                 <PlayingCard
                   card={card}
                   faceDown={i === 1 && !holeRevealed}
-                  backColor={cardBack}
+                  appearance={appearance}
+                  dealIndex={dealKey > 0 ? i : undefined}
                 />
               </div>
             ))}
@@ -336,9 +339,13 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
             )}
           </div>
           <div className="bj__hand">
-            {playerHand.map((card) => (
+            {playerHand.map((card, i) => (
               <div key={card.id} className="bj__card">
-                <PlayingCard card={card} backColor={cardBack} />
+                <PlayingCard
+                  card={card}
+                  appearance={appearance}
+                  dealIndex={dealKey > 0 ? i + 2 : undefined}
+                />
               </div>
             ))}
           </div>

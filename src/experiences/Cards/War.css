@@ -58,9 +58,10 @@
   color: rgba(255,255,255,0.55);
 }
 
-/* Flipped card revealed in battle */
+/* Flipped card revealed in battle — key changes each round, triggering the animation */
 .war__flipped {
   margin-top: 6px;
+  animation: card-reveal 0.28s ease forwards;
 }
 
 /* War cards row (face-down × 3 + face-up) */

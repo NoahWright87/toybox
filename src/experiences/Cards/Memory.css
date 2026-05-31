@@ -1,0 +1,158 @@
+/* ─── Memory / Concentration ────────────────────────────────────────── */
+
+@keyframes memory-match-flash {
+  0%   { outline-color: #44cc44; box-shadow: 0 0 8px 2px rgba(68, 204, 68, 0.6); }
+  60%  { outline-color: #44cc44; box-shadow: 0 0 14px 4px rgba(68, 204, 68, 0.4); }
+  100% { outline-color: transparent; box-shadow: none; }
+}
+
+.memory {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+}
+
+/* Info bar (difficulty label) */
+.memory__infobar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 5px 10px 3px;
+  font-size: 7px;
+  color: #444;
+  border-bottom: 1px solid #808080;
+}
+
+/* Green felt table */
+.memory__table {
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 8px 8px 4px;
+  padding: 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Card grid */
+.memory__grid {
+  display: grid;
+  gap: 6px;
+  /* gridTemplateColumns set inline via style prop */
+}
+
+/* Individual card slot */
+.memory__card-wrap {
+  cursor: pointer;
+  border-radius: 4px;
+  transition: transform 0.12s ease;
+  position: relative;
+}
+
+.memory__card-wrap:hover.memory__card-wrap--facedown {
+  transform: translateY(-2px);
+}
+
+/* Selected (face-up, not yet matched): orange highlight */
+.memory__card-wrap--selected .playing-card {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+}
+
+/* Matched + flashing: green highlight */
+.memory__card-wrap--matched-flash .playing-card {
+  outline: 2px solid #44cc44;
+  outline-offset: 1px;
+  animation: memory-match-flash 0.9s ease forwards;
+}
+
+/* Matched (flash done): no highlight, slightly dimmed */
+.memory__card-wrap--matched {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.memory__card-wrap--matched .playing-card {
+  outline: none;
+}
+
+/* Face-down card: pointer cursor */
+.memory__card-wrap--facedown {
+  cursor: pointer;
+}
+
+/* Win banner — overlaid inside the table */
+.memory__win-banner {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.memory__win-title {
+  font-size: 14px;
+  color: #44cc44;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(68, 204, 68, 0.7);
+}
+
+.memory__win-stats {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Status bar */
+.memory__statusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 7px;
+  color: #333;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  background: #c0c0c0;
+}
+
+/* Controls row */
+.memory__controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+/* Buttons */
+.memory__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 12px;
+  border: 2px solid;
+  cursor: pointer;
+}
+
+.memory__btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.memory__btn--primary:hover  { background: #ee5500; }
+.memory__btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+
+.memory__btn--secondary {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+.memory__btn--secondary:active { border-color: #808080 #ffffff #ffffff #808080; }

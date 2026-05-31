@@ -1,0 +1,315 @@
+/* ─── Klondike Solitaire ─────────────────────────────────────────────── */
+
+.klondike {
+  display: flex;
+  flex-direction: column;
+  background: #1a4a1a; /* green felt */
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+  min-width: 420px;
+  min-height: 500px;
+  position: relative;
+  padding: 8px;
+  gap: 8px;
+}
+
+/* ─── Top row (foundations + stock/waste) ────────────────────────────── */
+
+.klondike__top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.klondike__foundations {
+  display: flex;
+  gap: 4px;
+}
+
+.klondike__top-spacer {
+  flex: 1;
+}
+
+.klondike__stock-area {
+  display: flex;
+  flex-direction: row-reverse; /* stock on right, waste on left */
+  gap: 4px;
+  align-items: flex-start;
+}
+
+/* Foundation slots */
+.klondike__foundation-slot {
+  width: 52px;
+  height: 72px;
+  cursor: pointer;
+  position: relative;
+  border-radius: 4px;
+}
+
+.klondike__foundation-slot--selected > .playing-card {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+}
+
+/* Stock slot */
+.klondike__stock-slot {
+  width: 52px;
+  height: 72px;
+  cursor: pointer;
+  position: relative;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* Waste slot — needs to accommodate fanout of up to 3 cards */
+.klondike__waste-slot {
+  width: 52px;
+  height: 72px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.klondike__waste-slot--selected .klondike__waste-top > .playing-card {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+}
+
+.klondike__waste-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+}
+
+.klondike__waste-peek {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+}
+
+.klondike__waste-peek--back {
+  left: -20px;
+  z-index: 1;
+}
+
+.klondike__waste-peek--mid {
+  left: -10px;
+  z-index: 2;
+}
+
+/* Empty slot generic */
+.klondike__empty-slot {
+  width: 52px;
+  height: 72px;
+  border-radius: 4px;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.klondike__empty-slot--suit {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.klondike__suit-hint {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.25);
+  line-height: 1;
+  font-family: serif;
+}
+
+/* Stock reset indicator */
+.klondike__stock-reset {
+  cursor: pointer;
+}
+
+.klondike__reset-icon {
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: sans-serif;
+  line-height: 1;
+}
+
+/* ─── Tableau ─────────────────────────────────────────────────────────── */
+
+.klondike__tableau {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  align-items: flex-start;
+}
+
+.klondike__column {
+  flex: 1;
+  position: relative;
+  min-height: 72px;
+  /* Height grows with cards; JS positions cards via inline style top */
+}
+
+/* Valid destination highlight */
+.klondike__column--valid-dest > .klondike__empty-slot {
+  border-color: rgba(80, 220, 80, 0.7);
+  background: rgba(80, 220, 80, 0.08);
+}
+
+/* Face-down cards — absolute positioned, show as thin slivers */
+.klondike__facedown-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 18px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.klondike__facedown-card .playing-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Face-up cards — absolute positioned, overlapping */
+.klondike__faceup-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 26px;
+  cursor: pointer;
+}
+
+/* The last face-up card in a column should show full height */
+.klondike__faceup-card:last-child {
+  height: 72px;
+}
+
+.klondike__faceup-card .playing-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Selected card and cards below it in the sequence */
+.klondike__faceup-card--selected .playing-card {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+}
+
+/* Make the valid-dest column style apply to face-up top card too */
+.klondike__column--valid-dest .klondike__faceup-card:last-child .playing-card {
+  box-shadow: 0 0 0 2px rgba(80, 220, 80, 0.5);
+}
+
+/* The empty-slot placeholder inside a column */
+.klondike__column > .klondike__empty-slot {
+  position: relative;
+}
+
+/* ─── Status bar ──────────────────────────────────────────────────────── */
+
+.klondike__statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px 2px;
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+/* Auto-complete button */
+.klondike__autocomplete-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #228833;
+  color: #fff;
+  border: 2px solid;
+  border-color: #66cc77 #115522 #115522 #66cc77;
+  padding: 4px 8px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.klondike__autocomplete-btn:hover {
+  background: #33aa44;
+}
+
+.klondike__autocomplete-btn:active {
+  border-color: #115522 #66cc77 #66cc77 #115522;
+}
+
+/* ─── Win overlay ─────────────────────────────────────────────────────── */
+
+.klondike__win-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.klondike__win-banner {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.klondike__win-title {
+  font-size: 16px;
+  color: #228833;
+  letter-spacing: 2px;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.klondike__win-stats {
+  font-size: 8px;
+  color: #444;
+}
+
+.klondike__win-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  background: #cc4400;
+  color: #fff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  padding: 7px 16px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.klondike__win-btn:hover {
+  background: #ee5500;
+}
+
+.klondike__win-btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+.klondike__win-btn--secondary {
+  background: #5b2d8e;
+  border-color: #9966cc #331155 #331155 #9966cc;
+  margin-top: -4px;
+}
+
+.klondike__win-btn--secondary:hover {
+  background: #7b3dbe;
+}
+
+.klondike__win-btn--secondary:active {
+  border-color: #331155 #9966cc #9966cc #331155;
+}

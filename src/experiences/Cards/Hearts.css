@@ -1,0 +1,420 @@
+/* ─── Hearts ──────────────────────────────────────────────────────────── */
+
+.hearts {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+  min-height: 480px;
+  position: relative;
+}
+
+/* ── Table (felt) ────────────────────────────────────────────────────── */
+
+.hearts__table {
+  flex: 1;
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 6px 6px 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 400px;
+  position: relative;
+}
+
+/* ── North (AI top) ──────────────────────────────────────────────────── */
+
+.hearts__north {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+/* ── Middle row ──────────────────────────────────────────────────────── */
+
+.hearts__middle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── West / East AI ──────────────────────────────────────────────────── */
+
+.hearts__west,
+.hearts__east {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 60px;
+}
+
+/* ── Center trick area ───────────────────────────────────────────────── */
+
+.hearts__center {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 88px auto 88px;
+  grid-template-rows: auto auto auto;
+  gap: 6px;
+  align-items: center;
+  justify-items: center;
+  min-height: 240px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.hearts__trick-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 108px;
+}
+
+.hearts__trick-slot--north  { grid-column: 2; grid-row: 1; }
+.hearts__trick-slot--west   { grid-column: 1; grid-row: 2; }
+.hearts__trick-center       { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.hearts__trick-slot--east   { grid-column: 3; grid-row: 2; }
+.hearts__trick-slot--south  { grid-column: 2; grid-row: 3; }
+
+.hearts__trick-count {
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.hearts__broken {
+  font-size: 14px;
+  color: #ff4444;
+  line-height: 1;
+}
+
+/* ── South (Human) ───────────────────────────────────────────────────── */
+
+.hearts__south {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Player labels ───────────────────────────────────────────────────── */
+
+.hearts__player-label {
+  font-size: 6px;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.hearts__player-label--ai {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.hearts__score-inline {
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-left: 6px;
+}
+
+.hearts__hand-score {
+  font-size: 6px;
+  color: #ff9944;
+  min-height: 10px;
+}
+
+/* Turn indicator dot */
+.hearts__turn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffdd44;
+  flex-shrink: 0;
+  animation: hearts-pulse 1s ease-in-out infinite;
+}
+
+.hearts__turn-dot--human {
+  background: #ff8844;
+}
+
+@keyframes hearts-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ── AI hands (face-down rows/columns) ───────────────────────────────── */
+
+.hearts__ai-hand {
+  display: flex;
+}
+
+.hearts__ai-hand--horiz {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.hearts__ai-hand--horiz .playing-card--sm + .playing-card--sm {
+  margin-left: -30px;
+}
+
+.hearts__ai-hand--vert {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.hearts__ai-hand--vert .playing-card--sm + .playing-card--sm {
+  margin-top: -44px;
+}
+
+/* ── Human hand ──────────────────────────────────────────────────────── */
+
+.hearts__human-hand {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 4px 8px 2px;
+}
+
+.hearts__human-hand .hearts__card-wrap + .hearts__card-wrap {
+  margin-left: -20px;
+}
+
+/* Extra spacing in passing phase so cards don't feel cramped */
+.hearts__human-hand--passing .hearts__card-wrap + .hearts__card-wrap {
+  margin-left: -12px;
+}
+
+/* ── Card wrappers (selection / validity) ────────────────────────────── */
+
+.hearts__card-wrap {
+  position: relative;
+  transition: transform 0.12s ease;
+}
+
+.hearts__card-wrap--clickable {
+  cursor: pointer;
+}
+
+.hearts__card-wrap--clickable:hover {
+  transform: translateY(-8px);
+  z-index: 2;
+}
+
+/* Valid play — yellow glow */
+.hearts__card-wrap--valid .playing-card {
+  box-shadow: 0 0 0 2px #ffdd44, 0 0 8px rgba(255, 221, 68, 0.6);
+}
+
+/* Selected — orange glow + lifted */
+.hearts__card-wrap--selected {
+  transform: translateY(-14px) !important;
+  z-index: 5;
+}
+
+.hearts__card-wrap--selected .playing-card {
+  box-shadow: 0 0 0 2px #ff6600, 0 0 10px rgba(255, 102, 0, 0.7);
+}
+
+/* Newly received card in passing phase — subtle purple highlight */
+.hearts__card-wrap--received .playing-card {
+  box-shadow: 0 0 0 2px #9966cc, 0 0 8px rgba(153, 102, 204, 0.5);
+}
+
+/* ── Passing hints ───────────────────────────────────────────────────── */
+
+.hearts__pass-hint {
+  font-size: 6px;
+  color: #ffdd88;
+  text-align: center;
+  padding: 2px 0;
+}
+
+.hearts__pass-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+/* ── Play hint ───────────────────────────────────────────────────────── */
+
+.hearts__play-hint {
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  height: 12px;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────── */
+
+.hearts__status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 6px;
+  color: #000;
+  border-top: 1px solid #808080;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hearts__scores-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hearts__score-item {
+  white-space: nowrap;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+
+.hearts-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  border: 2px solid;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hearts-btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  padding: 6px 12px;
+}
+
+.hearts-btn--primary:hover { background: #ee5500; }
+.hearts-btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+
+.hearts-btn--sm {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 3px 7px;
+  font-size: 6px;
+}
+
+.hearts-btn--sm:hover:not(:disabled) { background: #d4d0c8; }
+.hearts-btn--sm:active:not(:disabled) { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ── Modal ───────────────────────────────────────────────────────────── */
+
+.hearts-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.hearts-modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.5);
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.hearts-modal__titlebar {
+  background: linear-gradient(to right, #cc4400, #881a00);
+  color: #fff;
+  font-size: 8px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hearts-modal__close {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.hearts-modal__close:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.hearts-modal__body {
+  padding: 12px 16px;
+}
+
+.hearts-modal__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7px;
+}
+
+.hearts-modal__table th,
+.hearts-modal__table td {
+  padding: 4px 8px;
+  text-align: center;
+  border-bottom: 1px solid #808080;
+}
+
+.hearts-modal__table th {
+  font-size: 6px;
+  color: #444;
+  border-bottom: 2px solid #808080;
+}
+
+.hearts-modal__table td:first-child {
+  text-align: left;
+  font-size: 6px;
+  color: #333;
+}
+
+.hearts-modal__winner-row td {
+  color: #228833;
+  font-weight: normal;
+}
+
+.hearts-modal__winner-label {
+  font-size: 6px;
+  color: #228833;
+  white-space: nowrap;
+}
+
+.hearts-modal__moon {
+  color: #5b2d8e;
+}
+
+.hearts-modal__footer {
+  padding: 8px 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  border-top: 1px solid #808080;
+}

@@ -1,0 +1,263 @@
+/* ── FreeCell Layout ────────────────────────────────────────────────────── */
+
+.freecell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: #1a4a1a;
+  font-family: "Press Start 2P", monospace;
+  min-height: 400px;
+  user-select: none;
+}
+
+/* ── Top Row (free cells + status + foundations) ────────────────────────── */
+
+.freecell__top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.freecell__free-cells {
+  display: flex;
+  gap: 4px;
+}
+
+.freecell__foundations {
+  display: flex;
+  gap: 4px;
+}
+
+.freecell__center-status {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.freecell__moves {
+  font-size: 7px;
+  color: #c0c0c0;
+  white-space: nowrap;
+}
+
+.freecell__auto-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  color: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.freecell__auto-btn:hover:not(:disabled) {
+  background: #d4d0c8;
+}
+
+.freecell__auto-btn:active:not(:disabled) {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.freecell__auto-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+/* ── Cell Slots (free cells + foundations) ──────────────────────────────── */
+
+.freecell__cell-slot {
+  width: 52px;
+  height: 72px;
+  position: relative;
+  cursor: pointer;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.freecell__cell-slot--selected {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+.freecell__cell-slot--valid {
+  outline: 2px solid #44cc44;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+.freecell__cell-slot--foundation {
+  cursor: pointer;
+}
+
+/* ── Empty slot placeholders ────────────────────────────────────────────── */
+
+.freecell__empty-slot {
+  width: 52px;
+  height: 72px;
+  border-radius: 3px;
+  border: 2px dashed #3a6a3a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.freecell__empty-slot--freecell {
+  background: #1a3a1a;
+  border-color: #2a5a2a;
+}
+
+.freecell__empty-slot--foundation {
+  background: #163816;
+  border-color: #2a5a2a;
+}
+
+.freecell__empty-slot--cascade {
+  background: #163816;
+  border-color: #2a5a2a;
+  width: 100%;
+  height: 72px;
+}
+
+.freecell__suit-hint {
+  font-size: 18px;
+  color: #2a5a2a;
+  line-height: 1;
+}
+
+/* ── Cascades ───────────────────────────────────────────────────────────── */
+
+.freecell__cascades {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  align-items: flex-start;
+}
+
+.freecell__cascade {
+  flex: 1;
+  position: relative;
+  min-width: 56px;
+  /* height grows with content */
+  min-height: 80px;
+}
+
+.freecell__cascade--valid > .freecell__empty-slot--cascade {
+  border-color: #44cc44;
+  background: #1e4a1e;
+}
+
+/* Highlight the empty-cascade slot itself when valid drop target */
+.freecell__cascade--valid .freecell__empty-slot--cascade {
+  border-color: #44cc44;
+}
+
+/* ── Cascade Cards ──────────────────────────────────────────────────────── */
+
+.freecell__cascade-card {
+  position: absolute;
+  left: 0;
+  cursor: pointer;
+}
+
+.freecell__cascade-card--selected {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* The topmost card in a selected sequence keeps the orange outline */
+.freecell__cascade-card--seq-start {
+  outline: 2px solid #cc4400;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* ── Win Overlay ────────────────────────────────────────────────────────── */
+
+.freecell__win-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border-radius: 2px;
+}
+
+.freecell__win-banner {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.freecell__win-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 16px;
+  color: #228833;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.freecell__win-moves {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #333;
+}
+
+.freecell__win-btns {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.freecell__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 8px 16px;
+  border: 2px solid;
+  cursor: pointer;
+}
+
+.freecell__btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+.freecell__btn--primary:hover {
+  background: #ee5500;
+}
+
+.freecell__btn--primary:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+.freecell__btn--secondary {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.freecell__btn--secondary:hover {
+  background: #d4d0c8;
+}
+
+.freecell__btn--secondary:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}

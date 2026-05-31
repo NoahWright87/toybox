@@ -7,38 +7,56 @@ export interface Card {
   id: string;
 }
 
-export interface CardBackColor {
-  label: string;
-  color: string;
-}
-
-export const CARD_BACK_COLORS: CardBackColor[] = [
-  { label: "Orange",  color: "#cc4400" },
-  { label: "Purple",  color: "#5b2d8e" },
-  { label: "Blue",    color: "#1a4a8a" },
-  { label: "Green",   color: "#1a5c2a" },
-  { label: "Red",     color: "#8a1a1a" },
-  { label: "Black",   color: "#1a1a1a" },
-];
-
+export type BackPattern = "crosshatch" | "diagonal" | "diamonds" | "noahsoft";
+export type CardFaceStyle = "classic" | "minimal" | "large-index";
 export type WarSpeed = "slow" | "normal" | "fast";
+export type MemoryDifficulty = "easy" | "medium" | "hard";
+
+export interface CardAppearance {
+  backPrimaryColor: string;
+  backSecondaryColor: string;
+  backPattern: BackPattern;
+  backImageUrl: string | null;
+  fourColorSuits: boolean;
+  cardFaceStyle: CardFaceStyle;
+}
 
 export interface DeckSettings {
   numDecks: number;
   suits: Suit[];
   includeJokers: boolean;
-  cardBack: string;
+  appearance: CardAppearance;
   warAutoPlay: boolean;
   warSpeed: WarSpeed;
+  memoryDifficulty: MemoryDifficulty;
+  klondikeDraw: 1 | 3;
 }
 
-export type CardsGame = "war" | "blackjack" | "pyramid";
+export type CardsGame =
+  | "war"
+  | "blackjack"
+  | "pyramid"
+  | "memory"
+  | "klondike"
+  | "freecell"
+  | "hearts";
+
+export const DEFAULT_APPEARANCE: CardAppearance = {
+  backPrimaryColor: "#cc4400",
+  backSecondaryColor: "#ffffff",
+  backPattern: "crosshatch",
+  backImageUrl: null,
+  fourColorSuits: false,
+  cardFaceStyle: "classic",
+};
 
 export const DEFAULT_DECK_SETTINGS: DeckSettings = {
   numDecks: 1,
   suits: ["spades", "hearts", "diamonds", "clubs"],
   includeJokers: false,
-  cardBack: "#cc4400",
+  appearance: DEFAULT_APPEARANCE,
   warAutoPlay: false,
   warSpeed: "normal",
+  memoryDifficulty: "easy",
+  klondikeDraw: 1,
 };

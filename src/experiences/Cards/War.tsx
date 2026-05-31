@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import "./Cards.css";
 import "./War.css";
 import { PlayingCard } from "./PlayingCard";
-import type { Card, DeckSettings } from "./types";
+import type { Card, CardAppearance, DeckSettings } from "./types";
 import { buildDeck, shuffle } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -77,7 +77,7 @@ interface WarProps {
 
 export default function War({ settings, onNewGame, onQuit }: WarProps) {
   const [state, setState] = useState<WarState>(() => makeInitialState(settings));
-  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
 
   const autoPlay = settings.warAutoPlay;
@@ -248,7 +248,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     ];
     return [
       { label: "Game", items },
-      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+      { label: "Options", items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }] },
     ];
   }, [newGame, onNewGame, onQuit]);
 
@@ -316,8 +316,8 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     <div className="war">
       {showDeckModal && (
         <DeckModal
-          cardBack={cardBack}
-          onSelect={setCardBack}
+          appearance={appearance}
+          onUpdate={setAppearance}
           onClose={() => setShowDeckModal(false)}
         />
       )}
@@ -335,7 +335,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
           <div className="war__side-label">You</div>
           <div className="war__pile-stack">
             {playerPile.length > 0
-              ? <PlayingCard card={playerPile[0]} faceDown backColor={cardBack} />
+              ? <PlayingCard card={playerPile[0]} faceDown appearance={appearance} />
               : <div className="playing-card--empty" />
             }
             <div className="war__pile-count">{playerPile.length} left</div>
@@ -343,7 +343,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
           {isWar && (
             <div className="war__war-cards">
               {warPlayerCards.map((c) => (
-                <PlayingCard key={c.id} card={c} faceDown backColor={cardBack} />
+                <PlayingCard key={c.id} card={c} faceDown appearance={appearance} />
               ))}
               {warPlayerFinal
                 ? <PlayingCard card={warPlayerFinal} />
@@ -352,7 +352,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
             </div>
           )}
           {playerCard && (
-            <div className="war__flipped">
+            <div key={playerCard.id} className="war__flipped">
               <PlayingCard card={playerCard} />
             </div>
           )}
@@ -368,7 +368,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
           <div className="war__side-label">Dealer</div>
           <div className="war__pile-stack">
             {dealerPile.length > 0
-              ? <PlayingCard card={dealerPile[0]} faceDown backColor={cardBack} />
+              ? <PlayingCard card={dealerPile[0]} faceDown appearance={appearance} />
               : <div className="playing-card--empty" />
             }
             <div className="war__pile-count">{dealerPile.length} left</div>
@@ -376,13 +376,13 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
           {isWar && (
             <div className="war__war-cards">
               {warDealerCards.map((c) => (
-                <PlayingCard key={c.id} card={c} faceDown backColor={cardBack} />
+                <PlayingCard key={c.id} card={c} faceDown appearance={appearance} />
               ))}
               {warDealerFinal && <PlayingCard card={warDealerFinal} />}
             </div>
           )}
           {dealerCard && (
-            <div className="war__flipped">
+            <div key={dealerCard.id} className="war__flipped">
               <PlayingCard card={dealerCard} />
             </div>
           )}

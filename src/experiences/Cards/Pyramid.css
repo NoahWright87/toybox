@@ -32,6 +32,7 @@
 .pyramid__card-wrap {
   position: absolute;
   cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 .pyramid__card-wrap--unavailable {
@@ -46,7 +47,8 @@
 }
 
 .pyramid__card-wrap--removed {
-  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.75);
   pointer-events: none;
 }
 

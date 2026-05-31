@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import "./Pyramid.css";
 import { PlayingCard } from "./PlayingCard";
-import type { Card, DeckSettings } from "./types";
+import type { Card, CardAppearance, DeckSettings } from "./types";
 import { buildDeck } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -120,7 +120,7 @@ interface PyramidProps {
 
 export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
   const [state, setState] = useState<PyramidState>(() => buildPyramid(settings));
-  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
 
   const newGame = useCallback(() => setState(buildPyramid(settings)), [settings]);
@@ -223,7 +223,7 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
     ];
     return [
       { label: "Game", items },
-      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+      { label: "Options", items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }] },
     ];
   }, [newGame, onNewGame, onQuit]);
 
@@ -235,8 +235,8 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
     <div className="pyramid">
       {showDeckModal && (
         <DeckModal
-          cardBack={cardBack}
-          onSelect={setCardBack}
+          appearance={appearance}
+          onUpdate={setAppearance}
           onClose={() => setShowDeckModal(false)}
         />
       )}
@@ -259,7 +259,7 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
                   style={{ left: cardX(slot.row, slot.col), top: cardY(slot.row) }}
                   onClick={() => avail && selectCard(slot.card.id, false)}
                 >
-                  <PlayingCard card={slot.card} size="sm" backColor={cardBack} />
+                  <PlayingCard card={slot.card} size="sm" appearance={appearance} />
                 </div>
               );
             })}
@@ -271,7 +271,7 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
             <div className="pyramid__pile-label">Stock</div>
             <div className="pyramid__stock-card" onClick={drawFromStock}>
               {state.stock.length > 0
-                ? <PlayingCard card={state.stock[0]} faceDown size="sm" backColor={cardBack} />
+                ? <PlayingCard card={state.stock[0]} faceDown size="sm" appearance={appearance} />
                 : <div className="playing-card--empty" style={{ width: 52, height: 72 }} />
               }
             </div>
@@ -289,7 +289,7 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
                   style={{ position: "relative" }}
                   onClick={() => selectCard(wasteTop.id, true)}
                 >
-                  <PlayingCard card={wasteTop} size="sm" backColor={cardBack} />
+                  <PlayingCard card={wasteTop} size="sm" appearance={appearance} />
                 </div>
               )
               : <div className="playing-card--empty" style={{ width: 52, height: 72 }} />

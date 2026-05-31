@@ -4,6 +4,7 @@ import {
   DEFAULT_DECK_SETTINGS,
   type CardsGame,
   type DeckSettings,
+  type MemoryDifficulty,
   type Suit,
   type WarSpeed,
 } from "./types";
@@ -23,6 +24,12 @@ const WAR_SPEEDS: { value: WarSpeed; label: string }[] = [
   { value: "slow",   label: "Slow (2s)"    },
   { value: "normal", label: "Normal (0.9s)" },
   { value: "fast",   label: "Fast (0.25s)" },
+];
+
+const MEMORY_DIFFICULTIES: { value: MemoryDifficulty; label: string }[] = [
+  { value: "easy",   label: "Easy (4×4)"  },
+  { value: "medium", label: "Medium (4×6)" },
+  { value: "hard",   label: "Hard (6×6)"  },
 ];
 
 interface CardsLauncherProps {
@@ -68,6 +75,13 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
 
   useWindowMenus(launcherMenus);
 
+  const showDeckCount = game === "blackjack";
+  const showSuits     = game === "war";
+  const showOptions   = showDeckCount || showSuits;
+  const showWarOpts   = game === "war";
+  const showMemOpts   = game === "memory";
+  const showKlonOpts  = game === "klondike";
+
   return (
     <div className="cards-launcher">
       {/* Game picker */}
@@ -80,20 +94,22 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
         >
           <option value="war">War</option>
           <option value="blackjack">Blackjack</option>
-          <option value="pyramid">Pyramid</option>
-          <option disabled>── More Coming Soon ──</option>
+          <option value="pyramid">Pyramid Solitaire</option>
+          <option value="memory">Memory</option>
+          <option value="klondike">Klondike Solitaire</option>
+          <option value="freecell">FreeCell</option>
+          <option value="hearts">Hearts</option>
         </select>
       </div>
 
-      {/* Per-game options */}
-      {(game === "war" || game === "blackjack") && (
+      {/* Deck options (War suits, Blackjack deck count) */}
+      {showOptions && (
         <>
           <div className="cards-launcher__divider" />
           <div>
             <div className="cards-launcher__section-title">Options:</div>
 
-            {/* Deck count — Blackjack only */}
-            {game === "blackjack" && (
+            {showDeckCount && (
               <div className="cards-launcher__row">
                 <span className="cards-launcher__option-label">Number of Decks:</span>
                 <div className="cards-launcher__stepper">
@@ -104,8 +120,7 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
               </div>
             )}
 
-            {/* Suits — War only */}
-            {game === "war" && (
+            {showSuits && (
               <div className="cards-launcher__row">
                 <span className="cards-launcher__option-label">Suits:</span>
                 <div className="cards-launcher__suits">
@@ -132,8 +147,8 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
         </>
       )}
 
-      {/* War-specific settings */}
-      {game === "war" && (
+      {/* War settings */}
+      {showWarOpts && (
         <>
           <div className="cards-launcher__divider" />
           <div>
@@ -144,6 +159,7 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
               <label className="cards-launcher__checkbox-wrap">
                 <input
                   type="checkbox"
+                  className="cards-launcher__checkbox"
                   checked={settings.warAutoPlay}
                   onChange={(e) => setSettings((prev) => ({ ...prev, warAutoPlay: e.target.checked }))}
                 />
@@ -170,6 +186,51 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
         </>
       )}
 
+      {/* Memory difficulty */}
+      {showMemOpts && (
+        <>
+          <div className="cards-launcher__divider" />
+          <div>
+            <div className="cards-launcher__section-title">Memory Options:</div>
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Difficulty:</span>
+              <select
+                className="cards-launcher__select"
+                style={{ width: "auto" }}
+                value={settings.memoryDifficulty}
+                onChange={(e) => setSettings((prev) => ({ ...prev, memoryDifficulty: e.target.value as MemoryDifficulty }))}
+              >
+                {MEMORY_DIFFICULTIES.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Klondike draw mode */}
+      {showKlonOpts && (
+        <>
+          <div className="cards-launcher__divider" />
+          <div>
+            <div className="cards-launcher__section-title">Klondike Options:</div>
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Draw:</span>
+              <select
+                className="cards-launcher__select"
+                style={{ width: "auto" }}
+                value={settings.klondikeDraw}
+                onChange={(e) => setSettings((prev) => ({ ...prev, klondikeDraw: parseInt(e.target.value) as 1 | 3 }))}
+              >
+                <option value={1}>Draw 1</option>
+                <option value={3}>Draw 3</option>
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="cards-launcher__divider" />
 
       <button className="cards-launcher__launch-btn" onClick={() => onLaunch(game, settings)}>
@@ -178,8 +239,8 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
 
       {showDeckModal && (
         <DeckModal
-          cardBack={settings.cardBack}
-          onSelect={(color) => setSettings((prev) => ({ ...prev, cardBack: color }))}
+          appearance={settings.appearance}
+          onUpdate={(a) => setSettings((prev) => ({ ...prev, appearance: a }))}
           onClose={() => setShowDeckModal(false)}
         />
       )}
