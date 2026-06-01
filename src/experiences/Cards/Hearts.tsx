@@ -84,7 +84,6 @@ function passTarget(from: number, dir: PassDir): number {
 
 // ── AI Helpers ────────────────────────────────────────────────────────────────
 
-/** Score a card for "how bad is it to keep" — higher = pass first */
 function problemScore(card: Card): number {
   if (card.suit === "spades") {
     if (card.rank === "A") return 200;
@@ -92,7 +91,6 @@ function problemScore(card: Card): number {
     if (card.rank === "Q") return 160;
   }
   if (card.suit === "hearts") return 100 + rankValue(card.rank as string);
-  // high spades (J, 10, 9, 8 = bad supports)
   if (card.suit === "spades") return rankValue(card.rank as string);
   return 0;
 }
@@ -107,9 +105,7 @@ function aiChooseCard(
   trick: TrickPlay[],
   ledSuit: Suit | null,
 ): Card {
-  // Leading
   if (trick.length === 0 || ledSuit === null) {
-    // Lead lowest non-heart if possible
     const nonHearts = valid.filter((c) => c.suit !== "hearts");
     const pool = nonHearts.length > 0 ? nonHearts : valid;
     return pool.reduce((best, c) =>
@@ -117,11 +113,9 @@ function aiChooseCard(
     );
   }
 
-  // Following suit
   const canFollowSuit = valid.some((c) => c.suit === ledSuit);
   if (canFollowSuit) {
     const suitCards = valid.filter((c) => c.suit === ledSuit);
-    // Find current winner value
     let winnerVal = -1;
     for (const play of trick) {
       if (play.card.suit === ledSuit) {
@@ -129,31 +123,25 @@ function aiChooseCard(
         if (v > winnerVal) winnerVal = v;
       }
     }
-    // Try to play highest card that won't win, or lowest if all would win
     const losers = suitCards.filter((c) => rankValue(c.rank as string) < winnerVal);
     if (losers.length > 0) {
       return losers.reduce((best, c) =>
         rankValue(c.rank as string) > rankValue(best.rank as string) ? c : best
       );
     }
-    // All cards win or no hearts broken — play lowest
     return suitCards.reduce((best, c) =>
       rankValue(c.rank as string) < rankValue(best.rank as string) ? c : best
     );
   }
 
-  // Can't follow suit — discard
-  // Dump Q♠ first
   const qs = valid.find((c) => c.suit === "spades" && c.rank === "Q");
   if (qs) return qs;
-  // Highest heart
   const hearts = valid.filter((c) => c.suit === "hearts");
   if (hearts.length > 0) {
     return hearts.reduce((best, c) =>
       rankValue(c.rank as string) > rankValue(best.rank as string) ? c : best
     );
   }
-  // Highest remaining
   return valid.reduce((best, c) =>
     rankValue(c.rank as string) > rankValue(best.rank as string) ? c : best
   );
@@ -165,7 +153,6 @@ function applyHandScores(
   handScores: number[],
   cumulativeScores: number[],
 ): number[] {
-  // Check shoot the moon: did any player score all 26?
   const moonShooterIdx = handScores.findIndex((s) => s === 26);
   if (moonShooterIdx !== -1) {
     return cumulativeScores.map((s, i) => (i === moonShooterIdx ? s : s + 26));
@@ -178,7 +165,6 @@ function applyHandScores(
 function makeInitialState(handNumber: number, prevScores: number[]): HeartsState {
   const deck = buildDeck();
   const hands = dealHands(deck, 4);
-  // Sort hands for display: by suit then rank
   const suitOrder: Record<string, number> = { spades: 0, hearts: 1, diamonds: 2, clubs: 3 };
   const sortHand = (hand: Card[]) =>
     [...hand].sort((a, b) => {
@@ -189,7 +175,6 @@ function makeInitialState(handNumber: number, prevScores: number[]): HeartsState
 
   const dir = passDirection(handNumber);
 
-  // Find who has 2♣
   let trickLeader = 0;
   for (let i = 0; i < 4; i++) {
     if (hands[i].some((c) => c.suit === "clubs" && c.rank === "2")) {
@@ -222,6 +207,21 @@ function freshGame(): HeartsState {
   return makeInitialState(0, [0, 0, 0, 0]);
 }
 
+// ── Fan helpers ───────────────────────────────────────────────────────────────
+
+// Returns rotation angle in degrees for a card at position idx in a hand of total
+function fanAngle(idx: number, total: number): number {
+  if (total <= 1) return 0;
+  const mid = (total - 1) / 2;
+  return ((idx - mid) / mid) * 11;
+}
+
+// Overlap in px to keep a horizontal hand within maxWidth
+function handOverlap(count: number, cardW: number, maxW: number): number {
+  if (count <= 1) return 0;
+  return Math.max(0, Math.round((count * cardW - maxW) / (count - 1)));
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface HeartsProps {
@@ -235,8 +235,17 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
   const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [showScores, setShowScores] = useState(false);
-  // Ref to track if an AI step is currently scheduled (prevents double-firing)
+  const [dealKey, setDealKey] = useState(0);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevHandNumRef = useRef(state.handNumber);
+
+  // Increment dealKey on each new hand so cards remount and re-animate
+  useEffect(() => {
+    if (state.handNumber !== prevHandNumRef.current) {
+      prevHandNumRef.current = state.handNumber;
+      setDealKey((k) => k + 1);
+    }
+  }, [state.handNumber]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -271,28 +280,23 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     setState((s) => {
       if (s.passedCards.length !== 3) return s;
 
-      // AI passes
       const aiPasses: Card[][] = [[], [], [], []];
       aiPasses[0] = s.passedCards;
       for (let i = 1; i < 4; i++) {
         aiPasses[i] = aiSelectCardsToPass(s.hands[i]);
       }
 
-      // Exchange cards
       const newHands = s.hands.map((hand) => [...hand]);
       for (let from = 0; from < 4; from++) {
         const to = passTarget(from, s.passDir);
         if (to === from) continue;
         const passing = aiPasses[from];
-        // Remove from sender
         newHands[from] = newHands[from].filter(
           (c) => !passing.some((p) => p.id === c.id)
         );
-        // Add to receiver
         newHands[to] = [...newHands[to], ...passing];
       }
 
-      // Re-sort hands
       const suitOrder: Record<string, number> = { spades: 0, hearts: 1, diamonds: 2, clubs: 3 };
       const sortHand = (hand: Card[]) =>
         [...hand].sort((a, b) => {
@@ -303,7 +307,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
 
       const sortedHands = newHands.map(sortHand);
 
-      // Find who has 2♣ after passing
       let trickLeader = 0;
       for (let i = 0; i < 4; i++) {
         if (sortedHands[i].some((c) => c.suit === "clubs" && c.rank === "2")) {
@@ -312,7 +315,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
         }
       }
 
-      // Determine what human received: find who passes TO player 0
       const humanReceivedFrom: number[] = [];
       for (let from = 0; from < 4; from++) {
         if (passTarget(from, s.passDir) === 0 && from !== 0) {
@@ -342,7 +344,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
       if (s.phase !== "playing") return s;
       if (s.currentPlayer !== playerIndex) return s;
 
-      // Validate
       const valid = getValidHeartPlays(
         s.hands[playerIndex],
         s.ledSuit,
@@ -362,7 +363,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
       const newHeartsAreBroken =
         s.heartsAreBroken || card.suit === "hearts";
 
-      // Not all 4 played yet
       if (newTrick.length < 4) {
         const nextPlayer = (playerIndex + 1) % 4;
         return {
@@ -376,7 +376,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
         };
       }
 
-      // Trick complete — resolve
       const winner = resolveTrick(newTrick, newLedSuit!);
       const pts = trickPoints(newTrick.map((p) => p.card));
       const newHandScores = s.handScores.map((hs, i) => (i === winner ? hs + pts : hs));
@@ -384,7 +383,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
       const newIsFirstTrick = false;
 
       if (newTricksThisHand === 13) {
-        // Hand over
         const newCumulative = applyHandScores(newHandScores, s.scores);
         const gameOver = newCumulative.some((sc) => sc >= 100);
         return {
@@ -404,7 +402,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
         };
       }
 
-      // Brief pause to show trick before clearing
       return {
         ...s,
         hands: newHands,
@@ -433,7 +430,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     if (!validIds.has(card.id)) return;
 
     if (selectedCard === card.id) {
-      // Second click = confirm play
       playCard(0, card);
     } else {
       setState((s) => ({ ...s, selectedCard: card.id }));
@@ -447,12 +443,7 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     const t = setTimeout(() => {
       setState((s) => {
         if (s.phase !== "trick-end") return s;
-        return {
-          ...s,
-          phase: "playing",
-          currentTrick: [],
-          ledSuit: null,
-        };
+        return { ...s, phase: "playing", currentTrick: [], ledSuit: null };
       });
     }, 900);
     return () => clearTimeout(t);
@@ -465,7 +456,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     if (currentPlayer === 0) return;
     if (phase === "trick-end") return;
 
-    // Cancel any stale timer
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
 
     aiTimerRef.current = setTimeout(() => {
@@ -505,7 +495,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
           };
         }
 
-        // Trick complete
         const winner = resolveTrick(newTrick, newLedSuit!);
         const pts = trickPoints(newTrick.map((p) => p.card));
         const newHandScores = s.handScores.map((hs, i) => (i === winner ? hs + pts : hs));
@@ -554,11 +543,7 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
   // ── Between-hand: start next hand ─────────────────────────────────────────
 
   const startNextHand = useCallback(() => {
-    setState((s) => {
-      const nextHandNum = s.handNumber + 1;
-      const next = makeInitialState(nextHandNum, s.scores);
-      return next;
-    });
+    setState((s) => makeInitialState(s.handNumber + 1, s.scores));
   }, []);
 
   const startNewGame = useCallback(() => {
@@ -585,11 +570,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
-  const passTargetName = passDir !== "none"
-    ? PLAYER_NAMES[passTarget(0, passDir)]
-    : "";
-
-  /** Card played by a given player in current trick */
   function trickCardFor(playerIdx: number): Card | null {
     return currentTrick.find((p) => p.playerIndex === playerIdx)?.card ?? null;
   }
@@ -601,7 +581,13 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     return "";
   }
 
+  const passTargetName = passDir !== "none" ? PLAYER_NAMES[passTarget(0, passDir)] : "";
   const gameOverWinnerIdx = state.scores.indexOf(Math.min(...state.scores));
+
+  // Human hand overlap: fit 13 cards into ~300px max
+  const hOverlap = handOverlap(humanHand.length, 72, 300);
+  // North AI overlap: fit 13 sm cards into ~280px max
+  const nOverlap = handOverlap(hands[2].length, 52, 280);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -615,14 +601,25 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
         />
       )}
 
-      {/* Hand-end / Game-over scorecard modal */}
+      {/* Hand-end / Game-over / Scores modal */}
       {(phase === "hand-end" || phase === "game-over" || showScores) && (
-        <div className="hearts-modal-overlay" onClick={showScores ? () => setShowScores(false) : undefined}>
+        <div
+          className="hearts-modal-overlay"
+          onClick={showScores ? () => setShowScores(false) : undefined}
+        >
           <div className="hearts-modal" onClick={(e) => e.stopPropagation()}>
             <div className="hearts-modal__titlebar">
-              <span>{phase === "game-over" ? "Game Over" : showScores ? "Scores" : "Hand Results"}</span>
+              <span>
+                {phase === "game-over" ? "Game Over" : showScores ? "Scores" : "Hand Results"}
+              </span>
               {showScores && (
-                <button className="hearts-modal__close" onClick={() => setShowScores(false)} aria-label="Close">✕</button>
+                <button
+                  className="hearts-modal__close"
+                  onClick={() => setShowScores(false)}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
               )}
             </div>
             <div className="hearts-modal__body">
@@ -636,7 +633,14 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
                 </thead>
                 <tbody>
                   {PLAYER_NAMES.map((name, i) => (
-                    <tr key={i} className={phase === "game-over" && i === gameOverWinnerIdx ? "hearts-modal__winner-row" : ""}>
+                    <tr
+                      key={i}
+                      className={
+                        phase === "game-over" && i === gameOverWinnerIdx
+                          ? "hearts-modal__winner-row"
+                          : ""
+                      }
+                    >
                       <td>{name}</td>
                       {(phase === "hand-end" || phase === "game-over") && (
                         <td className={handScores[i] === 26 ? "hearts-modal__moon" : ""}>
@@ -674,139 +678,148 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
         </div>
       )}
 
-      {/* Table */}
+      {/* ── Table (felt) ── */}
       <div className="hearts__table">
 
-        {/* North AI (top) */}
-        <div className="hearts__north">
+        {/* North AI */}
+        <div className="hearts__zone hearts__zone--north">
           <div className="hearts__player-label hearts__player-label--ai">
             {PLAYER_NAMES[2]}
-            {currentPlayer === 2 && phase === "playing" && (
-              <span className="hearts__turn-dot" />
+            {currentPlayer === 2 && phase === "playing" && <span className="hearts__turn-dot" />}
+            {handScores[2] > 0 && (
+              <span className="hearts__hand-score-badge">{handScores[2]}pt</span>
             )}
           </div>
-          <div className="hearts__ai-hand hearts__ai-hand--horiz">
-            {hands[2].map((card) => (
+          <div
+            className="hearts__ai-fan hearts__ai-fan--horiz"
+            style={{ "--ai-overlap": `${nOverlap}px` } as React.CSSProperties}
+          >
+            {hands[2].map((card, idx) => (
               <PlayingCard
-                key={card.id}
+                key={`n-${dealKey}-${card.id}`}
                 card={card}
                 faceDown
                 appearance={appearance}
                 size="sm"
+                dealIndex={idx}
               />
             ))}
           </div>
-          <div className="hearts__hand-score">
-            {handScores[2] > 0 && `${handScores[2]}pt`}
+        </div>
+
+        {/* West AI */}
+        <div className="hearts__zone hearts__zone--west">
+          <div className="hearts__player-label hearts__player-label--ai hearts__player-label--side">
+            {PLAYER_NAMES[1]}
+            {currentPlayer === 1 && phase === "playing" && <span className="hearts__turn-dot" />}
+            {handScores[1] > 0 && (
+              <span className="hearts__hand-score-badge">{handScores[1]}pt</span>
+            )}
+          </div>
+          <div className="hearts__ai-fan hearts__ai-fan--vert">
+            {hands[1].slice(0, 8).map((card, idx) => (
+              <PlayingCard
+                key={`w-${dealKey}-${card.id}`}
+                card={card}
+                faceDown
+                appearance={appearance}
+                size="sm"
+                dealIndex={idx}
+              />
+            ))}
+            {hands[1].length > 8 && (
+              <div className="hearts__ai-extra">+{hands[1].length - 8}</div>
+            )}
           </div>
         </div>
 
-        {/* Middle row: West, Center, East */}
-        <div className="hearts__middle">
-          {/* West AI */}
-          <div className="hearts__west">
-            <div className="hearts__player-label hearts__player-label--ai">
-              {PLAYER_NAMES[1]}
-              {currentPlayer === 1 && phase === "playing" && (
-                <span className="hearts__turn-dot" />
-              )}
-            </div>
-            <div className="hearts__ai-hand hearts__ai-hand--vert">
-              {hands[1].map((card) => (
-                <PlayingCard
-                  key={card.id}
-                  card={card}
-                  faceDown
-                  appearance={appearance}
-                  size="sm"
-                />
-              ))}
-            </div>
-            <div className="hearts__hand-score">
-              {handScores[1] > 0 && `${handScores[1]}pt`}
-            </div>
+        {/* Trick area */}
+        <div className="hearts__trick-area">
+          <div className="hearts__trick-slot hearts__trick-slot--n">
+            {trickCardFor(2) && (
+              <div key={trickCardFor(2)!.id} className="hearts__trick-card">
+                <PlayingCard card={trickCardFor(2)!} appearance={appearance} size="sm" />
+              </div>
+            )}
           </div>
-
-          {/* Center trick area */}
-          <div className="hearts__center">
-            {/* North slot */}
-            <div className="hearts__trick-slot hearts__trick-slot--north">
-              {trickCardFor(2) && (
-                <PlayingCard card={trickCardFor(2)!} appearance={appearance} />
-              )}
-            </div>
-            {/* West slot */}
-            <div className="hearts__trick-slot hearts__trick-slot--west">
-              {trickCardFor(1) && (
-                <PlayingCard card={trickCardFor(1)!} appearance={appearance} />
-              )}
-            </div>
-            {/* Center indicator */}
-            <div className="hearts__trick-center">
-              {phase === "playing" || phase === "trick-end" ? (
-                <span className="hearts__trick-count">{tricksThisHand}/13</span>
-              ) : null}
-              {heartsAreBroken && <span className="hearts__broken">♥</span>}
-            </div>
-            {/* East slot */}
-            <div className="hearts__trick-slot hearts__trick-slot--east">
-              {trickCardFor(3) && (
-                <PlayingCard card={trickCardFor(3)!} appearance={appearance} />
-              )}
-            </div>
-            {/* South (human) slot */}
-            <div className="hearts__trick-slot hearts__trick-slot--south">
-              {trickCardFor(0) && (
-                <PlayingCard card={trickCardFor(0)!} appearance={appearance} />
-              )}
-            </div>
+          <div className="hearts__trick-slot hearts__trick-slot--w">
+            {trickCardFor(1) && (
+              <div key={trickCardFor(1)!.id} className="hearts__trick-card">
+                <PlayingCard card={trickCardFor(1)!} appearance={appearance} size="sm" />
+              </div>
+            )}
           </div>
-
-          {/* East AI */}
-          <div className="hearts__east">
-            <div className="hearts__player-label hearts__player-label--ai">
-              {PLAYER_NAMES[3]}
-              {currentPlayer === 3 && phase === "playing" && (
-                <span className="hearts__turn-dot" />
-              )}
-            </div>
-            <div className="hearts__ai-hand hearts__ai-hand--vert">
-              {hands[3].map((card) => (
-                <PlayingCard
-                  key={card.id}
-                  card={card}
-                  faceDown
-                  appearance={appearance}
-                  size="sm"
-                />
-              ))}
-            </div>
-            <div className="hearts__hand-score">
-              {handScores[3] > 0 && `${handScores[3]}pt`}
-            </div>
+          <div className="hearts__trick-center-info">
+            {(phase === "playing" || phase === "trick-end") && (
+              <span className="hearts__trick-count">{tricksThisHand}/13</span>
+            )}
+            {heartsAreBroken && <span className="hearts__broken">♥</span>}
+          </div>
+          <div className="hearts__trick-slot hearts__trick-slot--e">
+            {trickCardFor(3) && (
+              <div key={trickCardFor(3)!.id} className="hearts__trick-card">
+                <PlayingCard card={trickCardFor(3)!} appearance={appearance} size="sm" />
+              </div>
+            )}
+          </div>
+          <div className="hearts__trick-slot hearts__trick-slot--s">
+            {trickCardFor(0) && (
+              <div key={trickCardFor(0)!.id} className="hearts__trick-card">
+                <PlayingCard card={trickCardFor(0)!} appearance={appearance} size="sm" />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Human (South) */}
-        <div className="hearts__south">
+        {/* East AI */}
+        <div className="hearts__zone hearts__zone--east">
+          <div className="hearts__player-label hearts__player-label--ai hearts__player-label--side">
+            {PLAYER_NAMES[3]}
+            {currentPlayer === 3 && phase === "playing" && <span className="hearts__turn-dot" />}
+            {handScores[3] > 0 && (
+              <span className="hearts__hand-score-badge">{handScores[3]}pt</span>
+            )}
+          </div>
+          <div className="hearts__ai-fan hearts__ai-fan--vert">
+            {hands[3].slice(0, 8).map((card, idx) => (
+              <PlayingCard
+                key={`e-${dealKey}-${card.id}`}
+                card={card}
+                faceDown
+                appearance={appearance}
+                size="sm"
+                dealIndex={idx}
+              />
+            ))}
+            {hands[3].length > 8 && (
+              <div className="hearts__ai-extra">+{hands[3].length - 8}</div>
+            )}
+          </div>
+        </div>
+
+        {/* South — human player */}
+        <div className="hearts__zone hearts__zone--south">
           <div className="hearts__player-label">
             {PLAYER_NAMES[0]}
             {isHumanTurn && phase === "playing" && (
               <span className="hearts__turn-dot hearts__turn-dot--human" />
             )}
-            <span className="hearts__score-inline">{scores[0]}pts total</span>
+            <span className="hearts__score-inline">{scores[0]}pts</span>
           </div>
 
-          {/* Passing phase instruction */}
           {phase === "passing" && (
             <div className="hearts__pass-hint">
-              Select 3 cards to pass to {passTargetName}
-              {passedCards.length > 0 && ` (${passedCards.length}/3 selected)`}
+              Select 3 to pass to {passTargetName}
+              {passedCards.length > 0 && ` (${passedCards.length}/3)`}
             </div>
           )}
 
-          <div className={`hearts__human-hand${phase === "passing" ? " hearts__human-hand--passing" : ""}`}>
-            {humanHand.map((card) => {
+          <div
+            className={`hearts__human-hand${phase === "passing" ? " hearts__human-hand--passing" : ""}`}
+            style={{ "--hand-overlap": `${hOverlap}px` } as React.CSSProperties}
+          >
+            {humanHand.map((card, idx) => {
+              const angle = fanAngle(idx, humanHand.length);
               const isSelected = phase === "passing"
                 ? passedCards.some((c) => c.id === card.id)
                 : selectedCard === card.id;
@@ -816,14 +829,19 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
 
               return (
                 <div
-                  key={card.id}
+                  key={`h-${dealKey}-${card.id}`}
                   className={[
-                    "hearts__card-wrap",
-                    isSelected ? "hearts__card-wrap--selected" : "",
-                    isValid && !isSelected ? "hearts__card-wrap--valid" : "",
-                    isPlayable ? "hearts__card-wrap--clickable" : "",
-                    hasReceived ? "hearts__card-wrap--received" : "",
+                    "hearts__fan-item",
+                    isSelected ? "hearts__fan-item--selected" : "",
+                    isValid && !isSelected ? "hearts__fan-item--valid" : "",
+                    isPlayable ? "hearts__fan-item--clickable" : "",
+                    hasReceived ? "hearts__fan-item--received" : "",
                   ].filter(Boolean).join(" ")}
+                  style={{
+                    "--fan-angle": `${angle}deg`,
+                    "--fan-i": idx,
+                    zIndex: isSelected ? 20 : idx + 1,
+                  } as React.CSSProperties}
                   onClick={() => handleCardClick(card)}
                 >
                   <PlayingCard card={card} appearance={appearance} />
@@ -834,19 +852,14 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
 
           {phase === "passing" && passedCards.length === 3 && (
             <div className="hearts__pass-actions">
-              <button
-                className="hearts-btn hearts-btn--primary"
-                onClick={confirmPass}
-              >
+              <button className="hearts-btn hearts-btn--primary" onClick={confirmPass}>
                 {passLabel()} →
               </button>
             </div>
           )}
 
           {phase === "playing" && isHumanTurn && selectedCard && (
-            <div className="hearts__play-hint">
-              Click again to play
-            </div>
+            <div className="hearts__play-hint">Click again to play</div>
           )}
           {phase === "playing" && !isHumanTurn && currentPlayer !== 0 && (
             <div className="hearts__play-hint">
@@ -869,10 +882,7 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
             </span>
           ))}
         </span>
-        <button
-          className="hearts-btn hearts-btn--sm"
-          onClick={() => setShowScores(true)}
-        >
+        <button className="hearts-btn hearts-btn--sm" onClick={() => setShowScores(true)}>
           Scores
         </button>
       </div>
