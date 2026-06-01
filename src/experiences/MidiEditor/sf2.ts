@@ -306,6 +306,8 @@ export function playSfNote(
   gain: number,
   bendToPitch?: number,
   bendCurvature = 0,
+  bendStartSec = 0,
+  bendDurationSec?: number,
 ): boolean {
   if (!_font) return false;
 
@@ -344,7 +346,11 @@ export function playSfNote(
     for (let i = 0; i < N; i++) {
       curve[i] = startRate + (endRate - startRate) * sfShapedCurve(i / (N - 1), bendCurvature);
     }
-    source.playbackRate.setValueCurveAtTime(curve, when, Math.max(durationSec - 0.05, 0.05));
+    const slideStart = when + bendStartSec;
+    const slideDur   = bendDurationSec ?? Math.max(durationSec - bendStartSec - 0.05, 0.05);
+    source.playbackRate.setValueAtTime(startRate, when);
+    source.playbackRate.setValueCurveAtTime(curve, slideStart, slideDur);
+    source.playbackRate.setValueAtTime(endRate, slideStart + slideDur);
   } else {
     source.playbackRate.value = startRate;
   }

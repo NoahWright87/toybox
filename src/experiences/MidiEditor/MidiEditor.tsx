@@ -203,29 +203,37 @@ function exportToMidi(song: Song, selectedClipId: string): void {
       const shift = track.isDrum ? 0 : (track.octaveOffset ?? 0);
       const noteById = new Map(track.notes.map(n => [n.id, n]));
 
+      const skipNoteIds = new Set<string>(track.bends.map(b => b.toNoteId));
       for (const note of track.notes) {
+        if (skipNoteIds.has(note.id)) continue; // merged into source
+
+        const bend   = track.bends.find(b => b.fromNoteId === note.id);
+        const toNote = bend ? noteById.get(bend.toNoteId) : undefined;
+        const overlapStart = toNote ? Math.max(note.startStep, toNote.startStep) : 0;
+        const overlapEnd   = toNote ? Math.min(note.startStep + note.durationSteps, toNote.startStep + toNote.durationSteps) : 0;
+        const hasValidBend = toNote !== undefined && overlapEnd > overlapStart;
+
+        // Source note on/off spans from note.startStep to toNote.endStep when bent
+        const noteEnd = hasValidBend ? toNote!.startStep + toNote!.durationSteps : note.startStep + note.durationSteps;
         const t0 = Math.round((blockStartStep + note.startStep) * PPQ / stepsPerBeat);
-        const t1 = Math.round((blockStartStep + note.startStep + note.durationSteps) * PPQ / stepsPerBeat);
+        const t1 = Math.round((blockStartStep + noteEnd) * PPQ / stepsPerBeat);
         const p  = Math.max(0, Math.min(127, note.pitch + shift));
         slotEvents[slot].push({ kind: 'note', tick: t0, isOff: false, pitch: p, velocity: note.velocity & 0x7F, ch });
         slotEvents[slot].push({ kind: 'note', tick: t1, isOff: true,  pitch: p, velocity: 64, ch });
 
-        const bend = track.bends.find(b => b.fromNoteId === note.id);
-        if (bend) {
-          const toNote = noteById.get(bend.toNoteId);
-          if (toNote) {
-            const semDelta = (toNote.pitch + shift) - p;
-            const N = 16;
-            const durTicks = t1 - t0;
-            for (let i = 0; i < N; i++) {
-              const q = shapedCurve(i / (N - 1), bend.curvature);
-              const bendVal = Math.round(8192 + (semDelta * q / MIDI_BEND_RANGE) * 8192);
-              const clampedVal = Math.max(0, Math.min(16383, bendVal));
-              slotEvents[slot].push({ kind: 'bend', tick: t0 + Math.round(i * durTicks / (N - 1)), value: clampedVal, ch });
-            }
-            // Reset bend after note ends
-            slotEvents[slot].push({ kind: 'bend', tick: t1 + 1, value: 8192, ch });
+        if (hasValidBend && toNote) {
+          const semDelta = (toNote.pitch + shift) - p;
+          const N = 16;
+          const slideT0 = Math.round((blockStartStep + overlapStart) * PPQ / stepsPerBeat);
+          const slideT1 = Math.round((blockStartStep + overlapEnd)   * PPQ / stepsPerBeat);
+          for (let i = 0; i < N; i++) {
+            const q = shapedCurve(i / (N - 1), bend!.curvature);
+            const bendVal = Math.round(8192 + (semDelta * q / MIDI_BEND_RANGE) * 8192);
+            const clampedVal = Math.max(0, Math.min(16383, bendVal));
+            slotEvents[slot].push({ kind: 'bend', tick: slideT0 + Math.round(i * (slideT1 - slideT0) / (N - 1)), value: clampedVal, ch });
           }
+          // Reset bend after slide completes (hold at target until note-off)
+          slotEvents[slot].push({ kind: 'bend', tick: slideT1 + 1, value: 8192, ch });
         }
       }
     });
@@ -781,6 +789,13 @@ function MelodicGrid({
     return m;
   }, [track.notes]);
 
+  // Set of all note IDs already participating in a bend (source or target)
+  const usedInBend = useMemo(() => {
+    const s = new Set<string>();
+    bends.forEach(b => { s.add(b.fromNoteId); s.add(b.toNoteId); });
+    return s;
+  }, [bends]);
+
   const bendOverlay = useMemo(() => {
     if (bendDisplay === 'indicator' || bends.length === 0) return null;
     const showKnob = bendDisplay === 'all';
@@ -792,9 +807,14 @@ function MelodicGrid({
       const toRow   = PITCH_TO_ROW.get(toNote.pitch);
       if (fromRow === undefined || toRow === undefined) return null;
 
-      const x1 = (fromNote.startStep + Math.min(fromNote.durationSteps, totalSteps - fromNote.startStep)) * stepW;
+      // Line spans the overlap region: that's where the slide actually happens
+      const overlapStart = Math.max(fromNote.startStep, toNote.startStep);
+      const overlapEnd   = Math.min(fromNote.startStep + fromNote.durationSteps, toNote.startStep + toNote.durationSteps);
+      if (overlapEnd <= overlapStart) return null;
+
+      const x1 = overlapStart * stepW;
       const y1 = fromRow * rowH + rowH / 2;
-      const x2 = toNote.startStep * stepW;
+      const x2 = overlapEnd * stepW;
       const y2 = toRow * rowH + rowH / 2;
       const mx = (x1 + x2) / 2;
       const my = (y1 + y2) / 2;
@@ -830,11 +850,13 @@ function MelodicGrid({
                 cx={mx} cy={my} r={11}
                 fill={isEraseHover ? '#ffc0c0' : '#c0c0c0'}
                 stroke={stroke} strokeWidth={1.5}
-                style={{ cursor: canDragKnob ? 'ew-resize' : canErase ? 'pointer' : 'default' }}
+                style={{ cursor: canDragKnob ? 'ew-resize' : canErase ? 'pointer' : 'default',
+                         touchAction: 'none' }}
                 onPointerEnter={() => canErase && onEraseBendHover(bend.id)}
                 onPointerLeave={() => canErase && onEraseBendHover(null)}
                 onPointerDown={e => {
                   e.stopPropagation(); e.preventDefault();
+                  (e.target as Element).setPointerCapture(e.pointerId);
                   if (canErase) { onRemoveBend(bend.id); return; }
                   if (canDragKnob) onBendKnobDragStart(bend.id, e.clientX);
                 }}
@@ -858,19 +880,23 @@ function MelodicGrid({
   }, [bends, noteById, stepW, rowH, totalSteps, bendDisplay, eraseBendHoverId, eraseHoverNoteId, tool,
       onEraseBendHover, onRemoveBend, onBendKnobDragStart]);
 
-  // Indicator arrows on right edge of notes that have bends
+  // Indicator arrows at the start of the overlap region
   const bendIndicators = useMemo(() => {
     if (bendDisplay !== 'indicator' || bends.length === 0) return null;
     return bends.map(bend => {
       const fromNote = noteById.get(bend.fromNoteId);
-      if (!fromNote) return null;
+      const toNote   = noteById.get(bend.toNoteId);
+      if (!fromNote || !toNote) return null;
       const fromRow = PITCH_TO_ROW.get(fromNote.pitch);
       if (fromRow === undefined) return null;
-      const x = (fromNote.startStep + Math.min(fromNote.durationSteps, totalSteps - fromNote.startStep)) * stepW - 6;
+      const overlapStart = Math.max(fromNote.startStep, toNote.startStep);
+      const overlapEnd   = Math.min(fromNote.startStep + fromNote.durationSteps, toNote.startStep + toNote.durationSteps);
+      if (overlapEnd <= overlapStart) return null;
+      const x = overlapStart * stepW;
       const y = fromRow * rowH + rowH / 2;
       return <text key={bend.id} x={x} y={y + 3} fontSize={8} fill="#cc4400" style={{ pointerEvents: 'none' }}>›</text>;
     });
-  }, [bends, noteById, stepW, rowH, totalSteps, bendDisplay]);
+  }, [bends, noteById, stepW, rowH, bendDisplay]);
 
   return (
     <div
@@ -912,7 +938,13 @@ function MelodicGrid({
         const isSelected = selectedIds.has(note.id);
         const isEraseHover = tool === 'erase' && eraseHoverNoteId === note.id;
         const isBendSource = isBendMode && bendDraft?.fromNoteId === note.id;
-        const isBendTarget = isBendMode && bendDraft !== null && bendDraft.trackId === track.id && bendDraft.fromNoteId !== note.id;
+        const sourceNote   = bendDraft ? noteById.get(bendDraft.fromNoteId) : undefined;
+        const isBendTarget = isBendMode && bendDraft !== null && bendDraft.trackId === track.id
+          && note.id !== bendDraft.fromNoteId
+          && !usedInBend.has(note.id)
+          && sourceNote !== undefined
+          && sourceNote.startStep < note.startStep + note.durationSteps
+          && note.startStep < sourceNote.startStep + sourceNote.durationSteps;
         let noteClass = 'me-note-rect';
         if (isSelected)    noteClass += ' me-note-rect--selected';
         if (isBendMode)    noteClass += ' me-note-rect--bend-mode';
@@ -963,8 +995,8 @@ function MelodicGrid({
       )}
       {/* Bend overlay — drawn above notes */}
       <svg
-        style={{ position: 'absolute', inset: 0, width: gridW, height: gridH, pointerEvents: 'none', overflow: 'visible' }}
-        className={isBendMode || tool === 'erase-bend' ? 'me-bend-svg--active' : ''}
+        style={{ position: 'absolute', inset: 0, width: gridW, height: gridH, overflow: 'visible',
+                 pointerEvents: (isBendMode || tool === 'erase-bend') ? 'all' : 'none' }}
       >
         {bendOverlay}
         {bendIndicators}
@@ -1300,19 +1332,40 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     const stepDur = 60 / s.bpm / s.stepsPerBeat;
     movePlayhead(step);
 
-    function fireNote(track: Track, note: Note) {
+    function fireTrackNote(track: Track, note: Note, skipIds: Set<string>) {
       if (track.isDrum) { playDrum(note.pitch, note.velocity); return; }
+      if (skipIds.has(note.id)) return; // this note's audio is merged into its source's
       const shift = track.octaveOffset ?? 0;
       const bend  = track.bends.find(b => b.fromNoteId === note.id);
-      let bendToPitch: number | undefined;
-      let bendCurvature = 0;
       if (bend) {
         const toNote = track.notes.find(n => n.id === bend.toNoteId);
-        if (toNote) { bendToPitch = toNote.pitch + shift; bendCurvature = bend.curvature; }
+        if (toNote) {
+          const overlapStart = Math.max(note.startStep, toNote.startStep);
+          const overlapEnd   = Math.min(note.startStep + note.durationSteps, toNote.startStep + toNote.durationSteps);
+          if (overlapEnd > overlapStart) {
+            const totalDurSec  = (toNote.startStep + toNote.durationSteps - note.startStep) * stepDur;
+            const bendStartSec = (overlapStart - note.startStep) * stepDur;
+            const bendDurSec   = (overlapEnd - overlapStart) * stepDur;
+            playNote(note.pitch + shift, note.velocity, totalDurSec, track.waveform,
+              undefined, track.volume, track.attack, track.release,
+              track.gmProgram, toNote.pitch + shift, bend.curvature, bendStartSec, bendDurSec);
+            return;
+          }
+        }
       }
       playNote(note.pitch + shift, note.velocity, note.durationSteps * stepDur,
-        track.waveform, undefined, track.volume, track.attack, track.release,
-        track.gmProgram, bendToPitch, bendCurvature);
+        track.waveform, undefined, track.volume, track.attack, track.release, track.gmProgram);
+    }
+
+    function fireClipAtStep(clip: { bars: number; tracks: Track[] }, localStep: number, clipTotalSteps: number) {
+      clip.tracks.forEach(track => {
+        if (track.muted) return;
+        const skipIds = new Set<string>(track.bends.map(b => b.toNoteId));
+        track.notes.forEach((note: Note) => {
+          if (note.startStep !== localStep || note.startStep >= clipTotalSteps) return;
+          fireTrackNote(track, note, skipIds);
+        });
+      });
     }
 
     if (viewRef.current === 'pattern') {
@@ -1320,13 +1373,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       const clip = s.clips.find(c => c.id === selectedClipIdRef.current) ?? s.clips[0];
       const clipTotalSteps = clip.bars * s.beatsPerBar * s.stepsPerBeat;
       const localStep = step % clipTotalSteps;
-      clip.tracks.forEach(track => {
-        if (track.muted) return;
-        track.notes.forEach((note: Note) => {
-          if (note.startStep !== localStep || note.startStep >= clipTotalSteps) return;
-          fireNote(track, note);
-        });
-      });
+      fireClipAtStep(clip, localStep, clipTotalSteps);
       stepRef.current = (step + 1) % clipTotalSteps;
     } else {
       // Song mode: fire notes from all active blocks
@@ -1339,13 +1386,8 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
         if (!clip) return;
         if (globalBar < block.startBar || globalBar >= block.startBar + clip.bars) return;
         const localStep = step - block.startBar * stepsPerBar;
-        clip.tracks.forEach(track => {
-          if (track.muted) return;
-          track.notes.forEach((note: Note) => {
-            if (note.startStep !== localStep) return;
-            fireNote(track, note);
-          });
-        });
+        const clipTotalSteps = clip.bars * s.beatsPerBar * s.stepsPerBeat;
+        fireClipAtStep(clip, localStep, clipTotalSteps);
       });
 
       const nextStep = step + 1;
@@ -1637,7 +1679,14 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const handleNoteClickBend = useCallback((trackId: string, noteId: string) => {
     setBendDraft(prev => {
-      if (prev === null) return { fromNoteId: noteId, trackId };
+      if (prev === null) {
+        // Block if note already participates in any bend
+        const clip = songRef.current.clips.find(c => c.id === selectedClipIdRef.current) ?? songRef.current.clips[0];
+        const track = clip?.tracks.find(t => t.id === trackId);
+        if (!track) return null;
+        if (track.bends.some(b => b.fromNoteId === noteId || b.toNoteId === noteId)) return null;
+        return { fromNoteId: noteId, trackId };
+      }
       if (prev.trackId !== trackId || prev.fromNoteId === noteId) return null;
       addBend(trackId, prev.fromNoteId, noteId);
       return null;

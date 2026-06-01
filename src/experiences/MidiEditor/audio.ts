@@ -46,12 +46,14 @@ export function playNote(
   gmProgram?: number,
   bendToPitch?: number,
   bendCurvature = 0,
+  bendStartSec = 0,      // seconds into the note when the slide begins
+  bendDurationSec?: number, // seconds the slide lasts (defaults to near end of note)
 ): void {
   const c = getCtx();
   const t = when ?? c.currentTime;
 
   if (gmProgram !== undefined && isSoundFontReady()) {
-    if (playSfNote(gmProgram, pitch, velocity, durationSec, c, t, gain, bendToPitch, bendCurvature)) return;
+    if (playSfNote(gmProgram, pitch, velocity, durationSec, c, t, gain, bendToPitch, bendCurvature, bendStartSec, bendDurationSec)) return;
     // SF failed to find a zone for this pitch — fall through to oscillator
   }
   const vol = (velocity / 127) * 0.22 * Math.max(0, Math.min(1, gain));
@@ -74,8 +76,11 @@ export function playNote(
     for (let i = 0; i < N; i++) {
       curve[i] = startHz + (endHz - startHz) * shapedCurve(i / (N - 1), bendCurvature);
     }
-    const curveDur = Math.max(durationSec - relDur - 0.01, 0.05);
-    osc.frequency.setValueCurveAtTime(curve, t, curveDur);
+    const slideStart = t + bendStartSec;
+    const slideDur   = bendDurationSec ?? Math.max(durationSec - relDur - bendStartSec - 0.01, 0.05);
+    osc.frequency.setValueAtTime(startHz, t);
+    osc.frequency.setValueCurveAtTime(curve, slideStart, slideDur);
+    osc.frequency.setValueAtTime(endHz, slideStart + slideDur);
   } else {
     osc.frequency.value = midiToHz(pitch);
   }
