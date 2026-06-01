@@ -536,3 +536,34 @@
 .no-game__btn--reshuffle:active {
   border-color: #331155 #9966cc #9966cc #331155;
 }
+
+/* ─── FlippableCard 3D flip ─────────────────────────────────────────── */
+
+.flippable {
+  perspective: 600px;
+  display: inline-block;
+}
+
+.flippable__inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(0deg);
+  transition: transform 260ms ease-in-out;
+}
+
+.flippable__inner--face-up {
+  transform: rotateY(180deg);
+}
+
+.flippable__face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flippable__face--front {
+  transform: rotateY(180deg);
+}

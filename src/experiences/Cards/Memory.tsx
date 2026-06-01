@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import "./Cards.css";
 import "./Memory.css";
-import { PlayingCard } from "./PlayingCard";
+import { FlippableCard } from "./FlippableCard";
 import type { CardAppearance, DeckSettings } from "./types";
 import type { Card, Rank, Suit } from "./types";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
@@ -341,7 +341,7 @@ export default function Memory({ settings, onNewGame, onQuit }: MemoryProps) {
                 className={cls}
                 onClick={() => handleCardClick(idx)}
               >
-                <PlayingCard
+                <FlippableCard
                   card={mc.card}
                   faceDown={!mc.faceUp}
                   appearance={appearance}

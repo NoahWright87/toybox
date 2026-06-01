@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import "./Blackjack.css";
 import { PlayingCard } from "./PlayingCard";
+import { FlippableCard } from "./FlippableCard";
 import type { Card, CardAppearance, DeckSettings } from "./types";
 import { buildDeck } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
@@ -317,12 +318,20 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
           <div className="bj__hand">
             {dealerHand.map((card, i) => (
               <div key={card.id} className="bj__card">
-                <PlayingCard
-                  card={card}
-                  faceDown={i === 1 && !holeRevealed}
-                  appearance={appearance}
-                  dealIndex={dealKey > 0 ? i : undefined}
-                />
+                {i === 1 ? (
+                  <FlippableCard
+                    card={card}
+                    faceDown={!holeRevealed}
+                    appearance={appearance}
+                    dealIndex={dealKey > 0 ? i : undefined}
+                  />
+                ) : (
+                  <PlayingCard
+                    card={card}
+                    appearance={appearance}
+                    dealIndex={dealKey > 0 ? i : undefined}
+                  />
+                )}
               </div>
             ))}
           </div>

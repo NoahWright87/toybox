@@ -759,7 +759,7 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
                   </div>
                 )}
                 <div className="klondike__waste-top">
-                  <PlayingCard card={wasteTopCard} appearance={appearance} size="sm" />
+                  <PlayingCard key={wasteTopCard.id} card={wasteTopCard} appearance={appearance} size="sm" dealIndex={0} />
                 </div>
               </>
             ) : (

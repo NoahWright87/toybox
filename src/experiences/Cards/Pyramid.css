@@ -46,9 +46,14 @@
   box-shadow: 0 0 6px #ffdd00;
 }
 
+@keyframes pyramid-remove {
+  0%   { transform: scale(1) rotate(0deg); opacity: 1; }
+  20%  { transform: scale(1.06) rotate(-4deg); opacity: 1; }
+  100% { transform: scale(0) rotate(18deg); opacity: 0; }
+}
+
 .pyramid__card-wrap--removed {
-  opacity: 0;
-  transform: scale(0.75);
+  animation: pyramid-remove 300ms ease-in forwards;
   pointer-events: none;
 }
 
