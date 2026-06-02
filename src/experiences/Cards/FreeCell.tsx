@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import "./Cards.css";
 import "./FreeCell.css";
 import { PlayingCard } from "./PlayingCard";
@@ -182,10 +182,30 @@ interface FreeCellProps {
   onQuit?: () => void;
 }
 
+type PortraitLayout = "rotate" | "grid";
+
 export default function FreeCell({ settings, onNewGame, onQuit }: FreeCellProps) {
   const [state, setState] = useState<FreeCellState>(() => makeInitialState());
   const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
+
+  // Portrait-mode detection
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ w: 800, h: 600 });
+  const [portraitLayout, setPortraitLayout] = useState<PortraitLayout>("rotate");
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setContainerSize({ w: width, h: height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const isNarrow = containerSize.w > 0 && containerSize.w < 500;
 
   // ── Game actions ──────────────────────────────────────────────────────────
 
@@ -532,8 +552,12 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FreeCellProps)
     clubs: "♣",
   };
 
-  return (
-    <div className="freecell">
+  // Cascades split for 2×4 portrait grid layout
+  const cascadesTop = cascades.slice(0, 4);
+  const cascadesBottom = cascades.slice(4, 8);
+
+  const gameContent = (
+    <>
       {showDeckModal && (
         <DeckModal
           appearance={appearance}
@@ -612,62 +636,27 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FreeCellProps)
         </div>
       </div>
 
-      {/* Cascade area */}
-      <div className="freecell__cascades">
-        {cascades.map((col, colIdx) => {
-          const isCascadeValid = validDestinations?.cascadeValid[colIdx] ?? false;
-          // Height: (n-1) slivers * 22px + full card height 72px; or 72 if empty
-          const colHeight = col.length === 0 ? 72 : (col.length - 1) * 22 + 72;
-          return (
-            <div
-              key={colIdx}
-              className={
-                "freecell__cascade" +
-                (isCascadeValid ? " freecell__cascade--valid" : "")
-              }
-              style={{ height: colHeight }}
-              onClick={col.length === 0 ? () => handleEmptyCascadeClick(colIdx) : undefined}
-            >
-              {col.length === 0 ? (
-                <div className="freecell__empty-slot freecell__empty-slot--cascade" />
-              ) : (
-                col.map((card, cardIdx) => {
-                  const isSeqStart = selected?.from === "cascade" &&
-                    selected.colIndex === colIdx &&
-                    selected.cardIndex === cardIdx;
-                  const isInSelected = selected?.from === "cascade" &&
-                    selected.colIndex === colIdx &&
-                    cardIdx >= selected.cardIndex;
-                  const isTop = cardIdx === col.length - 1;
-                  const offsetY = cardIdx * 22;
-
-                  return (
-                    <div
-                      key={card.id}
-                      className={
-                        "freecell__cascade-card" +
-                        (isInSelected ? " freecell__cascade-card--selected" : "") +
-                        (isSeqStart ? " freecell__cascade-card--seq-start" : "")
-                      }
-                      style={{
-                        top: `${offsetY}px`,
-                        zIndex: cardIdx + 1,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCascadeClick(colIdx, cardIdx);
-                      }}
-                      title={isTop ? `${card.rank} of ${card.suit}` : undefined}
-                    >
-                      <PlayingCard card={card} appearance={appearance} size="sm" />
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* Cascade area — normal 8-column or 2×4 grid */}
+      {isNarrow && portraitLayout === "grid" ? (
+        <>
+          <div className="freecell__cascades">
+            {cascadesTop.map((col, i) => {
+              const colIdx = i;
+              return renderCascadeCol(col, colIdx);
+            })}
+          </div>
+          <div className="freecell__cascades">
+            {cascadesBottom.map((col, i) => {
+              const colIdx = i + 4;
+              return renderCascadeCol(col, colIdx);
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="freecell__cascades">
+          {cascades.map((col, colIdx) => renderCascadeCol(col, colIdx))}
+        </div>
+      )}
 
       {/* Win banner */}
       {phase === "won" && (
@@ -688,6 +677,116 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FreeCellProps)
           </div>
         </div>
       )}
+    </>
+  );
+
+  function renderCascadeCol(col: Card[], colIdx: number) {
+    const isCascadeValid = validDestinations?.cascadeValid[colIdx] ?? false;
+    const colHeight = col.length === 0 ? 72 : (col.length - 1) * 22 + 72;
+    return (
+      <div
+        key={colIdx}
+        className={
+          "freecell__cascade" +
+          (isCascadeValid ? " freecell__cascade--valid" : "")
+        }
+        style={{ height: colHeight }}
+        onClick={col.length === 0 ? () => handleEmptyCascadeClick(colIdx) : undefined}
+      >
+        {col.length === 0 ? (
+          <div className="freecell__empty-slot freecell__empty-slot--cascade" />
+        ) : (
+          col.map((card, cardIdx) => {
+            const isSeqStart = selected?.from === "cascade" &&
+              selected.colIndex === colIdx &&
+              selected.cardIndex === cardIdx;
+            const isInSelected = selected?.from === "cascade" &&
+              selected.colIndex === colIdx &&
+              cardIdx >= selected.cardIndex;
+            const isTop = cardIdx === col.length - 1;
+            const offsetY = cardIdx * 22;
+            return (
+              <div
+                key={card.id}
+                className={
+                  "freecell__cascade-card" +
+                  (isInSelected ? " freecell__cascade-card--selected" : "") +
+                  (isSeqStart ? " freecell__cascade-card--seq-start" : "")
+                }
+                style={{ top: `${offsetY}px`, zIndex: cardIdx + 1 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCascadeClick(colIdx, cardIdx);
+                }}
+                title={isTop ? `${card.rank} of ${card.suit}` : undefined}
+              >
+                <PlayingCard card={card} appearance={appearance} size="sm" />
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
+  }
+
+  if (isNarrow && portraitLayout === "rotate") {
+    // Rotate the game 90° CW so landscape content fills a portrait container.
+    // Container: W×H (portrait). Landscape element: H×W.
+    // After `translateY(H) rotate(90deg)` (rotate first, then translate):
+    //   rotated bounds → x=[0,W], y=[0,H]. Fills container exactly.
+    const gameW = containerSize.h;  // landscape width  = portrait height (H)
+    const gameH = containerSize.w;  // landscape height = portrait width  (W)
+    const wrapHeight = gameW || 400; // outer height = H (portrait height)
+    return (
+      <div
+        ref={wrapperRef}
+        className="freecell-wrapper freecell-wrapper--rotate"
+        style={{ position: "relative", height: wrapHeight, overflow: "hidden" }}
+      >
+        <div className="freecell__portrait-toggle freecell__portrait-toggle--overlay">
+          <button
+            className="freecell__portrait-btn"
+            onClick={() => setPortraitLayout("grid")}
+            title="Switch to 2×4 grid layout"
+          >▦ 2×4</button>
+        </div>
+        <div
+          className="freecell"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: gameW,
+            height: gameH,
+            transform: `translateY(${gameW}px) rotate(90deg)`,
+            transformOrigin: "top left",
+          }}
+        >
+          {gameContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={wrapperRef} className="freecell-wrapper">
+      {isNarrow && (
+        <div className="freecell__portrait-toggle">
+          <button
+            className={"freecell__portrait-btn" + (portraitLayout === "rotate" ? " freecell__portrait-btn--active" : "")}
+            onClick={() => setPortraitLayout("rotate")}
+            title="Rotate 90°"
+          >⟳ Rotate</button>
+          <button
+            className={"freecell__portrait-btn" + (portraitLayout === "grid" ? " freecell__portrait-btn--active" : "")}
+            onClick={() => setPortraitLayout("grid")}
+            title="2×4 grid layout"
+          >▦ 2×4</button>
+        </div>
+      )}
+      <div className="freecell">
+        {gameContent}
+      </div>
     </div>
   );
 }

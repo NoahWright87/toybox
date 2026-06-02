@@ -9,6 +9,7 @@ export interface Card {
 
 export type BackPattern = "crosshatch" | "diagonal" | "diamonds" | "noahsoft";
 export type CardFaceStyle = "classic" | "minimal" | "large-index";
+export type SuitColorMode = "standard" | "four-color" | "high-contrast";
 export type WarSpeed = "slow" | "normal" | "fast";
 export type MemoryDifficulty = "easy" | "medium" | "hard";
 
@@ -17,7 +18,7 @@ export interface CardAppearance {
   backSecondaryColor: string;
   backPattern: BackPattern;
   backImageUrl: string | null;
-  fourColorSuits: boolean;
+  suitColorMode: SuitColorMode;
   cardFaceStyle: CardFaceStyle;
 }
 
@@ -30,6 +31,7 @@ export interface DeckSettings {
   warSpeed: WarSpeed;
   memoryDifficulty: MemoryDifficulty;
   klondikeDraw: 1 | 3;
+  klondikeRelaxed: boolean;
 }
 
 export type CardsGame =
@@ -46,7 +48,7 @@ export const DEFAULT_APPEARANCE: CardAppearance = {
   backSecondaryColor: "#ffffff",
   backPattern: "crosshatch",
   backImageUrl: null,
-  fourColorSuits: false,
+  suitColorMode: "standard",
   cardFaceStyle: "classic",
 };
 
@@ -59,4 +61,5 @@ export const DEFAULT_DECK_SETTINGS: DeckSettings = {
   warSpeed: "normal",
   memoryDifficulty: "easy",
   klondikeDraw: 1,
+  klondikeRelaxed: false,
 };

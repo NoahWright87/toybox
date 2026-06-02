@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import type { CardAppearance, BackPattern, CardFaceStyle } from "./types";
+import type { CardAppearance, BackPattern, CardFaceStyle, SuitColorMode } from "./types";
 import { PlayingCard } from "./PlayingCard";
 import "./DeckModal.css";
 
@@ -214,18 +214,26 @@ export function DeckModal({ appearance, onUpdate, onClose }: DeckModalProps) {
                 ))}
               </div>
 
-              {/* Four-color suits */}
+              {/* Suit color mode */}
               <div className="deck-modal__section-label">Suit Colors:</div>
-              <label className="deck-modal__check-row">
-                <input
-                  type="checkbox"
-                  className="cards-launcher__checkbox"
-                  checked={appearance.fourColorSuits}
-                  onChange={(e) => set({ fourColorSuits: e.target.checked })}
-                />
-                <span className="deck-modal__check-label">Four-color suits</span>
-              </label>
-              {appearance.fourColorSuits && (
+              <div className="deck-modal__suit-modes">
+                {(["standard", "four-color", "high-contrast"] as SuitColorMode[]).map((mode) => (
+                  <label key={mode} className="deck-modal__suit-mode-option">
+                    <input
+                      type="radio"
+                      name="suitColorMode"
+                      value={mode}
+                      checked={(appearance.suitColorMode ?? "standard") === mode}
+                      onChange={() => set({ suitColorMode: mode })}
+                      className="deck-modal__radio"
+                    />
+                    <span className="deck-modal__check-label">
+                      {mode === "standard" ? "Standard" : mode === "four-color" ? "Four-Color" : "High Contrast"}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {(appearance.suitColorMode ?? "standard") !== "standard" && (
                 <div className="deck-modal__four-color-preview">
                   <PlayingCard card={PREVIEW_CARD_SPADE}   size="sm" appearance={appearance} />
                   <PlayingCard card={PREVIEW_CARD_HEART}   size="sm" appearance={appearance} />

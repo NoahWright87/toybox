@@ -211,10 +211,12 @@
 }
 
 /* Suit colors */
-.playing-card--red   { color: #cc0000; }
-.playing-card--black { color: #111111; }
-.playing-card--blue  { color: #1a1a8a; }
-.playing-card--green { color: #1a5c1a; }
+.playing-card--red    { color: #cc0000; }
+.playing-card--black  { color: #111111; }
+.playing-card--pink   { color: #dd2277; }
+.playing-card--orange { color: #cc5500; }
+.playing-card--blue   { color: #1133aa; }
+.playing-card--green  { color: #117733; }
 
 .playing-card--joker {
   color: #5b2d8e;

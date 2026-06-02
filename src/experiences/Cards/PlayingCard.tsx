@@ -1,5 +1,5 @@
 import "./Cards.css";
-import type { Card, CardAppearance } from "./types";
+import type { Card, CardAppearance, SuitColorMode } from "./types";
 import { DEFAULT_APPEARANCE } from "./types";
 
 const SUIT_SYMBOL: Record<string, string> = {
@@ -17,12 +17,21 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function suitColorClass(suit: string, fourColor: boolean): string {
-  if (suit === "hearts" || suit === "diamonds") return "playing-card--red";
-  if (fourColor) {
-    if (suit === "spades") return "playing-card--blue";
-    if (suit === "clubs")  return "playing-card--green";
+function suitColorClass(suit: string, mode: SuitColorMode): string {
+  if (mode === "high-contrast") {
+    if (suit === "hearts")   return "playing-card--pink";
+    if (suit === "diamonds") return "playing-card--orange";
+    if (suit === "spades")   return "playing-card--blue";
+    if (suit === "clubs")    return "playing-card--green";
   }
+  if (mode === "four-color") {
+    if (suit === "hearts")   return "playing-card--pink";
+    if (suit === "diamonds") return "playing-card--red";
+    if (suit === "spades")   return "playing-card--blue";
+    if (suit === "clubs")    return "playing-card--green";
+  }
+  // standard: red for ♥♦, black for ♠♣
+  if (suit === "hearts" || suit === "diamonds") return "playing-card--red";
   return "playing-card--black";
 }
 
@@ -97,7 +106,7 @@ export function PlayingCard({
   }
 
   const symbol = SUIT_SYMBOL[card.suit] ?? "?";
-  const colorClass = suitColorClass(card.suit, appearance.fourColorSuits);
+  const colorClass = suitColorClass(card.suit, appearance.suitColorMode ?? "standard");
   const faceStyle = appearance.cardFaceStyle ?? "classic";
 
   if (faceStyle === "minimal") {

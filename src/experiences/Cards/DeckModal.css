@@ -282,7 +282,28 @@
   pointer-events: none;
 }
 
-/* Four-color */
+/* Suit color mode radio buttons */
+.deck-modal__suit-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deck-modal__suit-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.deck-modal__radio {
+  accent-color: #cc4400;
+  cursor: pointer;
+  width: 12px;
+  height: 12px;
+}
+
+/* Legacy check-row (kept for other uses) */
 .deck-modal__check-row {
   display: flex;
   align-items: center;

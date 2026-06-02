@@ -227,6 +227,25 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
                 <option value={3}>Draw 3</option>
               </select>
             </div>
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Relaxed Rules:</span>
+              <label className="cards-launcher__checkbox-wrap">
+                <input
+                  type="checkbox"
+                  className="cards-launcher__checkbox"
+                  checked={settings.klondikeRelaxed}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, klondikeRelaxed: e.target.checked }))}
+                />
+                <span className="cards-launcher__checkbox-text">{settings.klondikeRelaxed ? "On" : "Off"}</span>
+              </label>
+            </div>
+            {settings.klondikeRelaxed && (
+              <div className="cards-launcher__row">
+                <span style={{ fontSize: "6px", color: "#666", lineHeight: 1.4 }}>
+                  Any card may be placed on empty columns
+                </span>
+              </div>
+            )}
           </div>
         </>
       )}

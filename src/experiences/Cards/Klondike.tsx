@@ -41,11 +41,10 @@ function isRed(suit: Suit): boolean {
   return suit === "hearts" || suit === "diamonds";
 }
 
-function canPlaceOnTableau(card: Card, topCard: Card | null): boolean {
+function canPlaceOnTableau(card: Card, topCard: Card | null, relaxed = false): boolean {
   if (card.suit === "joker") return false;
   if (topCard === null) {
-    // Empty column: only King
-    return RANK_VAL[card.rank as string] === 13;
+    return relaxed || RANK_VAL[card.rank as string] === 13;
   }
   if (topCard.suit === "joker") return false;
   const oppColor = isRed(card.suit as Suit) !== isRed(topCard.suit as Suit);
@@ -424,7 +423,7 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
           ? destColData.faceUp[destColData.faceUp.length - 1]
           : null;
 
-      if (!canPlaceOnTableau(cards[0], topCard)) return null;
+      if (!canPlaceOnTableau(cards[0], topCard, settings.klondikeRelaxed)) return null;
 
       // Build new state
       let newTableau = s.tableau.map((col) => ({
@@ -468,7 +467,7 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
         moves: s.moves + 1,
       };
     },
-    []
+    [settings.klondikeRelaxed]
   );
 
   // ── Click handlers ─────────────────────────────────────────────────────────
@@ -645,9 +644,9 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
       if (cards.length === 0) return false;
       const topCard =
         col.faceUp.length > 0 ? col.faceUp[col.faceUp.length - 1] : null;
-      return canPlaceOnTableau(cards[0], topCard);
+      return canPlaceOnTableau(cards[0], topCard, settings.klondikeRelaxed);
     });
-  }, [state]);
+  }, [state, settings.klondikeRelaxed]);
 
   // ── Menus ──────────────────────────────────────────────────────────────────
 
