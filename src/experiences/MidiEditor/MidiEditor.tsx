@@ -48,7 +48,6 @@ type MoveNote     = { trackId: string; origPitch: number; origStep: number };
 type MoveState    = { startClientX: number; startClientY: number; notes: Map<string, MoveNote> };
 type ClipboardNote = { trackId: string; note: Note };
 type BendDisplay  = 'all' | 'lines' | 'indicator';
-type KnobDragState = { bendId: string; trackId: string; startX: number; startCurvature: number };
 
 interface SaveEntry { name: string; song?: Song; pattern?: unknown; savedAt: string }
 
@@ -734,7 +733,7 @@ interface MelodicGridProps {
   onNoteClickBend: (noteId: string) => void;
   onEraseNoteHover: (noteId: string | null) => void;
   onEraseBendHover: (bendId: string | null) => void;
-  onBendKnobDragStart: (bendId: string, startX: number) => void;
+  onBendCurvatureChange: (bendId: string, curvature: number) => void;
   onRemoveBend: (bendId: string) => void;
 }
 
@@ -745,7 +744,7 @@ function MelodicGrid({
   onAddNote, onRemoveNote, onStartResize, onPreviewPitch,
   onSelectNote, onDeselectAll, onStartMove,
   onNoteClickBend, onEraseNoteHover, onEraseBendHover,
-  onBendKnobDragStart, onRemoveBend,
+  onBendCurvatureChange, onRemoveBend,
 }: MelodicGridProps) {
   const noteMap   = useMemo(() => buildNoteMap(track), [track]);
   const gridW     = totalSteps * stepW;
@@ -796,6 +795,14 @@ function MelodicGrid({
     return s;
   }, [bends]);
 
+  // Local knob selection state: tap selects, drag adjusts
+  const [selectedKnobId, setSelectedKnobId] = useState<string | null>(null);
+  const knobDragRef = useRef<{ bendId: string; startX: number; startCurvature: number } | null>(null);
+  // Clear selection when tool changes away from bend/select
+  useEffect(() => {
+    if (tool !== 'bend' && tool !== 'select') setSelectedKnobId(null);
+  }, [tool]);
+
   const bendOverlay = useMemo(() => {
     if (bendDisplay === 'indicator' || bends.length === 0) return null;
     const showKnob = bendDisplay === 'all';
@@ -840,26 +847,44 @@ function MelodicGrid({
 
       const canDragKnob = tool === 'select' || tool === 'bend';
       const canErase    = tool === 'erase-bend';
+      const isSelected  = selectedKnobId === bend.id;
+      const knobR       = isSelected ? 14 : 11;
+      const knobFill    = isEraseHover ? '#ffc0c0' : isSelected ? '#e8e4dc' : '#c0c0c0';
 
       return (
         <g key={bend.id}>
-          <path d={pathD} fill="none" stroke={stroke} strokeWidth={strokeW} strokeLinecap="round" />
+          <path d={pathD} fill="none" stroke={stroke} strokeWidth={strokeW} strokeLinecap="round"
+                style={{ pointerEvents: 'none' }} />
           {showKnob && (
             <g>
               <circle
-                cx={mx} cy={my} r={11}
-                fill={isEraseHover ? '#ffc0c0' : '#c0c0c0'}
-                stroke={stroke} strokeWidth={1.5}
-                style={{ cursor: canDragKnob ? 'ew-resize' : canErase ? 'pointer' : 'default',
-                         touchAction: 'none' }}
+                cx={mx} cy={my} r={knobR}
+                fill={knobFill}
+                stroke={isSelected ? '#cc4400' : stroke} strokeWidth={isSelected ? 2 : 1.5}
+                style={{ cursor: canDragKnob ? (isSelected ? 'ew-resize' : 'pointer') : canErase ? 'pointer' : 'default',
+                         touchAction: 'none', pointerEvents: 'all' }}
                 onPointerEnter={() => canErase && onEraseBendHover(bend.id)}
                 onPointerLeave={() => canErase && onEraseBendHover(null)}
                 onPointerDown={e => {
                   e.stopPropagation(); e.preventDefault();
-                  (e.target as Element).setPointerCapture(e.pointerId);
                   if (canErase) { onRemoveBend(bend.id); return; }
-                  if (canDragKnob) onBendKnobDragStart(bend.id, e.clientX);
+                  if (!canDragKnob) return;
+                  (e.target as Element).setPointerCapture(e.pointerId);
+                  if (isSelected) {
+                    // Already selected: this pointer-down starts the drag
+                    knobDragRef.current = { bendId: bend.id, startX: e.clientX, startCurvature: bend.curvature };
+                  } else {
+                    // First tap: select without dragging yet
+                    setSelectedKnobId(bend.id);
+                  }
                 }}
+                onPointerMove={e => {
+                  if (!knobDragRef.current || knobDragRef.current.bendId !== bend.id) return;
+                  const delta = (e.clientX - knobDragRef.current.startX) / 80;
+                  const newCurvature = Math.max(-1, Math.min(1, knobDragRef.current.startCurvature + delta));
+                  onBendCurvatureChange(bend.id, newCurvature);
+                }}
+                onPointerUp={() => { knobDragRef.current = null; }}
               />
               <circle cx={dotX} cy={dotY} r={2.5} fill="#cc4400" style={{ pointerEvents: 'none' }} />
             </g>
@@ -868,7 +893,7 @@ function MelodicGrid({
           {canErase && (
             <path
               d={pathD} fill="none" stroke="transparent" strokeWidth={12}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', pointerEvents: 'all', touchAction: 'none' }}
               onPointerEnter={() => onEraseBendHover(bend.id)}
               onPointerLeave={() => onEraseBendHover(null)}
               onPointerDown={e => { e.stopPropagation(); e.preventDefault(); onRemoveBend(bend.id); }}
@@ -878,7 +903,7 @@ function MelodicGrid({
       );
     });
   }, [bends, noteById, stepW, rowH, totalSteps, bendDisplay, eraseBendHoverId, eraseHoverNoteId, tool,
-      onEraseBendHover, onRemoveBend, onBendKnobDragStart]);
+      selectedKnobId, onEraseBendHover, onRemoveBend, onBendCurvatureChange]);
 
   // Indicator arrows at the start of the overlap region
   const bendIndicators = useMemo(() => {
@@ -902,6 +927,7 @@ function MelodicGrid({
     <div
       className={`me-note-grid${editActive ? ' me-note-grid--edit' : ' me-note-grid--select'}`}
       style={{ width: gridW, height: gridH }}
+      onPointerDown={() => { if (selectedKnobId) setSelectedKnobId(null); }}
     >
       {Array.from({ length: totalSteps }, (_, s) => {
         const isBar  = s % (stepsPerBeat * beatsPerBar) === 0;
@@ -993,10 +1019,11 @@ function MelodicGrid({
           ? <div key={`od-${pitch}`} className="me-row-divider" style={{ top: rowIdx * rowH, width: gridW }} />
           : null
       )}
-      {/* Bend overlay — drawn above notes */}
+      {/* Bend overlay — drawn above notes. SVG root is pointer-events:none so clicks
+          pass through to note divs below; only individual knob/path elements are interactive. */}
       <svg
-        style={{ position: 'absolute', inset: 0, width: gridW, height: gridH, overflow: 'visible',
-                 pointerEvents: (isBendMode || tool === 'erase-bend') ? 'all' : 'none' }}
+        style={{ position: 'absolute', inset: 0, width: gridW, height: gridH,
+                 overflow: 'visible', pointerEvents: 'none' }}
       >
         {bendOverlay}
         {bendIndicators}
@@ -1112,7 +1139,7 @@ interface TrackSectionProps {
   onNoteClickBend: (noteId: string) => void;
   onEraseNoteHover: (noteId: string | null) => void;
   onEraseBendHover: (bendId: string | null) => void;
-  onBendKnobDragStart: (bendId: string, startX: number) => void;
+  onBendCurvatureChange: (bendId: string, curvature: number) => void;
   onRemoveBend: (bendId: string) => void;
 }
 
@@ -1126,7 +1153,7 @@ function TrackSection({
   onAddDrumPiece, onRemoveDrumPiece,
   onSelectNote, onDeselectAll, onStartMove,
   onNoteClickBend, onEraseNoteHover, onEraseBendHover,
-  onBendKnobDragStart, onRemoveBend,
+  onBendCurvatureChange, onRemoveBend,
 }: TrackSectionProps) {
   const [showAddPiece, setShowAddPiece] = useState(false);
 
@@ -1195,7 +1222,7 @@ function TrackSection({
                   onPreviewPitch={onStartPreviewPitch}
                   onSelectNote={onSelectNote} onDeselectAll={onDeselectAll} onStartMove={onStartMove}
                   onNoteClickBend={onNoteClickBend} onEraseNoteHover={onEraseNoteHover}
-                  onEraseBendHover={onEraseBendHover} onBendKnobDragStart={onBendKnobDragStart}
+                  onEraseBendHover={onEraseBendHover} onBendCurvatureChange={onBendCurvatureChange}
                   onRemoveBend={onRemoveBend} />
             }
           </div>
@@ -1248,7 +1275,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
   const [bendDraft,     setBendDraft]     = useState<{ fromNoteId: string; trackId: string } | null>(null);
   const [eraseHoverNoteId, setEraseHoverNoteId] = useState<string | null>(null);
   const [eraseBendHoverId, setEraseBendHoverId] = useState<string | null>(null);
-  const knobDragRef = useRef<KnobDragState | null>(null);
 
   const selectedClip = song.clips.find(c => c.id === selectedClipId) ?? song.clips[0];
 
@@ -1514,17 +1540,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
       }
     }
 
-    // Knob drag
-    const kd = knobDragRef.current;
-    if (kd) {
-      const delta = (e.clientX - kd.startX) / 100;
-      const newCurvature = Math.max(-1, Math.min(1, kd.startCurvature + delta));
-      setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
-        tracks.map(t => t.id !== kd.trackId ? t : {
-          ...t, bends: t.bends.map(b => b.id !== kd.bendId ? b : { ...b, curvature: newCurvature }),
-        })
-      ));
-    }
   };
 
   pointerUpHandlerRef.current = (_e: PointerEvent) => {
@@ -1539,7 +1554,6 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     resizeStateRef.current  = null;
     isMoveActiveRef.current = false;
     moveStateRef.current    = null;
-    knobDragRef.current     = null;
     if (sustainedNoteStopRef.current) {
       sustainedNoteStopRef.current();
       sustainedNoteStopRef.current = null;
@@ -1661,12 +1675,18 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
     ));
   }, []);
 
-  const addBend = useCallback((fromTrackId: string, fromNoteId: string, toNoteId: string) => {
+  const addBend = useCallback((trackId: string, noteAId: string, noteBId: string) => {
     const id = makeBendId();
-    const newBend: Bend = { id, fromNoteId, toNoteId, curvature: 0 };
     setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
-      tracks.map(t => t.id !== fromTrackId ? t : {
-        ...t, bends: [...t.bends, newBend],
+      tracks.map(t => {
+        if (t.id !== trackId) return t;
+        const noteA = t.notes.find(n => n.id === noteAId);
+        const noteB = t.notes.find(n => n.id === noteBId);
+        if (!noteA || !noteB) return t;
+        // Always set fromNoteId to the earlier note regardless of tap order
+        const [from, to] = noteA.startStep <= noteB.startStep ? [noteA, noteB] : [noteB, noteA];
+        const newBend: Bend = { id, fromNoteId: from.id, toNoteId: to.id, curvature: 0 };
+        return { ...t, bends: [...t.bends, newBend] };
       })
     ));
   }, []);
@@ -1679,24 +1699,39 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
 
   const handleNoteClickBend = useCallback((trackId: string, noteId: string) => {
     setBendDraft(prev => {
+      const clip  = songRef.current.clips.find(c => c.id === selectedClipIdRef.current) ?? songRef.current.clips[0];
+      const track = clip?.tracks.find(t => t.id === trackId);
+      if (!track) return null;
+
       if (prev === null) {
         // Block if note already participates in any bend
-        const clip = songRef.current.clips.find(c => c.id === selectedClipIdRef.current) ?? songRef.current.clips[0];
-        const track = clip?.tracks.find(t => t.id === trackId);
-        if (!track) return null;
         if (track.bends.some(b => b.fromNoteId === noteId || b.toNoteId === noteId)) return null;
         return { fromNoteId: noteId, trackId };
       }
+
+      // Second click: validate the target
       if (prev.trackId !== trackId || prev.fromNoteId === noteId) return null;
+      // Target must not already be in a bend
+      if (track.bends.some(b => b.fromNoteId === noteId || b.toNoteId === noteId)) return null;
+      // Notes must overlap
+      const srcNote  = track.notes.find(n => n.id === prev.fromNoteId);
+      const tgtNote  = track.notes.find(n => n.id === noteId);
+      if (!srcNote || !tgtNote) return null;
+      const overlapEnd = Math.min(srcNote.startStep + srcNote.durationSteps, tgtNote.startStep + tgtNote.durationSteps);
+      const overlapStart = Math.max(srcNote.startStep, tgtNote.startStep);
+      if (overlapEnd <= overlapStart) return null;
+
       addBend(trackId, prev.fromNoteId, noteId);
       return null;
     });
   }, [addBend]);
 
-  const handleBendKnobDragStart = useCallback((trackId: string, bendId: string, startX: number) => {
-    const clip = songRef.current.clips.find(c => c.id === selectedClipIdRef.current) ?? songRef.current.clips[0];
-    const bend = clip?.tracks.find(t => t.id === trackId)?.bends.find(b => b.id === bendId);
-    if (bend) knobDragRef.current = { bendId, trackId, startX, startCurvature: bend.curvature };
+  const updateBendCurvature = useCallback((trackId: string, bendId: string, curvature: number) => {
+    setSong(prev => updateTracksInClip(prev, selectedClipIdRef.current, tracks =>
+      tracks.map(t => t.id !== trackId ? t : {
+        ...t, bends: t.bends.map(b => b.id !== bendId ? b : { ...b, curvature }),
+      })
+    ));
   }, []);
 
   const startResize = useCallback((noteId: string, trackId: string, startX: number, origDuration: number, noteStartStep: number) => {
@@ -2048,7 +2083,7 @@ export default function MidiEditor({ onQuit }: MidiEditorProps) {
                 onNoteClickBend={noteId => handleNoteClickBend(track.id, noteId)}
                 onEraseNoteHover={setEraseHoverNoteId}
                 onEraseBendHover={setEraseBendHoverId}
-                onBendKnobDragStart={(bendId, startX) => handleBendKnobDragStart(track.id, bendId, startX)}
+                onBendCurvatureChange={(bendId, curvature) => updateBendCurvature(track.id, bendId, curvature)}
                 onRemoveBend={bendId => removeBend(track.id, bendId)}
               />
             ))}

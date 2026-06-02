@@ -584,12 +584,13 @@
   flex-shrink: 0;
 }
 
-/* In edit mode, tell the browser not to intercept touches for scrolling.
+/* In edit/select mode, tell the browser not to intercept touches for scrolling.
    This must be on the grid container itself (not just children) so iOS Safari
    doesn't steal the touch for the scrollable .me-outer ancestor. */
 .me-note-grid--edit,
 .me-note-grid--edit .me-cell,
-.me-note-grid--edit .me-note-rect {
+.me-note-grid--edit .me-note-rect,
+.me-note-grid--select {
   touch-action: none;
 }
 
