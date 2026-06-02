@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import type { CardAppearance, BackPattern, CardFaceStyle, SuitColorMode } from "./types";
+import type { CardAppearance, BackPattern, CardFaceStyle, CardTextSize, SuitColorMode } from "./types";
 import { PlayingCard } from "./PlayingCard";
 import "./DeckModal.css";
 
@@ -210,6 +210,25 @@ export function DeckModal({ appearance, onUpdate, onClose }: DeckModalProps) {
                       />
                     </div>
                     <span className="deck-modal__pattern-label">{fs.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Card text size */}
+              <div className="deck-modal__section-label">Text Size:</div>
+              <div className="deck-modal__text-sizes">
+                {(["normal", "large", "xl"] as CardTextSize[]).map((sz) => (
+                  <button
+                    key={sz}
+                    className={`deck-modal__size-btn${(appearance.cardTextSize ?? "normal") === sz ? " deck-modal__size-btn--active" : ""}`}
+                    onClick={() => set({ cardTextSize: sz })}
+                  >
+                    <span style={{ fontSize: sz === "normal" ? 7 : sz === "large" ? 9 : 11 }}>
+                      {sz === "normal" ? "Aa" : sz === "large" ? "Aa" : "Aa"}
+                    </span>
+                    <span className="deck-modal__size-label">
+                      {sz === "normal" ? "Normal" : sz === "large" ? "Large" : "XL"}
+                    </span>
                   </button>
                 ))}
               </div>

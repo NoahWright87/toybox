@@ -282,6 +282,41 @@
   pointer-events: none;
 }
 
+/* Card text size buttons */
+.deck-modal__text-sizes {
+  display: flex;
+  gap: 6px;
+}
+
+.deck-modal__size-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 10px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #d4d0c8;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  min-width: 52px;
+}
+
+.deck-modal__size-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c0c0c0;
+  outline: 1px solid #000;
+}
+
+.deck-modal__size-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.deck-modal__size-label {
+  font-size: 5px;
+  color: #444;
+}
+
 /* Suit color mode radio buttons */
 .deck-modal__suit-modes {
   display: flex;

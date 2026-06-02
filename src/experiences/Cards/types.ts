@@ -9,6 +9,7 @@ export interface Card {
 
 export type BackPattern = "crosshatch" | "diagonal" | "diamonds" | "noahsoft";
 export type CardFaceStyle = "classic" | "minimal" | "large-index";
+export type CardTextSize = "normal" | "large" | "xl";
 export type SuitColorMode = "standard" | "four-color" | "high-contrast";
 export type WarSpeed = "slow" | "normal" | "fast";
 export type MemoryDifficulty = "easy" | "medium" | "hard";
@@ -20,6 +21,7 @@ export interface CardAppearance {
   backImageUrl: string | null;
   suitColorMode: SuitColorMode;
   cardFaceStyle: CardFaceStyle;
+  cardTextSize: CardTextSize;
 }
 
 export interface DeckSettings {
@@ -50,6 +52,7 @@ export const DEFAULT_APPEARANCE: CardAppearance = {
   backImageUrl: null,
   suitColorMode: "standard",
   cardFaceStyle: "classic",
+  cardTextSize: "normal",
 };
 
 export const DEFAULT_DECK_SETTINGS: DeckSettings = {

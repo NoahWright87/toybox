@@ -1,5 +1,5 @@
 import "./Cards.css";
-import type { Card, CardAppearance, SuitColorMode } from "./types";
+import type { Card, CardAppearance, CardTextSize, SuitColorMode } from "./types";
 import { DEFAULT_APPEARANCE } from "./types";
 
 const SUIT_SYMBOL: Record<string, string> = {
@@ -19,20 +19,26 @@ function hexToRgba(hex: string, alpha: number): string {
 
 function suitColorClass(suit: string, mode: SuitColorMode): string {
   if (mode === "high-contrast") {
-    if (suit === "hearts")   return "playing-card--pink";
-    if (suit === "diamonds") return "playing-card--orange";
-    if (suit === "spades")   return "playing-card--blue";
-    if (suit === "clubs")    return "playing-card--green";
+    if (suit === "hearts")   return "playing-card--pink";    // warm pink
+    if (suit === "diamonds") return "playing-card--orange";  // vivid orange
+    if (suit === "spades")   return "playing-card--blue";    // vivid blue
+    if (suit === "clubs")    return "playing-card--green";   // forest green
   }
   if (mode === "four-color") {
-    if (suit === "hearts")   return "playing-card--pink";
-    if (suit === "diamonds") return "playing-card--red";
-    if (suit === "spades")   return "playing-card--blue";
-    if (suit === "clubs")    return "playing-card--green";
+    if (suit === "hearts")   return "playing-card--pink";    // warm pink
+    if (suit === "diamonds") return "playing-card--red";     // deep red (same as standard)
+    if (suit === "spades")   return "playing-card--navy";    // navy (distinct from high-contrast blue)
+    if (suit === "clubs")    return "playing-card--green";   // forest green
   }
   // standard: red for ♥♦, black for ♠♣
   if (suit === "hearts" || suit === "diamonds") return "playing-card--red";
   return "playing-card--black";
+}
+
+function textSizeClass(size: CardTextSize | undefined): string {
+  if (size === "large") return " playing-card--text-lg";
+  if (size === "xl")    return " playing-card--text-xl";
+  return "";
 }
 
 export interface PlayingCardProps {
@@ -50,9 +56,10 @@ export function PlayingCard({
   size,
   dealIndex,
 }: PlayingCardProps) {
-  const sizeClass = size === "sm" ? " playing-card--sm" : "";
-  const dealClass = dealIndex !== undefined ? " playing-card--deal" : "";
-  const dealStyle = dealIndex !== undefined
+  const sizeClass  = size === "sm" ? " playing-card--sm" : "";
+  const dealClass  = dealIndex !== undefined ? " playing-card--deal" : "";
+  const textClass  = textSizeClass(appearance.cardTextSize);
+  const dealStyle  = dealIndex !== undefined
     ? { "--deal-index": dealIndex } as React.CSSProperties
     : {};
 
@@ -112,7 +119,7 @@ export function PlayingCard({
   if (faceStyle === "minimal") {
     return (
       <div
-        className={`playing-card playing-card--front ${colorClass}${sizeClass}${dealClass}`}
+        className={`playing-card playing-card--front ${colorClass}${sizeClass}${textClass}${dealClass}`}
         style={dealStyle}
       >
         <div className="playing-card__corner playing-card__corner--tl">
@@ -130,7 +137,7 @@ export function PlayingCard({
   if (faceStyle === "large-index") {
     return (
       <div
-        className={`playing-card playing-card--front playing-card--large-idx ${colorClass}${sizeClass}${dealClass}`}
+        className={`playing-card playing-card--front playing-card--large-idx ${colorClass}${sizeClass}${textClass}${dealClass}`}
         style={dealStyle}
       >
         <div className="playing-card__large-rank">{card.rank}</div>
@@ -143,7 +150,7 @@ export function PlayingCard({
 
   return (
     <div
-      className={`playing-card playing-card--front ${colorClass}${sizeClass}${dealClass}`}
+      className={`playing-card playing-card--front ${colorClass}${sizeClass}${textClass}${dealClass}`}
       style={dealStyle}
     >
       <div className="playing-card__corner playing-card__corner--tl">

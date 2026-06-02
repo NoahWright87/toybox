@@ -210,13 +210,30 @@
   pointer-events: none;
 }
 
-/* Suit colors */
-.playing-card--red    { color: #cc0000; }
-.playing-card--black  { color: #111111; }
-.playing-card--pink   { color: #dd2277; }
-.playing-card--orange { color: #cc5500; }
-.playing-card--blue   { color: #1133aa; }
-.playing-card--green  { color: #117733; }
+/* Suit colors — standard */
+.playing-card--red   { color: #cc0000; }
+.playing-card--black { color: #111111; }
+
+/* Suit colors — four-color mode (closest to traditional) */
+.playing-card--pink  { color: #cc0055; }   /* hearts */
+.playing-card--navy  { color: #1133aa; }   /* spades */
+.playing-card--green { color: #117733; }   /* clubs */
+/* diamonds stay --red */
+
+/* Suit colors — high-contrast mode (maximally distinct) */
+.playing-card--orange { color: #ee5500; }  /* diamonds: vivid orange */
+.playing-card--blue   { color: #0055ee; }  /* spades: vivid blue */
+/* hearts stay --pink, clubs stay --green */
+
+/* ─── Card text size ────────────────────────────────────────────────────── */
+
+.playing-card--text-lg:not(.playing-card--sm) .playing-card__rank { font-size: 9px; }
+.playing-card--text-lg:not(.playing-card--sm) .playing-card__suit-pip { font-size: 10px; }
+.playing-card--text-lg:not(.playing-card--sm) .playing-card__center { font-size: 30px; }
+
+.playing-card--text-xl:not(.playing-card--sm) .playing-card__rank { font-size: 12px; }
+.playing-card--text-xl:not(.playing-card--sm) .playing-card__suit-pip { font-size: 13px; }
+.playing-card--text-xl:not(.playing-card--sm) .playing-card__center { font-size: 36px; }
 
 .playing-card--joker {
   color: #5b2d8e;

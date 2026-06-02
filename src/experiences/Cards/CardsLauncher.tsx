@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import "./Cards.css";
 import {
+  DEFAULT_APPEARANCE,
   DEFAULT_DECK_SETTINGS,
   type CardsGame,
   type DeckSettings,
@@ -12,6 +13,41 @@ import { totalCards } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { DeckModal } from "./DeckModal";
+
+const STORAGE_KEY = "toybox-cards-settings-v1";
+
+function loadPersistedState(): { game: CardsGame; settings: DeckSettings } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { game: "war", settings: DEFAULT_DECK_SETTINGS };
+    const parsed = JSON.parse(raw) as { game?: CardsGame; settings?: Partial<DeckSettings> };
+    return {
+      game: (parsed.game ?? "war") as CardsGame,
+      settings: {
+        ...DEFAULT_DECK_SETTINGS,
+        ...(parsed.settings ?? {}),
+        appearance: {
+          ...DEFAULT_APPEARANCE,
+          ...(parsed.settings?.appearance ?? {}),
+          backImageUrl: null, // don't restore large data URLs
+        },
+      },
+    };
+  } catch {
+    return { game: "war", settings: DEFAULT_DECK_SETTINGS };
+  }
+}
+
+function persistState(game: CardsGame, settings: DeckSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      game,
+      settings: { ...settings, appearance: { ...settings.appearance, backImageUrl: null } },
+    }));
+  } catch {
+    // localStorage unavailable or full — ignore
+  }
+}
 
 const SUITS: { id: Suit; symbol: string; isRed: boolean }[] = [
   { id: "spades",   symbol: "♠", isRed: false },
@@ -38,9 +74,15 @@ interface CardsLauncherProps {
 }
 
 export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) {
-  const [game, setGame] = useState<CardsGame>("war");
-  const [settings, setSettings] = useState<DeckSettings>(DEFAULT_DECK_SETTINGS);
+  const initial = useMemo(loadPersistedState, []);
+  const [game, setGame] = useState<CardsGame>(initial.game);
+  const [settings, setSettings] = useState<DeckSettings>(initial.settings);
   const [showDeckModal, setShowDeckModal] = useState(false);
+
+  // Persist whenever game or settings change
+  useEffect(() => {
+    persistState(game, settings);
+  }, [game, settings]);
 
   const toggleSuit = (suit: Suit) => {
     const active = settings.suits.includes(suit);
