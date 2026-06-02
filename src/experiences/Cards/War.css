@@ -1,4 +1,4 @@
-/* ─── War ───────────────────────────────────────────────────────────── */
+/* ─── War ────────────────────────────────────────────────────────────── */
 
 .war {
   display: flex;
@@ -7,6 +7,7 @@
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   user-select: none;
+  min-height: 340px;
 }
 
 .war__scoreboard {
@@ -17,91 +18,140 @@
   font-size: 7px;
   color: #000;
   border-bottom: 1px solid #808080;
+  flex-shrink: 0;
 }
 
-.war__table {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 12px 10px;
-  gap: 8px;
+/* ── Stage ──────────────────────────────────────────────────────────── */
+
+.war__stage {
+  position: relative;
+  height: 240px;
   background: #1a4a1a;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   margin: 8px 8px 4px;
-  min-height: 200px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-/* Side columns (player / dealer) */
-.war__side {
+/* ── Stacked pile ────────────────────────────────────────────────────── */
+
+.war__stack {
+  position: relative;
+  width: 72px;
+  height: 100px;
+}
+
+.war__stack-layer {
+  position: absolute;
+}
+
+.war__empty-slot {
+  width: 72px;
+  height: 100px;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ── Pile positioned within stage ────────────────────────────────────── */
+
+.war__pile {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  gap: 5px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
-.war__side-label {
+.war__pile--player {
+  left: 40px;
+}
+
+.war__pile--dealer {
+  right: 40px;
+}
+
+.war__pile-label {
   font-size: 7px;
-  color: rgba(255,255,255,0.6);
-}
-
-.war__pile-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .war__pile-count {
-  font-size: 7px;
-  color: rgba(255,255,255,0.55);
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
 }
 
-/* Flipped card revealed in battle — key changes each round, triggering the animation */
-@keyframes war-flip-in {
-  0%   { transform: perspective(400px) rotateY(-90deg) scale(0.85); opacity: 0.3; }
-  100% { transform: perspective(400px) rotateY(0deg) scale(1); opacity: 1; }
+/* ── VS label ────────────────────────────────────────────────────────── */
+
+.war__vs-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 2px;
+  pointer-events: none;
 }
 
-.war__flipped {
-  margin-top: 6px;
-  animation: war-flip-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-}
+/* ── Shuffle animation ───────────────────────────────────────────────── */
 
-/* War cards row (face-down × 3 + face-up) */
-.war__war-cards {
+.war__shuffle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
-  gap: -8px;
-  align-items: flex-end;
+  gap: 4px;
 }
 
-.war__war-cards > * + * {
-  margin-left: -8px;
+.war__shuffle-half {
+  position: relative;
 }
 
-/* Center column */
-.war__center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-top: 40px;
-  min-width: 40px;
+@keyframes war-shuffle-left {
+  0%   { transform: translateX(0) rotate(0deg); }
+  12%  { transform: translateX(-38px) rotate(-7deg); }
+  40%  { transform: translateX(-38px) rotate(-7deg); }
+  55%  { transform: translateX(0) rotate(0deg); }
+  65%  { transform: translateX(-30px) rotate(-5deg); }
+  82%  { transform: translateX(-30px) rotate(-5deg); }
+  95%  { transform: translateX(0) rotate(0deg); }
+  100% { transform: translateX(0) rotate(0deg); }
 }
 
-.war__vs {
-  font-size: 9px;
-  color: rgba(255,255,255,0.4);
-  letter-spacing: 1px;
+@keyframes war-shuffle-right {
+  0%   { transform: translateX(0) rotate(0deg); }
+  12%  { transform: translateX(38px) rotate(7deg); }
+  40%  { transform: translateX(38px) rotate(7deg); }
+  55%  { transform: translateX(0) rotate(0deg); }
+  65%  { transform: translateX(30px) rotate(5deg); }
+  82%  { transform: translateX(30px) rotate(5deg); }
+  95%  { transform: translateX(0) rotate(0deg); }
+  100% { transform: translateX(0) rotate(0deg); }
 }
 
-/* Controls */
+.war__shuffle-half--l {
+  animation: war-shuffle-left 1.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.war__shuffle-half--r {
+  animation: war-shuffle-right 1.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────── */
+
 .war__controls {
-  padding: 8px 10px 10px;
+  padding: 6px 10px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .war__banner {
@@ -109,6 +159,12 @@
   padding: 5px 12px;
   border: 2px solid;
   text-align: center;
+  animation: war-banner-in 220ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes war-banner-in {
+  from { transform: translateY(-6px) scale(0.92); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 .war__banner--win  { color: #44cc44; border-color: #44cc44; background: rgba(68,204,68,0.1); }
@@ -123,7 +179,7 @@
 .war__btn {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border: 2px solid;
   cursor: pointer;
 }
@@ -133,16 +189,9 @@
   color: #fff;
   border-color: #ffcc88 #664400 #664400 #ffcc88;
 }
-.war__btn--primary:hover  { background: #ee5500; }
-.war__btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+.war__btn--primary:hover   { background: #ee5500; }
+.war__btn--primary:active  { border-color: #664400 #ffcc88 #ffcc88 #664400; }
 .war__btn--primary:disabled { background: #884400; cursor: default; }
-
-.war__btn--secondary {
-  background: #c0c0c0;
-  color: #000;
-  border-color: #ffffff #808080 #808080 #ffffff;
-}
-.war__btn--secondary:active { border-color: #808080 #ffffff #ffffff #808080; }
 
 .war__auto-notice {
   font-size: 7px;
