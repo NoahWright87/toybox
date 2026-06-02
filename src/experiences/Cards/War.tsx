@@ -47,27 +47,6 @@ const ANIM_MULT: Record<string, number> = { slow: 1.5, normal: 1.0, fast: 0.5 };
 type Phase = "shuffle" | "idle" | "animating" | "game-over";
 type BannerType = "win" | "lose" | "war";
 
-// ─── StackedPile — used only for the shuffle animation overlay ────────────────
-
-const DUMMY: Card = { id: "__dum", suit: "spades", rank: "2" };
-
-function StackedPile({ count, appearance }: { count: number; appearance: CardAppearance }) {
-  if (count === 0) return <div className="war__empty-slot" />;
-  const layers = Math.min(5, count);
-  return (
-    <div className="war__stack">
-      {Array.from({ length: layers }).map((_, i) => {
-        const d = layers - 1 - i;
-        return (
-          <div key={i} className="war__stack-layer" style={{ left: d * -1.5, top: d * 1.5, zIndex: i }}>
-            <PlayingCard card={DUMMY} faceDown appearance={appearance} />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── PermCard — one permanently-mounted card div ──────────────────────────────
 
 function PermCard({
@@ -199,7 +178,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     setBanner("");
     setPhase("shuffle");
 
-    // All 52 cards start at deck center (instant, hidden behind shuffle overlay)
+    // Step 0: All cards stacked at deck center (instant — no transition)
     const initStates: Record<string, CardVisualState> = {};
     for (const card of deck) {
       initStates[card.id] = { x: WAR_X, y: CY, z: 10, rotation: 0, faceDown: true, transitionMs: 0 };
@@ -207,16 +186,69 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     setAllCards(deck);
     setCardStates(initStates);
 
-    after(1600, () => {
+    // Timing blocks — all scaled by speed multiplier
+    const SPLIT = t(320);
+    const PAUSE = t(150);
+    const MERGE = t(280);
+    const DEAL  = t(400);
+    let now = 80;  // initial paint delay before first transition
+
+    // Step 1: Split deck into two halves (pCards left, dCards right)
+    after(now, () => {
+      const states: Record<string, CardVisualState> = {};
+      pCards.forEach((card, i) => {
+        states[card.id] = { x: 130 + i * 0.5, y: CY - i * 0.5, z: 300 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      dCards.forEach((card, i) => {
+        states[card.id] = { x: 286 - i * 0.5, y: CY - i * 0.5, z: 400 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      setCardStates(states);
+    });
+    now += SPLIT + PAUSE;
+
+    // Step 2: Merge both halves back to center (interleaved z-order)
+    after(now, () => {
+      const states: Record<string, CardVisualState> = {};
+      deck.forEach((card, i) => {
+        states[card.id] = { x: WAR_X, y: CY, z: 10 + i, rotation: rnd(-5, 5), faceDown: true, transitionMs: MERGE };
+      });
+      setCardStates(states);
+    });
+    now += MERGE + PAUSE;
+
+    // Step 3: Split again (slightly different spread)
+    after(now, () => {
+      const states: Record<string, CardVisualState> = {};
+      pCards.forEach((card, i) => {
+        states[card.id] = { x: 136 + i * 0.4, y: CY - i * 0.4, z: 300 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      dCards.forEach((card, i) => {
+        states[card.id] = { x: 280 - i * 0.4, y: CY - i * 0.4, z: 400 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      setCardStates(states);
+    });
+    now += SPLIT + PAUSE;
+
+    // Step 4: Merge back to center again
+    after(now, () => {
+      const states: Record<string, CardVisualState> = {};
+      deck.forEach((card, i) => {
+        states[card.id] = { x: WAR_X, y: CY, z: 10 + i, rotation: rnd(-4, 4), faceDown: true, transitionMs: MERGE };
+      });
+      setCardStates(states);
+    });
+    now += MERGE + PAUSE;
+
+    // Step 5: Deal — all cards fan out to their permanent pile positions
+    after(now, () => {
       for (const card of pCards) ps.current.addCard(card, { toTop: true, faceDown: true });
       for (const card of dCards) ds.current.addCard(card, { toTop: true, faceDown: true });
 
       setPlayerCount(ps.current.size);
       setDealerCount(ds.current.size);
+      setCardStates({ ...ps.current.layout(DEAL), ...ds.current.layout(DEAL) });
 
-      // Instantly place all cards at pile positions (transitionMs=0 → no animation)
-      setCardStates({ ...ps.current.layout(0), ...ds.current.layout(0) });
-      setPhase("idle");
+      after(DEAL + 100, () => setPhase("idle"));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
@@ -471,18 +503,6 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
       </div>
 
       <div className="war__stage">
-        {/* Shuffle animation overlay — sits above permanent cards */}
-        {phase === "shuffle" && (
-          <div className="war__shuffle">
-            <div className="war__shuffle-half war__shuffle-half--l">
-              <StackedPile count={20} appearance={appearance} />
-            </div>
-            <div className="war__shuffle-half war__shuffle-half--r">
-              <StackedPile count={20} appearance={appearance} />
-            </div>
-          </div>
-        )}
-
         {/* VS label when waiting for flip */}
         {phase === "idle" && <div className="war__vs-label">VS</div>}
 
