@@ -9,51 +9,50 @@
   user-select: none;
 }
 
-/* Felt table area */
-.bj__table {
-  background: #1a4a1a;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
+/* Container measures width for scale */
+.bj__stage-container {
   margin: 8px 8px 4px;
-  padding: 12px;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 256px;
-}
-
-/* Hand section (dealer or player) */
-.bj__section-label {
-  font-size: 7px;
-  color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 4px;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.bj__score {
-  font-size: 9px;
-  color: #ffffff;
-}
-
-.bj__score--bust { color: #ff6666; }
-.bj__score--bj   { color: #ffdd44; }
-
-/* Card row with overlap */
-.bj__hand {
-  display: flex;
-  flex-wrap: nowrap;
-  min-height: 104px; /* card height + shadow */
-}
-
-.bj__card {
+  overflow: hidden;
   flex-shrink: 0;
 }
 
-.bj__card + .bj__card {
-  margin-left: -14px;
+/* The felt stage — isolation keeps high-z cards from bleeding above menus */
+.bj__stage {
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* In-stage labels (DEALER / YOU) */
+.bj__stage-label {
+  position: absolute;
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.55);
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.bj__stage-score {
+  font-size: 8px;
+  color: #ffffff;
+}
+
+.bj__stage-score--bust { color: #ff6666; }
+.bj__stage-score--bj   { color: #ffdd44; }
+
+/* Shoe card count */
+.bj__shoe-label {
+  position: absolute;
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+  z-index: 5;
 }
 
 /* Outcome overlay — floats above the felt */
