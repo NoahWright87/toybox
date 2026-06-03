@@ -111,6 +111,12 @@ export class CardStack {
     }
   }
 
+  /** Update the faceDown state of a specific card by id (used for hole-card reveal). */
+  setFaceDown(id: string, faceDown: boolean): void {
+    const entry = this.entries.find(e => e.card.id === id);
+    if (entry) entry.faceDown = faceDown;
+  }
+
   setBase(x: number, y: number): void { this.baseX = x; this.baseY = y; }
 
   /**
