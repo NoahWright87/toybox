@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import "./Cards.css";
 import "./War.css";
-import { PlayingCard } from "./PlayingCard";
 import type { Card, CardAppearance, DeckSettings } from "./types";
+import { PermCard } from "./PermCard";
 import { buildDeck, shuffle } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -26,8 +26,6 @@ function rnd(min: number, max: number): number {
 // ─── Stage constants ──────────────────────────────────────────────────────────
 
 // Stage inner: 416px wide × 240px tall (440 window − chrome − margin − border)
-const CARD_W = 72;
-const CARD_H = 100;
 const CY = 120;  // vertical center of stage
 
 const PLAYER_X = 76;
@@ -46,58 +44,6 @@ const ANIM_MULT: Record<string, number> = { slow: 1.5, normal: 1.0, fast: 0.5 };
 
 type Phase = "shuffle" | "idle" | "animating" | "game-over";
 type BannerType = "win" | "lose" | "war";
-
-// ─── PermCard — one permanently-mounted card div ──────────────────────────────
-
-function PermCard({
-  card,
-  cs,
-  appearance,
-}: {
-  card: Card;
-  cs: CardVisualState;
-  appearance: CardAppearance;
-}) {
-  const delay = cs.transitionDelay ?? 0;
-  const posTrans = cs.transitionMs > 0
-    ? `left ${cs.transitionMs}ms ease-in-out ${delay}ms, top ${cs.transitionMs}ms ease-in-out ${delay}ms`
-    : undefined;
-
-  return (
-    <div
-      style={{
-        position:   "absolute",
-        left:       cs.x - CARD_W / 2,
-        top:        cs.y - CARD_H / 2,
-        width:      CARD_W,
-        height:     CARD_H,
-        zIndex:     cs.z,
-        transition: posTrans,
-      }}
-    >
-      <div
-        style={{
-          width:           "100%",
-          height:          "100%",
-          transform:       `rotate(${cs.rotation}deg)`,
-          transformOrigin: "center",
-          transition:      "transform 250ms ease-out",
-        }}
-      >
-        <div className="flippable" style={{ width: CARD_W, height: CARD_H }}>
-          <div className={`flippable__inner${cs.faceDown ? "" : " flippable__inner--face-up"}`}>
-            <div className="flippable__face">
-              <PlayingCard card={card} faceDown appearance={appearance} />
-            </div>
-            <div className="flippable__face flippable__face--front">
-              <PlayingCard card={card} appearance={appearance} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── War ──────────────────────────────────────────────────────────────────────
 
