@@ -63,6 +63,8 @@ interface DragState {
   offsetX: number;
   offsetY: number;
   moved: boolean;
+  startPx: number;
+  startPy: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -87,8 +89,10 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
   const [appearance,    setAppearance]    = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [autoComplete,  setAutoComplete]  = useState(false);
+  const [scale,         setScale]         = useState(1);
 
-  const stageRef = useRef<HTMLDivElement>(null);
+  const stageRef     = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Stacks — face-down/face-up offsets for tableau fanning
   const tableau     = useRef<CardStack[]>(
@@ -125,6 +129,18 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
 
   useEffect(() => { if (phase === "game-over") stopTimer(); }, [phase, stopTimer]);
   useEffect(() => () => { stopTimer(); }, [stopTimer]);
+
+  // Scale stage to fit container on narrow screens
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -482,8 +498,10 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
     const stageEl = stageRef.current;
     if (!stageEl) return;
     const rect = stageEl.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    // Divide by actual rendered size to get stage-native coords (handles CSS scale)
+    const stageScale = rect.width / STAGE_W;
+    const px = (e.clientX - rect.left) / stageScale;
+    const py = (e.clientY - rect.top)  / stageScale;
 
     drag.current = {
       ids: run.map(c => c.id),
@@ -492,6 +510,8 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
       offsetX: px - cs.x,
       offsetY: py - cs.y,
       moved: false,
+      startPx: px,
+      startPy: py,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, cardStates]);
@@ -502,13 +522,15 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
     const stageEl = stageRef.current;
     if (!stageEl) return;
     const rect = stageEl.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    const stageScale = rect.width / STAGE_W;
+    const px = (e.clientX - rect.left) / stageScale;
+    const py = (e.clientY - rect.top)  / stageScale;
 
     if (!d.moved) {
-      const dx = px - (d.originStates[d.ids[0]]?.x ?? 0) + d.offsetX;
-      const dy = py - (d.originStates[d.ids[0]]?.y ?? 0) + d.offsetY;
-      if (Math.hypot(dx, dy) < 4) return;
+      // Compare current pointer to WHERE pointer was at pointerDown
+      const dx = px - d.startPx;
+      const dy = py - d.startPy;
+      if (Math.hypot(dx, dy) < 5) return;
       d.moved = true;
     }
 
@@ -557,8 +579,9 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
     const stageEl = stageRef.current;
     if (!stageEl) { applyLayouts(allLayouts(200)); return; }
     const rect = stageEl.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    const stageScale = rect.width / STAGE_W;
+    const px = (e.clientX - rect.left) / stageScale;
+    const py = (e.clientY - rect.top)  / stageScale;
 
     const run = d.ids.map(id => allCards.find(c => c.id === id)!).filter(Boolean);
     const target = findDropTarget(px - d.offsetX, py - d.offsetY, run);
@@ -626,61 +649,93 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
         <DeckModal appearance={appearance} onUpdate={setAppearance} onClose={() => setShowDeckModal(false)} />
       )}
 
+      {/* Container measures available width; stage scales down to fit */}
       <div
-        ref={stageRef}
-        className="klondike__stage"
-        style={{ width: STAGE_W, height: STAGE_H }}
-        onPointerMove={handleStagePointerMove}
-        onPointerUp={handleStagePointerUp}
+        ref={containerRef}
+        className="klondike__stage-container"
+        style={{ height: Math.round(STAGE_H * scale) + 4 }}
       >
-        {/* Empty slot outlines */}
         <div
-          className="klondike__slot"
-          style={{ left: COL_X[0] - CARD_W/2, top: TOP_Y - CARD_H/2 }}
-          onClick={drawCard}
+          ref={stageRef}
+          className="klondike__stage"
+          style={{
+            width: STAGE_W,
+            height: STAGE_H,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
+          }}
+          onPointerMove={handleStagePointerMove}
+          onPointerUp={handleStagePointerUp}
         >
-          {stockStack.current.size === 0 && <span className="klondike__slot-icon">↺</span>}
-        </div>
+          {/* Waste slot outline */}
+          <div className="klondike__slot" style={{ left: COL_X[1] - CARD_W/2, top: TOP_Y - CARD_H/2 }} />
 
-        <div className="klondike__slot" style={{ left: COL_X[1] - CARD_W/2, top: TOP_Y - CARD_H/2 }} />
+          {/* Foundation slots */}
+          {[0,1,2,3].map(i => (
+            <div
+              key={i}
+              className="klondike__slot klondike__slot--foundation"
+              style={{ left: COL_X[3+i] - CARD_W/2, top: TOP_Y - CARD_H/2 }}
+              onClick={() => handleFoundationClick(i)}
+            >
+              <span className="klondike__slot-suit">{["♠","♥","♦","♣"][i]}</span>
+            </div>
+          ))}
 
-        {[0,1,2,3].map(i => (
-          <div
-            key={i}
-            className="klondike__slot klondike__slot--foundation"
-            style={{ left: COL_X[3+i] - CARD_W/2, top: TOP_Y - CARD_H/2 }}
-            onClick={() => handleFoundationClick(i)}
-          >
-            <span className="klondike__slot-suit">{["♠","♥","♦","♣"][i]}</span>
-          </div>
-        ))}
-
-        {tableau.current.map((t, i) => t.size === 0 && (
-          <div
-            key={i}
-            className="klondike__slot"
-            style={{ left: COL_X[i] - CARD_W/2, top: TAB_Y - CARD_H/2 }}
-            onClick={() => handleEmptyTabClick(i)}
-          />
-        ))}
-
-        {/* All 52 cards — permanently mounted */}
-        {allCards.map(card => {
-          const cs = cardStates[card.id];
-          if (!cs) return null;
-          const isSelected = selectedRun.includes(card.id);
-          const canInteract = !cs.faceDown && phase === "idle";
-          return (
-            <PermCard
-              key={card.id}
-              card={card}
-              cs={cs}
-              appearance={appearance}
-              highlightColor={isSelected ? "#cc4400" : undefined}
-              onPointerDown={canInteract ? (e) => handleCardPointerDown(e, card.id) : undefined}
+          {/* Empty tableau column slots */}
+          {tableau.current.map((t, i) => t.size === 0 && (
+            <div
+              key={i}
+              className="klondike__slot"
+              style={{ left: COL_X[i] - CARD_W/2, top: TAB_Y - CARD_H/2 }}
+              onClick={() => handleEmptyTabClick(i)}
             />
-          );
-        })}
+          ))}
+
+          {/* All 52 cards — permanently mounted */}
+          {allCards.map(card => {
+            const cs = cardStates[card.id];
+            if (!cs) return null;
+            const isSelected  = selectedRun.includes(card.id);
+            const isTopStock  = stockStack.current.top?.id === card.id;
+            const canInteract = !cs.faceDown && phase === "idle";
+            return (
+              <PermCard
+                key={card.id}
+                card={card}
+                cs={cs}
+                appearance={appearance}
+                highlightColor={isSelected ? "#cc4400" : undefined}
+                onClick={isTopStock ? drawCard : undefined}
+                onPointerDown={canInteract ? (e) => handleCardPointerDown(e, card.id) : undefined}
+              />
+            );
+          })}
+
+          {/* Stock click-catcher: transparent overlay above stock cards so taps work */}
+          <div
+            className="klondike__stock-hit"
+            style={{
+              left: COL_X[0] - CARD_W/2,
+              top: TOP_Y - CARD_H/2,
+              border: stockLeft === 0 ? "2px dashed rgba(255,255,255,0.25)" : "none",
+            }}
+            onClick={drawCard}
+          >
+            {stockLeft === 0 && <span className="klondike__slot-icon">↺</span>}
+          </div>
+
+          {/* Win overlay — inside stage so it's contained by isolation context */}
+          {phase === "game-over" && (
+            <div className="klondike__win-overlay">
+              <div className="klondike__win-banner">
+                <div className="klondike__win-title">You Win!</div>
+                <div className="klondike__win-stats">{moves} moves · {elapsed}s</div>
+                <button className="klondike__btn klondike__btn--primary" onClick={startGame}>Play Again</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="klondike__statusbar">
@@ -699,16 +754,6 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
         <button className="klondike__btn klondike__btn--primary" onClick={startGame}>New Game</button>
         {onNewGame && <button className="klondike__btn klondike__btn--secondary" onClick={onNewGame}>Change Game</button>}
       </div>
-
-      {phase === "game-over" && (
-        <div className="klondike__win-overlay">
-          <div className="klondike__win-banner">
-            <div className="klondike__win-title">You Win!</div>
-            <div className="klondike__win-stats">{moves} moves · {elapsed}s</div>
-            <button className="klondike__btn klondike__btn--primary" onClick={startGame}>Play Again</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
