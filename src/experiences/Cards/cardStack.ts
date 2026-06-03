@@ -7,6 +7,7 @@ export interface CardVisualState {
   rotation: number;
   faceDown: boolean;
   transitionMs: number;
+  transitionDelay?: number;  // per-card stagger for riffle effect
 }
 
 interface StackEntry {

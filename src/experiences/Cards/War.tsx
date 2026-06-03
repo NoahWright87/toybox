@@ -58,8 +58,9 @@ function PermCard({
   cs: CardVisualState;
   appearance: CardAppearance;
 }) {
+  const delay = cs.transitionDelay ?? 0;
   const posTrans = cs.transitionMs > 0
-    ? `left ${cs.transitionMs}ms ease-in-out, top ${cs.transitionMs}ms ease-in-out`
+    ? `left ${cs.transitionMs}ms ease-in-out ${delay}ms, top ${cs.transitionMs}ms ease-in-out ${delay}ms`
     : undefined;
 
   return (
@@ -186,12 +187,35 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     setAllCards(deck);
     setCardStates(initStates);
 
-    // Timing blocks — all scaled by speed multiplier
-    const SPLIT = t(320);
-    const PAUSE = t(150);
-    const MERGE = t(280);
-    const DEAL  = t(400);
-    let now = 80;  // initial paint delay before first transition
+    // Timing — all scaled by speed multiplier
+    const SPLIT   = t(280);
+    const PAUSE   = t(80);
+    const MERGE   = t(200);
+    const STAGGER = t(8);    // per-card delay in merge for riffle effect
+    const DEAL    = t(380);
+    // Total merge animation = MERGE + last card's delay
+    const MERGE_TOTAL = MERGE + (deck.length - 1) * STAGGER;
+    let now = 80;  // initial paint delay so browser renders the "all at center" frame first
+
+    // Helper: interleave cards from two halves (left[0], right[0], left[1], right[1], ...)
+    // then build merge states with per-card stagger
+    function mergeStates(cards1: Card[], cards2: Card[]): Record<string, CardVisualState> {
+      const interleaved: Card[] = [];
+      const len = Math.max(cards1.length, cards2.length);
+      for (let i = 0; i < len; i++) {
+        if (i < cards1.length) interleaved.push(cards1[i]);
+        if (i < cards2.length) interleaved.push(cards2[i]);
+      }
+      const states: Record<string, CardVisualState> = {};
+      interleaved.forEach((card, i) => {
+        states[card.id] = {
+          x: WAR_X, y: CY, z: 10 + i,
+          rotation: rnd(-5, 5), faceDown: true,
+          transitionMs: MERGE, transitionDelay: i * STAGGER,
+        };
+      });
+      return states;
+    }
 
     // Step 1: Split deck into two halves (pCards left, dCards right)
     after(now, () => {
@@ -206,17 +230,11 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     });
     now += SPLIT + PAUSE;
 
-    // Step 2: Merge both halves back to center (interleaved z-order)
-    after(now, () => {
-      const states: Record<string, CardVisualState> = {};
-      deck.forEach((card, i) => {
-        states[card.id] = { x: WAR_X, y: CY, z: 10 + i, rotation: rnd(-5, 5), faceDown: true, transitionMs: MERGE };
-      });
-      setCardStates(states);
-    });
-    now += MERGE + PAUSE;
+    // Step 2: Merge — cards riffle together one by one
+    after(now, () => setCardStates(mergeStates(pCards, dCards)));
+    now += MERGE_TOTAL + PAUSE;
 
-    // Step 3: Split again (slightly different spread)
+    // Step 3: Split again (slightly tighter spread)
     after(now, () => {
       const states: Record<string, CardVisualState> = {};
       pCards.forEach((card, i) => {
@@ -229,23 +247,18 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     });
     now += SPLIT + PAUSE;
 
-    // Step 4: Merge back to center again
-    after(now, () => {
-      const states: Record<string, CardVisualState> = {};
-      deck.forEach((card, i) => {
-        states[card.id] = { x: WAR_X, y: CY, z: 10 + i, rotation: rnd(-4, 4), faceDown: true, transitionMs: MERGE };
-      });
-      setCardStates(states);
-    });
-    now += MERGE + PAUSE;
+    // Step 4: Merge again with riffle
+    after(now, () => setCardStates(mergeStates(pCards, dCards)));
+    now += MERGE_TOTAL + PAUSE;
 
-    // Step 5: Deal — all cards fan out to their permanent pile positions
+    // Step 5: Deal — all cards fan out to their pile positions (no stagger, clean spread)
     after(now, () => {
       for (const card of pCards) ps.current.addCard(card, { toTop: true, faceDown: true });
       for (const card of dCards) ds.current.addCard(card, { toTop: true, faceDown: true });
 
       setPlayerCount(ps.current.size);
       setDealerCount(ds.current.size);
+      // transitionDelay resets to 0 since layout() doesn't set it
       setCardStates({ ...ps.current.layout(DEAL), ...ds.current.layout(DEAL) });
 
       after(DEAL + 100, () => setPhase("idle"));
