@@ -1,21 +1,137 @@
-/* ─── Klondike Solitaire ─────────────────────────────────────────────── */
+/* ─── Klondike Solitaire ──────────────────────────────────────────────── */
 
 .klondike {
   display: flex;
   flex-direction: column;
-  background: #1a4a1a; /* green felt */
+  background: #c0c0c0;
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   user-select: none;
-  min-width: 420px;
-  min-height: 500px;
-  position: relative;
-  padding: 8px;
-  gap: 8px;
 }
 
-/* ─── Top row (foundations + stock/waste) ────────────────────────────── */
+/* ─── Stage ──────────────────────────────────────────────────────────── */
 
+.klondike__stage {
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  margin: 8px 8px 4px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Empty card slot — dashed outline */
+.klondike__slot {
+  position: absolute;
+  width: 72px;
+  height: 100px;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.klondike__slot--foundation { border-color: rgba(255, 255, 255, 0.35); }
+
+.klondike__slot-suit {
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.28);
+  font-family: Georgia, serif;
+  line-height: 1;
+}
+
+.klondike__slot-icon {
+  font-size: 26px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: sans-serif;
+}
+
+/* ─── Status bar ──────────────────────────────────────────────────────── */
+
+.klondike__statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px;
+  font-size: 7px;
+  color: #333;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  background: #c0c0c0;
+}
+
+/* ─── Controls ────────────────────────────────────────────────────────── */
+
+.klondike__controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
+.klondike__btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 12px;
+  border: 2px solid;
+  cursor: pointer;
+}
+
+.klondike__btn--sm { padding: 3px 8px; font-size: 7px; }
+
+.klondike__btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.klondike__btn--primary:hover  { background: #ee5500; }
+.klondike__btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+
+.klondike__btn--secondary {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+.klondike__btn--secondary:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ─── Win overlay ─────────────────────────────────────────────────────── */
+
+.klondike__win-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.klondike__win-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 28px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.klondike__win-title {
+  font-size: 14px;
+  color: #228833;
+  letter-spacing: 2px;
+}
+
+.klondike__win-stats { font-size: 8px; color: #333; }
+
+/* Remove old layout classes that no longer exist */
 .klondike__top-row {
   display: flex;
   align-items: flex-start;

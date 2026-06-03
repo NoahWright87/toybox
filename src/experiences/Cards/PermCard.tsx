@@ -1,3 +1,4 @@
+import React from "react";
 import "./Cards.css";
 import { PlayingCard } from "./PlayingCard";
 import type { Card, CardAppearance } from "./types";
@@ -10,6 +11,7 @@ interface PermCardProps {
   size?: "sm";
   highlightColor?: string;
   onClick?: () => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
 }
 
 /**
@@ -17,7 +19,7 @@ interface PermCardProps {
  * All animation is driven by changes to `cs` — CSS transitions fire automatically
  * because the element always has a prior position in the DOM.
  */
-export function PermCard({ card, cs, appearance, size, highlightColor, onClick }: PermCardProps) {
+export function PermCard({ card, cs, appearance, size, highlightColor, onClick, onPointerDown }: PermCardProps) {
   const cw = size === "sm" ? 52 : 72;
   const ch = size === "sm" ? 72 : 100;
   const delay = cs.transitionDelay ?? 0;
@@ -28,18 +30,20 @@ export function PermCard({ card, cs, appearance, size, highlightColor, onClick }
   return (
     <div
       style={{
-        position:  "absolute",
-        left:      cs.x - cw / 2,
-        top:       cs.y - ch / 2,
-        width:     cw,
-        height:    ch,
-        zIndex:    cs.z,
-        transition: posTrans,
-        cursor:    onClick ? "pointer" : "default",
-        boxShadow: highlightColor ? `0 0 0 2px ${highlightColor}, 0 0 6px 1px ${highlightColor}` : undefined,
+        position:    "absolute",
+        left:        cs.x - cw / 2,
+        top:         cs.y - ch / 2,
+        width:       cw,
+        height:      ch,
+        zIndex:      cs.z,
+        transition:  posTrans,
+        cursor:      onPointerDown || onClick ? "pointer" : "default",
+        boxShadow:   highlightColor ? `0 0 0 2px ${highlightColor}, 0 0 6px 1px ${highlightColor}` : undefined,
         borderRadius: "4px",
+        touchAction: onPointerDown ? "none" : undefined,
       }}
       onClick={onClick}
+      onPointerDown={onPointerDown}
     >
       <div
         style={{

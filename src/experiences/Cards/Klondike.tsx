@@ -1,142 +1,68 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import "./Cards.css";
 import "./Klondike.css";
-import { PlayingCard } from "./PlayingCard";
-import type { Card, CardAppearance, DeckSettings, Suit } from "./types";
+import { PermCard } from "./PermCard";
+import { CardStack } from "./cardStack";
+import type { CardVisualState } from "./cardStack";
+import type { Card, CardAppearance, DeckSettings } from "./types";
+import type { Rank, Suit } from "./types";
+import { buildDeck, shuffle } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { DeckModal } from "./DeckModal";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Stage layout ──────────────────────────────────────────────────────────────
 
-const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] as const;
-const SUITS_ALL: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
-const FOUNDATION_SUITS: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
+const STAGE_W  = 596;
+const STAGE_H  = 520;
+const CARD_W   = 72;
+const CARD_H   = 100;
+const TOP_Y    = 66;
+const TAB_Y    = 196;
 
-const RANK_VAL: Record<string, number> = {
-  A: 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
-  "8": 8, "9": 9, "10": 10, J: 11, Q: 12, K: 13,
+// 7 column x-centers, evenly spaced
+const COL_X: number[] = (() => {
+  const gridW = 7 * CARD_W + 6 * 8;
+  const startX = (STAGE_W - gridW) / 2 + CARD_W / 2;
+  return Array.from({ length: 7 }, (_, i) => startX + i * (CARD_W + 8));
+})();
+
+const Z_DRAG = 9000;
+
+// ── Game logic helpers ────────────────────────────────────────────────────────
+
+const RANK_VALUE: Partial<Record<Rank, number>> = {
+  "A":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"10":10,"J":11,"Q":12,"K":13,
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+function rv(card: Card): number { return RANK_VALUE[card.rank as Rank] ?? 0; }
 
-function buildStandardDeck(): Card[] {
-  const cards: Card[] = [];
-  for (const suit of SUITS_ALL) {
-    for (const rank of RANKS) {
-      cards.push({ suit, rank, id: `${suit}-${rank}` });
-    }
-  }
-  // Fisher-Yates shuffle
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = cards[i];
-    cards[i] = cards[j];
-    cards[j] = tmp;
-  }
-  return cards;
+function cardColor(card: Card): "red" | "black" {
+  return card.suit === "hearts" || card.suit === "diamonds" ? "red" : "black";
 }
 
-function isRed(suit: Suit): boolean {
-  return suit === "hearts" || suit === "diamonds";
+function canPlaceOnTableau(card: Card, top: Card | null, relaxed: boolean): boolean {
+  if (top === null) return card.rank === "K" || relaxed;
+  return rv(card) === rv(top) - 1 && cardColor(card) !== cardColor(top);
 }
 
-function canPlaceOnTableau(card: Card, topCard: Card | null, relaxed = false): boolean {
-  if (card.suit === "joker") return false;
-  if (topCard === null) {
-    return relaxed || RANK_VAL[card.rank as string] === 13;
-  }
-  if (topCard.suit === "joker") return false;
-  const oppColor = isRed(card.suit as Suit) !== isRed(topCard.suit as Suit);
-  const oneBelow = RANK_VAL[card.rank as string] === RANK_VAL[topCard.rank as string] - 1;
-  return oppColor && oneBelow;
-}
-
-function canPlaceOnFoundation(card: Card, foundation: Card[]): boolean {
-  if (card.suit === "joker") return false;
-  if (foundation.length === 0) {
-    return RANK_VAL[card.rank as string] === 1;
-  }
-  const top = foundation[foundation.length - 1];
-  return (
-    top.suit === card.suit &&
-    RANK_VAL[card.rank as string] === RANK_VAL[top.rank as string] + 1
-  );
+function canPlaceOnFoundation(card: Card, top: Card | null): boolean {
+  if (top === null) return card.rank === "A";
+  return card.suit === top.suit && rv(card) === rv(top) + 1;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface TableauColumn {
-  faceDown: Card[];
-  faceUp: Card[];
-}
+type Phase = "shuffle" | "idle" | "animating" | "game-over";
+type StackId = `tab-${number}` | `found-${number}` | "stock" | "waste";
 
-interface KlondikeSelection {
-  from: "tableau" | "waste" | "foundation";
-  colIndex: number;
-  cardIndex: number;
-}
-
-type GamePhase = "playing" | "won";
-
-interface KlondikeState {
-  tableau: TableauColumn[];
-  foundations: Card[][];
-  stock: Card[];
-  waste: Card[];
-  wasteIndex: number;
-  selected: KlondikeSelection | null;
-  moves: number;
-  startTime: number;
-  phase: GamePhase;
-}
-
-// ── Game setup ────────────────────────────────────────────────────────────────
-
-function makeInitialState(): KlondikeState {
-  const deck = buildStandardDeck();
-  const tableau: TableauColumn[] = [];
-
-  let idx = 0;
-  for (let col = 0; col < 7; col++) {
-    const numCards = col + 1;
-    const colCards = deck.slice(idx, idx + numCards);
-    idx += numCards;
-    tableau.push({
-      faceDown: colCards.slice(0, numCards - 1),
-      faceUp: [colCards[numCards - 1]],
-    });
-  }
-
-  const stock = deck.slice(idx); // remaining 24 cards
-
-  return {
-    tableau,
-    foundations: [[], [], [], []],
-    stock,
-    waste: [],
-    wasteIndex: -1,
-    selected: null,
-    moves: 0,
-    startTime: Date.now(),
-    phase: "playing",
-  };
-}
-
-// ── Move helpers ──────────────────────────────────────────────────────────────
-
-function getVisibleWasteCard(state: KlondikeState): Card | null {
-  if (state.wasteIndex < 0 || state.waste.length === 0) return null;
-  const idx = Math.min(state.wasteIndex, state.waste.length - 1);
-  return state.waste[idx];
-}
-
-function allFaceUp(tableau: TableauColumn[]): boolean {
-  return tableau.every((col) => col.faceDown.length === 0);
-}
-
-function checkWon(foundations: Card[][]): boolean {
-  return foundations.every((f) => f.length === 13);
+interface DragState {
+  ids: string[];
+  fromStack: StackId;
+  originStates: Record<string, CardVisualState>;
+  offsetX: number;
+  offsetY: number;
+  moved: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -148,750 +74,638 @@ interface KlondikeProps {
 }
 
 export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps) {
-  const [state, setState] = useState<KlondikeState>(() => makeInitialState());
-  const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
+  const drawMode = settings.klondikeDraw;
+  const relaxed  = settings.klondikeRelaxed;
+
+  const [allCards,      setAllCards]      = useState<Card[]>([]);
+  const [cardStates,    setCardStates]    = useState<Record<string, CardVisualState>>({});
+  const [phase,         setPhase]         = useState<Phase>("shuffle");
+  const [selectedRun,   setSelectedRun]   = useState<string[]>([]);
+  const [moves,         setMoves]         = useState(0);
+  const [elapsed,       setElapsed]       = useState(0);
+  const [stockLeft,     setStockLeft]     = useState(0);
+  const [appearance,    setAppearance]    = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const autoCompleteRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [autoComplete,  setAutoComplete]  = useState(false);
 
-  // ── Timer ──────────────────────────────────────────────────────────────────
+  const stageRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (state.phase === "won") return;
-    const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - state.startTime) / 1000));
+  // Stacks — face-down/face-up offsets for tableau fanning
+  const tableau     = useRef<CardStack[]>(
+    Array.from({ length: 7 }, (_, i) =>
+      new CardStack({ zTier: 5 + i, baseX: COL_X[i], baseY: TAB_Y, faceDownOffsetY: 15, faceUpOffsetY: 20 })
+    )
+  );
+  const foundations = useRef<CardStack[]>(
+    Array.from({ length: 4 }, (_, i) =>
+      new CardStack({ zTier: 1 + i, baseX: COL_X[3 + i], baseY: TOP_Y })
+    )
+  );
+  const stockStack = useRef(new CardStack({ zTier: 12, baseX: COL_X[0], baseY: TOP_Y }));
+  const wasteStack = useRef(new CardStack({ zTier: 13, baseX: COL_X[1], baseY: TOP_Y }));
+
+  const drag = useRef<DragState | null>(null);
+
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearTimers = useCallback(() => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  function after(ms: number, fn: () => void) { timers.current.push(setTimeout(fn, ms)); }
+
+  const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }, []);
+  const ensureTimer = useCallback(() => {
+    if (timerRef.current) return;
+    startTimeRef.current = Date.now();
+    timerRef.current = setInterval(() => {
+      if (startTimeRef.current !== null) setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
     }, 1000);
-    return () => clearInterval(id);
-  }, [state.phase, state.startTime]);
-
-  // ── Auto-complete ──────────────────────────────────────────────────────────
-
-  const startAutoComplete = useCallback(() => {
-    if (autoCompleteRef.current) return;
-    autoCompleteRef.current = setInterval(() => {
-      setState((s) => {
-        if (s.phase === "won") {
-          if (autoCompleteRef.current) {
-            clearInterval(autoCompleteRef.current);
-            autoCompleteRef.current = null;
-          }
-          return s;
-        }
-
-        // Try to move any card to a foundation
-        const newFoundations = s.foundations.map((f) => [...f]);
-        const newTableau = s.tableau.map((col) => ({
-          faceDown: [...col.faceDown],
-          faceUp: [...col.faceUp],
-        }));
-        const newWaste = [...s.waste];
-        let moved = false;
-
-        // Try tableau cards
-        for (let ci = 0; ci < 7 && !moved; ci++) {
-          const col = newTableau[ci];
-          if (col.faceUp.length === 0) continue;
-          const card = col.faceUp[col.faceUp.length - 1];
-          for (let fi = 0; fi < 4 && !moved; fi++) {
-            if (canPlaceOnFoundation(card, newFoundations[fi])) {
-              newFoundations[fi] = [...newFoundations[fi], card];
-              col.faceUp = col.faceUp.slice(0, col.faceUp.length - 1);
-              // flip next face-down
-              if (col.faceUp.length === 0 && col.faceDown.length > 0) {
-                col.faceUp = [col.faceDown[col.faceDown.length - 1]];
-                col.faceDown = col.faceDown.slice(0, col.faceDown.length - 1);
-              }
-              moved = true;
-            }
-          }
-        }
-
-        // Try waste top
-        if (!moved && s.wasteIndex >= 0 && newWaste.length > 0) {
-          const wIdx = Math.min(s.wasteIndex, newWaste.length - 1);
-          const card = newWaste[wIdx];
-          for (let fi = 0; fi < 4 && !moved; fi++) {
-            if (canPlaceOnFoundation(card, newFoundations[fi])) {
-              newFoundations[fi] = [...newFoundations[fi], card];
-              newWaste.splice(wIdx, 1);
-              moved = true;
-            }
-          }
-        }
-
-        if (!moved) {
-          if (autoCompleteRef.current) {
-            clearInterval(autoCompleteRef.current);
-            autoCompleteRef.current = null;
-          }
-          return s;
-        }
-
-        const won = checkWon(newFoundations);
-        const newWasteIndex = Math.min(s.wasteIndex, newWaste.length - 1);
-        const newPhase: GamePhase = won ? "won" : s.phase;
-
-        return {
-          ...s,
-          tableau: newTableau,
-          foundations: newFoundations,
-          waste: newWaste,
-          wasteIndex: newWasteIndex,
-          moves: s.moves + 1,
-          phase: newPhase,
-          selected: null,
-        };
-      });
-    }, 150);
   }, []);
 
+  useEffect(() => { if (phase === "game-over") stopTimer(); }, [phase, stopTimer]);
+  useEffect(() => () => { stopTimer(); }, [stopTimer]);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function applyLayouts(...layouts: Record<string, CardVisualState>[]): void {
+    setCardStates(prev => {
+      const next = { ...prev };
+      for (const l of layouts) Object.assign(next, l);
+      return next;
+    });
+  }
+
+  function stackById(id: StackId): CardStack {
+    if (id === "stock") return stockStack.current;
+    if (id === "waste") return wasteStack.current;
+    if (id.startsWith("found-")) return foundations.current[parseInt(id.slice(6))];
+    return tableau.current[parseInt(id.slice(4))];
+  }
+
+  // Build visual states for all stacks
+  function allLayouts(ms = 250): Record<string, CardVisualState> {
+    const result: Record<string, CardVisualState> = {};
+    for (const t of tableau.current)     Object.assign(result, t.layout(ms));
+    for (const f of foundations.current) Object.assign(result, f.layout(ms));
+    Object.assign(result, stockStack.current.layout(ms));
+    Object.assign(result, computeWasteLayout(ms));
+    return result;
+  }
+
+  // Waste visual: draw-3 fans the top 3 cards left→right so all are visible
+  function computeWasteLayout(ms = 250): Record<string, CardVisualState> {
+    const cards = wasteStack.current.cards;
+    if (cards.length === 0) return {};
+    if (drawMode === 1 || cards.length <= 1) return wasteStack.current.layout(ms);
+    const result: Record<string, CardVisualState> = {};
+    const show = Math.min(3, cards.length);
+    const base = cards.length - show;
+    for (let i = 0; i < base; i++) {
+      result[cards[i].id] = { x: COL_X[1], y: TOP_Y, z: 1300 + i, rotation: 0, faceDown: false, transitionMs: ms };
+    }
+    for (let j = 0; j < show; j++) {
+      result[cards[base + j].id] = {
+        x: COL_X[1] + (j - (show - 1)) * 8 + (show - 1) * 8,
+        y: TOP_Y, z: 1300 + base + j,
+        rotation: 0, faceDown: false, transitionMs: ms,
+      };
+    }
+    return result;
+  }
+
+  // ── startGame ──────────────────────────────────────────────────────────────
+
+  const startGame = useCallback(() => {
+    clearTimers();
+    stopTimer();
+    setElapsed(0);
+    startTimeRef.current = null;
+    setSelectedRun([]);
+    setMoves(0);
+    setAutoComplete(false);
+    setPhase("shuffle");
+
+    const deck = shuffle(buildDeck({
+      ...settings,
+      numDecks: 1,
+      suits: ["spades", "hearts", "diamonds", "clubs"] as Suit[],
+      includeJokers: false,
+    }));
+
+    for (const t of tableau.current)     t.clear();
+    for (const f of foundations.current) f.clear();
+    stockStack.current.clear();
+    wasteStack.current.clear();
+
+    const initStates: Record<string, CardVisualState> = {};
+    for (const c of deck) {
+      initStates[c.id] = { x: COL_X[0], y: TOP_Y, z: 1200, rotation: 0, faceDown: true, transitionMs: 0 };
+    }
+    setAllCards(deck);
+    setCardStates(initStates);
+
+    const SPLIT = 220, PAUSE = 60, MERGE = 160, STAGGER = 6;
+    const DEAL_MS = 280;
+    const MERGE_TOTAL = MERGE + (deck.length - 1) * STAGGER;
+
+    function mergeAnim(c1: Card[], c2: Card[]): Record<string, CardVisualState> {
+      const merged: Card[] = [];
+      const len = Math.max(c1.length, c2.length);
+      for (let i = 0; i < len; i++) {
+        if (i < c1.length) merged.push(c1[i]);
+        if (i < c2.length) merged.push(c2[i]);
+      }
+      const out: Record<string, CardVisualState> = {};
+      merged.forEach((c, i) => {
+        out[c.id] = { x: COL_X[0], y: TOP_Y, z: 10 + i, rotation: 0, faceDown: true, transitionMs: MERGE, transitionDelay: i * STAGGER };
+      });
+      return out;
+    }
+
+    const half = Math.floor(deck.length / 2);
+    const left = deck.slice(0, half), right = deck.slice(half);
+    const lx = COL_X[0] - 60, rx = COL_X[0] + 60;
+
+    let now = 80;
+
+    after(now, () => {
+      const s: Record<string, CardVisualState> = {};
+      left.forEach((c, i)  => { s[c.id] = { x: lx + i*0.4, y: TOP_Y - i*0.4, z: 300+i, rotation: 0, faceDown: true, transitionMs: SPLIT }; });
+      right.forEach((c, i) => { s[c.id] = { x: rx - i*0.4, y: TOP_Y - i*0.4, z: 400+i, rotation: 0, faceDown: true, transitionMs: SPLIT }; });
+      setCardStates(s);
+    });
+    now += SPLIT + PAUSE;
+
+    after(now, () => setCardStates(mergeAnim(left, right)));
+    now += MERGE_TOTAL + PAUSE;
+
+    after(now, () => {
+      const s: Record<string, CardVisualState> = {};
+      left.forEach((c, i)  => { s[c.id] = { x: lx + i*0.3, y: TOP_Y - i*0.3, z: 300+i, rotation: 0, faceDown: true, transitionMs: SPLIT }; });
+      right.forEach((c, i) => { s[c.id] = { x: rx - i*0.3, y: TOP_Y - i*0.3, z: 400+i, rotation: 0, faceDown: true, transitionMs: SPLIT }; });
+      setCardStates(s);
+    });
+    now += SPLIT + PAUSE;
+
+    after(now, () => setCardStates(mergeAnim(left, right)));
+    now += MERGE_TOTAL + PAUSE;
+
+    // Deal: col 0→1 card, col 1→2, ..., col 6→7; rest to stock
+    after(now, () => {
+      let idx = 0;
+      for (let col = 0; col < 7; col++) {
+        for (let row = 0; row <= col; row++) {
+          tableau.current[col].addCard(deck[idx++], { toTop: true, faceDown: row < col });
+        }
+      }
+      for (let i = idx; i < deck.length; i++) {
+        stockStack.current.addCard(deck[i], { toTop: true, faceDown: true });
+      }
+      setStockLeft(stockStack.current.size);
+
+      // Staggered deal states
+      const dealStates: Record<string, CardVisualState> = {};
+      idx = 0;
+      for (let col = 0; col < 7; col++) {
+        for (let row = 0; row <= col; row++) {
+          const c = deck[idx++];
+          let y = TAB_Y;
+          for (let r = 0; r < row; r++) y += 15;
+          dealStates[c.id] = {
+            x: COL_X[col], y,
+            z: 500 + col * 100 + row,
+            rotation: 0, faceDown: row < col,
+            transitionMs: DEAL_MS, transitionDelay: (col + row) * 40,
+          };
+        }
+      }
+      Object.assign(dealStates, stockStack.current.layout(DEAL_MS));
+      setCardStates(dealStates);
+
+      after(DEAL_MS + 12 * 40 + 100, () => {
+        applyLayouts(allLayouts(0));
+        setPhase("idle");
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
   useEffect(() => {
-    return () => {
-      if (autoCompleteRef.current) {
-        clearInterval(autoCompleteRef.current);
-        autoCompleteRef.current = null;
+    startGame();
+    return clearTimers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Draw card ─────────────────────────────────────────────────────────────
+
+  const drawCard = useCallback(() => {
+    if (phase !== "idle") return;
+    ensureTimer();
+    setSelectedRun([]);
+
+    if (stockStack.current.size === 0) {
+      if (wasteStack.current.size === 0) return;
+      const cards = [...wasteStack.current.cards].reverse();
+      wasteStack.current.clear();
+      for (const c of cards) stockStack.current.addCard(c, { toTop: true, faceDown: true });
+      setStockLeft(stockStack.current.size);
+      applyLayouts(stockStack.current.layout(250), computeWasteLayout(250));
+      setMoves(m => m + 1);
+      return;
+    }
+
+    const n = Math.min(drawMode, stockStack.current.size);
+    for (let i = 0; i < n; i++) {
+      const c = stockStack.current.removeTop();
+      if (c) wasteStack.current.addCard(c, { toTop: true, faceDown: false });
+    }
+    setStockLeft(stockStack.current.size);
+    applyLayouts(stockStack.current.layout(200), computeWasteLayout(200));
+    setMoves(m => m + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, drawMode]);
+
+  // ── Stack lookup ──────────────────────────────────────────────────────────
+
+  function findStack(cardId: string): StackId | null {
+    for (let i = 0; i < 7; i++) {
+      if (tableau.current[i].cards.some(c => c.id === cardId)) return `tab-${i}`;
+    }
+    for (let i = 0; i < 4; i++) {
+      if (foundations.current[i].cards.some(c => c.id === cardId)) return `found-${i}`;
+    }
+    if (stockStack.current.cards.some(c => c.id === cardId)) return "stock";
+    if (wasteStack.current.cards.some(c => c.id === cardId)) return "waste";
+    return null;
+  }
+
+  function getRunFrom(cardId: string, stackId: StackId): Card[] {
+    const cards = stackById(stackId).cards;
+    const idx = cards.findIndex(c => c.id === cardId);
+    return idx === -1 ? [] : cards.slice(idx);
+  }
+
+  // ── Drop target detection ─────────────────────────────────────────────────
+
+  function findDropTarget(px: number, py: number, run: Card[]): StackId | null {
+    const lead = run[0];
+    const THRESH = 55;
+    let best: StackId | null = null;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < 7; i++) {
+      const top = tableau.current[i].top;
+      if (!canPlaceOnTableau(lead, top, relaxed)) continue;
+      const cy = top ? (cardStates[top.id]?.y ?? TAB_Y) : TAB_Y;
+      const dist = Math.hypot(px - COL_X[i], py - cy);
+      if (dist < THRESH && dist < bestDist) { bestDist = dist; best = `tab-${i}`; }
+    }
+
+    if (run.length === 1) {
+      for (let i = 0; i < 4; i++) {
+        const top = foundations.current[i].top;
+        if (!canPlaceOnFoundation(lead, top)) continue;
+        const dist = Math.hypot(px - COL_X[3 + i], py - TOP_Y);
+        if (dist < THRESH && dist < bestDist) { bestDist = dist; best = `found-${i}`; }
+      }
+    }
+
+    return best;
+  }
+
+  // ── Execute move ──────────────────────────────────────────────────────────
+
+  function executeMove(run: Card[], fromId: StackId, toId: StackId): void {
+    const from = stackById(fromId);
+    const to   = stackById(toId);
+
+    for (let i = run.length - 1; i >= 0; i--) from.removeCard(run[i].id);
+    if (fromId.startsWith("tab-") && from.size > 0 && from.topFaceDown) from.flipTop();
+
+    const faceDown = toId === "stock";
+    for (const c of run) to.addCard(c, { toTop: true, faceDown });
+
+    if (toId === "stock" || toId === "waste") setStockLeft(stockStack.current.size);
+    setMoves(m => m + 1);
+
+    const newLayouts = allLayouts(200);
+    run.forEach((c, i) => {
+      if (newLayouts[c.id]) newLayouts[c.id] = { ...newLayouts[c.id], transitionDelay: i * 40 };
+    });
+    applyLayouts(newLayouts);
+    setSelectedRun([]);
+
+    const won = foundations.current.every(f => f.size === 13);
+    if (won) { after(400, () => setPhase("game-over")); return; }
+
+    // Check auto-complete eligibility
+    const allFaceUp = tableau.current.every(t => !t.topFaceDown || t.size === 0);
+    const noStock   = stockStack.current.size === 0 && wasteStack.current.size === 0;
+    setAutoComplete(allFaceUp && noStock);
+  }
+
+  // ── Auto-complete ─────────────────────────────────────────────────────────
+
+  const runAutoComplete = useCallback(() => {
+    if (phase !== "idle") return;
+    setPhase("animating");
+    const step = () => {
+      let moved = false;
+      outer:
+      for (const t of tableau.current) {
+        const top = t.top;
+        if (!top) continue;
+        for (let fi = 0; fi < 4; fi++) {
+          if (canPlaceOnFoundation(top, foundations.current[fi].top)) {
+            t.removeTop();
+            if (t.size > 0 && t.topFaceDown) t.flipTop();
+            foundations.current[fi].addCard(top, { toTop: true, faceDown: false });
+            moved = true;
+            break outer;
+          }
+        }
+      }
+      // Also check waste
+      if (!moved) {
+        const top = wasteStack.current.top;
+        if (top) {
+          for (let fi = 0; fi < 4; fi++) {
+            if (canPlaceOnFoundation(top, foundations.current[fi].top)) {
+              wasteStack.current.removeTop();
+              foundations.current[fi].addCard(top, { toTop: true, faceDown: false });
+              moved = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!moved) { setPhase("idle"); return; }
+      applyLayouts(allLayouts(200));
+      if (foundations.current.every(f => f.size === 13)) {
+        after(400, () => setPhase("game-over"));
+      } else {
+        after(150, step);
       }
     };
-  }, []);
+    step();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
-  // ── Restart ────────────────────────────────────────────────────────────────
+  // ── Pointer handlers ──────────────────────────────────────────────────────
 
-  const restart = useCallback(() => {
-    if (autoCompleteRef.current) {
-      clearInterval(autoCompleteRef.current);
-      autoCompleteRef.current = null;
+  const handleCardPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>, cardId: string) => {
+    if (phase !== "idle") return;
+    const cs = cardStates[cardId];
+    if (!cs || cs.faceDown) return;
+
+    const stackId = findStack(cardId);
+    if (!stackId || stackId === "stock") return;
+
+    // Waste: only top card is draggable
+    if (stackId === "waste") {
+      const topCard = wasteStack.current.top;
+      if (!topCard || topCard.id !== cardId) return;
     }
-    setState(makeInitialState());
-    setElapsed(0);
-  }, []);
 
-  // ── Stock click ────────────────────────────────────────────────────────────
+    const run = getRunFrom(cardId, stackId);
+    if (run.length === 0) return;
 
-  const handleStockClick = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "playing") return s;
-      const draw = settings.klondikeDraw;
+    // Validate run is a legal alternating-color descending sequence
+    for (let i = 1; i < run.length; i++) {
+      if (rv(run[i]) !== rv(run[i-1]) - 1 || cardColor(run[i]) === cardColor(run[i-1])) return;
+    }
 
-      if (s.stock.length === 0) {
-        // Reset: flip waste back to stock
-        if (s.waste.length === 0) return s;
-        return {
-          ...s,
-          stock: [...s.waste].reverse(),
-          waste: [],
-          wasteIndex: -1,
-          selected: null,
-          moves: s.moves + 1,
-        };
-      }
+    ensureTimer();
+    e.currentTarget.setPointerCapture(e.pointerId);
 
-      // Draw from stock to waste
-      const toDraw = Math.min(draw, s.stock.length);
-      const drawn = s.stock.slice(0, toDraw);
-      const newStock = s.stock.slice(toDraw);
-      const newWaste = [...s.waste, ...drawn];
-      const newWasteIndex = newWaste.length - 1;
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
 
-      return {
-        ...s,
-        stock: newStock,
-        waste: newWaste,
-        wasteIndex: newWasteIndex,
-        selected: null,
-        moves: s.moves + 1,
-      };
-    });
-  }, [settings.klondikeDraw]);
+    drag.current = {
+      ids: run.map(c => c.id),
+      fromStack: stackId,
+      originStates: Object.fromEntries(run.map(c => [c.id, cardStates[c.id]])),
+      offsetX: px - cs.x,
+      offsetY: py - cs.y,
+      moved: false,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, cardStates]);
 
-  // ── Move logic ─────────────────────────────────────────────────────────────
+  const handleStagePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
 
-  const tryMoveToFoundation = useCallback(
-    (
-      from: KlondikeSelection["from"],
-      colIndex: number,
-      cardIndex: number,
-      s: KlondikeState
-    ): KlondikeState | null => {
-      let card: Card | null = null;
+    if (!d.moved) {
+      const dx = px - (d.originStates[d.ids[0]]?.x ?? 0) + d.offsetX;
+      const dy = py - (d.originStates[d.ids[0]]?.y ?? 0) + d.offsetY;
+      if (Math.hypot(dx, dy) < 4) return;
+      d.moved = true;
+    }
 
-      if (from === "tableau") {
-        const col = s.tableau[colIndex];
-        if (col.faceUp.length === 0) return null;
-        // Only move single card (top of the sequence) to foundation
-        if (cardIndex !== col.faceUp.length - 1) return null;
-        card = col.faceUp[col.faceUp.length - 1];
-      } else if (from === "waste") {
-        card = getVisibleWasteCard(s);
-      } else if (from === "foundation") {
-        if (s.foundations[colIndex].length === 0) return null;
-        card = s.foundations[colIndex][s.foundations[colIndex].length - 1];
-      }
-
-      if (!card) return null;
-
-      // Find a matching foundation (must be a different pile if source is foundation)
-      for (let fi = 0; fi < 4; fi++) {
-        // Can't move a foundation card onto the same foundation pile
-        if (from === "foundation" && fi === colIndex) continue;
-
-        if (canPlaceOnFoundation(card, s.foundations[fi])) {
-          // Build new foundations: add card to fi
-          const newFoundations = s.foundations.map((f, i) =>
-            i === fi ? [...f, card!] : [...f]
-          );
-
-          let newTableau = s.tableau;
-          let newWaste = s.waste;
-          let newWasteIndex = s.wasteIndex;
-
-          if (from === "tableau") {
-            newTableau = s.tableau.map((tCol, ci) => {
-              if (ci !== colIndex) return tCol;
-              const newFaceUp = tCol.faceUp.slice(0, tCol.faceUp.length - 1);
-              const newFaceDown = [...tCol.faceDown];
-              // Flip next card if face-up becomes empty
-              if (newFaceUp.length === 0 && newFaceDown.length > 0) {
-                newFaceUp.push(newFaceDown[newFaceDown.length - 1]);
-                newFaceDown.pop();
-              }
-              return { faceDown: newFaceDown, faceUp: newFaceUp };
-            });
-          } else if (from === "waste") {
-            const wIdx = Math.min(s.wasteIndex, s.waste.length - 1);
-            newWaste = [...s.waste];
-            newWaste.splice(wIdx, 1);
-            newWasteIndex = Math.min(s.wasteIndex, newWaste.length - 1);
-          } else if (from === "foundation") {
-            // Remove card from source foundation pile
-            newFoundations[colIndex] = newFoundations[colIndex].slice(
-              0,
-              newFoundations[colIndex].length - 1
-            );
-          }
-
-          const won = checkWon(newFoundations);
-          const newPhase: GamePhase = won ? "won" : s.phase;
-
-          return {
-            ...s,
-            tableau: newTableau,
-            foundations: newFoundations,
-            waste: newWaste,
-            wasteIndex: newWasteIndex,
-            selected: null,
-            moves: s.moves + 1,
-            phase: newPhase,
-          };
-        }
-      }
-
-      return null;
-    },
-    []
-  );
-
-  const tryMoveToTableau = useCallback(
-    (
-      sel: KlondikeSelection,
-      destCol: number,
-      s: KlondikeState
-    ): KlondikeState | null => {
-      // Get the sequence of cards to move
-      let cards: Card[] = [];
-
-      if (sel.from === "tableau") {
-        const col = s.tableau[sel.colIndex];
-        cards = col.faceUp.slice(sel.cardIndex);
-      } else if (sel.from === "waste") {
-        const wCard = getVisibleWasteCard(s);
-        if (!wCard) return null;
-        cards = [wCard];
-      } else if (sel.from === "foundation") {
-        const f = s.foundations[sel.colIndex];
-        if (f.length === 0) return null;
-        cards = [f[f.length - 1]];
-      }
-
-      if (cards.length === 0) return null;
-
-      // Can't move a column onto itself
-      if (sel.from === "tableau" && sel.colIndex === destCol) return null;
-
-      const destColData = s.tableau[destCol];
-      const topCard =
-        destColData.faceUp.length > 0
-          ? destColData.faceUp[destColData.faceUp.length - 1]
-          : null;
-
-      if (!canPlaceOnTableau(cards[0], topCard, settings.klondikeRelaxed)) return null;
-
-      // Build new state
-      let newTableau = s.tableau.map((col) => ({
-        faceDown: [...col.faceDown],
-        faceUp: [...col.faceUp],
-      }));
-      let newWaste = [...s.waste];
-      let newWasteIndex = s.wasteIndex;
-      let newFoundations = s.foundations.map((f) => [...f]);
-
-      // Remove from source
-      if (sel.from === "tableau") {
-        const srcCol = newTableau[sel.colIndex];
-        srcCol.faceUp = srcCol.faceUp.slice(0, sel.cardIndex);
-        // Flip next face-down if needed
-        if (srcCol.faceUp.length === 0 && srcCol.faceDown.length > 0) {
-          srcCol.faceUp = [srcCol.faceDown[srcCol.faceDown.length - 1]];
-          srcCol.faceDown = srcCol.faceDown.slice(0, srcCol.faceDown.length - 1);
-        }
-      } else if (sel.from === "waste") {
-        const wIdx = Math.min(s.wasteIndex, s.waste.length - 1);
-        newWaste.splice(wIdx, 1);
-        newWasteIndex = Math.min(s.wasteIndex, newWaste.length - 1);
-      } else if (sel.from === "foundation") {
-        newFoundations[sel.colIndex] = newFoundations[sel.colIndex].slice(
-          0,
-          newFoundations[sel.colIndex].length - 1
-        );
-      }
-
-      // Add to destination
-      newTableau[destCol].faceUp = [...newTableau[destCol].faceUp, ...cards];
-
-      return {
-        ...s,
-        tableau: newTableau,
-        foundations: newFoundations,
-        waste: newWaste,
-        wasteIndex: newWasteIndex,
-        selected: null,
-        moves: s.moves + 1,
-      };
-    },
-    [settings.klondikeRelaxed]
-  );
-
-  // ── Click handlers ─────────────────────────────────────────────────────────
-
-  const handleWasteClick = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "playing") return s;
-      const card = getVisibleWasteCard(s);
-      if (!card) return { ...s, selected: null };
-
-      // If already selected from waste → deselect
-      if (s.selected?.from === "waste") {
-        return { ...s, selected: null };
-      }
-
-      // If something is selected, try move to... waste? That's not valid. Change selection.
-      if (s.selected) {
-        // Can't move to waste, so select waste card instead
-        return {
-          ...s,
-          selected: { from: "waste", colIndex: 0, cardIndex: 0 },
-        };
-      }
-
-      // Select the waste top
-      return {
-        ...s,
-        selected: { from: "waste", colIndex: 0, cardIndex: 0 },
-      };
+    setCardStates(prev => {
+      const next = { ...prev };
+      const originLead = d.originStates[d.ids[0]];
+      d.ids.forEach((id, i) => {
+        const origin = d.originStates[id];
+        const offX = origin ? origin.x - originLead.x : 0;
+        const offY = origin ? origin.y - originLead.y : 0;
+        next[id] = { ...prev[id], x: px - d.offsetX + offX, y: py - d.offsetY + offY, z: Z_DRAG + i, transitionMs: 0 };
+      });
+      return next;
     });
   }, []);
 
-  const handleFoundationClick = useCallback(
-    (fi: number) => {
-      setState((s) => {
-        if (s.phase !== "playing") return s;
+  const handleStagePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
 
-        // If something is selected, try moving it to foundation
-        if (s.selected) {
-          // Don't move from same foundation to same foundation
-          if (s.selected.from === "foundation" && s.selected.colIndex === fi) {
-            return { ...s, selected: null };
+    if (!d.moved) {
+      // Tap/click — 2-click mode
+      const leadId = d.ids[0];
+      if (selectedRun.length > 0 && selectedRun[0] !== leadId) {
+        const clickedStack = findStack(leadId);
+        const fromStack    = findStack(selectedRun[0]);
+        if (clickedStack && fromStack) {
+          const run = selectedRun.map(id => allCards.find(c => c.id === id)!).filter(Boolean);
+          if (run.length > 0) {
+            executeMove(run, fromStack, clickedStack);
+            return;
           }
-
-          const moved = tryMoveToFoundation(
-            s.selected.from,
-            s.selected.colIndex,
-            s.selected.cardIndex,
-            s
-          );
-          if (moved) return moved;
-
-          // If selection is a foundation card, switch selection
-          const fTop = s.foundations[fi];
-          if (fTop.length > 0) {
-            return { ...s, selected: { from: "foundation", colIndex: fi, cardIndex: 0 } };
-          }
-
-          return { ...s, selected: null };
         }
-
-        // Select top of foundation
-        if (s.foundations[fi].length > 0) {
-          return {
-            ...s,
-            selected: { from: "foundation", colIndex: fi, cardIndex: 0 },
-          };
-        }
-
-        return s;
-      });
-    },
-    [tryMoveToFoundation]
-  );
-
-  const handleTableauCardClick = useCallback(
-    (colIndex: number, cardIndex: number) => {
-      setState((s) => {
-        if (s.phase !== "playing") return s;
-        const col = s.tableau[colIndex];
-        const card = col.faceUp[cardIndex];
-        if (!card) return s;
-
-        // If clicking the same card, deselect
-        if (
-          s.selected?.from === "tableau" &&
-          s.selected.colIndex === colIndex &&
-          s.selected.cardIndex === cardIndex
-        ) {
-          return { ...s, selected: null };
-        }
-
-        // If something is selected, try moving to this column
-        if (s.selected) {
-          const moved = tryMoveToTableau(s.selected, colIndex, s);
-          if (moved) return moved;
-
-          // Try double-click-style: if single card and can go to foundation
-          // But user clicked a tableau card, not a foundation — try to move selection to foundation
-          // first try to move clicked card to foundation if it's the selection target
-          // Actually: if move fails, change selection to the clicked card
-          return {
-            ...s,
-            selected: { from: "tableau", colIndex, cardIndex },
-          };
-        }
-
-        // No selection — select this card
-        return {
-          ...s,
-          selected: { from: "tableau", colIndex, cardIndex },
-        };
-      });
-    },
-    [tryMoveToTableau]
-  );
-
-  const handleTableauEmptyClick = useCallback(
-    (colIndex: number) => {
-      setState((s) => {
-        if (s.phase !== "playing") return s;
-        if (!s.selected) return s;
-
-        const moved = tryMoveToTableau(s.selected, colIndex, s);
-        if (moved) return moved;
-
-        return { ...s, selected: null };
-      });
-    },
-    [tryMoveToTableau]
-  );
-
-  // Double-click: auto-move to foundation
-  const handleTableauCardDblClick = useCallback(
-    (colIndex: number, cardIndex: number) => {
-      setState((s) => {
-        if (s.phase !== "playing") return s;
-        const col = s.tableau[colIndex];
-        if (cardIndex !== col.faceUp.length - 1) return s; // only top card
-        const moved = tryMoveToFoundation("tableau", colIndex, cardIndex, s);
-        return moved ?? s;
-      });
-    },
-    [tryMoveToFoundation]
-  );
-
-  const handleWasteDblClick = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "playing") return s;
-      const moved = tryMoveToFoundation("waste", 0, 0, s);
-      return moved ?? s;
-    });
-  }, [tryMoveToFoundation]);
-
-  // ── Valid destination highlighting ─────────────────────────────────────────
-
-  const validTableauDests = useMemo<boolean[]>(() => {
-    if (!state.selected) return Array(7).fill(false);
-    return state.tableau.map((col, ci) => {
-      // Don't highlight source column
-      if (state.selected!.from === "tableau" && state.selected!.colIndex === ci) return false;
-
-      let cards: Card[] = [];
-      if (state.selected!.from === "tableau") {
-        cards = state.tableau[state.selected!.colIndex].faceUp.slice(state.selected!.cardIndex);
-      } else if (state.selected!.from === "waste") {
-        const wc = getVisibleWasteCard(state);
-        if (wc) cards = [wc];
-      } else if (state.selected!.from === "foundation") {
-        const f = state.foundations[state.selected!.colIndex];
-        if (f.length > 0) cards = [f[f.length - 1]];
       }
+      if (selectedRun[0] === leadId) {
+        setSelectedRun([]);
+        applyLayouts(allLayouts(150));
+      } else {
+        setSelectedRun(d.ids);
+        applyLayouts(allLayouts(150));
+      }
+      return;
+    }
 
-      if (cards.length === 0) return false;
-      const topCard =
-        col.faceUp.length > 0 ? col.faceUp[col.faceUp.length - 1] : null;
-      return canPlaceOnTableau(cards[0], topCard, settings.klondikeRelaxed);
-    });
-  }, [state, settings.klondikeRelaxed]);
+    const stageEl = stageRef.current;
+    if (!stageEl) { applyLayouts(allLayouts(200)); return; }
+    const rect = stageEl.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
 
-  // ── Menus ──────────────────────────────────────────────────────────────────
+    const run = d.ids.map(id => allCards.find(c => c.id === id)!).filter(Boolean);
+    const target = findDropTarget(px - d.offsetX, py - d.offsetY, run);
+
+    if (target && target !== d.fromStack) {
+      executeMove(run, d.fromStack, target);
+    } else {
+      setCardStates(prev => {
+        const next = { ...prev };
+        const origins = d.originStates;
+        for (const id of Object.keys(origins)) {
+          const cs: CardVisualState = origins[id];
+          next[id] = { ...cs, transitionMs: 200 };
+        }
+        return next;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allCards, cardStates, selectedRun, relaxed]);
+
+  // 2-click: click a foundation slot directly
+  const handleFoundationClick = useCallback((foundIdx: number) => {
+    if (phase !== "idle" || selectedRun.length === 0) return;
+    const run = selectedRun.map(id => allCards.find(c => c.id === id)!).filter(Boolean);
+    if (run.length !== 1) return;
+    const fromId = findStack(selectedRun[0]);
+    if (!fromId) return;
+    if (canPlaceOnFoundation(run[0], foundations.current[foundIdx].top)) {
+      executeMove(run, fromId, `found-${foundIdx}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selectedRun, allCards]);
+
+  // 2-click: click an empty tableau column
+  const handleEmptyTabClick = useCallback((col: number) => {
+    if (phase !== "idle" || selectedRun.length === 0) return;
+    const run = selectedRun.map(id => allCards.find(c => c.id === id)!).filter(Boolean);
+    const fromId = findStack(selectedRun[0]);
+    if (!fromId || !canPlaceOnTableau(run[0], null, relaxed)) return;
+    executeMove(run, fromId, `tab-${col}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selectedRun, allCards, relaxed]);
+
+  // ── Menus ─────────────────────────────────────────────────────────────────
 
   const menus = useMemo<MenuBarMenu[]>(() => {
     const gameItems: MenuBarMenu["items"] = [
-      { label: "Restart", onClick: restart },
-      ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
-      ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
+      { label: "New Game",    onClick: startGame },
+      ...(onNewGame ? [{ label: "Change Game…", onClick: onNewGame }] : []),
+      ...(onQuit    ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
     ];
     return [
-      { label: "Game", items: gameItems },
-      {
-        label: "Options",
-        items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }],
-      },
+      { label: "Game",    items: gameItems },
+      { label: "Options", items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }] },
     ];
-  }, [restart, onNewGame, onQuit]);
+  }, [startGame, onNewGame, onQuit]);
 
   useWindowMenus(menus);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  const { tableau, foundations, stock, waste, wasteIndex, selected, moves, phase } = state;
-  const wasteTopCard = getVisibleWasteCard(state);
-  const canAutoComplete = allFaceUp(tableau) && phase === "playing";
-  const autoRunning = autoCompleteRef.current !== null;
-
-  const SUIT_SYMBOLS: Record<Suit, string> = {
-    spades: "♠",
-    hearts: "♥",
-    diamonds: "♦",
-    clubs: "♣",
-  };
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="klondike">
       {showDeckModal && (
-        <DeckModal
-          appearance={appearance}
-          onUpdate={setAppearance}
-          onClose={() => setShowDeckModal(false)}
-        />
+        <DeckModal appearance={appearance} onUpdate={setAppearance} onClose={() => setShowDeckModal(false)} />
       )}
 
-      {/* Top area: foundations + stock/waste */}
-      <div className="klondike__top-row">
-        {/* Foundations */}
-        <div className="klondike__foundations">
-          {FOUNDATION_SUITS.map((suit, fi) => {
-            const fPile = foundations[fi];
-            const fTop = fPile.length > 0 ? fPile[fPile.length - 1] : null;
-            const isSelected =
-              selected?.from === "foundation" && selected.colIndex === fi;
-            return (
-              <div
-                key={suit}
-                className={
-                  "klondike__foundation-slot" +
-                  (isSelected ? " klondike__foundation-slot--selected" : "")
-                }
-                onClick={() => handleFoundationClick(fi)}
-                title={`${suit} foundation`}
-              >
-                {fTop ? (
-                  <PlayingCard card={fTop} appearance={appearance} size="sm" />
-                ) : (
-                  <div className="klondike__empty-slot klondike__empty-slot--suit">
-                    <span className="klondike__suit-hint">{SUIT_SYMBOLS[suit]}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      <div
+        ref={stageRef}
+        className="klondike__stage"
+        style={{ width: STAGE_W, height: STAGE_H }}
+        onPointerMove={handleStagePointerMove}
+        onPointerUp={handleStagePointerUp}
+      >
+        {/* Empty slot outlines */}
+        <div
+          className="klondike__slot"
+          style={{ left: COL_X[0] - CARD_W/2, top: TOP_Y - CARD_H/2 }}
+          onClick={drawCard}
+        >
+          {stockStack.current.size === 0 && <span className="klondike__slot-icon">↺</span>}
         </div>
 
-        {/* Spacer */}
-        <div className="klondike__top-spacer" />
+        <div className="klondike__slot" style={{ left: COL_X[1] - CARD_W/2, top: TOP_Y - CARD_H/2 }} />
 
-        {/* Stock + Waste */}
-        <div className="klondike__stock-area">
-          {/* Waste */}
+        {[0,1,2,3].map(i => (
           <div
-            className={
-              "klondike__waste-slot" +
-              (selected?.from === "waste" ? " klondike__waste-slot--selected" : "")
-            }
-            onClick={handleWasteClick}
-            onDoubleClick={handleWasteDblClick}
+            key={i}
+            className="klondike__slot klondike__slot--foundation"
+            style={{ left: COL_X[3+i] - CARD_W/2, top: TOP_Y - CARD_H/2 }}
+            onClick={() => handleFoundationClick(i)}
           >
-            {wasteTopCard ? (
-              <>
-                {/* Show peeks of cards behind in draw-3 mode (back=furthest left, mid=closer) */}
-                {settings.klondikeDraw === 3 && wasteIndex >= 2 && waste[wasteIndex - 2] && (
-                  <div className="klondike__waste-peek klondike__waste-peek--back">
-                    <PlayingCard
-                      card={waste[wasteIndex - 2]}
-                      appearance={appearance}
-                      size="sm"
-                    />
-                  </div>
-                )}
-                {settings.klondikeDraw === 3 && wasteIndex >= 1 && waste[wasteIndex - 1] && (
-                  <div className="klondike__waste-peek klondike__waste-peek--mid">
-                    <PlayingCard
-                      card={waste[wasteIndex - 1]}
-                      appearance={appearance}
-                      size="sm"
-                    />
-                  </div>
-                )}
-                <div className="klondike__waste-top">
-                  <PlayingCard key={wasteTopCard.id} card={wasteTopCard} appearance={appearance} size="sm" dealIndex={0} />
-                </div>
-              </>
-            ) : (
-              <div className="klondike__empty-slot" />
-            )}
+            <span className="klondike__slot-suit">{["♠","♥","♦","♣"][i]}</span>
           </div>
+        ))}
 
-          {/* Stock */}
+        {tableau.current.map((t, i) => t.size === 0 && (
           <div
-            className="klondike__stock-slot"
-            onClick={handleStockClick}
-            title={stock.length > 0 ? `Stock: ${stock.length} cards` : "Click to reset"}
-          >
-            {stock.length > 0 ? (
-              <PlayingCard
-                card={stock[0]}
-                faceDown
-                appearance={appearance}
-                size="sm"
-              />
-            ) : (
-              <div className="klondike__empty-slot klondike__stock-reset">
-                <span className="klondike__reset-icon">↺</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+            key={i}
+            className="klondike__slot"
+            style={{ left: COL_X[i] - CARD_W/2, top: TAB_Y - CARD_H/2 }}
+            onClick={() => handleEmptyTabClick(i)}
+          />
+        ))}
 
-      {/* Tableau */}
-      <div className="klondike__tableau">
-        {tableau.map((col, ci) => {
-          const isValidDest = validTableauDests[ci];
-          const totalCards = col.faceDown.length + col.faceUp.length;
-          // Height: face-down slivers (18px each) + face-up slivers (26px each) + last card full height (72px)
-          const colHeight = totalCards === 0
-            ? 72
-            : col.faceDown.length * 18 +
-              (col.faceUp.length > 1 ? (col.faceUp.length - 1) * 26 : 0) +
-              72;
-
+        {/* All 52 cards — permanently mounted */}
+        {allCards.map(card => {
+          const cs = cardStates[card.id];
+          if (!cs) return null;
+          const isSelected = selectedRun.includes(card.id);
+          const canInteract = !cs.faceDown && phase === "idle";
           return (
-            <div
-              key={ci}
-              className={
-                "klondike__column" +
-                (isValidDest ? " klondike__column--valid-dest" : "")
-              }
-              style={{ height: colHeight }}
-              onClick={totalCards === 0 ? () => handleTableauEmptyClick(ci) : undefined}
-            >
-              {/* Face-down cards */}
-              {col.faceDown.map((card, di) => (
-                <div
-                  key={card.id}
-                  className="klondike__facedown-card"
-                  style={{ top: di * 18 }}
-                >
-                  <PlayingCard card={card} faceDown appearance={appearance} size="sm" />
-                </div>
-              ))}
-
-              {/* Face-up cards */}
-              {col.faceUp.map((card, ui) => {
-                const topOffset = col.faceDown.length * 18;
-                const isSelected =
-                  selected?.from === "tableau" &&
-                  selected.colIndex === ci &&
-                  selected.cardIndex <= ui;
-                const isSelectionStart =
-                  selected?.from === "tableau" &&
-                  selected.colIndex === ci &&
-                  selected.cardIndex === ui;
-                return (
-                  <div
-                    key={card.id}
-                    className={
-                      "klondike__faceup-card" +
-                      (isSelected ? " klondike__faceup-card--selected" : "") +
-                      (isSelectionStart ? " klondike__faceup-card--selection-start" : "")
-                    }
-                    style={{ top: topOffset + ui * 26 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTableauCardClick(ci, ui);
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      handleTableauCardDblClick(ci, ui);
-                    }}
-                  >
-                    <PlayingCard card={card} appearance={appearance} size="sm" />
-                  </div>
-                );
-              })}
-
-              {/* Empty column placeholder */}
-              {totalCards === 0 && (
-                <div className="klondike__empty-slot" />
-              )}
-            </div>
+            <PermCard
+              key={card.id}
+              card={card}
+              cs={cs}
+              appearance={appearance}
+              highlightColor={isSelected ? "#cc4400" : undefined}
+              onPointerDown={canInteract ? (e) => handleCardPointerDown(e, card.id) : undefined}
+            />
           );
         })}
       </div>
 
-      {/* Status bar */}
       <div className="klondike__statusbar">
         <span>Moves: {moves}</span>
+        <span>Stock: {stockLeft}</span>
+        <span>Draw {drawMode}</span>
         <span>Time: {elapsed}s</span>
-        <span>Draw: {settings.klondikeDraw}</span>
-        {canAutoComplete && !autoRunning && (
-          <button className="klondike__autocomplete-btn" onClick={startAutoComplete}>
+        {autoComplete && phase === "idle" && (
+          <button className="klondike__btn klondike__btn--primary klondike__btn--sm" onClick={runAutoComplete}>
             Auto-Complete
           </button>
         )}
       </div>
 
-      {/* Win overlay */}
-      {phase === "won" && (
+      <div className="klondike__controls">
+        <button className="klondike__btn klondike__btn--primary" onClick={startGame}>New Game</button>
+        {onNewGame && <button className="klondike__btn klondike__btn--secondary" onClick={onNewGame}>Change Game</button>}
+      </div>
+
+      {phase === "game-over" && (
         <div className="klondike__win-overlay">
           <div className="klondike__win-banner">
-            <div className="klondike__win-title">YOU WIN!</div>
-            <div className="klondike__win-stats">
-              {moves} moves &bull; {elapsed}s
-            </div>
-            <button className="klondike__win-btn" onClick={restart}>
-              Play Again
-            </button>
-            {onNewGame && (
-              <button className="klondike__win-btn klondike__win-btn--secondary" onClick={onNewGame}>
-                New Game
-              </button>
-            )}
+            <div className="klondike__win-title">You Win!</div>
+            <div className="klondike__win-stats">{moves} moves · {elapsed}s</div>
+            <button className="klondike__btn klondike__btn--primary" onClick={startGame}>Play Again</button>
           </div>
         </div>
       )}
