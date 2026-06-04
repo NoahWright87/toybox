@@ -1,5 +1,5 @@
 export type OscWaveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
-export type EditTool = 'select' | 'draw' | 'paint';
+export type EditTool = 'select' | 'draw' | 'paint' | 'erase' | 'bend' | 'erase-bend';
 export type AppView = 'pattern' | 'song';
 
 // GM instrument names, index = program number 0–127
@@ -52,6 +52,13 @@ export interface Note {
   velocity: number;
 }
 
+export interface Bend {
+  id: string;
+  fromNoteId: string;
+  toNoteId: string;
+  curvature: number; // -1 (9 o'clock/ease-out) to 1 (3 o'clock/ease-in), 0 = linear
+}
+
 export interface Track {
   id: string;
   name: string;
@@ -59,6 +66,7 @@ export interface Track {
   waveform: OscWaveform;
   gmProgram?: number;  // 0–127; undefined = use oscillator synth
   notes: Note[];
+  bends: Bend[];
   muted: boolean;
   isDrum: boolean;
   volume: number;     // 0–1
@@ -148,9 +156,10 @@ export const PIANO_MIN = 36;  // C2
 export const PIANO_MAX = 83;  // B5
 
 let noteCounter = 0;
-export function makeNoteId(): string {
-  return `n${++noteCounter}`;
-}
+export function makeNoteId(): string { return `n${++noteCounter}`; }
+
+let bendCounter = 0;
+export function makeBendId(): string { return `b${++bendCounter}`; }
 
 export function isBlackPitch(pitch: number): boolean {
   return [1, 3, 6, 8, 10].includes(pitch % 12);
@@ -161,8 +170,8 @@ export function pitchName(pitch: number): string {
   return `${names[pitch % 12]}${Math.floor(pitch / 12) - 1}`;
 }
 
-function makeTrack(partial: Omit<Track, 'volume'|'attack'|'release'|'collapsed'|'octaveOffset'>): Track {
-  return { ...partial, volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0 };
+function makeTrack(partial: Omit<Track, 'volume'|'attack'|'release'|'collapsed'|'octaveOffset'|'bends'>): Track {
+  return { ...partial, bends: [], volume: 1, attack: 0.01, release: 0.3, collapsed: false, octaveOffset: 0 };
 }
 
 export function makeDefaultTracks(): Track[] {

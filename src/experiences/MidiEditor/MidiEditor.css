@@ -584,10 +584,13 @@
   flex-shrink: 0;
 }
 
-/* In edit mode, give every touchable element its own touch-action:none so
-   mobile browsers don't intercept the pointer events for scrolling */
+/* In edit/select mode, tell the browser not to intercept touches for scrolling.
+   This must be on the grid container itself (not just children) so iOS Safari
+   doesn't steal the touch for the scrollable .me-outer ancestor. */
+.me-note-grid--edit,
 .me-note-grid--edit .me-cell,
-.me-note-grid--edit .me-note-rect {
+.me-note-grid--edit .me-note-rect,
+.me-note-grid--select {
   touch-action: none;
 }
 
@@ -684,6 +687,7 @@
   flex-shrink: 0;
 }
 
+.me-drum-grid--edit,
 .me-drum-grid--edit .me-drum-cell {
   touch-action: none;
 }
@@ -1053,4 +1057,96 @@
   border-radius: 50%;
   flex-shrink: 0;
   border: 1px solid rgba(0,0,0,0.3);
+}
+
+/* ── Tool palette (bottom of piano roll) ───────────────────────────────────── */
+.me-tool-palette {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #c0c0c0;
+  border-top: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.me-tool-palette__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.me-tool-palette__divider {
+  width: 4px;
+  height: 36px;
+  flex-shrink: 0;
+  margin: 0 2px;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+}
+
+.me-tool-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.me-tool-btn:active,
+.me-tool-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+
+/* ── Note states for bend/erase tools ─────────────────────────────────────── */
+.me-note-rect--bend-mode {
+  opacity: 0.55;
+  filter: brightness(0.65);
+  z-index: 1;
+}
+
+.me-note-rect--bend-source {
+  opacity: 1;
+  filter: brightness(1.1);
+  outline: 2px solid #ffffff;
+  outline-offset: -1px;
+  z-index: 3;
+}
+
+.me-note-rect--bend-target {
+  opacity: 1;
+  filter: brightness(1.05);
+  outline: 3px solid #228833;
+  outline-offset: -1px;
+  transform: scale(1.04);
+  z-index: 3;
+}
+
+.me-note-rect--erase-hover {
+  outline: 3px solid #cc0000;
+  outline-offset: -1px;
+  filter: brightness(1.1);
+  z-index: 4;
+}
+
+/* Bend SVG overlay */
+.me-bend-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+.me-bend-svg--active {
+  pointer-events: all;
 }

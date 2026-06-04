@@ -290,6 +290,12 @@ function getBuffer(sampleIdx: number, ctx: AudioContext): AudioBuffer | null {
   return ab;
 }
 
+function sfShapedCurve(p: number, curvature: number): number {
+  if (curvature === 0) return p;
+  const exp = 1 + Math.abs(curvature) * 3;
+  return curvature > 0 ? Math.pow(p, exp) : 1 - Math.pow(1 - p, exp);
+}
+
 export function playSfNote(
   program: number,
   pitch: number,
@@ -298,6 +304,10 @@ export function playSfNote(
   ctx: AudioContext,
   when: number,
   gain: number,
+  bendToPitch?: number,
+  bendCurvature = 0,
+  bendStartSec = 0,
+  bendDurationSec?: number,
 ): boolean {
   if (!_font) return false;
 
@@ -323,10 +333,27 @@ export function playSfNote(
   const source = ctx.createBufferSource();
   source.buffer = ab;
 
-  // Pitch shift via playbackRate
-  const rootKey = zone.overrideRootKey >= 0 ? zone.overrideRootKey : sh.originalPitch;
-  const cents   = (pitch - rootKey) * zone.scaleTuning + sh.pitchCorrection;
-  source.playbackRate.value = Math.pow(2, cents / 1200);
+  // Pitch shift via playbackRate; optionally ramp to bendToPitch
+  const rootKey   = zone.overrideRootKey >= 0 ? zone.overrideRootKey : sh.originalPitch;
+  const cents     = (pitch - rootKey) * zone.scaleTuning + sh.pitchCorrection;
+  const startRate = Math.pow(2, cents / 1200);
+
+  if (bendToPitch !== undefined) {
+    const endCents = (bendToPitch - rootKey) * zone.scaleTuning + sh.pitchCorrection;
+    const endRate  = Math.pow(2, endCents / 1200);
+    const N = 32;
+    const curve = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      curve[i] = startRate + (endRate - startRate) * sfShapedCurve(i / (N - 1), bendCurvature);
+    }
+    const slideStart = when + bendStartSec;
+    const slideDur   = bendDurationSec ?? Math.max(durationSec - bendStartSec - 0.05, 0.05);
+    source.playbackRate.setValueAtTime(startRate, when);
+    source.playbackRate.setValueCurveAtTime(curve, slideStart, slideDur);
+    source.playbackRate.setValueAtTime(endRate, slideStart + slideDur);
+  } else {
+    source.playbackRate.value = startRate;
+  }
 
   // Loop
   const looping = zone.loopMode === LOOP_CONTINUES || zone.loopMode === LOOP_UNTIL_OFF;
