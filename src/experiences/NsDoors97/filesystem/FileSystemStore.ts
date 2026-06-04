@@ -446,15 +446,19 @@ export class FileSystemStore {
           changed = true;
         }
       }
-      // Add PNG stubs that don't exist yet
+      // Add PNG stubs that don't exist yet; update existing ones to have appId
       for (const name of spriteNames) {
-        if (!this.findChild(spritesDir.id, name)) {
+        const existing = this.findChild(spritesDir.id, name);
+        if (existing?.kind === "file" && !existing.appId) {
+          this.nodes.set(existing.id, { ...existing, appId: "nsart" });
+          changed = true;
+        } else if (!existing) {
           const id = `fs:ego-spr-${name.replace(/\./g, "-")}`;
           this.nodes.set(id, {
             id, kind: "file", name,
             parentId: spritesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
             fileType: "png", content: "", mimeType: "image/png",
-            system: false, readonly: false,
+            system: false, readonly: false, appId: "nsart",
           } as FSFile);
           changed = true;
         }
@@ -486,7 +490,7 @@ export class FileSystemStore {
           id: sid, kind: "file", name,
           parentId: sDirId, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "wav", content: "", mimeType: "audio/wav",
-          system: false, readonly: false,
+          system: false, readonly: false, appId: "sound-recorder",
         } as FSFile);
       }
       changed = true;

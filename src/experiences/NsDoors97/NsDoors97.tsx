@@ -158,9 +158,9 @@ type WindowContent =
   | { type: "dumpster" }
   | { type: "notebook"; fileId: string; fileName: string }
   | { type: "desktop-display" }
-  | { type: "nsart" }
+  | { type: "nsart"; fileId?: string; fileUrl?: string }
   | { type: "nsart-backup" }
-  | { type: "sound-recorder"; fileName?: string }
+  | { type: "sound-recorder"; fileName?: string; fileId?: string; fallbackUrl?: string }
   | { type: "midi-editor" }
   | { type: "chain-reaction" }
   | { type: "peg-solitaire" };
@@ -574,9 +574,9 @@ export default function NsDoors97() {
         );
         return;
       }
-      // .wav files in the SR folder should open SR loaded with that recording
-      if (file.fileType === "wav" && file.appId === "sound-recorder") {
-        const winId = `sound-recorder:${file.name}`;
+      // .png sprite files in EGO/SPRITES open NS Art loaded with that sprite
+      if (file.fileType === "png" && file.appId === "nsart") {
+        const winId = `nsart:${file.id}`;
         setOpenWindows((prev) => {
           if (prev.some((w) => w.id === winId)) {
             maxZ++;
@@ -588,8 +588,48 @@ export default function NsDoors97() {
           maxZ++;
           setActiveWindowId(winId);
           return [...prev, {
-            id: winId, title: file.name, icon: "🎵",
-            content: { type: "sound-recorder" as const, fileName: file.name },
+            id: winId,
+            title: `NS Art — ${file.name}`,
+            icon: "🎨",
+            content: {
+              type: "nsart" as const,
+              fileId: file.id,
+              fileUrl: `/sprites/${file.name}`,
+            },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 760, minimized: false,
+          }];
+        });
+        return;
+      }
+      // .wav files open Sound Recorder; EGO/SOUNDS files pass fileId + fallbackUrl
+      if (file.fileType === "wav" && file.appId === "sound-recorder") {
+        const filePath = fsStore.getPath(file.id);
+        const isEgoSound = filePath.toUpperCase().startsWith("C:\\EGO\\");
+        const winId = `sound-recorder:${file.id}`;
+        setOpenWindows((prev) => {
+          if (prev.some((w) => w.id === winId)) {
+            maxZ++;
+            setActiveWindowId(winId);
+            return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+          }
+          const offset = (windowSeq % 8) * 32;
+          windowSeq++;
+          maxZ++;
+          setActiveWindowId(winId);
+          return [...prev, {
+            id: winId,
+            title: isEgoSound ? `Sound Recorder — ${file.name}` : file.name,
+            icon: "🎵",
+            content: {
+              type: "sound-recorder" as const,
+              fileName: file.name,
+              ...(isEgoSound ? {
+                fileId: file.id,
+                fallbackUrl: `/sounds/${file.name}`,
+              } : {}),
+            },
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
             width: 420, minimized: false,
@@ -840,7 +880,12 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nsart" && (
-            <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
+            <NsArt
+              ref={nsArtRef}
+              onBackupSaved={() => {}}
+              fileId={win.content.fileId}
+              fileUrl={win.content.fileUrl}
+            />
           )}
           {win.content.type === "nsart-backup" && (
             <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
@@ -930,6 +975,8 @@ export default function NsDoors97() {
           {win.content.type === "sound-recorder" && (
             <SoundRecorder
               fileName={win.content.fileName}
+              fileId={win.content.fileId}
+              fallbackUrl={win.content.fallbackUrl}
               onQuit={() => closeWindow(win.id)}
               onFileSaved={handleSoundFileSaved}
             />

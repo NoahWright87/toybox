@@ -40,6 +40,8 @@ export interface NsArtHandle {
 
 export interface NsArtProps {
   onBackupSaved?: () => void;
+  fileId?: string;   // FS file to persist PNG data URL to on every auto-save
+  fileUrl?: string;  // initial image URL to load when opening a sprite file
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -347,7 +349,7 @@ function FrameThumbnail({
 // ── Component ──────────────────────────────────────────────────────────────
 
 const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
-  { onBackupSaved }: NsArtProps,
+  { onBackupSaved, fileId, fileUrl }: NsArtProps,
   ref,
 ) {
   // DOM refs
@@ -450,7 +452,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const containerSizeRef        = useRef({ w: 0, h: 0 });
   const renderMinimapRef        = useRef<() => void>(() => {});
 
+  const fileIdRef = useRef(fileId);
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
+  useEffect(() => { fileIdRef.current = fileId; }, [fileId]);
   useEffect(() => { currentStripRef.current  = currentStrip;  }, [currentStrip]);
   useEffect(() => { currentFrameRef.current  = currentFrame;  }, [currentFrame]);
   useEffect(() => { frameCountRef.current    = frameCount;    }, [frameCount]);
@@ -547,11 +551,58 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     }
   }, [canvasSize]);
 
-  // ── Load backup ────────────────────────────────────────────────────────
+  // ── Load backup / sprite file ───────────────────────────────────────────
 
   useEffect(() => {
     const t = setTimeout(() => {
-      // Prefer FS backup; fall back to legacy localStorage, migrating on first read
+      if (fileId) {
+        // Sprite edit mode: load from FS file content (user's override) or bundled URL
+        const fsContent = fsStore.getFile(fileId)?.content;
+        const sourceUrl = fsContent || fileUrl;
+        if (!sourceUrl || !canvasRef.current) return;
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const w = img.naturalWidth || 64;
+          const h = img.naturalHeight || 64;
+          const tmp = document.createElement("canvas");
+          tmp.width = w; tmp.height = h;
+          const tmpCtx = tmp.getContext("2d")!;
+          tmpCtx.drawImage(img, 0, 0);
+          const imageData = tmpCtx.getImageData(0, 0, w, h);
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const pending: PendingRestore = {
+            strips: [{ name: "Sprite" }],
+            frames: [[imageData]],
+            frameCount: 1,
+            frameW: w,
+            frameH: h,
+          };
+          if (canvas.width === w && canvas.height === h) {
+            framesDataRef.current      = [[imageData]];
+            stripsRef.current          = [{ name: "Sprite" }];
+            frameCountRef.current      = 1;
+            currentStripRef.current    = 0;
+            currentFrameRef.current    = 0;
+            setStrips([{ name: "Sprite" }]);
+            setFrameCount(1);
+            setCurrentStrip(0);
+            setCurrentFrame(0);
+            canvas.getContext("2d")!.putImageData(imageData, 0, 0);
+            isDirtyRef.current = false;
+            renderOnionRef.current();
+          } else {
+            pendingRestoreRef.current = pending;
+            setCanvasSize({ w, h });
+          }
+        };
+        img.onerror = () => {};
+        img.src = sourceUrl;
+        return;
+      }
+
+      // Normal backup mode: prefer FS backup; fall back to legacy localStorage
       const fsContent = fsStore.getFile(NS_ART_BACKUP_ID)?.content;
       const legacy = !fsContent ? localStorage.getItem(LS_KEY) : null;
       if (legacy) {
@@ -643,6 +694,14 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
           return tmp.toDataURL("image/png");
         })
       );
+
+      // Save current frame as PNG data URL to the target FS file (sprite edit mode)
+      if (fileIdRef.current) {
+        const currentUrl = framesUrls[currentStripRef.current]?.[currentFrameRef.current];
+        if (currentUrl) {
+          fsStore.writeFile(fileIdRef.current, currentUrl);
+        }
+      }
 
       try {
         fsStore.writeFile(NS_ART_BACKUP_ID, JSON.stringify({

@@ -458,7 +458,7 @@ export function seedFileSystem(store: FileSystemStore): void {
     "wall-rock.png", "wall-lava.png",
   ];
   for (const name of spriteNames) {
-    store.createFile(spritesDir.id, name, { fileType: "png" });
+    store.createFile(spritesDir.id, name, { fileType: "png", appId: "nsart" });
   }
 
   const soundsDir = store.createFolder(EGO_ID, "SOUNDS");
@@ -472,7 +472,7 @@ export function seedFileSystem(store: FileSystemStore): void {
     "shoot-flamethrower.wav", "burning.wav",
   ];
   for (const name of soundNames) {
-    store.createFile(soundsDir.id, name, { fileType: "wav" });
+    store.createFile(soundsDir.id, name, { fileType: "wav", appId: "sound-recorder" });
   }
 
   // ── Recycle Bin (Dumpster) ────────────────────────────────────────────────
