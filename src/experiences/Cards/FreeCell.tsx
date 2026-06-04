@@ -1,791 +1,611 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import "./Cards.css";
 import "./FreeCell.css";
-import { PlayingCard } from "./PlayingCard";
+import { PermCard } from "./PermCard";
+import { CardStack } from "./cardStack";
+import type { CardVisualState } from "./cardStack";
 import type { Card, CardAppearance, DeckSettings, Suit } from "./types";
 import { shuffle } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { DeckModal } from "./DeckModal";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Layout ────────────────────────────────────────────────────────────────────
 
-const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] as const;
-const ALL_SUITS: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
+const STAGE_W  = 520;
+const STAGE_H  = 540;
+const TOP_Y    = 50;
+const CASC_Y   = 152;
+const FAN_STEP = 22;
+const ANIM_Z   = 9000;
+const ANIM_MS  = 180;
+const STEP_MS  = 220;
+
+// 8 evenly-spaced column centers for sm cards (52px wide) with 8px gaps
+const COL_X = (() => {
+  const gw = 8 * 52 + 7 * 8;
+  const sx = (STAGE_W - gw) / 2 + 26;
+  return Array.from({ length: 8 }, (_, i) => sx + i * 60);
+})();
+
+const CARD_W = 52;
+const CARD_H = 72;
+
+const SUIT_SYMBOL: Record<string, string> = { spades:"♠", hearts:"♥", diamonds:"♦", clubs:"♣" };
 const FOUNDATION_SUITS: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
 
-const RANK_VAL: Record<string, number> = {
-  A: 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
-  "8": 8, "9": 9, "10": 10, J: 11, Q: 12, K: 13,
+// ── Game helpers ──────────────────────────────────────────────────────────────
+
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"] as const;
+const SUITS: Suit[] = ["spades","hearts","diamonds","clubs"];
+const RV: Record<string, number> = {
+  A:1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"10":10,J:11,Q:12,K:13,
 };
+
+function isRed(s: string) { return s === "hearts" || s === "diamonds"; }
+function canStack(top: Card, base: Card): boolean {
+  return isRed(top.suit) !== isRed(base.suit) && RV[top.rank] === RV[base.rank] - 1;
+}
+function canFound(c: Card, pile: Card[]): boolean {
+  if (pile.length === 0) return RV[c.rank] === 1;
+  const t = pile[pile.length - 1];
+  return t.suit === c.suit && RV[c.rank] === RV[t.rank] + 1;
+}
+function isValidSeq(cards: Card[]): boolean {
+  for (let i = 0; i < cards.length - 1; i++) if (!canStack(cards[i + 1], cards[i])) return false;
+  return true;
+}
+function maxMovable(fcs: (Card|null)[], cols: Card[][], excl: number): number {
+  const ef = fcs.filter(c => c === null).length;
+  const ec = cols.filter((c, i) => i !== excl && c.length === 0).length;
+  return (ef + 1) * Math.pow(2, ec);
+}
+function isSafeAuto(card: Card, foundations: Card[][]): boolean {
+  const v = RV[card.rank];
+  if (v <= 2) return true;
+  const need = v - 1;
+  const opp = isRed(card.suit) ? SUITS.filter(s => !isRed(s)) : SUITS.filter(s => isRed(s));
+  return opp.every(s => {
+    const fi = SUITS.indexOf(s);
+    const top = foundations[fi].length > 0 ? RV[foundations[fi][foundations[fi].length - 1].rank] : 0;
+    return top >= need;
+  });
+}
+
+// ── Animation step planner ────────────────────────────────────────────────────
+// seq: bottom-to-top (seq[0] placed on destination first, last card placed last).
+// Routes multi-card moves visibly through free cells and empty columns.
+
+interface AnimStep { cardId: string; x: number; y: number; z: number; }
+
+function planSteps(
+  seq: Card[],
+  dx: number, dy: number, dc: number,
+  afc: Array<{x:number;y:number}>,
+  acc: Array<{x:number;y:number}>,
+  out: AnimStep[]
+): void {
+  const n = seq.length;
+  if (n === 0) return;
+  if (n === 1) { out.push({ cardId:seq[0].id, x:dx, y:dy+dc*FAN_STEP, z:ANIM_Z }); return; }
+  if (afc.length >= n - 1) {
+    for (let i = n - 1; i >= 1; i--)
+      out.push({ cardId:seq[i].id, x:afc[n-1-i].x, y:afc[n-1-i].y, z:ANIM_Z+i });
+    out.push({ cardId:seq[0].id, x:dx, y:dy+dc*FAN_STEP, z:ANIM_Z });
+    for (let i = 1; i < n; i++)
+      out.push({ cardId:seq[i].id, x:dx, y:dy+(dc+i)*FAN_STEP, z:ANIM_Z+(n-i) });
+    return;
+  }
+  if (acc.length === 0) return;
+  const tmp = acc[0], rem = acc.slice(1);
+  const split = Math.ceil(n / 2);
+  planSteps(seq.slice(n - split), tmp.x, tmp.y, 0, afc, rem, out);
+  planSteps(seq.slice(0, n - split), dx, dy, dc, afc, rem, out);
+  planSteps(seq.slice(n - split), dx, dy, dc + (n - split), afc, rem, out);
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface FreeCellSelection {
-  from: "cascade" | "freecell";
-  colIndex: number;
-  cardIndex: number; // index in cascade where sequence starts (0 = bottommost = topmost visible)
-  cards: Card[];
-}
-
-interface FreeCellState {
-  cascades: Card[][];
-  freeCells: (Card | null)[];
+interface FCGame {
+  cascades:    Card[][];
+  freeCells:   (Card|null)[];
   foundations: Card[][];
-  selected: FreeCellSelection | null;
-  moves: number;
-  phase: "playing" | "won";
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function buildFreeCellDeck(): Card[] {
-  const cards: Card[] = [];
-  for (const suit of ALL_SUITS) {
-    for (const rank of RANKS) {
-      cards.push({ suit, rank, id: `${suit}-${rank}` });
-    }
-  }
-  return shuffle(cards);
-}
-
-function isRed(suit: string): boolean {
-  return suit === "hearts" || suit === "diamonds";
-}
-
-function isBlack(suit: string): boolean {
-  return suit === "spades" || suit === "clubs";
-}
-
-function oppositeColor(a: string, b: string): boolean {
-  return (isRed(a) && isBlack(b)) || (isBlack(a) && isRed(b));
-}
-
-/** Can card `top` be placed on `base` in the tableau? */
-function canStackOnCascade(top: Card, base: Card): boolean {
-  if (top.suit === "joker" || base.suit === "joker") return false;
-  return (
-    oppositeColor(top.suit, base.suit) &&
-    RANK_VAL[top.rank] === RANK_VAL[base.rank] - 1
-  );
-}
-
-/** Can card be placed on foundation? */
-function canPlaceOnFoundation(card: Card, foundation: Card[]): boolean {
-  if (card.suit === "joker") return false;
-  if (foundation.length === 0) return RANK_VAL[card.rank] === 1;
-  const top = foundation[foundation.length - 1];
-  return top.suit === card.suit && RANK_VAL[card.rank] === RANK_VAL[top.rank] + 1;
-}
-
-/** Check if a sequence of cards forms a valid alternating-color descending run */
-function isValidSequence(cards: Card[]): boolean {
-  for (let i = 0; i < cards.length - 1; i++) {
-    if (!canStackOnCascade(cards[i + 1], cards[i])) return false;
-  }
-  return true;
-}
-
-/** Supermove: max cards that can be moved */
-function maxMovableCards(freeCells: (Card | null)[], cascades: Card[][], excludeColIndex: number): number {
-  const emptyFreeCells = freeCells.filter((c) => c === null).length;
-  const emptyCascades = cascades.filter((col, i) => i !== excludeColIndex && col.length === 0).length;
-  return (emptyFreeCells + 1) * Math.pow(2, emptyCascades);
-}
-
-function makeInitialState(): FreeCellState {
-  const deck = buildFreeCellDeck();
-  const cascades: Card[][] = Array.from({ length: 8 }, () => []);
-  // Deal: columns 0–3 get 7 cards, columns 4–7 get 6 cards
-  let idx = 0;
-  for (let col = 0; col < 8; col++) {
-    const count = col < 4 ? 7 : 6;
-    for (let i = 0; i < count; i++) {
-      cascades[col].push(deck[idx++]);
-    }
-  }
-  return {
-    cascades,
-    freeCells: [null, null, null, null],
-    foundations: [[], [], [], []],
-    selected: null,
-    moves: 0,
-    phase: "playing",
-  };
-}
-
-function checkWin(state: FreeCellState): boolean {
-  return state.foundations.every((f) => f.length === 13);
-}
-
-// ── Auto-move logic ───────────────────────────────────────────────────────────
-
-/**
- * Return true if moving `card` to foundation is "safe" —
- * i.e. no card that could be built on it is still in play at a lower foundation level.
- */
-function isSafeToAutoMove(card: Card, foundations: Card[][]): boolean {
-  if (card.suit === "joker") return false;
-  const cardVal = RANK_VAL[card.rank];
-  if (cardVal <= 2) return true;
-  // Safe if both colors of the rank below are already on foundations
-  const needVal = cardVal - 1;
-  for (const suit of FOUNDATION_SUITS) {
-    const foundIdx = FOUNDATION_SUITS.indexOf(suit);
-    const f = foundations[foundIdx];
-    const topVal = f.length > 0 ? RANK_VAL[f[f.length - 1].rank] : 0;
-    if (isRed(card.suit) !== isRed(suit) && topVal < needVal) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function autoMoveToFoundation(state: FreeCellState): FreeCellState {
-  let changed = true;
-  let s = { ...state };
-  while (changed) {
-    changed = false;
-    // Check free cells
-    for (let i = 0; i < 4; i++) {
-      const card = s.freeCells[i];
-      if (!card) continue;
-      const foundIdx = FOUNDATION_SUITS.indexOf(card.suit as Suit);
-      if (foundIdx >= 0 && canPlaceOnFoundation(card, s.foundations[foundIdx]) && isSafeToAutoMove(card, s.foundations)) {
-        const newFounds = s.foundations.map((f, fi) => fi === foundIdx ? [...f, card] : f);
-        const newFreeCells = s.freeCells.map((c, ci) => ci === i ? null : c);
-        s = { ...s, foundations: newFounds, freeCells: newFreeCells, moves: s.moves + 1 };
-        changed = true;
-      }
-    }
-    // Check cascade tops
-    for (let col = 0; col < 8; col++) {
-      if (s.cascades[col].length === 0) continue;
-      const card = s.cascades[col][s.cascades[col].length - 1];
-      const foundIdx = FOUNDATION_SUITS.indexOf(card.suit as Suit);
-      if (foundIdx >= 0 && canPlaceOnFoundation(card, s.foundations[foundIdx]) && isSafeToAutoMove(card, s.foundations)) {
-        const newFounds = s.foundations.map((f, fi) => fi === foundIdx ? [...f, card] : f);
-        const newCascades = s.cascades.map((col2, ci) => ci === col ? col2.slice(0, col2.length - 1) : col2);
-        s = { ...s, foundations: newFounds, cascades: newCascades, moves: s.moves + 1 };
-        changed = true;
-      }
-    }
-  }
-  return s;
-}
+type SelFrom = "cascade" | "freecell";
+interface Selection { from: SelFrom; idx: number; startDepth: number; cards: Card[]; }
+type Phase = "dealing" | "playing" | "animating" | "won";
+interface FCProps { settings: DeckSettings; onNewGame?: () => void; onQuit?: () => void; }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-interface FreeCellProps {
-  settings: DeckSettings;
-  onNewGame?: () => void;
-  onQuit?: () => void;
-}
-
-type PortraitLayout = "rotate" | "grid";
-
-export default function FreeCell({ settings, onNewGame, onQuit }: FreeCellProps) {
-  const [state, setState] = useState<FreeCellState>(() => makeInitialState());
-  const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
+export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
+  const [allCards,      setAllCards]      = useState<Card[]>([]);
+  const [cardStates,    setCardStates]    = useState<Record<string, CardVisualState>>({});
+  const [game,          setGame]          = useState<FCGame>(() => ({
+    cascades: Array.from({length:8}, () => []), freeCells:[null,null,null,null], foundations:[[],[],[],[]]
+  }));
+  const [phase,         setPhase]         = useState<Phase>("dealing");
+  const [selected,      setSelected]      = useState<Selection | null>(null);
+  const [moves,         setMoves]         = useState(0);
+  const [appearance,    setAppearance]    = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
+  const [scale,         setScale]         = useState(1);
 
-  // Portrait-mode detection
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ w: 800, h: 600 });
-  const [portraitLayout, setPortraitLayout] = useState<PortraitLayout>("rotate");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isAnim       = useRef(false);
+  const gameRef      = useRef<FCGame>({ cascades: Array.from({length:8},()=>[]), freeCells:[null,null,null,null], foundations:[[],[],[],[]] });
+  const timers       = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  const clearTimers = useCallback(() => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  function after(ms: number, fn: () => void) { timers.current.push(setTimeout(fn, ms)); }
+
+  const cascSt = useRef(
+    Array.from({length:8}, (_, i) =>
+      new CardStack({ zTier:10+i, baseX:COL_X[i], baseY:CASC_Y, faceUpOffsetY:FAN_STEP })
+    )
+  );
+  const fcSt = useRef(
+    Array.from({length:4}, (_, i) =>
+      new CardStack({ zTier:5+i, baseX:COL_X[i], baseY:TOP_Y })
+    )
+  );
+  const foundSt = useRef(
+    Array.from({length:4}, (_, i) =>
+      new CardStack({ zTier:1+i, baseX:COL_X[4+i], baseY:TOP_Y })
+    )
+  );
+
+  function allLayouts(ms = 250): Record<string, CardVisualState> {
+    const r: Record<string, CardVisualState> = {};
+    for (const s of cascSt.current)  Object.assign(r, s.layout(ms));
+    for (const s of fcSt.current)    Object.assign(r, s.layout(ms));
+    for (const s of foundSt.current) Object.assign(r, s.layout(ms));
+    return r;
+  }
+
+  function syncStacks(g: FCGame): void {
+    for (let i = 0; i < 8; i++) {
+      cascSt.current[i].clear();
+      for (const c of g.cascades[i]) cascSt.current[i].addCard(c, { toTop:true, faceDown:false });
+    }
+    for (let i = 0; i < 4; i++) {
+      fcSt.current[i].clear();
+      if (g.freeCells[i]) fcSt.current[i].addCard(g.freeCells[i]!, { toTop:true, faceDown:false });
+    }
+    for (let i = 0; i < 4; i++) {
+      foundSt.current[i].clear();
+      for (const c of g.foundations[i]) foundSt.current[i].addCard(c, { toTop:true, faceDown:false });
+    }
+  }
+
+  function applyAutoMoves(g: FCGame): FCGame {
+    let changed = true, s = g;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i < 4; i++) {
+        const c = s.freeCells[i]; if (!c) continue;
+        const fi = SUITS.indexOf(c.suit as Suit);
+        if (fi >= 0 && canFound(c, s.foundations[fi]) && isSafeAuto(c, s.foundations)) {
+          s = { ...s,
+            foundations: s.foundations.map((f,j) => j===fi ? [...f,c] : f),
+            freeCells: s.freeCells.map((fc,j): Card|null => j===i ? null : fc),
+          };
+          changed = true;
+        }
+      }
+      for (let col = 0; col < 8; col++) {
+        if (s.cascades[col].length === 0) continue;
+        const c = s.cascades[col][s.cascades[col].length - 1];
+        const fi = SUITS.indexOf(c.suit as Suit);
+        if (fi >= 0 && canFound(c, s.foundations[fi]) && isSafeAuto(c, s.foundations)) {
+          s = { ...s,
+            foundations: s.foundations.map((f,j) => j===fi ? [...f,c] : f),
+            cascades: s.cascades.map((col2,j) => j===col ? col2.slice(0,-1) : col2),
+          };
+          changed = true;
+        }
+      }
+    }
+    return s;
+  }
+
+  function completeMove(newG: FCGame): void {
+    const withAuto = applyAutoMoves(newG);
+    syncStacks(withAuto);
+    gameRef.current = withAuto;
+    setGame(withAuto);
+    setCardStates(allLayouts(0));
+    setMoves(m => m + 1);
+    isAnim.current = false;
+    setPhase(withAuto.foundations.every(f => f.length === 13) ? "won" : "playing");
+  }
+
+  // Scale to fit container
   useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setContainerSize({ w: width, h: height });
+    const el = containerRef.current; if (!el) return;
+    const obs = new ResizeObserver(e => {
+      const { width, height } = e[0].contentRect;
+      setScale(Math.min(1, width / STAGE_W, height / STAGE_H));
     });
-    ro.observe(el);
-    return () => ro.disconnect();
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
-  const isNarrow = containerSize.w > 0 && containerSize.w < 500;
+  // ── startGame ────────────────────────────────────────────────────────────────
 
-  // ── Game actions ──────────────────────────────────────────────────────────
+  const startGame = useCallback(() => {
+    clearTimers();
+    isAnim.current = false;
+    setSelected(null);
+    setMoves(0);
+    setPhase("dealing");
 
-  const restart = useCallback(() => {
-    setState(makeInitialState());
-  }, []);
+    const deck: Card[] = [];
+    for (const suit of SUITS) for (const rank of RANKS) deck.push({ suit, rank, id:`${suit}-${rank}` });
+    const shuffled = shuffle(deck);
 
-  const handleAutoMove = useCallback(() => {
-    setState((s) => {
-      if (s.phase === "won") return s;
-      const next = autoMoveToFoundation(s);
-      const won = checkWin(next);
-      return { ...next, phase: won ? "won" : "playing" };
-    });
-  }, []);
+    for (const s of cascSt.current)  s.clear();
+    for (const s of fcSt.current)    s.clear();
+    for (const s of foundSt.current) s.clear();
 
-  // ── Selection & move logic ────────────────────────────────────────────────
+    const cascades: Card[][] = Array.from({length:8}, () => []);
+    let idx = 0;
+    for (let col = 0; col < 8; col++) {
+      const count = col < 4 ? 7 : 6;
+      for (let i = 0; i < count; i++) {
+        cascades[col].push(shuffled[idx]);
+        cascSt.current[col].addCard(shuffled[idx], { toTop:true, faceDown:false });
+        idx++;
+      }
+    }
 
-  const handleFreeCellClick = useCallback((cellIdx: number) => {
-    setState((s) => {
-      if (s.phase === "won") return s;
-      const cellCard = s.freeCells[cellIdx];
+    const newG: FCGame = { cascades, freeCells:[null,null,null,null], foundations:[[],[],[],[]] };
+    gameRef.current = newG;
+    setAllCards(shuffled);
+    setGame(newG);
 
-      // If something is selected, try to move it here
-      if (s.selected) {
-        // Can only move single card to free cell from cascade
-        if (s.selected.cards.length === 1) {
-          const movingCard = s.selected.cards[0];
+    const initStates: Record<string, CardVisualState> = {};
+    for (const c of shuffled) initStates[c.id] = { x:STAGE_W/2, y:-80, z:100, rotation:0, faceDown:false, transitionMs:0 };
+    setCardStates(initStates);
 
-          // Move to empty free cell
-          if (cellCard === null && s.selected.from === "cascade") {
-            const newFreeCells = s.freeCells.map((c, i) => i === cellIdx ? movingCard : c);
-            const newCascades = s.cascades.map((col, i) =>
-              i === s.selected!.colIndex ? col.slice(0, s.selected!.cardIndex) : col
-            );
-            const next: FreeCellState = {
-              ...s,
-              freeCells: newFreeCells,
-              cascades: newCascades,
-              selected: null,
-              moves: s.moves + 1,
-            };
-            return autoMoveToFoundation(next);
-          }
-
-          // Move from free cell to free cell (if destination empty)
-          if (cellCard === null && s.selected.from === "freecell") {
-            if (cellIdx === s.selected.colIndex) {
-              return { ...s, selected: null };
-            }
-            const newFreeCells = s.freeCells.map((c, i) => {
-              if (i === cellIdx) return movingCard;
-              if (i === s.selected!.colIndex) return null;
-              return c;
-            });
-            const next: FreeCellState = {
-              ...s,
-              freeCells: newFreeCells,
-              selected: null,
-              moves: s.moves + 1,
-            };
-            return autoMoveToFoundation(next);
-          }
-        }
-
-        // Click same free cell card — deselect
-        if (s.selected.from === "freecell" && s.selected.colIndex === cellIdx) {
-          return { ...s, selected: null };
-        }
-
-        // Try selecting the free cell card instead
-        if (cellCard) {
-          return {
-            ...s,
-            selected: {
-              from: "freecell",
-              colIndex: cellIdx,
-              cardIndex: 0,
-              cards: [cellCard],
-            },
+    after(80, () => {
+      const dealStates: Record<string, CardVisualState> = {};
+      let di = 0;
+      for (let col = 0; col < 8; col++) {
+        const count = col < 4 ? 7 : 6;
+        for (let i = 0; i < count; i++) {
+          const c = shuffled[di++];
+          dealStates[c.id] = {
+            x:COL_X[col], y:CASC_Y + i * FAN_STEP, z:(10+col)*100+i,
+            rotation:0, faceDown:false, transitionMs:240, transitionDelay:(col + i) * 28,
           };
         }
-
-        return { ...s, selected: null };
       }
-
-      // No selection — select the free cell card
-      if (cellCard) {
-        return {
-          ...s,
-          selected: {
-            from: "freecell",
-            colIndex: cellIdx,
-            cardIndex: 0,
-            cards: [cellCard],
-          },
-        };
-      }
-
-      return s;
+      setCardStates(dealStates);
+      after(240 + 14 * 28 + 120, () => { setCardStates(allLayouts(0)); setPhase("playing"); });
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, clearTimers]);
 
-  const handleFoundationClick = useCallback((foundIdx: number) => {
-    setState((s) => {
-      if (s.phase === "won") return s;
-      if (!s.selected || s.selected.cards.length !== 1) return s;
+  useEffect(() => { startGame(); return clearTimers; }, []); // eslint-disable-line
 
-      const movingCard = s.selected.cards[0];
-      if (!canPlaceOnFoundation(movingCard, s.foundations[foundIdx])) {
-        return { ...s, selected: null };
-      }
+  // ── Move executors ────────────────────────────────────────────────────────────
 
-      const newFounds = s.foundations.map((f, fi) =>
-        fi === foundIdx ? [...f, movingCard] : f
-      );
+  function execAnimSteps(steps: AnimStep[], onDone: () => void): void {
+    setPhase("animating"); isAnim.current = true; setSelected(null);
+    let t = 0;
+    for (const step of steps) {
+      const s = step;
+      after(t, () => setCardStates(prev => ({
+        ...prev, [s.cardId]: { ...prev[s.cardId], x:s.x, y:s.y, z:s.z, transitionMs:ANIM_MS, transitionDelay:0 }
+      })));
+      t += STEP_MS;
+    }
+    after(t + ANIM_MS, onDone);
+  }
 
-      let newCascades = s.cascades;
-      let newFreeCells = s.freeCells;
+  function doMoveToCol(sel: Selection, destColIdx: number): boolean {
+    const g = gameRef.current;
+    const destCol = g.cascades[destColIdx];
+    const movingCards = sel.cards;
 
-      if (s.selected.from === "cascade") {
-        newCascades = s.cascades.map((col, i) =>
-          i === s.selected!.colIndex ? col.slice(0, s.selected!.cardIndex) : col
-        );
-      } else {
-        newFreeCells = s.freeCells.map((c, i) =>
-          i === s.selected!.colIndex ? null : c
-        );
-      }
+    if (destCol.length > 0 && !canStack(movingCards[0], destCol[destCol.length - 1])) return false;
+    const excl = sel.from === "cascade" ? sel.idx : -1;
+    if (movingCards.length > maxMovable(g.freeCells, g.cascades, destColIdx)) return false;
 
-      const next: FreeCellState = {
-        ...s,
-        foundations: newFounds,
-        cascades: newCascades,
-        freeCells: newFreeCells,
-        selected: null,
-        moves: s.moves + 1,
-      };
-      const afterAuto = autoMoveToFoundation(next);
-      const won = checkWin(afterAuto);
-      return { ...afterAuto, phase: won ? "won" : "playing" };
-    });
-  }, []);
+    const availFC = g.freeCells
+      .map((c, i): {x:number;y:number}|null => c === null ? { x:COL_X[i], y:TOP_Y } : null)
+      .filter((x): x is {x:number;y:number} => x !== null);
+    const availCC = g.cascades
+      .map((c, i): {x:number;y:number}|null =>
+        (i !== destColIdx && i !== excl && c.length === 0) ? { x:COL_X[i], y:CASC_Y } : null)
+      .filter((x): x is {x:number;y:number} => x !== null);
 
-  const handleCascadeClick = useCallback((colIndex: number, cardIdx: number) => {
-    setState((s) => {
-      if (s.phase === "won") return s;
-      const col = s.cascades[colIndex];
+    const steps: AnimStep[] = [];
+    planSteps(movingCards, COL_X[destColIdx], CASC_Y, destCol.length, availFC, availCC, steps);
+    if (steps.length === 0) return false;
 
-      // If nothing selected, try to select from this cascade
-      if (!s.selected) {
-        if (col.length === 0) return s;
-        // cardIdx is the index in the array (last = top of pile)
-        const seq = col.slice(cardIdx);
-        if (!isValidSequence(seq)) return s;
-        return {
-          ...s,
-          selected: {
-            from: "cascade",
-            colIndex,
-            cardIndex: cardIdx,
-            cards: seq,
-          },
-        };
-      }
-
-      // Something is selected — try to move it here
-      const { selected } = s;
-
-      // Click same card to deselect
-      if (
-        selected.from === "cascade" &&
-        selected.colIndex === colIndex &&
-        selected.cardIndex === cardIdx
-      ) {
-        return { ...s, selected: null };
-      }
-
-      const movingCards = selected.cards;
-      const movingTop = movingCards[0]; // first card = top of sequence (placed last)
-
-      // Can we place here?
-      let canPlace = false;
-      if (col.length === 0) {
-        canPlace = true;
-      } else {
-        const destTop = col[col.length - 1];
-        canPlace = canStackOnCascade(movingTop, destTop);
-      }
-
-      if (!canPlace) {
-        // Try to change selection to the clicked column
-        if (col.length > 0 && cardIdx < col.length) {
-          const seq = col.slice(cardIdx);
-          if (isValidSequence(seq)) {
-            return {
-              ...s,
-              selected: {
-                from: "cascade",
-                colIndex,
-                cardIndex: cardIdx,
-                cards: seq,
-              },
-            };
-          }
-        }
-        return { ...s, selected: null };
-      }
-
-      // Check supermove limit
-      const maxMove = maxMovableCards(s.freeCells, s.cascades, colIndex);
-      if (movingCards.length > maxMove) {
-        return { ...s, selected: null };
-      }
-
-      // Perform the move
-      const newCascades = s.cascades.map((c, i) => {
-        if (i === colIndex) return [...c, ...movingCards];
-        if (selected.from === "cascade" && i === selected.colIndex) {
-          return c.slice(0, selected.cardIndex);
-        }
-        return c;
-      });
-
-      let newFreeCells = s.freeCells;
-      if (selected.from === "freecell") {
-        newFreeCells = s.freeCells.map((c, i) =>
-          i === selected.colIndex ? null : c
-        );
-      }
-
-      const next: FreeCellState = {
-        ...s,
-        cascades: newCascades,
-        freeCells: newFreeCells,
-        selected: null,
-        moves: s.moves + 1,
-      };
-      const afterAuto = autoMoveToFoundation(next);
-      const won = checkWin(afterAuto);
-      return { ...afterAuto, phase: won ? "won" : "playing" };
-    });
-  }, []);
-
-  const handleEmptyCascadeClick = useCallback((colIndex: number) => {
-    setState((s) => {
-      if (s.phase === "won") return s;
-      if (!s.selected) return s;
-
-      const { selected } = s;
-      const movingCards = selected.cards;
-
-      const maxMove = maxMovableCards(s.freeCells, s.cascades, colIndex);
-      if (movingCards.length > maxMove) {
-        return { ...s, selected: null };
-      }
-
-      const newCascades = s.cascades.map((col, i) => {
-        if (i === colIndex) return [...col, ...movingCards];
-        if (selected.from === "cascade" && i === selected.colIndex) {
-          return col.slice(0, selected.cardIndex);
-        }
+    const capSel = { ...sel }, capDest = destColIdx, capCards = [...movingCards];
+    execAnimSteps(steps, () => {
+      const prev = gameRef.current;
+      const newCascades = prev.cascades.map((col, i): Card[] => {
+        if (capSel.from === "cascade" && i === capSel.idx) return col.slice(0, capSel.startDepth);
+        if (i === capDest) return [...col, ...capCards];
         return col;
       });
+      const newFCs = prev.freeCells.map((c, i): Card|null =>
+        capSel.from === "freecell" && i === capSel.idx ? null : c
+      );
+      completeMove({ cascades:newCascades, freeCells:newFCs, foundations:prev.foundations });
+    });
+    return true;
+  }
 
-      let newFreeCells = s.freeCells;
-      if (selected.from === "freecell") {
-        newFreeCells = s.freeCells.map((c, i) =>
-          i === selected.colIndex ? null : c
-        );
+  function doMoveToFC(sel: Selection, fcIdx: number): boolean {
+    const g = gameRef.current;
+    if (g.freeCells[fcIdx] !== null || sel.cards.length !== 1) return false;
+    const card = sel.cards[0];
+    const steps: AnimStep[] = [{ cardId:card.id, x:COL_X[fcIdx], y:TOP_Y, z:ANIM_Z }];
+    const capSel = { ...sel }, capFC = fcIdx, capCard = card;
+    execAnimSteps(steps, () => {
+      const prev = gameRef.current;
+      const newFCs = prev.freeCells.map((c, i): Card|null => i === capFC ? capCard : c);
+      const newCascades = capSel.from === "cascade"
+        ? prev.cascades.map((col, i) => i === capSel.idx ? col.slice(0, capSel.startDepth) : col)
+        : prev.cascades;
+      completeMove({ cascades:newCascades, freeCells:newFCs, foundations:prev.foundations });
+    });
+    return true;
+  }
+
+  function doMoveToFoundation(sel: Selection, foundIdx: number): boolean {
+    const g = gameRef.current;
+    if (sel.cards.length !== 1) return false;
+    const card = sel.cards[0];
+    if (!canFound(card, g.foundations[foundIdx])) return false;
+    const steps: AnimStep[] = [{ cardId:card.id, x:COL_X[4+foundIdx], y:TOP_Y, z:ANIM_Z }];
+    const capSel = { ...sel }, capFI = foundIdx, capCard = card;
+    execAnimSteps(steps, () => {
+      const prev = gameRef.current;
+      const newFounds = prev.foundations.map((f, i) => i === capFI ? [...f, capCard] : f);
+      const newCascades = capSel.from === "cascade"
+        ? prev.cascades.map((col, i) => i === capSel.idx ? col.slice(0, capSel.startDepth) : col)
+        : prev.cascades;
+      const newFCs = prev.freeCells.map((c, i): Card|null =>
+        capSel.from === "freecell" && i === capSel.idx ? null : c
+      );
+      completeMove({ cascades:newCascades, freeCells:newFCs, foundations:newFounds });
+    });
+    return true;
+  }
+
+  // ── Click handlers ────────────────────────────────────────────────────────────
+
+  const handleCardClick = useCallback((cardId: string) => {
+    if (isAnim.current || phase !== "playing") return;
+    const g = gameRef.current;
+
+    let kind: "cascade"|"freecell"|"foundation" = "cascade";
+    let col = -1, depth = -1;
+    found: {
+      for (let c = 0; c < 8; c++) {
+        const d = g.cascades[c].findIndex(x => x.id === cardId);
+        if (d >= 0) { kind="cascade"; col=c; depth=d; break found; }
       }
+      for (let i = 0; i < 4; i++) {
+        if (g.freeCells[i]?.id === cardId) { kind="freecell"; col=i; depth=0; break found; }
+      }
+      for (let i = 0; i < 4; i++) {
+        const d = g.foundations[i].findIndex(x => x.id === cardId);
+        if (d >= 0) { kind="foundation"; col=i; depth=d; break found; }
+      }
+      return;
+    }
 
-      const next: FreeCellState = {
-        ...s,
-        cascades: newCascades,
-        freeCells: newFreeCells,
-        selected: null,
-        moves: s.moves + 1,
-      };
-      const afterAuto = autoMoveToFoundation(next);
-      const won = checkWin(afterAuto);
-      return { ...afterAuto, phase: won ? "won" : "playing" };
-    });
-  }, []);
+    const sel = selected;
 
-  // ── Computed highlight state ──────────────────────────────────────────────
+    if (!sel) {
+      if (kind === "foundation") return;
+      if (kind === "freecell") {
+        setSelected({ from:"freecell", idx:col, startDepth:0, cards:[g.freeCells[col]!] });
+        return;
+      }
+      const seq = g.cascades[col].slice(depth);
+      if (isValidSeq(seq)) setSelected({ from:"cascade", idx:col, startDepth:depth, cards:seq });
+      return;
+    }
 
-  const validDestinations = useMemo(() => {
-    if (!state.selected) return null;
-    const sel = state.selected;
-    const movingCards = sel.cards;
-    const movingTop = movingCards[0];
+    if (kind === "foundation") {
+      if (!doMoveToFoundation(sel, col)) setSelected(null);
+      return;
+    }
+    if (kind === "freecell") {
+      if (sel.from === "freecell" && sel.idx === col) { setSelected(null); return; }
+      if (g.freeCells[col] === null) {
+        if (!doMoveToFC(sel, col)) setSelected(null);
+      } else {
+        setSelected({ from:"freecell", idx:col, startDepth:0, cards:[g.freeCells[col]!] });
+      }
+      return;
+    }
+    // cascade
+    if (sel.from === "cascade" && sel.idx === col && sel.startDepth === depth) { setSelected(null); return; }
+    const destCol = g.cascades[col];
+    if (depth === destCol.length - 1 || destCol.length === 0) {
+      if (!doMoveToCol(sel, col)) {
+        const seq = destCol.slice(depth);
+        if (seq.length > 0 && isValidSeq(seq)) setSelected({ from:"cascade", idx:col, startDepth:depth, cards:seq });
+        else setSelected(null);
+      }
+      return;
+    }
+    const seq2 = destCol.slice(depth);
+    if (isValidSeq(seq2)) setSelected({ from:"cascade", idx:col, startDepth:depth, cards:seq2 });
+    else setSelected(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selected]);
 
-    const maxMove = maxMovableCards(state.freeCells, state.cascades, sel.from === "cascade" ? sel.colIndex : -1);
+  const handleEmptyColClick = useCallback((colIdx: number) => {
+    if (isAnim.current || phase !== "playing" || !selected) return;
+    if (!doMoveToCol(selected, colIdx)) setSelected(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selected]);
 
-    const cascadeValid: boolean[] = state.cascades.map((col, i) => {
-      if (sel.from === "cascade" && i === sel.colIndex) return false;
-      if (movingCards.length > maxMove) return false;
-      if (col.length === 0) return true;
-      const destTop = col[col.length - 1];
-      return canStackOnCascade(movingTop, destTop);
-    });
+  const handleEmptyFCClick = useCallback((fcIdx: number) => {
+    if (isAnim.current || phase !== "playing" || !selected) return;
+    if (!doMoveToFC(selected, fcIdx)) setSelected(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selected]);
 
-    const freeCellValid: boolean[] = state.freeCells.map((c, i) => {
-      if (sel.from === "freecell" && i === sel.colIndex) return false;
-      return c === null && movingCards.length === 1;
-    });
+  const handleFoundationSlotClick = useCallback((foundIdx: number) => {
+    if (isAnim.current || phase !== "playing" || !selected) return;
+    if (!doMoveToFoundation(selected, foundIdx)) setSelected(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selected]);
 
-    const foundationValid: boolean[] = state.foundations.map((f, fi) => {
-      return movingCards.length === 1 && canPlaceOnFoundation(movingTop, f) &&
-        FOUNDATION_SUITS[fi] === movingTop.suit;
-    });
+  const handleAutoMove = useCallback(() => {
+    if (isAnim.current || phase !== "playing") return;
+    const g = applyAutoMoves(gameRef.current);
+    syncStacks(g);
+    gameRef.current = g;
+    setGame(g);
+    setCardStates(allLayouts(0));
+    setPhase(g.foundations.every(f => f.length === 13) ? "won" : "playing");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
-    return { cascadeValid, freeCellValid, foundationValid };
-  }, [state]);
+  // ── Derived render state ──────────────────────────────────────────────────────
 
-  // ── Menus ─────────────────────────────────────────────────────────────────
+  const selectedIds = useMemo(() => new Set(selected?.cards.map(c => c.id) ?? []), [selected]);
+
+  const cardLocs = useMemo(() => {
+    const m = new Map<string, {kind:"cascade"|"freecell"|"foundation"; col:number; depth:number}>();
+    game.cascades.forEach((col, ci) => col.forEach((c, di) => m.set(c.id, {kind:"cascade",col:ci,depth:di})));
+    game.freeCells.forEach((c, i) => { if (c) m.set(c.id, {kind:"freecell",col:i,depth:0}); });
+    game.foundations.forEach((f, i) => f.forEach((c, di) => m.set(c.id, {kind:"foundation",col:i,depth:di})));
+    return m;
+  }, [game]);
+
+  // ── Menus ─────────────────────────────────────────────────────────────────────
 
   const menus = useMemo<MenuBarMenu[]>(() => {
-    const gameItems: MenuBarMenu["items"] = [
-      { label: "Restart", onClick: restart },
-      ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
-      ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
+    const items: MenuBarMenu["items"] = [
+      { label:"New Game", onClick: startGame },
+      ...(onNewGame ? [{ label:"Change Game…", onClick: onNewGame }] : []),
+      ...(onQuit    ? [{ separator:true as const }, { label:"Exit", onClick: onQuit }] : []),
     ];
     return [
-      { label: "Game", items: gameItems },
-      {
-        label: "Options",
-        items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }],
-      },
+      { label:"Game",    items },
+      { label:"Options", items:[{ label:"Card Appearance…", onClick:() => setShowDeckModal(true) }] },
     ];
-  }, [restart, onNewGame, onQuit]);
+  }, [startGame, onNewGame, onQuit]);
 
   useWindowMenus(menus);
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  const { cascades, freeCells, foundations, selected, moves, phase } = state;
-
-  const SUIT_SYMBOL: Record<string, string> = {
-    spades: "♠",
-    hearts: "♥",
-    diamonds: "♦",
-    clubs: "♣",
-  };
-
-  // Cascades split for 2×4 portrait grid layout
-  const cascadesTop = cascades.slice(0, 4);
-  const cascadesBottom = cascades.slice(4, 8);
-
-  const gameContent = (
-    <>
-      {showDeckModal && (
-        <DeckModal
-          appearance={appearance}
-          onUpdate={setAppearance}
-          onClose={() => setShowDeckModal(false)}
-        />
-      )}
-
-      {/* Top area: free cells + foundations */}
-      <div className="freecell__top-row">
-        {/* Free cells */}
-        <div className="freecell__free-cells">
-          {freeCells.map((card, i) => {
-            const isSelected = selected?.from === "freecell" && selected.colIndex === i;
-            const isValid = validDestinations?.freeCellValid[i] ?? false;
-            return (
-              <div
-                key={i}
-                className={
-                  "freecell__cell-slot" +
-                  (isSelected ? " freecell__cell-slot--selected" : "") +
-                  (isValid ? " freecell__cell-slot--valid" : "")
-                }
-                onClick={() => handleFreeCellClick(i)}
-                title="Free Cell"
-              >
-                {card ? (
-                  <PlayingCard card={card} appearance={appearance} size="sm" />
-                ) : (
-                  <div className="freecell__empty-slot freecell__empty-slot--freecell" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Spacer / status */}
-        <div className="freecell__center-status">
-          <div className="freecell__moves">Moves: {moves}</div>
-          <button
-            className="freecell__auto-btn"
-            onClick={handleAutoMove}
-            disabled={phase === "won"}
-            title="Auto-move safe cards to foundations"
-          >
-            Auto
-          </button>
-        </div>
-
-        {/* Foundations */}
-        <div className="freecell__foundations">
-          {FOUNDATION_SUITS.map((suit, i) => {
-            const pile = foundations[i];
-            const topCard = pile.length > 0 ? pile[pile.length - 1] : null;
-            const isValid = validDestinations?.foundationValid[i] ?? false;
-            return (
-              <div
-                key={suit}
-                className={
-                  "freecell__cell-slot freecell__cell-slot--foundation" +
-                  (isValid ? " freecell__cell-slot--valid" : "")
-                }
-                onClick={() => handleFoundationClick(i)}
-                title={`${suit} foundation`}
-              >
-                {topCard ? (
-                  <PlayingCard card={topCard} appearance={appearance} size="sm" />
-                ) : (
-                  <div className="freecell__empty-slot freecell__empty-slot--foundation">
-                    <span className="freecell__suit-hint">{SUIT_SYMBOL[suit]}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Cascade area — normal 8-column or 2×4 grid */}
-      {isNarrow && portraitLayout === "grid" ? (
-        <>
-          <div className="freecell__cascades">
-            {cascadesTop.map((col, i) => {
-              const colIdx = i;
-              return renderCascadeCol(col, colIdx);
-            })}
-          </div>
-          <div className="freecell__cascades">
-            {cascadesBottom.map((col, i) => {
-              const colIdx = i + 4;
-              return renderCascadeCol(col, colIdx);
-            })}
-          </div>
-        </>
-      ) : (
-        <div className="freecell__cascades">
-          {cascades.map((col, colIdx) => renderCascadeCol(col, colIdx))}
-        </div>
-      )}
-
-      {/* Win banner */}
-      {phase === "won" && (
-        <div className="freecell__win-overlay">
-          <div className="freecell__win-banner">
-            <div className="freecell__win-title">You Win!</div>
-            <div className="freecell__win-moves">Completed in {moves} moves</div>
-            <div className="freecell__win-btns">
-              <button className="freecell__btn freecell__btn--primary" onClick={restart}>
-                Play Again
-              </button>
-              {onNewGame && (
-                <button className="freecell__btn freecell__btn--secondary" onClick={onNewGame}>
-                  New Game
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-
-  function renderCascadeCol(col: Card[], colIdx: number) {
-    const isCascadeValid = validDestinations?.cascadeValid[colIdx] ?? false;
-    const colHeight = col.length === 0 ? 72 : (col.length - 1) * 22 + 72;
-    return (
-      <div
-        key={colIdx}
-        className={
-          "freecell__cascade" +
-          (isCascadeValid ? " freecell__cascade--valid" : "")
-        }
-        style={{ height: colHeight }}
-        onClick={col.length === 0 ? () => handleEmptyCascadeClick(colIdx) : undefined}
-      >
-        {col.length === 0 ? (
-          <div className="freecell__empty-slot freecell__empty-slot--cascade" />
-        ) : (
-          col.map((card, cardIdx) => {
-            const isSeqStart = selected?.from === "cascade" &&
-              selected.colIndex === colIdx &&
-              selected.cardIndex === cardIdx;
-            const isInSelected = selected?.from === "cascade" &&
-              selected.colIndex === colIdx &&
-              cardIdx >= selected.cardIndex;
-            const isTop = cardIdx === col.length - 1;
-            const offsetY = cardIdx * 22;
-            return (
-              <div
-                key={card.id}
-                className={
-                  "freecell__cascade-card" +
-                  (isInSelected ? " freecell__cascade-card--selected" : "") +
-                  (isSeqStart ? " freecell__cascade-card--seq-start" : "")
-                }
-                style={{ top: `${offsetY}px`, zIndex: cardIdx + 1 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCascadeClick(colIdx, cardIdx);
-                }}
-                title={isTop ? `${card.rank} of ${card.suit}` : undefined}
-              >
-                <PlayingCard card={card} appearance={appearance} size="sm" />
-              </div>
-            );
-          })
-        )}
-      </div>
-    );
-  }
-
-  if (isNarrow && portraitLayout === "rotate") {
-    // Rotate the game 90° CW so landscape content fills a portrait container.
-    // Container: W×H (portrait). Landscape element: H×W.
-    // After `translateY(H) rotate(90deg)` (rotate first, then translate):
-    //   rotated bounds → x=[0,W], y=[0,H]. Fills container exactly.
-    const gameW = containerSize.h;  // landscape width  = portrait height (H)
-    const gameH = containerSize.w;  // landscape height = portrait width  (W)
-    const wrapHeight = gameW || 400; // outer height = H (portrait height)
-    return (
-      <div
-        ref={wrapperRef}
-        className="freecell-wrapper freecell-wrapper--rotate"
-        style={{ position: "relative", height: wrapHeight, overflow: "hidden" }}
-      >
-        <div className="freecell__portrait-toggle freecell__portrait-toggle--overlay">
-          <button
-            className="freecell__portrait-btn"
-            onClick={() => setPortraitLayout("grid")}
-            title="Switch to 2×4 grid layout"
-          >▦ 2×4</button>
-        </div>
-        <div
-          className="freecell"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: gameW,
-            height: gameH,
-            transform: `translateY(${gameW}px) rotate(90deg)`,
-            transformOrigin: "top left",
-          }}
-        >
-          {gameContent}
-        </div>
-      </div>
-    );
-  }
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div ref={wrapperRef} className="freecell-wrapper">
-      {isNarrow && (
-        <div className="freecell__portrait-toggle">
-          <button
-            className={"freecell__portrait-btn" + (portraitLayout === "rotate" ? " freecell__portrait-btn--active" : "")}
-            onClick={() => setPortraitLayout("rotate")}
-            title="Rotate 90°"
-          >⟳ Rotate</button>
-          <button
-            className={"freecell__portrait-btn" + (portraitLayout === "grid" ? " freecell__portrait-btn--active" : "")}
-            onClick={() => setPortraitLayout("grid")}
-            title="2×4 grid layout"
-          >▦ 2×4</button>
-        </div>
+    <div className="freecell">
+      {showDeckModal && (
+        <DeckModal appearance={appearance} onUpdate={setAppearance} onClose={() => setShowDeckModal(false)} />
       )}
-      <div className="freecell">
-        {gameContent}
+
+      <div ref={containerRef} className="freecell__stage-container">
+        <div
+          className="freecell__stage"
+          style={{ width:STAGE_W, height:STAGE_H, transform:`scale(${scale})`, transformOrigin:"top left" }}
+        >
+          {/* Free cell slots */}
+          {game.freeCells.map((fc, i) => (
+            <div
+              key={`fc-${i}`}
+              className="freecell__slot freecell__slot--freecell"
+              style={{ left:COL_X[i] - CARD_W/2, top:TOP_Y - CARD_H/2 }}
+              onClick={fc === null ? () => handleEmptyFCClick(i) : undefined}
+            />
+          ))}
+
+          {/* Foundation slots */}
+          {FOUNDATION_SUITS.map((suit, i) => (
+            <div
+              key={suit}
+              className="freecell__slot freecell__slot--foundation"
+              style={{ left:COL_X[4+i] - CARD_W/2, top:TOP_Y - CARD_H/2 }}
+              onClick={() => handleFoundationSlotClick(i)}
+            >
+              {game.foundations[i].length === 0 &&
+                <span className="freecell__suit-hint">{SUIT_SYMBOL[suit]}</span>}
+            </div>
+          ))}
+
+          {/* Empty cascade column slots */}
+          {game.cascades.map((col, i) => col.length === 0 && (
+            <div
+              key={`casc-${i}`}
+              className="freecell__slot"
+              style={{ left:COL_X[i] - CARD_W/2, top:CASC_Y - CARD_H/2 }}
+              onClick={() => handleEmptyColClick(i)}
+            />
+          ))}
+
+          {/* All 52 cards permanently mounted */}
+          {allCards.map(card => {
+            const cs = cardStates[card.id];
+            if (!cs) return null;
+            const loc = cardLocs.get(card.id);
+            const isHighlighted = selectedIds.has(card.id);
+            let onClick: (() => void) | undefined;
+            if (phase === "playing" && loc) {
+              if (loc.kind === "foundation") {
+                if (loc.depth === game.foundations[loc.col].length - 1)
+                  onClick = () => handleFoundationSlotClick(loc.col);
+              } else {
+                onClick = () => handleCardClick(card.id);
+              }
+            }
+            return (
+              <PermCard
+                key={card.id}
+                card={card}
+                cs={cs}
+                appearance={appearance}
+                size="sm"
+                highlightColor={isHighlighted ? "#cc4400" : undefined}
+                onClick={onClick}
+              />
+            );
+          })}
+
+          {/* Win overlay */}
+          {phase === "won" && (
+            <div className="freecell__win-overlay">
+              <div className="freecell__win-banner">
+                <div className="freecell__win-title">You Win!</div>
+                <div className="freecell__win-moves">Completed in {moves} moves</div>
+                <div className="freecell__win-btns">
+                  <button className="freecell__btn freecell__btn--primary" onClick={startGame}>Play Again</button>
+                  {onNewGame && (
+                    <button className="freecell__btn freecell__btn--secondary" onClick={onNewGame}>New Game</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="freecell__statusbar">
+        <span>Moves: {moves}</span>
+        <button className="freecell__auto-btn" onClick={handleAutoMove} disabled={phase !== "playing"}>
+          Auto
+        </button>
+      </div>
+
+      <div className="freecell__controls">
+        <button className="freecell__btn freecell__btn--primary" onClick={startGame}>New Game</button>
+        {onNewGame && (
+          <button className="freecell__btn freecell__btn--secondary" onClick={onNewGame}>Change Game</button>
+        )}
       </div>
     </div>
   );
