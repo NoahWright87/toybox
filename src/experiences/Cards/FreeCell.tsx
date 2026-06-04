@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import "./Cards.css";
 import "./FreeCell.css";
 import { PermCard } from "./PermCard";
