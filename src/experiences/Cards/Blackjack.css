@@ -3,30 +3,33 @@
 .bj {
   display: flex;
   flex-direction: column;
-  background: #c0c0c0;
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   user-select: none;
+  flex: 1;
+  min-height: 0;
+  background: #1a4a1a; /* green felt fills the window */
 }
 
-/* Container measures width for scale */
+/* ─── Stage container (green felt, fills available space) ───────────── */
+
 .bj__stage-container {
-  margin: 8px 8px 4px;
+  flex: 1;
+  min-height: 200px;
+  position: relative;
+  background: #1a4a1a;
   overflow: hidden;
-  flex-shrink: 0;
 }
 
-/* The felt stage — isolation keeps high-z cards from bleeding above menus */
+/* Stage is absolutely centered within the container */
 .bj__stage {
   background: #1a4a1a;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  position: relative;
-  overflow: hidden;
   isolation: isolate;
+  /* width/height/position/transform set inline */
 }
 
-/* In-stage labels (DEALER / YOU) */
+/* ─── In-stage labels ────────────────────────────────────────────────── */
+
 .bj__stage-label {
   position: absolute;
   font-size: 6px;
@@ -38,24 +41,132 @@
   z-index: 5;
 }
 
-.bj__stage-score {
-  font-size: 8px;
-  color: #ffffff;
-}
+.bj__stage-score           { font-size: 8px; color: #ffffff; }
+.bj__stage-score--bust     { color: #ff6666; }
+.bj__stage-score--bj       { color: #ffdd44; }
 
-.bj__stage-score--bust { color: #ff6666; }
-.bj__stage-score--bj   { color: #ffdd44; }
-
-/* Shoe card count */
 .bj__shoe-label {
   position: absolute;
   font-size: 6px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.35);
   pointer-events: none;
   z-index: 5;
 }
 
-/* Outcome overlay — floats above the felt */
+/* Shuffling text centered in stage */
+.bj__shuffling {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+}
+
+/* ─── In-stage action buttons ────────────────────────────────────────── */
+
+/* HIT — card-shaped dashed outline, right of player cards */
+.bj__hit-btn {
+  position: absolute;
+  width: 52px;
+  height: 72px;
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  z-index: 2000;
+  transition: background 120ms, border-color 120ms;
+  padding: 0;
+}
+
+.bj__hit-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.bj__hit-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* STAY — pill button below player cards */
+.bj__stay-btn {
+  position: absolute;
+  width: 88px;
+  height: 42px;
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  z-index: 2000;
+  transition: background 120ms, border-color 120ms;
+  padding: 0;
+}
+
+.bj__stay-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.bj__stay-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* DOUBLE — smaller pill button */
+.bj__dbl-btn {
+  position: absolute;
+  width: 68px;
+  height: 42px;
+  border: 2px dashed rgba(200, 160, 255, 0.5);
+  border-radius: 6px;
+  background: rgba(80, 30, 120, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  z-index: 2000;
+  transition: background 120ms, border-color 120ms;
+  padding: 0;
+}
+
+.bj__dbl-btn:hover {
+  background: rgba(120, 50, 180, 0.35);
+  border-color: rgba(200, 160, 255, 0.9);
+}
+
+.bj__dbl-btn:active {
+  background: rgba(120, 50, 180, 0.5);
+}
+
+.bj__action-icon {
+  font-size: 20px;
+  line-height: 1;
+  font-family: sans-serif;
+}
+
+.bj__action-lbl {
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: "Press Start 2P", monospace;
+  letter-spacing: 1px;
+}
+
+/* ─── Outcome overlay ────────────────────────────────────────────────── */
+
 .bj__outcome {
   position: absolute;
   top: 50%;
@@ -67,7 +178,7 @@
   text-align: center;
   white-space: nowrap;
   font-size: 10px;
-  z-index: 10;
+  z-index: 3000;
   pointer-events: none;
 }
 
@@ -75,61 +186,91 @@
 .bj__outcome--push { color: #eeee44; }
 .bj__outcome--lose { color: #ee5555; }
 
-/* Controls */
+/* ─── Win95 controls bar ─────────────────────────────────────────────── */
+
 .bj__controls {
-  padding: 6px 10px 10px;
+  background: #c0c0c0;
+  border-top: 1px solid #808080;
+  box-shadow: inset 0 1px 0 #ffffff;
+  padding: 6px 10px 8px;
   display: flex;
   flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+/* Info row: [chips chip] [bet adjusters?] [bet chip] */
+.bj__info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
 
-.bj__info-row {
+.bj__chip-group {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
-.bj__chips-label {
-  font-size: 8px;
-  color: #000;
+.bj__chip-lbl {
+  font-size: 5px;
+  color: #444;
 }
 
-.bj__divider {
-  height: 0;
-  border: none;
-  border-top: 1px solid #808080;
-  border-bottom: 1px solid #ffffff;
-}
-
-/* Bet adjustment row */
-.bj__bet-row {
+/* Bet adjustment buttons row (center of info-row during betting) */
+.bj__bet-adjust {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  flex: 1;
 }
 
-/* Shared button base */
+/* ─── Chip visual ────────────────────────────────────────────────────── */
+
+.bj-chip {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px dashed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+/* Stack shadow: suggests a pile of chips beneath */
+.bj-chip--stack {
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.45), 5px 7px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
 .bj__btn {
   font-family: "Press Start 2P", monospace;
   font-size: 7px;
-  padding: 5px 9px;
+  padding: 4px 8px;
   border: 2px solid;
   cursor: pointer;
   white-space: nowrap;
 }
 
-/* Small neutral (bet controls) */
 .bj__btn--sm {
   background: #c0c0c0;
   color: #000;
   border-color: #ffffff #808080 #808080 #ffffff;
 }
-.bj__btn--sm:hover:not(:disabled) { background: #d4d0c8; }
+.bj__btn--sm:hover:not(:disabled)  { background: #d4d0c8; }
 .bj__btn--sm:active:not(:disabled) { border-color: #808080 #ffffff #ffffff #808080; }
-.bj__btn--sm:disabled { color: #808080; cursor: default; }
+.bj__btn--sm:disabled              { color: #808080; cursor: default; }
 
-/* Deal / New Hand — orange primary */
 .bj__btn--deal {
   background: #cc4400;
   color: #fff;
@@ -137,52 +278,22 @@
   font-size: 9px;
   padding: 7px 14px;
 }
-.bj__btn--deal:hover { background: #ee5500; }
-.bj__btn--deal:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
-.bj__btn--deal:disabled { background: #994400; cursor: default; }
+.bj__btn--deal:hover           { background: #ee5500; }
+.bj__btn--deal:active          { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+.bj__btn--deal:disabled        { background: #994400; cursor: default; }
 
-/* Hit — orange */
-.bj__btn--hit {
-  background: #cc4400;
-  color: #fff;
-  border-color: #ffcc88 #664400 #664400 #ffcc88;
-}
-.bj__btn--hit:hover { background: #ee5500; }
-.bj__btn--hit:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+/* ─── Action row ─────────────────────────────────────────────────────── */
 
-/* Stand — neutral */
-.bj__btn--stand {
-  background: #c0c0c0;
-  color: #000;
-  border-color: #ffffff #808080 #808080 #ffffff;
-}
-.bj__btn--stand:active { border-color: #808080 #ffffff #ffffff #808080; }
-
-/* Double — purple */
-.bj__btn--double {
-  background: #5b2d8e;
-  color: #fff;
-  border-color: #9966cc #331155 #331155 #9966cc;
-}
-.bj__btn--double:hover { background: #7b3dbe; }
-.bj__btn--double:active { border-color: #331155 #9966cc #9966cc #331155; }
-
-/* Action row */
 .bj__action-row {
   display: flex;
   gap: 6px;
   align-items: center;
   justify-content: center;
+  min-height: 28px;
 }
 
 .bj__waiting {
   font-size: 7px;
   color: #808080;
   font-style: italic;
-}
-
-.bj__notice {
-  font-size: 6px;
-  color: #808080;
-  text-align: right;
 }

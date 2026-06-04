@@ -11,27 +11,35 @@ import { DeckModal } from "./DeckModal";
 
 // ── Stage layout ──────────────────────────────────────────────────────────────
 
-const STAGE_W  = 480;
-const STAGE_H  = 280;
-const DEAL_Y   = 80;   // dealer hand center y
-const PLAY_Y   = 204;  // player hand center y
-const HAND_X   = 48;   // first card center x for both hands
-const FAN_X    = 24;   // horizontal offset per card in hand
-const SHOE_X   = 446;  // shoe pile center x
-const SHOE_Y   = 140;  // shoe pile center y
-const DISC_X   = -80;  // discard pile (off-screen left)
-const DISC_Y   = 140;
+const STAGE_W = 480;
+const STAGE_H = 300;
+const DEAL_Y  = 72;   // dealer hand y center
+const PLAY_Y  = 178;  // player hand y center
+const HAND_X  = 44;   // first card center x for both hands
+const FAN_X   = 24;   // per-card horizontal fan offset
+const SHOE_X  = 452;  // shoe pile center x (right of dealer row)
+const SHOE_Y  = 72;   // shoe pile center y (same level as dealer)
+const DISC_X  = -80;  // discard pile off-screen left
+const DISC_Y  = 125;
+
+// In-stage action button anchors
+const HIT_L   = 390;              // HIT card button left edge
+const HIT_T   = PLAY_Y - 36;     // 142 — aligns top of HIT card with player cards
+const STAY_T  = PLAY_Y + 54;     // 232 — below player card bottoms (PLAY_Y+36=214)
+const DBL_L   = 152;
+const DBL_T   = STAY_T;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Phase = "betting" | "player-turn" | "dealer-turn" | "resolved";
+type Phase = "shuffling" | "betting" | "player-turn" | "dealer-turn" | "resolved";
 type Outcome = "blackjack" | "win" | "push" | "dealer-blackjack" | "bust" | "lose";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STARTING_CHIPS      = 500;
-const DEALER_HIT_DELAY_MS = 700;
+const STARTING_CHIPS        = 500;
+const DEALER_HIT_DELAY_MS   = 700;
 const DEALER_STAND_DELAY_MS = 400;
+const SHUFFLE_CYCLES        = 2;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +73,29 @@ function scoreLabel(cards: Card[], holeRevealed: boolean, isDealer: boolean): st
   return String(total);
 }
 
+// ── Chip visual ───────────────────────────────────────────────────────────────
+
+function ChipView({ amount, stack }: { amount: number; stack?: boolean }) {
+  const bg = amount >= 500 ? "#5b2d8e"
+           : amount >= 100 ? "#111122"
+           : amount >= 50  ? "#cc4400"
+           : amount >= 25  ? "#1a5a22"
+           : amount >= 10  ? "#003388"
+           :                 "#992222";
+  const hl = amount >= 500 ? "#9966cc"
+           : amount >= 100 ? "#5555aa"
+           : amount >= 50  ? "#ff8844"
+           : amount >= 25  ? "#44aa55"
+           : amount >= 10  ? "#4477cc"
+           :                 "#ff5555";
+  const label = amount >= 1000 ? `${(amount / 1000).toFixed(1)}k` : `$${amount}`;
+  return (
+    <div className={`bj-chip${stack ? " bj-chip--stack" : ""}`} style={{ background: bg, borderColor: hl }}>
+      {label}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface BlackjackProps {
@@ -74,24 +105,19 @@ interface BlackjackProps {
 }
 
 export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProps) {
-  // All cards for this shoe (persists until explicit new game)
-  const allCards   = useRef<Card[]>([]);
-  const holeIdRef  = useRef<string | null>(null);
+  const allCards  = useRef<Card[]>([]);
+  const holeIdRef = useRef<string | null>(null);
 
-  // CardStacks (pure logic refs)
-  const shoe   = useRef(new CardStack({ zTier: 5, baseX: SHOE_X, baseY: SHOE_Y, offsetX: 0.15, offsetY: -0.35 }));
-  const disc   = useRef(new CardStack({ zTier: 1, baseX: DISC_X, baseY: DISC_Y }));
+  const shoe     = useRef(new CardStack({ zTier: 5, baseX: SHOE_X, baseY: SHOE_Y, offsetX: 0.08, offsetY: -0.3 }));
+  const disc     = useRef(new CardStack({ zTier: 1, baseX: DISC_X, baseY: DISC_Y }));
   const dealerSt = useRef(new CardStack({ zTier: 9, baseX: HAND_X, baseY: DEAL_Y, offsetX: FAN_X }));
   const playerSt = useRef(new CardStack({ zTier: 10, baseX: HAND_X, baseY: PLAY_Y, offsetX: FAN_X }));
 
-  // Visual state
   const [cardStates,    setCardStates]    = useState<Record<string, CardVisualState>>({});
   const [appearance,    setAppearance]    = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [scale,         setScale]         = useState(1);
-
-  // Game state
-  const [phase,         setPhase]         = useState<Phase>("betting");
+  const [phase,         setPhase]         = useState<Phase>("shuffling");
   const [playerHand,    setPlayerHand]    = useState<Card[]>([]);
   const [dealerHand,    setDealerHand]    = useState<Card[]>([]);
   const [holeRevealed,  setHoleRevealed]  = useState(false);
@@ -103,8 +129,84 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
   const [shoeCount,     setShoeCount]     = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearTimers = useCallback(() => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  const after = useCallback((ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); }, []);
 
-  // ── One-time shoe initialization ───────────────────────────────────────────
+  // ── Scale observer ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      const s = Math.min(width / STAGE_W, height / STAGE_H);
+      setScale(Math.max(0.4, s));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => () => clearTimers(), [clearTimers]);
+
+  // ── Layout helper ─────────────────────────────────────────────────────────
+
+  const allLayouts = useCallback((ms = 350): Record<string, CardVisualState> => ({
+    ...shoe.current.layout(ms),
+    ...disc.current.layout(ms),
+    ...dealerSt.current.layout(ms),
+    ...playerSt.current.layout(ms),
+  }), []);
+
+  // ── Shuffle animation ─────────────────────────────────────────────────────
+
+  const performShuffle = useCallback((onComplete: () => void) => {
+    setPhase("shuffling");
+    let t = 0;
+
+    for (let cycle = 0; cycle < SHUFFLE_CYCLES; cycle++) {
+      after(t, () => {
+        const cards = shoe.current.cards;
+        const mid   = Math.floor(cards.length / 2);
+        const split: Record<string, CardVisualState> = {};
+        for (let i = 0; i < mid; i++) {
+          split[cards[i].id] = {
+            x: SHOE_X - 30, y: SHOE_Y - i * 0.3,
+            z: 500 + i, rotation: 0, faceDown: true, transitionMs: 180,
+          };
+        }
+        for (let i = mid; i < cards.length; i++) {
+          split[cards[i].id] = {
+            x: SHOE_X + 30, y: SHOE_Y - (i - mid) * 0.3,
+            z: 500 + i, rotation: 0, faceDown: true, transitionMs: 180,
+          };
+        }
+        setCardStates(prev => ({ ...prev, ...split }));
+      });
+      t += 240;
+
+      after(t, () => {
+        const cards    = shoe.current.cards;
+        const combined: Record<string, CardVisualState> = {};
+        for (let i = 0; i < cards.length; i++) {
+          combined[cards[i].id] = {
+            x: SHOE_X, y: SHOE_Y - i * 0.3,
+            z: 500 + i, rotation: 0, faceDown: true,
+            transitionMs: 280, transitionDelay: (i % 2 === 0 ? 0 : 40),
+          };
+        }
+        setCardStates(prev => ({ ...prev, ...combined }));
+      });
+      t += 400;
+    }
+
+    after(t, () => {
+      setCardStates(allLayouts(0));
+      onComplete();
+    });
+  }, [after, allLayouts]);
+
+  // ── Initialization ────────────────────────────────────────────────────────
 
   useEffect(() => {
     const cards = buildDeck(settings);
@@ -116,49 +218,13 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     for (const c of cards) shoe.current.addCard(c, { toTop: true, faceDown: true });
     setShoeCount(shoe.current.size);
     setCardStates(shoe.current.layout(0));
+    performShuffle(() => setPhase("betting"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Scale stage to fit narrow containers ──────────────────────────────────
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(entries => {
-      const w = entries[0].contentRect.width;
-      setScale(Math.min(1, w / STAGE_W));
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  // ── Layout helpers ────────────────────────────────────────────────────────
-
-  const allLayouts = useCallback((ms = 350): Record<string, CardVisualState> => ({
-    ...shoe.current.layout(ms),
-    ...disc.current.layout(ms),
-    ...dealerSt.current.layout(ms),
-    ...playerSt.current.layout(ms),
-  }), []);
-
-  // ── Reshuffle helper ──────────────────────────────────────────────────────
-
-  const reshuffleIfNeeded = useCallback(() => {
-    const threshold = Math.max(15, Math.floor(allCards.current.length * 0.25));
-    if (shoe.current.size >= threshold) return;
-    // Collect all disc cards back into shoe
-    const discCards = disc.current.cards;
-    disc.current.clear();
-    const reshuffled = shuffle([...discCards]);
-    for (const c of reshuffled) shoe.current.addCard(c, { toTop: false, faceDown: true });
   }, []);
 
   // ── Deal ─────────────────────────────────────────────────────────────────
 
-  const deal = useCallback(() => {
-    reshuffleIfNeeded();
-
-    // Pull 4 cards: p1, d1, p2, d2(hole)
+  const dealCards = useCallback(() => {
     const p1 = shoe.current.removeTop()!;
     const d1 = shoe.current.removeTop()!;
     const p2 = shoe.current.removeTop()!;
@@ -166,14 +232,12 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
 
     playerSt.current.clear();
     dealerSt.current.clear();
-
     playerSt.current.addCard(p1, { toTop: true, faceDown: false });
     dealerSt.current.addCard(d1, { toTop: true, faceDown: false });
     playerSt.current.addCard(p2, { toTop: true, faceDown: false });
     dealerSt.current.addCard(d2, { toTop: true, faceDown: true });
     holeIdRef.current = d2.id;
 
-    // Layout with stagger delays flying from shoe
     const layouts = allLayouts(550);
     layouts[p1.id] = { ...layouts[p1.id], transitionDelay: 0 };
     layouts[d1.id] = { ...layouts[d1.id], transitionDelay: 140 };
@@ -190,8 +254,7 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     setShoeCount(shoe.current.size);
 
     if (isNaturalBlackjack([p1, p2])) {
-      // Reveal hole after cards land
-      setTimeout(() => {
+      after(800, () => {
         dealerSt.current.setFaceDown(d2.id, false);
         setHoleRevealed(true);
         setCardStates(allLayouts(400));
@@ -205,11 +268,27 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
           setChipDelta(win);
         }
         setPhase("resolved");
-      }, 800);
+      });
     } else {
       setPhase("player-turn");
     }
-  }, [bet, reshuffleIfNeeded, allLayouts]);
+  }, [bet, allLayouts, after]);
+
+  const deal = useCallback(() => {
+    const threshold = Math.max(15, Math.floor(allCards.current.length * 0.25));
+    if (shoe.current.size < threshold) {
+      // Gather disc cards into shoe then animate shuffle
+      const discCards = disc.current.cards;
+      disc.current.clear();
+      const reshuffled = shuffle([...discCards]);
+      for (const c of reshuffled) shoe.current.addCard(c, { toTop: false, faceDown: true });
+      setShoeCount(shoe.current.size);
+      setCardStates(allLayouts(300));
+      after(350, () => performShuffle(dealCards));
+    } else {
+      dealCards();
+    }
+  }, [dealCards, allLayouts, after, performShuffle]);
 
   // ── Hit ───────────────────────────────────────────────────────────────────
 
@@ -266,7 +345,6 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     setPlayerHand(newHand);
     setBet(newBet);
     setShoeCount(shoe.current.size);
-
     dealerSt.current.setFaceDown(holeIdRef.current!, false);
     setHoleRevealed(true);
 
@@ -326,7 +404,7 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     setPhase("resolved");
   }, [dealerDone, bet, playerHand, dealerHand]);
 
-  // ── New hand (clear hands → disc) ────────────────────────────────────────
+  // ── New hand ──────────────────────────────────────────────────────────────
 
   const newHand = useCallback(() => {
     const handCards = [...playerSt.current.cards, ...dealerSt.current.cards];
@@ -347,13 +425,12 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
   // ── Reset game ────────────────────────────────────────────────────────────
 
   const resetGame = useCallback(() => {
-    const allInPlay = [
-      ...disc.current.cards,
-      ...shoe.current.cards,
-      ...dealerSt.current.cards,
-      ...playerSt.current.cards,
+    clearTimers();
+    const all = [
+      ...disc.current.cards, ...shoe.current.cards,
+      ...dealerSt.current.cards, ...playerSt.current.cards,
     ];
-    const reshuffled = shuffle(allInPlay.length > 0 ? allInPlay : [...allCards.current]);
+    const reshuffled = shuffle(all.length > 0 ? all : [...allCards.current]);
     disc.current.clear();
     dealerSt.current.clear();
     playerSt.current.clear();
@@ -367,10 +444,10 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     setOutcome(null);
     setDealerDone(false);
     setChipDelta(0);
-    setPhase("betting");
     setShoeCount(shoe.current.size);
     setCardStates(shoe.current.layout(0));
-  }, []);
+    performShuffle(() => setPhase("betting"));
+  }, [clearTimers, performShuffle]);
 
   // ── Menus ─────────────────────────────────────────────────────────────────
 
@@ -388,13 +465,14 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
 
   useWindowMenus(bjMenus);
 
-  // ── Derived display ───────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
 
-  const dealerScore = scoreLabel(dealerHand, holeRevealed, true);
-  const playerScore = scoreLabel(playerHand, true, false);
-  const playerTotal = handTotal(playerHand);
+  const dealerScore        = scoreLabel(dealerHand, holeRevealed, true);
+  const playerScore        = scoreLabel(playerHand, true, false);
+  const playerTotal        = handTotal(playerHand);
   const dealerTotalForClass = holeRevealed ? handTotal(dealerHand) : 0;
-  const gameOver    = chips < 5 && phase === "betting";
+  const gameOver           = chips < 5 && phase === "betting";
+  const canDouble          = phase === "player-turn" && playerHand.length === 2 && chips >= bet * 2;
 
   function outcomeText(): string {
     if (!outcome) return "";
@@ -421,41 +499,31 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
   return (
     <div className="bj">
       {showDeckModal && (
-        <DeckModal
-          appearance={appearance}
-          onUpdate={setAppearance}
-          onClose={() => setShowDeckModal(false)}
-        />
+        <DeckModal appearance={appearance} onUpdate={setAppearance} onClose={() => setShowDeckModal(false)} />
       )}
 
-      {/* Stage container — measures width for scaling */}
+      {/* Green felt area — fills all available space */}
       <div className="bj__stage-container" ref={containerRef}>
         <div
           className="bj__stage"
           style={{
-            width:           STAGE_W,
-            height:          STAGE_H,
-            transform:       scale < 1 ? `scale(${scale})` : undefined,
-            transformOrigin: "top left",
+            width:  STAGE_W,
+            height: STAGE_H,
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: `translate(-50%, -50%) scale(${scale})`,
           }}
         >
-          {/* Render all cards as permanent DOM elements */}
+          {/* All cards: permanent DOM, positions driven by cardStates */}
           {allCards.current.map(card => {
             const cs = cardStates[card.id];
             if (!cs) return null;
-            return (
-              <PermCard
-                key={card.id}
-                card={card}
-                cs={cs}
-                appearance={appearance}
-                size="sm"
-              />
-            );
+            return <PermCard key={card.id} card={card} cs={cs} appearance={appearance} size="sm" />;
           })}
 
-          {/* Dealer label + score */}
-          <div className="bj__stage-label" style={{ top: 10, left: 10 }}>
+          {/* DEALER label */}
+          <div className="bj__stage-label" style={{ top: 8, left: 8 }}>
             DEALER
             {dealerHand.length > 0 && (
               <span className={`bj__stage-score${dealerTotalForClass > 21 ? " bj__stage-score--bust" : dealerTotalForClass === 21 && dealerHand.length === 2 ? " bj__stage-score--bj" : ""}`}>
@@ -464,8 +532,8 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
             )}
           </div>
 
-          {/* Player label + score */}
-          <div className="bj__stage-label" style={{ top: 148, left: 10 }}>
+          {/* YOU label */}
+          <div className="bj__stage-label" style={{ top: HIT_T - 12, left: 8 }}>
             YOU
             {playerHand.length > 0 && (
               <span className={`bj__stage-score${playerTotal > 21 ? " bj__stage-score--bust" : playerTotal === 21 && playerHand.length === 2 ? " bj__stage-score--bj" : ""}`}>
@@ -475,9 +543,36 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
           </div>
 
           {/* Shoe count */}
-          <div className="bj__shoe-label" style={{ right: 10, top: 10 }}>
-            {shoeCount} left
-          </div>
+          <div className="bj__shoe-label" style={{ top: 8, right: 8 }}>{shoeCount} left</div>
+
+          {/* Shuffling indicator */}
+          {phase === "shuffling" && (
+            <div className="bj__shuffling">Shuffling...</div>
+          )}
+
+          {/* HIT — card-shaped tap zone right of player cards */}
+          {phase === "player-turn" && (
+            <button className="bj__hit-btn" style={{ left: HIT_L, top: HIT_T }} onClick={hit}>
+              <span className="bj__action-icon">👇</span>
+              <span className="bj__action-lbl">HIT</span>
+            </button>
+          )}
+
+          {/* STAY — wave gesture below player cards */}
+          {phase === "player-turn" && (
+            <button className="bj__stay-btn" style={{ left: 50, top: STAY_T }} onClick={stand}>
+              <span className="bj__action-icon">✋</span>
+              <span className="bj__action-lbl">STAY</span>
+            </button>
+          )}
+
+          {/* DOUBLE */}
+          {canDouble && (
+            <button className="bj__dbl-btn" style={{ left: DBL_L, top: DBL_T }} onClick={doubleDown}>
+              <span className="bj__action-icon">×2</span>
+              <span className="bj__action-lbl">DBL</span>
+            </button>
+          )}
 
           {/* Outcome overlay */}
           {phase === "resolved" && outcome && (
@@ -486,52 +581,44 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
         </div>
       </div>
 
-      {/* Controls */}
+      {/* Win95 controls bar */}
       <div className="bj__controls">
         <div className="bj__info-row">
-          <span className="bj__chips-label">Chips: ${chips}</span>
-          <span className="bj__chips-label">Bet: ${bet}</span>
+          <div className="bj__chip-group">
+            <ChipView amount={chips} stack />
+            <span className="bj__chip-lbl">Chips</span>
+          </div>
+
+          {phase === "betting" && !gameOver && (
+            <div className="bj__bet-adjust">
+              <button className="bj__btn bj__btn--sm" disabled={bet <= 5}           onClick={() => setBet(p => Math.max(5,     p - 5))}>-$5</button>
+              <button className="bj__btn bj__btn--sm" disabled={bet + 5  > chips}   onClick={() => setBet(p => Math.min(chips, p + 5))}>+$5</button>
+              <button className="bj__btn bj__btn--sm" disabled={bet + 25 > chips}   onClick={() => setBet(p => Math.min(chips, p + 25))}>+$25</button>
+              <button className="bj__btn bj__btn--sm" disabled={bet === 5}          onClick={() => setBet(5)}>Min</button>
+              <button className="bj__btn bj__btn--sm" disabled={bet === chips}      onClick={() => setBet(chips)}>All In</button>
+            </div>
+          )}
+
+          <div className="bj__chip-group">
+            <ChipView amount={bet} />
+            <span className="bj__chip-lbl">Bet</span>
+          </div>
         </div>
 
-        <div className="bj__divider" />
-
-        {phase === "betting" && !gameOver && (
-          <div className="bj__bet-row">
-            <span className="bj__chips-label">Adjust:</span>
-            <button className="bj__btn bj__btn--sm" disabled={bet <= 5}           onClick={() => setBet(p => Math.max(5, p - 5))}>−$5</button>
-            <button className="bj__btn bj__btn--sm" disabled={bet + 5 > chips}    onClick={() => setBet(p => Math.min(chips, p + 5))}>+$5</button>
-            <button className="bj__btn bj__btn--sm" disabled={bet + 25 > chips}   onClick={() => setBet(p => Math.min(chips, p + 25))}>+$25</button>
-            <button className="bj__btn bj__btn--sm" disabled={bet === 5}          onClick={() => setBet(5)}>Min</button>
-            <button className="bj__btn bj__btn--sm" disabled={bet === chips}      onClick={() => setBet(chips)}>All In</button>
-          </div>
-        )}
-
         <div className="bj__action-row">
+          {phase === "shuffling" && <span className="bj__waiting">Shuffling deck...</span>}
           {phase === "betting" && !gameOver && (
-            <button className="bj__btn bj__btn--deal" onClick={deal} disabled={bet < 5 || allCards.current.length === 0}>
+            <button className="bj__btn bj__btn--deal" onClick={deal} disabled={allCards.current.length === 0}>
               ▶ DEAL
             </button>
           )}
-          {phase === "player-turn" && (
-            <>
-              <button className="bj__btn bj__btn--hit"    onClick={hit}>Hit</button>
-              <button className="bj__btn bj__btn--stand"  onClick={stand}>Stand</button>
-              {playerHand.length === 2 && chips >= bet * 2 && (
-                <button className="bj__btn bj__btn--double" onClick={doubleDown}>Double</button>
-              )}
-            </>
-          )}
-          {phase === "dealer-turn" && (
-            <span className="bj__waiting">Dealer playing...</span>
-          )}
+          {phase === "dealer-turn" && <span className="bj__waiting">Dealer playing...</span>}
           {phase === "resolved" && (
             chips >= 5
               ? <button className="bj__btn bj__btn--deal" onClick={newHand}>New Hand</button>
               : <button className="bj__btn bj__btn--deal" onClick={resetGame}>New Game</button>
           )}
-          {gameOver && (
-            <button className="bj__btn bj__btn--deal" onClick={resetGame}>New Game</button>
-          )}
+          {gameOver && <button className="bj__btn bj__btn--deal" onClick={resetGame}>New Game</button>}
         </div>
       </div>
     </div>
