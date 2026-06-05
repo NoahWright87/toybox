@@ -157,6 +157,12 @@ export default function FilesApp({
       return;
     }
 
+    // PNG sprites — open in NS Art with the sprite loaded for editing
+    if (file.fileType === "png" && file.appId === "nsart") {
+      onOpenFSNode?.(file.id);
+      return;
+    }
+
     // Executables with an app ID
     if (file.appId) {
       if (file.appId === "tos-only") {
