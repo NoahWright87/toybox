@@ -385,6 +385,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [dragOverStripIdx, setDragOverStripIdx] = useState<number | null>(null);
   const [showPaletteDlg, setShowPaletteDlg] = useState(false);
   const [paletteTarget, setPaletteTarget] = useState<"primary" | "secondary" | null>(null);
+  const [spriteSaved, setSpriteSaved] = useState(false);
 
   // Animation state
   const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
@@ -426,6 +427,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const moveOffsetRef        = useRef({ x: 0, y: 0 });
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spriteSaveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
 
   // Animation refs
@@ -507,15 +509,41 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   useImperativeHandle(ref, () => ({
     requestClose: (proceed) => {
       if (isDirtyRef.current) {
-        setConfirmState({
-          title: "NS Art",
-          message: "Your artwork has unsaved changes.",
-          buttons: [
-            { label: "Export PNG", primary: true, onClick: () => { exportCurrentFrame(); proceed(); setConfirmState(null); } },
-            { label: "Close without saving",      onClick: () => { proceed(); setConfirmState(null); } },
-            { label: "Cancel",                    onClick: () => setConfirmState(null) },
-          ],
-        });
+        if (fileIdRef.current) {
+          // Sprite edit mode: save directly to FS file
+          setConfirmState({
+            title: "NS Art",
+            message: "Save changes to this sprite?",
+            buttons: [
+              { label: "Save", primary: true, onClick: () => {
+                const canvas = canvasRef.current;
+                if (canvas) {
+                  saveFrameRef.current();
+                  const frame = framesDataRef.current[currentStripRef.current]?.[currentFrameRef.current];
+                  if (frame) {
+                    const tmp = document.createElement("canvas");
+                    tmp.width = canvas.width; tmp.height = canvas.height;
+                    tmp.getContext("2d")!.putImageData(frame, 0, 0);
+                    fsStore.writeFile(fileIdRef.current!, tmp.toDataURL("image/png"));
+                  }
+                }
+                proceed(); setConfirmState(null);
+              }},
+              { label: "Discard changes", onClick: () => { proceed(); setConfirmState(null); } },
+              { label: "Cancel",          onClick: () => setConfirmState(null) },
+            ],
+          });
+        } else {
+          setConfirmState({
+            title: "NS Art",
+            message: "Your artwork has unsaved changes.",
+            buttons: [
+              { label: "Export PNG", primary: true, onClick: () => { exportCurrentFrame(); proceed(); setConfirmState(null); } },
+              { label: "Close without saving",      onClick: () => { proceed(); setConfirmState(null); } },
+              { label: "Cancel",                    onClick: () => setConfirmState(null) },
+            ],
+          });
+        }
       } else {
         proceed();
       }
@@ -700,6 +728,10 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         const currentUrl = framesUrls[currentStripRef.current]?.[currentFrameRef.current];
         if (currentUrl) {
           fsStore.writeFile(fileIdRef.current, currentUrl);
+          isDirtyRef.current = false; // auto-save is complete
+          if (spriteSaveTimerRef.current) clearTimeout(spriteSaveTimerRef.current);
+          setSpriteSaved(true);
+          spriteSaveTimerRef.current = setTimeout(() => setSpriteSaved(false), 2500);
         }
       }
 
@@ -2085,6 +2117,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
         {/* Undo */}
         <button className="ns-art__bottom-undo" onClick={undo} title="Undo (Ctrl+Z)">↩</button>
+
+        {/* Sprite save status — only visible in sprite edit mode */}
+        {fileId && (
+          <span className={`ns-art__sprite-status${spriteSaved ? " ns-art__sprite-status--visible" : ""}`}>
+            ✓ Saved
+          </span>
+        )}
 
         {/* Minimap + zoom — grows to fill center */}
         <div className="ns-art__bottom-map">

@@ -563,7 +563,9 @@ export default function NsDoors97() {
     // File node
     const file = node;
     const textLike = ["text", "bat", "sys", "ini"] as const;
-    if ((textLike as readonly string[]).includes(file.fileType) || file.content) {
+    // Only open in Notebook if the file is text-like OR has content and no app to handle it.
+    // Files with appId must reach their own handler even after content has been written.
+    if ((textLike as readonly string[]).includes(file.fileType) || (!file.appId && file.content)) {
       openNotebook(file.id, file.name);
       return;
     }

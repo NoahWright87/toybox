@@ -516,6 +516,18 @@
 
 .ns-art__bottom-undo:active { border-color: #808080 #ffffff #ffffff #808080; }
 
+.ns-art__sprite-status {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #228833;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.ns-art__sprite-status--visible { opacity: 1; }
+
 /* Minimap section — centered, grows to fill */
 
 .ns-art__bottom-map {
