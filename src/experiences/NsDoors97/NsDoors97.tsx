@@ -89,6 +89,7 @@ interface AppDef {
 
 const APP_REGISTRY: Record<string, AppDef> = {
   "my-doors":       { title: "My Doors",          icon: "🖥️", action: "files"         },
+  "files":          { title: "My Doors",          icon: "🖥️", action: "files"         },
   "dumpster":       { title: "Dumpster",           icon: "🗑️", action: "dumpster"      },
   "readme":         { title: "README.txt",         icon: "📋", action: "readme"        },
   "about":          { title: "About NS Doors 97",  icon: "ℹ️",  action: "about"         },
