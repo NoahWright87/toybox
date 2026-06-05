@@ -1,3 +1,7 @@
+import { fsStore } from "./filesystem/FileSystemStore";
+import { SYSTEM_INI_ID } from "./filesystem/types";
+import { parseIni, updateIniSection } from "./filesystem/ini";
+
 export type DesktopBgType    = "noahsoft" | "solid" | "wallpaper";
 export type WallpaperPreset  = "sunset" | "arch";
 export type WallpaperFit     = "cover" | "contain";
@@ -29,7 +33,34 @@ export function getDesktopBackground(settings: DesktopSettings): string {
 
 const LS_KEY = "ns-desktop-settings";
 
+function parseDesktopFromIni(content: string): DesktopSettings {
+  const ini = parseIni(content);
+  const d = ini["Desktop"] ?? {};
+  const bgType = (d["Background"] as DesktopBgType | undefined) ?? DEFAULT_DESKTOP_SETTINGS.bgType;
+  const solidColor = d["Color"] ?? DEFAULT_DESKTOP_SETTINGS.solidColor;
+  const wallpaperRaw = d["Wallpaper"] ?? "(None)";
+  const wallpaperPreset: WallpaperPreset | null =
+    wallpaperRaw === "sunset" || wallpaperRaw === "arch" ? wallpaperRaw : null;
+  const wallpaperFit = (d["WallpaperFit"] as WallpaperFit | undefined) ?? DEFAULT_DESKTOP_SETTINGS.wallpaperFit;
+  return { bgType, solidColor, wallpaperPreset, wallpaperCustomUrl: null, wallpaperFit };
+}
+
+function settingsToIniKvs(settings: DesktopSettings): Record<string, string> {
+  return {
+    Background:    settings.bgType,
+    Color:         settings.solidColor,
+    Wallpaper:     settings.wallpaperPreset ?? "(None)",
+    WallpaperFit:  settings.wallpaperFit,
+  };
+}
+
 export function loadDesktopSettings(): DesktopSettings {
+  // If system.ini has been explicitly modified by the user, it is authoritative.
+  const sysIni = fsStore.getFile(SYSTEM_INI_ID);
+  if (sysIni && sysIni.modifiedAt > sysIni.createdAt) {
+    return parseDesktopFromIni(sysIni.content);
+  }
+  // Fall back to localStorage (legacy / pre-system.ini sessions)
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return { ...DEFAULT_DESKTOP_SETTINGS };
@@ -47,13 +78,15 @@ export function loadDesktopSettings(): DesktopSettings {
 }
 
 export function saveDesktopSettings(settings: DesktopSettings): void {
+  // Write to system.ini so users can see and edit their settings there
+  const sysIni = fsStore.getFile(SYSTEM_INI_ID);
+  if (sysIni) {
+    const updated = updateIniSection(sysIni.content, "Desktop", settingsToIniKvs(settings));
+    fsStore.writeFile(SYSTEM_INI_ID, updated);
+  }
+  // Also keep localStorage for any code that hasn't migrated yet
   try {
-    // Don't persist large custom data URLs — they'd eat localStorage quota.
-    // We keep them in React state only for the current session.
-    const toSave: DesktopSettings = {
-      ...settings,
-      wallpaperCustomUrl: null,
-    };
+    const toSave: DesktopSettings = { ...settings, wallpaperCustomUrl: null };
     localStorage.setItem(LS_KEY, JSON.stringify(toSave));
   } catch {}
 }

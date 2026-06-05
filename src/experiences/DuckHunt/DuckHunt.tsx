@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
+import { DH_SCORES_ID } from "../NsDoors97/filesystem/types";
 import "./DuckHunt.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -569,8 +571,17 @@ export default function DuckHunt() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) setHighScores(JSON.parse(raw) as HighScore[]);
+      // Prefer FS SCORES.DAT; fall back to legacy localStorage, migrating on first read
+      const fsContent = fsStore.getFile(DH_SCORES_ID)?.content;
+      const legacyRaw = !fsContent ? localStorage.getItem(LS_KEY) : null;
+      const raw = fsContent || legacyRaw;
+      if (raw) {
+        setHighScores(JSON.parse(raw) as HighScore[]);
+        if (legacyRaw) {
+          fsStore.writeFile(DH_SCORES_ID, legacyRaw);
+          localStorage.removeItem(LS_KEY);
+        }
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -588,7 +599,7 @@ export default function DuckHunt() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
     setHighScores(updated);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+    try { fsStore.writeFile(DH_SCORES_ID, JSON.stringify(updated)); } catch { /* ignore */ }
   }
 
   // ── Audio ──────────────────────────────────────────────────────────────────

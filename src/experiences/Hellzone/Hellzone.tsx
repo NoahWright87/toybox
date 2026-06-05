@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sprite } from "./sprites";
+import { getAssetUrl } from "./assetOverride";
 import { QUIPS, QuipKey, SubtitleCategory, SubtitleSettings, EXIT_QUIPS, pickRandom, pickLockedDoorQuip } from "./quips";
 import { generateMap as genMapFromModule, type MapGenParams, type Topology, GEN_WALL as MGEN_WALL } from './mapgen';
 import "./Hellzone.css";
@@ -449,9 +450,9 @@ export default function Hellzone() {
     let longPressTriggered = false;
 
     // ── Sprites ─────────────────────────────────────────────────────────────────
-    const sprWallRock = new Sprite('/sprites/wall-rock.png');
+    const sprWallRock = new Sprite(getAssetUrl('/sprites/wall-rock.png'));
     // Lava sheet: 2×2 grid of 4 frames, each 627×627 within a 1254×1254 image.
-    const sprWallLava = new Sprite('/sprites/wall-lava.png', [
+    const sprWallLava = new Sprite(getAssetUrl('/sprites/wall-lava.png'), [
       { x: 0,   y: 0,   w: 627, h: 627 },
       { x: 627, y: 0,   w: 627, h: 627 },
       { x: 0,   y: 627, w: 627, h: 627 },
@@ -459,39 +460,39 @@ export default function Hellzone() {
     ]);
 
     const sprEnemy = [
-      new Sprite('/sprites/enemy-0.png'),
-      new Sprite('/sprites/enemy-1.png'),
-      new Sprite('/sprites/enemy-2.png'),
+      new Sprite(getAssetUrl('/sprites/enemy-0.png')),
+      new Sprite(getAssetUrl('/sprites/enemy-1.png')),
+      new Sprite(getAssetUrl('/sprites/enemy-2.png')),
     ];
-    const sprEnemyDead = new Sprite('/sprites/enemy-dead.png');
-    const sprTarget = new Sprite('/sprites/target-dummy.png');
-    const sprTargetDead = new Sprite('/sprites/target-dummy-dead.png');
-    const sprPickupHealth = new Sprite('/sprites/pickup-health.png');
-    const sprPickupAmmo = new Sprite('/sprites/pickup-ammo.png');
+    const sprEnemyDead = new Sprite(getAssetUrl('/sprites/enemy-dead.png'));
+    const sprTarget = new Sprite(getAssetUrl('/sprites/target-dummy.png'));
+    const sprTargetDead = new Sprite(getAssetUrl('/sprites/target-dummy-dead.png'));
+    const sprPickupHealth = new Sprite(getAssetUrl('/sprites/pickup-health.png'));
+    const sprPickupAmmo = new Sprite(getAssetUrl('/sprites/pickup-ammo.png'));
     const sprWeapon: Record<WeaponId, Sprite> = {
-      claws:        new Sprite('/sprites/gun-claws.png'),
-      subwoofer:    new Sprite('/sprites/gun-subwoofer.png'),
-      woofer:       new Sprite('/sprites/gun-woofer.png'),
-      tennis:       new Sprite('/sprites/gun-tennis.png'),
-      flamethrower: new Sprite('/sprites/gun-flamethrower.png'),
+      claws:        new Sprite(getAssetUrl('/sprites/gun-claws.png')),
+      subwoofer:    new Sprite(getAssetUrl('/sprites/gun-subwoofer.png')),
+      woofer:       new Sprite(getAssetUrl('/sprites/gun-woofer.png')),
+      tennis:       new Sprite(getAssetUrl('/sprites/gun-tennis.png')),
+      flamethrower: new Sprite(getAssetUrl('/sprites/gun-flamethrower.png')),
     };
-    const sprPickupBullets  = new Sprite('/sprites/pickup-bullets.png');
-    const sprPickupFuel     = new Sprite('/sprites/pickup-fuel.png');
-    const sprPickupBalls    = new Sprite('/sprites/pickup-balls.png');
-    const sprPickupWoofer   = new Sprite('/sprites/pickup-weapon-woofer.png');
-    const sprPickupTennis   = new Sprite('/sprites/pickup-weapon-tennis.png');
-    const sprPickupFlame    = new Sprite('/sprites/pickup-weapon-flamethrower.png');
-    const sprTennisBall     = new Sprite('/sprites/projectile-tennis.png');
-    const sprFlameParticle  = new Sprite('/sprites/flame-particle.png');
-    const sprImpactWall = new Sprite('/sprites/impact-wall.png');
-    const sprImpactEnemy = new Sprite('/sprites/impact-enemy.png');
+    const sprPickupBullets  = new Sprite(getAssetUrl('/sprites/pickup-bullets.png'));
+    const sprPickupFuel     = new Sprite(getAssetUrl('/sprites/pickup-fuel.png'));
+    const sprPickupBalls    = new Sprite(getAssetUrl('/sprites/pickup-balls.png'));
+    const sprPickupWoofer   = new Sprite(getAssetUrl('/sprites/pickup-weapon-woofer.png'));
+    const sprPickupTennis   = new Sprite(getAssetUrl('/sprites/pickup-weapon-tennis.png'));
+    const sprPickupFlame    = new Sprite(getAssetUrl('/sprites/pickup-weapon-flamethrower.png'));
+    const sprTennisBall     = new Sprite(getAssetUrl('/sprites/projectile-tennis.png'));
+    const sprFlameParticle  = new Sprite(getAssetUrl('/sprites/flame-particle.png'));
+    const sprImpactWall = new Sprite(getAssetUrl('/sprites/impact-wall.png'));
+    const sprImpactEnemy = new Sprite(getAssetUrl('/sprites/impact-enemy.png'));
     const sprKeys: Record<KeyColor, Sprite> = {
-      red:    new Sprite('/sprites/key-red.png'),
-      orange: new Sprite('/sprites/key-orange.png'),
-      yellow: new Sprite('/sprites/key-yellow.png'),
-      green:  new Sprite('/sprites/key-green.png'),
-      blue:   new Sprite('/sprites/key-blue.png'),
-      purple: new Sprite('/sprites/key-purple.png'),
+      red:    new Sprite(getAssetUrl('/sprites/key-red.png')),
+      orange: new Sprite(getAssetUrl('/sprites/key-orange.png')),
+      yellow: new Sprite(getAssetUrl('/sprites/key-yellow.png')),
+      green:  new Sprite(getAssetUrl('/sprites/key-green.png')),
+      blue:   new Sprite(getAssetUrl('/sprites/key-blue.png')),
+      purple: new Sprite(getAssetUrl('/sprites/key-purple.png')),
     };
 
     // ── Sound system ───────────────────────────────────────────────────────────
@@ -509,7 +510,7 @@ export default function Hellzone() {
           'pickup-weapon','weapon-switch','door-open',
         ];
         for (const name of names) {
-          fetch(`/sounds/${name}.wav`)
+          fetch(getAssetUrl(`/sounds/${name}.wav`))
             .then(r => r.arrayBuffer())
             .then(buf => audioCtx!.decodeAudioData(buf))
             .then(decoded => { soundBuffers.set(name, decoded); })

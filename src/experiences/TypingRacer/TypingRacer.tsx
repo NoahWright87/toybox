@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
+import { TR_SCORES_ID } from "../NsDoors97/filesystem/types";
 import "./TypingRacer.css";
+
+const TR_LS_KEY = "typeemup-highscore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -312,8 +316,17 @@ export default function TypingRacer() {
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [finalStats, setFinalStats] = useState<FinalStats | null>(null);
   const [highScore, setHighScore]   = useState<number>(() => {
-    const s = localStorage.getItem("typeemup-highscore");
-    return s ? parseInt(s, 10) : 0;
+    // Prefer FS SCORES.DAT; fall back to legacy localStorage
+    const fsContent = fsStore.getFile(TR_SCORES_ID)?.content;
+    if (fsContent) return parseInt(fsContent, 10) || 0;
+    const ls = localStorage.getItem(TR_LS_KEY);
+    if (ls) {
+      // One-time migration: move to FS
+      fsStore.writeFile(TR_SCORES_ID, ls);
+      localStorage.removeItem(TR_LS_KEY);
+      return parseInt(ls, 10) || 0;
+    }
+    return 0;
   });
   // gamePaused drives the "tap to play" strip; gamePausedRef is readable inside
   // the RAF loop without a stale-closure issue.
@@ -504,7 +517,7 @@ export default function TypingRacer() {
         const isNewRecord = state.score > highScoreRef.current;
         setFinalStats({ score: state.score, wpm: finalWpm, wordsDestroyed: state.wordsDestroyed, isNewRecord });
         if (isNewRecord) {
-          localStorage.setItem("typeemup-highscore", String(state.score));
+          try { fsStore.writeFile(TR_SCORES_ID, String(state.score)); } catch { /* ignore */ }
           setHighScore(state.score);
         }
         gameRef.current = null;

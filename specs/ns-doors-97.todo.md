@@ -13,17 +13,34 @@
     - Recreate old-school games: eat-smaller-fish, helicopter dodge, bubble pop, Snood-like, etc.
     - Accessed by navigating to a fake URL inside the browser
 
-- [#32](https://github.com/NoahWright87/toybox/issues/32) Fake file structure — "My Machine" (or similar) folder browser
-  - Opens in a Win95-style folder viewer from My Doors or a desktop icon
-  - Navigate folder hierarchy; back-up control (no fancy breadcrumbs — 90s style)
-  - Fixed locations: games in `/Games`, backgrounds in `/Backgrounds`, OS files in `/System`
-  - Randomly placed Easter-egg files scattered throughout (see #31)
-  - Rule: anything added to the desktop / Start menu must also appear somewhere in the file system
+- Wire up `win.ini` / `system.ini` to real OS behavior
+  - `[Desktop] Wallpaper=` → set desktop wallpaper from FS path
+  - `[Desktop]` solid color entries → change desktop background color
+  - `[windows] Beep=` → toggle system beep sounds
+  - `[sounds]` entries → wire to actual audio playback on OS events
+  - Rule: every new INI entry wired up should be reflected in Display/Screensaver settings and vice versa
 
-- [#31](https://github.com/NoahWright87/toybox/issues/31) Documents folder with Easter-egg files
-  - Stored in a settings/config file in the repo so agents can add to it over time
-  - Include: `passwords.txt` (ridiculous credentials), `cheat codes.txt`, walkthrough for "that hard stage", random phone numbers, multiple drafts of "Important - Don't Forget", etc.
-  - Tone: humorous, 90s-appropriate; lean into nerd/gaming/computer references
+- Asset override system (FS-backed sprite replacement)
+  - If a FS file at a path matching a `/public/` bundled asset has non-empty content, the game/app uses that content instead
+  - Enables: draw a HELL sprite in NS Art → save to `C:\EGO\SPRITES\ENEMY0.BMP` → HELL game loads it on next run
+  - Detection is path-based; empty FS content means "use bundled default"
+
+- Folder navigation from desktop
+  - Double-clicking a folder node on the desktop should open My Doors navigated to that specific folder (not just the root)
+  - Requires passing `startFolderId` through `openFSNode` when `node.kind === "folder"`
+
+- StorageAdapter swap to IndexedDB
+  - Implement `IndexedDBAdapter` implementing the `StorageAdapter` interface
+  - Swap into `FileSystemStore` constructor; no other code changes required
+  - Benefit: larger storage quota, avoids localStorage 5 MB limit for large NS Art files
+
+- NS-TOS as a more complete shell
+  - `COPY src dst` — copy a file to a new location in the FS
+  - `MOVE src dst` — move (rename + reparent)
+  - `TYPE file | more` — paginate long text files
+  - Wildcard expansion for `DIR *.exe`, `DEL *.tmp`, etc.
+  - `CLS` — clear terminal output
+  - `VER` — print OS version string
 
 ## Backlog
 
@@ -33,4 +50,4 @@
 
 - Move completed items to `ns-doors-97.md` — this file is for future plans, not current state
 - Items flow: INTAKE → `spec.todo.md` → this file → `ns-doors-97.md` (when done)
-- If you add content to the file structure (#32), update both the folder-data config and `ns-doors-97.md`
+- New apps that save data must use `fsStore` — see `filesystem.spec.md` for the rules

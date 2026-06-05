@@ -4,6 +4,8 @@ import {
 } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
+import { NS_ART_BACKUP_ID } from "../NsDoors97/filesystem/types";
 import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -38,6 +40,8 @@ export interface NsArtHandle {
 
 export interface NsArtProps {
   onBackupSaved?: () => void;
+  fileId?: string;   // FS file to persist PNG data URL to on every auto-save
+  fileUrl?: string;  // initial image URL to load when opening a sprite file
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -345,7 +349,7 @@ function FrameThumbnail({
 // ── Component ──────────────────────────────────────────────────────────────
 
 const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
-  { onBackupSaved }: NsArtProps,
+  { onBackupSaved, fileId, fileUrl }: NsArtProps,
   ref,
 ) {
   // DOM refs
@@ -381,6 +385,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [dragOverStripIdx, setDragOverStripIdx] = useState<number | null>(null);
   const [showPaletteDlg, setShowPaletteDlg] = useState(false);
   const [paletteTarget, setPaletteTarget] = useState<"primary" | "secondary" | null>(null);
+  const [spriteSaved, setSpriteSaved] = useState(false);
 
   // Animation state
   const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
@@ -422,6 +427,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const moveOffsetRef        = useRef({ x: 0, y: 0 });
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spriteSaveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
 
   // Animation refs
@@ -448,7 +454,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const containerSizeRef        = useRef({ w: 0, h: 0 });
   const renderMinimapRef        = useRef<() => void>(() => {});
 
+  const fileIdRef = useRef(fileId);
   useEffect(() => { onBackupSavedRef.current = onBackupSaved; }, [onBackupSaved]);
+  useEffect(() => { fileIdRef.current = fileId; }, [fileId]);
   useEffect(() => { currentStripRef.current  = currentStrip;  }, [currentStrip]);
   useEffect(() => { currentFrameRef.current  = currentFrame;  }, [currentFrame]);
   useEffect(() => { frameCountRef.current    = frameCount;    }, [frameCount]);
@@ -501,15 +509,41 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   useImperativeHandle(ref, () => ({
     requestClose: (proceed) => {
       if (isDirtyRef.current) {
-        setConfirmState({
-          title: "NS Art",
-          message: "Your artwork has unsaved changes.",
-          buttons: [
-            { label: "Export PNG", primary: true, onClick: () => { exportCurrentFrame(); proceed(); setConfirmState(null); } },
-            { label: "Close without saving",      onClick: () => { proceed(); setConfirmState(null); } },
-            { label: "Cancel",                    onClick: () => setConfirmState(null) },
-          ],
-        });
+        if (fileIdRef.current) {
+          // Sprite edit mode: save directly to FS file
+          setConfirmState({
+            title: "NS Art",
+            message: "Save changes to this sprite?",
+            buttons: [
+              { label: "Save", primary: true, onClick: () => {
+                const canvas = canvasRef.current;
+                if (canvas) {
+                  saveFrameRef.current();
+                  const frame = framesDataRef.current[currentStripRef.current]?.[currentFrameRef.current];
+                  if (frame) {
+                    const tmp = document.createElement("canvas");
+                    tmp.width = canvas.width; tmp.height = canvas.height;
+                    tmp.getContext("2d")!.putImageData(frame, 0, 0);
+                    fsStore.writeFile(fileIdRef.current!, tmp.toDataURL("image/png"));
+                  }
+                }
+                proceed(); setConfirmState(null);
+              }},
+              { label: "Discard changes", onClick: () => { proceed(); setConfirmState(null); } },
+              { label: "Cancel",          onClick: () => setConfirmState(null) },
+            ],
+          });
+        } else {
+          setConfirmState({
+            title: "NS Art",
+            message: "Your artwork has unsaved changes.",
+            buttons: [
+              { label: "Export PNG", primary: true, onClick: () => { exportCurrentFrame(); proceed(); setConfirmState(null); } },
+              { label: "Close without saving",      onClick: () => { proceed(); setConfirmState(null); } },
+              { label: "Cancel",                    onClick: () => setConfirmState(null) },
+            ],
+          });
+        }
       } else {
         proceed();
       }
@@ -545,11 +579,65 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     }
   }, [canvasSize]);
 
-  // ── Load backup ────────────────────────────────────────────────────────
+  // ── Load backup / sprite file ───────────────────────────────────────────
 
   useEffect(() => {
     const t = setTimeout(() => {
-      const raw = localStorage.getItem(LS_KEY);
+      if (fileId) {
+        // Sprite edit mode: load from FS file content (user's override) or bundled URL
+        const fsContent = fsStore.getFile(fileId)?.content;
+        const sourceUrl = fsContent || fileUrl;
+        if (!sourceUrl || !canvasRef.current) return;
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const w = img.naturalWidth || 64;
+          const h = img.naturalHeight || 64;
+          const tmp = document.createElement("canvas");
+          tmp.width = w; tmp.height = h;
+          const tmpCtx = tmp.getContext("2d")!;
+          tmpCtx.drawImage(img, 0, 0);
+          const imageData = tmpCtx.getImageData(0, 0, w, h);
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const pending: PendingRestore = {
+            strips: [{ name: "Sprite" }],
+            frames: [[imageData]],
+            frameCount: 1,
+            frameW: w,
+            frameH: h,
+          };
+          if (canvas.width === w && canvas.height === h) {
+            framesDataRef.current      = [[imageData]];
+            stripsRef.current          = [{ name: "Sprite" }];
+            frameCountRef.current      = 1;
+            currentStripRef.current    = 0;
+            currentFrameRef.current    = 0;
+            setStrips([{ name: "Sprite" }]);
+            setFrameCount(1);
+            setCurrentStrip(0);
+            setCurrentFrame(0);
+            canvas.getContext("2d")!.putImageData(imageData, 0, 0);
+            isDirtyRef.current = false;
+            renderOnionRef.current();
+          } else {
+            pendingRestoreRef.current = pending;
+            setCanvasSize({ w, h });
+          }
+        };
+        img.onerror = () => {};
+        img.src = sourceUrl;
+        return;
+      }
+
+      // Normal backup mode: prefer FS backup; fall back to legacy localStorage
+      const fsContent = fsStore.getFile(NS_ART_BACKUP_ID)?.content;
+      const legacy = !fsContent ? localStorage.getItem(LS_KEY) : null;
+      if (legacy) {
+        fsStore.writeFile(NS_ART_BACKUP_ID, legacy);
+        localStorage.removeItem(LS_KEY);
+      }
+      const raw = fsContent || legacy;
       if (!raw || !canvasRef.current) return;
       try {
         const backup = JSON.parse(raw);
@@ -635,8 +723,20 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         })
       );
 
+      // Save current frame as PNG data URL to the target FS file (sprite edit mode)
+      if (fileIdRef.current) {
+        const currentUrl = framesUrls[currentStripRef.current]?.[currentFrameRef.current];
+        if (currentUrl) {
+          fsStore.writeFile(fileIdRef.current, currentUrl);
+          isDirtyRef.current = false; // auto-save is complete
+          if (spriteSaveTimerRef.current) clearTimeout(spriteSaveTimerRef.current);
+          setSpriteSaved(true);
+          spriteSaveTimerRef.current = setTimeout(() => setSpriteSaved(false), 2500);
+        }
+      }
+
       try {
-        localStorage.setItem(LS_KEY, JSON.stringify({
+        fsStore.writeFile(NS_ART_BACKUP_ID, JSON.stringify({
           version: 2,
           frameW: fw,
           frameH: fh,
@@ -2017,6 +2117,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
 
         {/* Undo */}
         <button className="ns-art__bottom-undo" onClick={undo} title="Undo (Ctrl+Z)">↩</button>
+
+        {/* Sprite save status — only visible in sprite edit mode */}
+        {fileId && (
+          <span className={`ns-art__sprite-status${spriteSaved ? " ns-art__sprite-status--visible" : ""}`}>
+            ✓ Saved
+          </span>
+        )}
 
         {/* Minimap + zoom — grows to fill center */}
         <div className="ns-art__bottom-map">

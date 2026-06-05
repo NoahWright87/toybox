@@ -9,14 +9,23 @@ import "./OsDialog.css";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface DialogOptions {
+  title?: string;
+  icon?: string;
+  buttons?: string[];
+  onButton?: (btn: string) => void;
+}
+
 interface DialogState {
   title: string;
   message: string;
   icon: string;
+  buttons: string[];
+  onButton?: (btn: string) => void;
 }
 
 interface OsDialogContextValue {
-  showDialog: (message: string, opts?: { title?: string; icon?: string }) => void;
+  showDialog: (message: string, opts?: DialogOptions) => void;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -35,10 +44,17 @@ function OsDialog({
   title,
   message,
   icon,
+  buttons,
+  onButton,
   onClose,
 }: DialogState & { onClose: () => void }) {
+  function handleButton(btn: string) {
+    onButton?.(btn);
+    onClose();
+  }
+
   return (
-    <div className="ns-dialog-overlay" onClick={onClose}>
+    <div className="ns-dialog-overlay" onClick={() => handleButton(buttons[0])}>
       <div
         className="ns-dialog"
         onClick={(e) => e.stopPropagation()}
@@ -55,7 +71,7 @@ function OsDialog({
           </span>
           <button
             className="ns-dialog__titlebar-close"
-            onClick={onClose}
+            onClick={() => handleButton(buttons[0])}
             aria-label="Close"
           >
             ✕
@@ -74,9 +90,16 @@ function OsDialog({
 
         {/* Footer */}
         <div className="ns-dialog__footer">
-          <button className="ns-dialog__ok" onClick={onClose} autoFocus>
-            OK
-          </button>
+          {buttons.map((btn, i) => (
+            <button
+              key={btn}
+              className="ns-dialog__ok"
+              onClick={() => handleButton(btn)}
+              autoFocus={i === 0}
+            >
+              {btn}
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -89,11 +112,13 @@ export function OsDialogProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
 
   const showDialog = useCallback(
-    (message: string, opts?: { title?: string; icon?: string }) => {
+    (message: string, opts?: DialogOptions) => {
       setDialog({
-        title: opts?.title ?? "NS Doors 97",
+        title:    opts?.title    ?? "NS Doors 97",
         message,
-        icon: opts?.icon ?? "⚠️",
+        icon:     opts?.icon     ?? "⚠️",
+        buttons:  opts?.buttons  ?? ["OK"],
+        onButton: opts?.onButton,
       });
     },
     []
@@ -107,6 +132,8 @@ export function OsDialogProvider({ children }: { children: ReactNode }) {
           title={dialog.title}
           message={dialog.message}
           icon={dialog.icon}
+          buttons={dialog.buttons}
+          onButton={dialog.onButton}
           onClose={() => setDialog(null)}
         />
       )}

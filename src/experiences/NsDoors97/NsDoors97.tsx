@@ -27,7 +27,7 @@ import TicTacToe from "../TicTacToe/TicTacToe";
 import Pool from "../Pool/Pool";
 import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
-import SoundRecorder, { lsGetSoundNames } from "./SoundRecorder";
+import SoundRecorder from "./SoundRecorder";
 import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
@@ -45,6 +45,12 @@ import {
   getDesktopBackground,
   type DesktopSettings,
 } from "./desktopSettings";
+import { useFS } from "./filesystem/FSContext";
+import { fsStore } from "./filesystem/FileSystemStore";
+import {
+  DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
+  getNodeIcon, type FSNode,
+} from "./filesystem/types";
 import "./NsDoors97.css";
 
 // ── App registry ───────────────────────────────────────────────────────────────
@@ -65,6 +71,7 @@ type AppAction =
   | "about"
   | "internet"
   | "files"
+  | "dumpster"
   | "notebook"
   | "nsart"
   | "art-backup"
@@ -82,7 +89,8 @@ interface AppDef {
 
 const APP_REGISTRY: Record<string, AppDef> = {
   "my-doors":       { title: "My Doors",          icon: "🖥️", action: "files"         },
-  "dumpster":       { title: "Dumpster",           icon: "🗑️", action: "placeholder"   },
+  "files":          { title: "My Doors",          icon: "🖥️", action: "files"         },
+  "dumpster":       { title: "Dumpster",           icon: "🗑️", action: "dumpster"      },
   "readme":         { title: "README.txt",         icon: "📋", action: "readme"        },
   "about":          { title: "About NS Doors 97",  icon: "ℹ️",  action: "about"         },
   "internet":       { title: "Internet",           icon: "🌐", action: "internet"      },
@@ -104,73 +112,31 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "peg-solitaire":  { title: "Peg Solitaire",       icon: "🔴", action: "peg-solitaire"   },
 };
 
-// ── Desktop icon entries (subset actually shown on desktop) ───────────────────
+// ── Desktop icon helpers ───────────────────────────────────────────────────────
 
-interface DesktopIconEntry {
-  id: string;
-  title: string;
-  icon: string;
-}
+// Map app IDs to their display icons for desktop shortcuts
+const APP_ICON_MAP: Record<string, string> = {
+  "files":          "🖥️",
+  "dumpster":       "🗑️",
+  "notebook":       "📝",
+  "nsart":          "🎨",
+  "sound-recorder": "🎵",
+  "internet":       "🌐",
+  "about":          "ℹ️",
+  "screensavers":   "💤",
+  "midi-editor":    "🎹",
+};
 
-const STATIC_DESKTOP_ICONS: DesktopIconEntry[] = [
-  { id: "my-doors",  title: "My Doors",  icon: "🖥️" },
-  { id: "dumpster",  title: "Dumpster",  icon: "🗑️" },
-];
-
-const STATIC_RIGHT_ICONS: DesktopIconEntry[] = [
-  { id: "readme", title: "README.txt", icon: "📋" },
-];
-
-const DESKTOP_README = `IMPORTANT NOTE TO MYSELF
-=========================
-
-To play HELL.EXE you can NOT just
-double-click it. I know. I tried.
-It gives you a whole lecture.
-
-You have to go through the TOS
-(the scary black text screen).
-
-HOW TO DO IT (I keep forgetting):
-
-  1. Click Start
-  2. Programs
-  3. NS-TOS
-  4. Type this exactly:
-       cd Programs\\Games
-       HELL.EXE
-  5. Press Enter. That's it!!
-
-Gerald says I "should not have
-that game installed." Gerald has
-never beaten level 3. I have.
-
-DO NOT tell Gerald.
-
-                        - Noah
-
-P.S. If you get stuck in the text
-screen just type DOORS to come back.
-`;
-
-const NB_PREFIX = "ns97_notebook_";
-const README_PATH = "C:\\Desktop\\README.txt";
-
-function loadSavedNotebookIcons(): DesktopIconEntry[] {
-  const entries: DesktopIconEntry[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key || !key.startsWith(NB_PREFIX)) continue;
-    const filePath = key.slice(NB_PREFIX.length);
-    if (filePath === "(new file)" || filePath === README_PATH) continue;
-    const fileName = filePath.split(/[/\\]/).pop() || filePath;
-    entries.push({ id: `nb:${filePath}`, title: fileName, icon: "📝" });
+function desktopNodeIcon(node: FSNode): string {
+  if (node.kind === "shortcut") {
+    if (node.targetAppId) return APP_ICON_MAP[node.targetAppId] ?? "🔗";
+    if (node.targetFilePath) {
+      const target = fsStore.getNodeByPath(node.targetFilePath);
+      return target ? getNodeIcon(target) : "📄";
+    }
+    return "🔗";
   }
-  return entries;
-}
-
-function loadSavedSoundIcons(): DesktopIconEntry[] {
-  return lsGetSoundNames().map(name => ({ id: `sound:${name}`, title: name, icon: "🎵" }));
+  return getNodeIcon(node);
 }
 
 // ── Window content union ───────────────────────────────────────────────────
@@ -190,11 +156,12 @@ type WindowContent =
   | { type: "about" }
   | { type: "internet" }
   | { type: "files" }
-  | { type: "notebook"; filePath: string; fileName: string; initialContent: string }
+  | { type: "dumpster" }
+  | { type: "notebook"; fileId: string; fileName: string }
   | { type: "desktop-display" }
-  | { type: "nsart" }
+  | { type: "nsart"; fileId?: string; fileUrl?: string }
   | { type: "nsart-backup" }
-  | { type: "sound-recorder"; fileName?: string }
+  | { type: "sound-recorder"; fileName?: string; fileId?: string; fallbackUrl?: string }
   | { type: "midi-editor" }
   | { type: "chain-reaction" }
   | { type: "peg-solitaire" };
@@ -264,36 +231,39 @@ export default function NsDoors97() {
   const skipBoot = (location.state as { skipBoot?: boolean } | null)?.skipBoot === true;
   const initialShouldBoot = !skipBoot && (fromTos || shouldShowBoot());
 
-  const nsArtRef       = useRef<NsArtHandle>(null);
+  const nsArtRef = useRef<NsArtHandle>(null);
+  const store = useFS();
 
   const [showBoot, setShowBoot]             = useState(initialShouldBoot);
   const [shuttingDown, setShuttingDown]     = useState(false);
   const [desktopLoading, setDesktopLoading] = useState(false);
 
-  // Saved notebook files that appear on the desktop
-  const [savedNotebookIcons, setSavedNotebookIcons] = useState<DesktopIconEntry[]>(
-    () => loadSavedNotebookIcons()
-  );
-  const savedNotebookIconsRef = useRef(savedNotebookIcons);
-  useEffect(() => { savedNotebookIconsRef.current = savedNotebookIcons; }, [savedNotebookIcons]);
-
-  // Saved sound files that appear on the desktop
-  const [savedSoundIcons, setSavedSoundIcons] = useState<DesktopIconEntry[]>(
-    () => loadSavedSoundIcons()
-  );
-  const savedSoundIconsRef = useRef(savedSoundIcons);
-  useEffect(() => { savedSoundIconsRef.current = savedSoundIcons; }, [savedSoundIcons]);
+  // Desktop folder contents from the FS (reactive — re-reads on any FS change)
+  const desktopNodes = store.getChildren(DESKTOP_ID);
+  const leftDesktopNodes  = desktopNodes.filter((n) => n.system);
+  const rightDesktopNodes = desktopNodes.filter((n) => !n.system);
 
   // Icons start empty whenever there's a boot screen; all-visible otherwise.
   const [visibleIcons, setVisibleIcons] = useState<ReadonlySet<string>>(() => {
     if (initialShouldBoot) return new Set<string>();
-    return new Set<string>([
-      ...STATIC_DESKTOP_ICONS.map((d) => d.id),
-      ...STATIC_RIGHT_ICONS.map((d) => d.id),
-      ...loadSavedNotebookIcons().map((d) => d.id),
-      ...loadSavedSoundIcons().map((d) => d.id),
-    ]);
+    return new Set<string>(store.getChildren(DESKTOP_ID).map((n) => n.id));
   });
+
+  // When the FS changes and new desktop icons appear (after boot), make them visible
+  useEffect(() => {
+    if (!desktopLoading && !showBoot) {
+      setVisibleIcons((prev) => {
+        const allIds = store.getChildren(DESKTOP_ID).map((n) => n.id);
+        const next = new Set<string>(prev);
+        let changed = false;
+        for (const id of allIds) {
+          if (!next.has(id)) { next.add(id); changed = true; }
+        }
+        return changed ? next : prev;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopNodes, desktopLoading, showBoot]);
 
   // Called when the boot screen finishes (both initial boot and after restart)
   const handleBootComplete = useCallback(() => {
@@ -334,12 +304,7 @@ export default function NsDoors97() {
       document.body.style.cursor = "";
 
       // Phase 2 — icons pop in one by one in random order
-      const allIds = [
-        ...STATIC_DESKTOP_ICONS.map((d) => d.id),
-        ...STATIC_RIGHT_ICONS.map((d) => d.id),
-        ...savedNotebookIconsRef.current.map((d) => d.id),
-        ...savedSoundIconsRef.current.map((d) => d.id),
-      ];
+      const allIds = store.getChildren(DESKTOP_ID).map((n) => n.id);
       const shuffled = [...allIds];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -443,8 +408,8 @@ export default function NsDoors97() {
   // ── Window management ────────────────────────────────────────────────────
 
   const openNotebook = useCallback(
-    (filePath: string, fileName: string, initialContent: string) => {
-      const winId = `notebook:${filePath}`;
+    (fileId: string, fileName: string) => {
+      const winId = `notebook:${fileId}`;
       setOpenWindows((prev) => {
         if (prev.some((w) => w.id === winId)) {
           maxZ++;
@@ -461,7 +426,7 @@ export default function NsDoors97() {
             id: winId,
             title: fileName,
             icon: "📝",
-            content: { type: "notebook" as const, filePath, fileName, initialContent },
+            content: { type: "notebook" as const, fileId, fileName },
             zIndex: maxZ,
             defaultPosition: { x: 100 + offset, y: 60 + offset },
             width: 560,
@@ -474,46 +439,6 @@ export default function NsDoors97() {
   );
 
   const openWindow = useCallback((id: string) => {
-    // Sound file desktop icons use "sound:{fileName}" id format
-    if (id.startsWith("sound:")) {
-      const soundFileName = id.slice(6);
-      const winId = `sound-recorder:${soundFileName}`;
-      setOpenWindows((prev) => {
-        if (prev.some((w) => w.id === winId)) {
-          maxZ++;
-          setActiveWindowId(winId);
-          return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
-        }
-        const offset = (windowSeq % 8) * 32;
-        windowSeq++;
-        maxZ++;
-        setActiveWindowId(winId);
-        return [
-          ...prev,
-          {
-            id: winId,
-            title: soundFileName,
-            icon: "🎵",
-            content: { type: "sound-recorder" as const, fileName: soundFileName },
-            zIndex: maxZ,
-            defaultPosition: { x: 80 + offset, y: 48 + offset },
-            width: 420,
-            minimized: false,
-          },
-        ];
-      });
-      return;
-    }
-
-    // Notebook saved-file desktop icons use "nb:{filePath}" id format
-    if (id.startsWith("nb:")) {
-      const filePath = id.slice(3);
-      const fileName = filePath.split(/[/\\]/).pop() || filePath;
-      const savedContent = localStorage.getItem(`${NB_PREFIX}${filePath}`) ?? "";
-      openNotebook(filePath, fileName, savedContent);
-      return;
-    }
-
     const appDef = APP_REGISTRY[id];
     if (!appDef) return;
 
@@ -538,26 +463,35 @@ export default function NsDoors97() {
       let width: number | undefined;
 
       switch (appDef.action) {
-        case "screensavers": content = { type: "screensaver-settings" }; width = 440; break;
-        case "about":        content = { type: "about" };                width = 340; break;
-        case "internet":     content = { type: "internet" };             width = 640; break;
-        case "files":        content = { type: "files" };                width = 600; break;
-        case "notebook":     content = { type: "notebook", filePath: "(new file)", fileName: "Untitled.txt", initialContent: "" }; width = 560; break;
-        case "readme":       content = { type: "notebook", filePath: README_PATH, fileName: "README.txt", initialContent: DESKTOP_README }; width = 420; break;
-        case "nsart":        content = { type: "nsart" };                width = 760; break;
-        case "art-backup":   content = { type: "nsart-backup" };         width = 760; break;
-        case "pool":         content = { type: "pool" };                 width = 800; break;
-        case "tictactoe":    content = { type: "tictactoe" };            width = TTT_WINDOW_WIDTHS[3]; break;
-        case "nomnom":       content = { type: "nomnom" };               width = 700; break;
-        case "wordwhirlwind":content = { type: "word-whirlwind" };       width = 600; break;
-        case "words":        content = { type: "words" };                width = 440; break;
-        case "bombfinder":   content = { type: "bombfinder" };           width = BF_WINDOW_WIDTHS.beginner; break;
-        case "duckhunt":     content = { type: "duckhunt" };             width = 740; break;
-        case "cards":          content = { type: "cards-launcher" };                           width = 320; break;
-        case "sound-recorder": content = { type: "sound-recorder" as const };                  width = 420; break;
-        case "midi-editor":    content = { type: "midi-editor" as const };                     width = 860; break;
-        case "chain-reaction": content = { type: "chain-reaction" as const };                  width = 540; break;
-        case "peg-solitaire":  content = { type: "peg-solitaire" as const };                   width = 580; break;
+        case "screensavers": content = { type: "screensaver-settings" };      width = 440; break;
+        case "about":        content = { type: "about" };                     width = 340; break;
+        case "internet":     content = { type: "internet" };                  width = 640; break;
+        case "files":        content = { type: "files" };                     width = 600; break;
+        case "dumpster":     content = { type: "dumpster" };                  width = 560; break;
+        case "notebook": {
+          // Create a new file in Documents for this session
+          const newFile = fsStore.createFile(DOCUMENTS_ID, "Untitled.txt", {
+            fileType: "text", content: "",
+          });
+          content = { type: "notebook", fileId: newFile.id, fileName: "Untitled.txt" };
+          width = 560;
+          break;
+        }
+        case "readme":       openNotebook("fs:desktop-readme", "README.txt"); return prev;
+        case "nsart":        content = { type: "nsart" };                     width = 760; break;
+        case "art-backup":   content = { type: "nsart-backup" };              width = 760; break;
+        case "pool":         content = { type: "pool" };                      width = 800; break;
+        case "tictactoe":    content = { type: "tictactoe" };                 width = TTT_WINDOW_WIDTHS[3]; break;
+        case "nomnom":       content = { type: "nomnom" };                    width = 700; break;
+        case "wordwhirlwind":content = { type: "word-whirlwind" };            width = 600; break;
+        case "words":        content = { type: "words" };                     width = 440; break;
+        case "bombfinder":   content = { type: "bombfinder" };                width = BF_WINDOW_WIDTHS.beginner; break;
+        case "duckhunt":     content = { type: "duckhunt" };                  width = 740; break;
+        case "cards":          content = { type: "cards-launcher" };          width = 320; break;
+        case "sound-recorder": content = { type: "sound-recorder" as const }; width = 420; break;
+        case "midi-editor":    content = { type: "midi-editor" as const };    width = 860; break;
+        case "chain-reaction": content = { type: "chain-reaction" as const }; width = 540; break;
+        case "peg-solitaire":  content = { type: "peg-solitaire" as const };  width = 580; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -582,6 +516,142 @@ export default function NsDoors97() {
       ];
     });
   }, [showDialog, openNotebook]);
+
+  // Open any node from the virtual filesystem (desktop double-click, FilesApp, etc.)
+  const openFSNode = useCallback((nodeId: string) => {
+    const node = store.getNode(nodeId);
+    if (!node) return;
+
+    if (node.kind === "shortcut") {
+      if (node.targetAppId === "sound-recorder" && node.targetFilePath) {
+        // Open SoundRecorder with this specific saved recording
+        const winId = `sound-recorder:${node.targetFilePath}`;
+        setOpenWindows((prev) => {
+          if (prev.some((w) => w.id === winId)) {
+            maxZ++;
+            setActiveWindowId(winId);
+            return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+          }
+          const offset = (windowSeq % 8) * 32;
+          windowSeq++;
+          maxZ++;
+          setActiveWindowId(winId);
+          return [...prev, {
+            id: winId, title: node.targetFilePath!, icon: "🎵",
+            content: { type: "sound-recorder" as const, fileName: node.targetFilePath },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 420, minimized: false,
+          }];
+        });
+        return;
+      }
+      if (node.targetAppId) { openWindow(node.targetAppId); return; }
+      if (node.targetFilePath) {
+        const target = store.getNodeByPath(node.targetFilePath);
+        if (target) openFSNode(target.id);
+      }
+      return;
+    }
+
+    if (node.kind === "folder") {
+      // Open My Doors at this folder — for now just open the default files browser
+      openWindow("files");
+      return;
+    }
+
+    // File node
+    const file = node;
+    const textLike = ["text", "bat", "sys", "ini"] as const;
+    // Only open in Notebook if the file is text-like OR has content and no app to handle it.
+    // Files with appId must reach their own handler even after content has been written.
+    if ((textLike as readonly string[]).includes(file.fileType) || (!file.appId && file.content)) {
+      openNotebook(file.id, file.name);
+      return;
+    }
+    if (file.appId) {
+      if (file.appId === "tos-only") {
+        showDialog(
+          "HELL.EXE must be launched from NS-TOS.\n\nOpen NS-TOS and type:\n  cd EGO\n  HELL.EXE",
+          { title: "Cannot Run Program", icon: "⛔" }
+        );
+        return;
+      }
+      // .png sprite files in EGO/SPRITES open NS Art loaded with that sprite
+      if (file.fileType === "png" && file.appId === "nsart") {
+        const winId = `nsart:${file.id}`;
+        setOpenWindows((prev) => {
+          if (prev.some((w) => w.id === winId)) {
+            maxZ++;
+            setActiveWindowId(winId);
+            return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+          }
+          const offset = (windowSeq % 8) * 32;
+          windowSeq++;
+          maxZ++;
+          setActiveWindowId(winId);
+          return [...prev, {
+            id: winId,
+            title: `NS Art — ${file.name}`,
+            icon: "🎨",
+            content: {
+              type: "nsart" as const,
+              fileId: file.id,
+              fileUrl: `/sprites/${file.name}`,
+            },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 760, minimized: false,
+          }];
+        });
+        return;
+      }
+      // .wav files open Sound Recorder; EGO/SOUNDS files pass fileId + fallbackUrl
+      if (file.fileType === "wav" && file.appId === "sound-recorder") {
+        const filePath = fsStore.getPath(file.id);
+        const isEgoSound = filePath.toUpperCase().startsWith("C:\\EGO\\");
+        const winId = `sound-recorder:${file.id}`;
+        setOpenWindows((prev) => {
+          if (prev.some((w) => w.id === winId)) {
+            maxZ++;
+            setActiveWindowId(winId);
+            return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+          }
+          const offset = (windowSeq % 8) * 32;
+          windowSeq++;
+          maxZ++;
+          setActiveWindowId(winId);
+          return [...prev, {
+            id: winId,
+            title: isEgoSound ? `Sound Recorder — ${file.name}` : file.name,
+            icon: "🎵",
+            content: {
+              type: "sound-recorder" as const,
+              fileName: file.name,
+              ...(isEgoSound ? {
+                fileId: file.id,
+                fallbackUrl: `/sounds/${file.name}`,
+              } : {}),
+            },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 420, minimized: false,
+          }];
+        });
+        return;
+      }
+      openWindow(file.appId);
+      return;
+    }
+    const ext = file.name.split(".").pop()?.toUpperCase() ?? "";
+    if (file.fileType === "tmp") {
+      showDialog("This temporary file is damaged and cannot be opened.", { title: "Error", icon: "❌" });
+    } else if (["zip", "bmp", "png", "wav"].includes(file.fileType)) {
+      showDialog(`Cannot open .${ext} files.\nYou need an additional program to view this file type.`, { title: "Open Error", icon: "⚠️" });
+    } else {
+      showDialog(`${file.name} is not a valid NS Doors application.\n\nError code: 0xC0000034`, { title: "Program Error", icon: "❌" });
+    }
+  }, [store, openWindow, openNotebook, showDialog]);
 
   const openAbout = useCallback(() => {
     openWindow("about");
@@ -612,25 +682,31 @@ export default function NsDoors97() {
     setActiveWindowId((cur) => (cur === id ? null : cur));
   }, []);
 
-  // When Notebook saves a file, add it to the desktop if not already there
-  const handleNotebookFileSaved = useCallback((filePath: string, fileName: string) => {
-    if (filePath === "(new file)" || filePath === README_PATH) return;
-    const newId = `nb:${filePath}`;
-    setSavedNotebookIcons((prev) => {
-      if (prev.some((d) => d.id === newId)) return prev;
-      return [...prev, { id: newId, title: fileName, icon: "📝" }];
-    });
-    setVisibleIcons((prev) => new Set<string>([...prev, newId]));
+  // When Notebook saves a file, add a desktop shortcut if not already there
+  const handleNotebookFileSaved = useCallback((fileId: string, fileName: string) => {
+    const filePath = fsStore.getPath(fileId);
+    // Don't add a desktop icon for the README (it's already there)
+    if (fileId === "fs:desktop-readme") return;
+    // Check if a shortcut already exists
+    const existing = fsStore.getChildren(DESKTOP_ID).find(
+      (n) => n.kind === "shortcut" && (n as { targetFilePath?: string }).targetFilePath === filePath
+    );
+    if (!existing) {
+      fsStore.createShortcut(DESKTOP_ID, fileName, { targetFilePath: filePath });
+    }
   }, []);
 
-  // Called by SoundRecorder when a file is saved — add its icon to the desktop
+  // Called by SoundRecorder when a file is saved — add a desktop shortcut
   const handleSoundFileSaved = useCallback((name: string) => {
-    const newId = `sound:${name}`;
-    setSavedSoundIcons((prev) => {
-      if (prev.some((d) => d.id === newId)) return prev;
-      return [...prev, { id: newId, title: name, icon: "🎵" }];
-    });
-    setVisibleIcons((prev) => new Set<string>([...prev, newId]));
+    const existing = fsStore.getChildren(DESKTOP_ID).find(
+      (n) => n.kind === "shortcut" && n.name === name && (n as { targetAppId?: string }).targetAppId === "sound-recorder"
+    );
+    if (!existing) {
+      fsStore.createShortcut(DESKTOP_ID, name, {
+        targetAppId: "sound-recorder",
+        targetFilePath: name,
+      });
+    }
   }, []);
 
   // Called by TicTacToe when board size changes — resize the window
@@ -726,36 +802,36 @@ export default function NsDoors97() {
     return { background: getDesktopBackground(desktopSettings) };
   })();
 
-  const rightIcons = [...STATIC_RIGHT_ICONS, ...savedNotebookIcons, ...savedSoundIcons];
-
   return (
     <div className="ns-desktop" style={desktopStyle}>
-      {/* ── Icon grid (icons pop in one by one during boot) ── */}
+      {/* ── Left icon column: system shortcuts (My Doors, Dumpster) ── */}
       <div className="ns-desktop__icons">
-        {STATIC_DESKTOP_ICONS
-          .filter((def) => visibleIcons.has(def.id))
-          .map((def) => (
+        {leftDesktopNodes
+          .filter((n) => visibleIcons.has(n.id))
+          .map((n) => (
             <DesktopIcon
-              key={def.id}
-              id={def.id}
-              title={def.title}
-              icon={def.icon}
-              onOpen={openWindow}
+              key={n.id}
+              id={n.id}
+              title={n.name}
+              icon={desktopNodeIcon(n)}
+              onOpen={openFSNode}
             />
           ))}
       </div>
 
-      {/* ── Right-side pinned icons (README, saved notebook files) ── */}
+      {/* ── Right icon column: user files, README, saved shortcuts ── */}
       <div className="ns-desktop__icons-right">
-        {rightIcons.filter((def) => visibleIcons.has(def.id)).map((def) => (
-          <DesktopIcon
-            key={def.id}
-            id={def.id}
-            title={def.title}
-            icon={def.icon}
-            onOpen={openWindow as (id: string) => void}
-          />
-        ))}
+        {rightDesktopNodes
+          .filter((n) => visibleIcons.has(n.id))
+          .map((n) => (
+            <DesktopIcon
+              key={n.id}
+              id={n.id}
+              title={n.name}
+              icon={desktopNodeIcon(n)}
+              onOpen={openFSNode}
+            />
+          ))}
       </div>
 
       {/* ── Branding watermark ── */}
@@ -807,7 +883,12 @@ export default function NsDoors97() {
             />
           )}
           {win.content.type === "nsart" && (
-            <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
+            <NsArt
+              ref={nsArtRef}
+              onBackupSaved={() => {}}
+              fileId={win.content.fileId}
+              fileUrl={win.content.fileUrl}
+            />
           )}
           {win.content.type === "nsart-backup" && (
             <NsArt ref={nsArtRef} onBackupSaved={() => {}} />
@@ -873,20 +954,32 @@ export default function NsDoors97() {
             <FilesApp
               onOpenApp={openWindow}
               onOpenNotebook={openNotebook}
+              onOpenFSNode={openFSNode}
+              onQuit={() => closeWindow(win.id)}
+            />
+          )}
+          {win.content.type === "dumpster" && (
+            <FilesApp
+              startFolderId={DUMPSTER_ID}
+              isDumpster={true}
+              onOpenApp={openWindow}
+              onOpenNotebook={openNotebook}
+              onOpenFSNode={openFSNode}
               onQuit={() => closeWindow(win.id)}
             />
           )}
           {win.content.type === "notebook" && (
             <NotebookApp
-              filePath={win.content.filePath}
+              fileId={win.content.fileId}
               fileName={win.content.fileName}
-              initialContent={win.content.initialContent}
               onFileSaved={handleNotebookFileSaved}
             />
           )}
           {win.content.type === "sound-recorder" && (
             <SoundRecorder
               fileName={win.content.fileName}
+              fileId={win.content.fileId}
+              fallbackUrl={win.content.fallbackUrl}
               onQuit={() => closeWindow(win.id)}
               onFileSaved={handleSoundFileSaved}
             />

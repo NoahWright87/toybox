@@ -1,0 +1,486 @@
+import type { FileSystemStore } from "./FileSystemStore";
+import {
+  ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
+  PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
+  NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
+} from "./types";
+
+// ── Text content (preserved from original fileSystem.ts) ─────────────────────
+
+const README = `WELCOME TO NS DOORS 97
+======================
+Thank you for purchasing NS Doors 97 by Noahsoft Corporation.
+
+SYSTEM REQUIREMENTS:
+  - 486 DX2 66 MHz or faster
+  - 8 MB RAM (16 MB recommended)
+  - 200 MB free disk space
+  - VGA or better display (640x480, 256 colors)
+
+GETTING STARTED:
+Double-click any icon on the desktop to launch a program.
+Right-click for options (coming soon in NS Doors 98!).
+
+SUPPORT:
+Call 1-800-NOAHSOFT between 9AM-5PM EST, Mon-Fri.
+Long distance charges may apply.
+
+(c) 1997 Noahsoft Corporation. All rights reserved.
+Unauthorized duplication is prohibited by law.
+`;
+
+const DESKTOP_README = `IMPORTANT NOTE TO MYSELF
+=========================
+
+To play HELL.EXE you can NOT just
+double-click it. I know. I tried.
+It gives you a whole lecture.
+
+You have to go through the TOS
+(the scary black text screen).
+
+HOW TO DO IT (I keep forgetting):
+
+  1. Click Start
+  2. Programs
+  3. NS-TOS
+  4. Type this exactly:
+       cd EGO
+       HELL.EXE
+  5. Press Enter. That's it!!
+
+Gerald says I "should not have
+that game installed." Gerald has
+never beaten level 3. I have.
+
+DO NOT tell Gerald.
+
+                        - Noah
+
+P.S. If you get stuck in the text
+screen just type DOORS to come back.
+`;
+
+const LETTER_MOM = `October 14, 1997
+
+Dear Mom,
+
+I finally got the computer set up! It only took three days and
+I only called tech support twice. The man named Gerald was very
+patient with me about the CD-ROM situation.
+
+NS Doors 97 is really something. You should see the screensaver.
+It looks like actual stars flying at you. I nearly fell out of
+my chair the first time it came on.
+
+Dad keeps wanting to use it to look up fishing lures on the
+internet. I told him the internet costs by the minute so he
+needs to be quick about it.
+
+Can you send the recipe for that casserole? I'll type it up
+and keep it on the computer. Very modern.
+
+Love,
+Noah
+
+P.S. Tell Dad the fishing lure website is probably on America
+Online. We got a free disc in the mail.
+`;
+
+const TODO = `TODO LIST - Updated 10/22/1997
+================================
+[x] Figure out how to print (call Gerald again)
+[x] Set up the screensaver
+[ ] Learn how to make a spreadsheet
+[ ] Get Dad's fishing lure website bookmarked
+[ ] Find out what a "cookie" is (the computer kind)
+[ ] Back up important files to floppy disk
+[ ] Ask about that Y2K thing everyone's talking about
+[ ] DEFRAG the hard drive (Gerald said every month)
+[ ] Write letter to Grandma on the computer
+[ ] Make a family budget spreadsheet (in progress - see Budget97.txt)
+[ ] Find Minesweeper tips on the internet
+`;
+
+const BUDGET = `FAMILY BUDGET - FISCAL YEAR 1997
+==================================
+
+INCOME:
+  Noah's salary:          $2,400 / mo
+  Side work (odd jobs):     $150 / mo
+  TOTAL INCOME:           $2,550 / mo
+
+EXPENSES:
+  Rent:                     $650 / mo
+  Groceries:                $280 / mo
+  Car payment:              $215 / mo
+  Car insurance:             $94 / mo
+  Phone (long distance!):    $67 / mo   <- call Mom less (sorry Mom)
+  Electric:                  $58 / mo
+  Internet dial-up (AOL):    $21.95 / mo
+  Cable TV:                  $35 / mo
+  Misc / fun money:         $100 / mo
+  TOTAL EXPENSES:         $1,520.95 / mo
+
+SAVINGS:                  $1,029.05 / mo
+
+NOTES:
+- Remember internet is PER MINUTE after first 10 hours!
+  DO NOT leave AOL connected and walk away again.
+- Christmas gifts budget: $200 total (stick to it this year)
+- Computer cost $1,899 — paid off by February at this rate
+`;
+
+const DIARY = `PERSONAL DIARY - DO NOT READ - SERIOUSLY
+=========================================
+
+Sept 3, 1997
+Got the computer today. It's enormous. Had to rearrange the whole
+desk. The monitor alone weighs as much as a small child.
+
+Sept 5, 1997
+Finally got it to turn on properly. The startup sound scared
+the cat. She hasn't come back in the room since.
+
+Sept 8, 1997
+Found a website with jokes. Printed 47 of them. Ink cartridge
+now empty. This is going to be an expensive hobby.
+
+Sept 19, 1997
+Played Solitaire for 3 hours. The computer is supposed to make
+me more productive.
+
+Oct 2, 1997
+Got NS Doors 97 upgrade disc in the mail. Took all day to install.
+Gerald at tech support says I am his "most interesting caller."
+I'm not sure that's a compliment.
+
+Oct 14, 1997
+Wrote a letter to Mom. On the COMPUTER. Didn't even need to
+use white-out. This changes everything.
+
+Oct 22, 1997
+Figured out what a browser is. The internet is just full of
+people arguing about Star Trek and selling used cars.
+I feel prepared for the future.
+`;
+
+const CONFIG_SYS = `@REM NS DOORS 97 SYSTEM CONFIGURATION
+@REM Generated by NS Doors 97 Setup - DO NOT EDIT
+
+DEVICE=C:\\SYSTEM\\DRIVERS\\HIMEM.SYS
+DEVICE=C:\\SYSTEM\\DRIVERS\\EMM386.EXE NOEMS
+BUFFERS=40,0
+FILES=85
+LASTDRIVE=Z
+FCBS=4,0
+DOS=HIGH,UMB
+STACKS=9,256
+SHELL=C:\\SYSTEM\\COMMAND.COM /P /E:2048
+`;
+
+const AUTOEXEC = `@ECHO OFF
+PROMPT $P$G
+PATH C:\\SYSTEM;C:\\PROGRAMS;C:\\PROGRAMS\\ACCESSORIES
+SET TEMP=C:\\SYSTEM\\TEMP
+SET TMP=C:\\SYSTEM\\TEMP
+SET BLASTER=A220 I5 D1 H5 P330 T6
+SMARTDRV /X
+MODE CON RATE=32 DELAY=1
+@REM Uncomment below to load mouse driver
+@REM C:\\SYSTEM\\DRIVERS\\MOUSE.COM /Y
+ECHO Welcome to NS Doors 97.
+`;
+
+const DOORS_INI = `; doors.ini — Noahsoft configuration placeholder
+; Future home of user preferences, registered app associations,
+; and other settings too important to put in system.ini but
+; too silly not to customize.
+;
+; "A mind is like a computer: it works best when you clear the cache." — Gerald
+;
+; Coming in NS Doors 98:
+;   [FavoriteJokes]   JokeCount=0
+;   [WallpaperMood]   Monday=sad  Friday=happy
+;   [Gerald]          CalledToday=no
+`;
+
+const SYSTEM_INI = `[boot]
+shell=nsdoors.exe
+mouse.drv=C:\\SYSTEM\\DRIVERS\\mouse.drv
+display.drv=C:\\SYSTEM\\DRIVERS\\svga256.drv
+sound.drv=C:\\SYSTEM\\DRIVERS\\sound.drv
+comm.drv=C:\\SYSTEM\\DRIVERS\\comm.drv
+
+[386Enh]
+woafont=dosapp.fon
+EGA80WOA.FON=EGA80WOA.FON
+MinTimeSlice=20
+WinTimeSlice=100,50
+mouse=*vmouse
+keyboard=*vkd
+MaxBPs=768
+
+[Desktop]
+; Background: noahsoft, solid, or wallpaper
+Background=solid
+; Color used when Background=solid
+Color=#cc4400
+; Wallpaper preset: sunset, arch, or (None)
+Wallpaper=(None)
+; WallpaperFit: cover or contain
+WallpaperFit=cover
+
+[Screen]
+; ScreenSaverActive: 0=off, 1=on
+ScreenSaverActive=0
+; ScreenSaverTimeout in minutes (0=disabled)
+ScreenSaverTimeout=1
+; ScreenSaver: starfield, fireworks, bouncing-shapes, scrolling-text,
+;              bouncing-polygons, raining-emojis, or (None)
+ScreenSaver=(None)
+`;
+
+const HELL_README = `HELL v0.3 — SHAREWARE
+======================
+© 1994 Ego Software Inc.
+1-800-HELL-EGO  |  BBS: 614-555-0139
+
+SYSTEM REQUIREMENTS:
+  486 DX2/66 or faster
+  4 MB RAM (8 MB recommended)
+  VGA 320x200, 256 colors
+  Sound Blaster or compatible
+
+IMPORTANT: Must be launched from NS-TOS.
+  Type HELL.EXE at the C: prompt.
+  Double-clicking will NOT work.
+
+CONTROLS:
+  Arrow keys or WASD — Move / Turn
+  Space or Left Mouse — Fire
+  M                  — Toggle map
+  Shift              — Sprint
+  F1 / ?             — Help
+  Esc                — Return to title
+
+TO REGISTER THE FULL GAME ($29.99):
+  Call 1-800-HELL-EGO or mail check/MO to:
+  Ego Software Inc.
+  PO Box 1994, Columbus OH 43215
+
+Registration includes Episodes 2 and 3,
+cheat codes, and an Ego Software sticker.
+
+WARNING: HELL contains extreme violence
+and demonic imagery. Not for children.
+Ego Software is not responsible for
+nightmares or sinful thoughts.
+`;
+
+const RECYCLE_DRAFT = `Draft letter - never sent
+
+June 3, 1997
+
+To whom it may concern at Noahsoft Corporation,
+
+I am writing to express my frustration with NS Doors 95.
+The hourglass cursor appears for no reason. My files rearrange
+themselves. The computer told me I performed an "illegal operation"
+and I have done nothing of the sort.
+
+I demand to speak with someone in charge.
+
+Sincerely,
+A Very Patient Customer
+
+---
+[NOTE TO SELF: Don't send this. Gerald has been very nice.
+And NS Doors 97 is actually pretty good. Delete this.]
+`;
+
+// ── Seed function ─────────────────────────────────────────────────────────────
+
+export function seedFileSystem(store: FileSystemStore): void {
+  // Root
+  store.createFolder(null, "C:\\", { id: ROOT_ID, system: true });
+
+  // ── Desktop ──────────────────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "Desktop", { id: DESKTOP_ID });
+  store.createShortcut(DESKTOP_ID, "My Doors",  { targetAppId: "files",    system: true, id: "fs:sc-mydoors" });
+  store.createShortcut(DESKTOP_ID, "Dumpster",  { targetAppId: "dumpster", system: true, id: "fs:sc-dumpster" });
+  store.createFile(DESKTOP_ID, "README.txt", {
+    fileType: "text",
+    content: DESKTOP_README,
+    id: "fs:desktop-readme",
+  });
+
+  // ── Documents ─────────────────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "Documents", { id: DOCUMENTS_ID });
+  store.createFile(DOCUMENTS_ID, "readme.txt",         { fileType: "text", content: README        });
+  store.createFile(DOCUMENTS_ID, "Letter to Mom.txt",  { fileType: "text", content: LETTER_MOM    });
+  store.createFile(DOCUMENTS_ID, "Todo.txt",           { fileType: "text", content: TODO          });
+  store.createFile(DOCUMENTS_ID, "Budget 1997.txt",    { fileType: "text", content: BUDGET        });
+  store.createFile(DOCUMENTS_ID, "Secret Diary.txt",   { fileType: "text", content: DIARY         });
+
+  // ── Programs ──────────────────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "Programs", { id: PROGRAMS_ID });
+
+  // Programs > Games (each game gets its own folder)
+  store.createFolder(PROGRAMS_ID, "Games", { id: GAMES_ID });
+
+  const hellDir = store.createFolder(GAMES_ID, "HELL");
+  store.createFile(hellDir.id, "HELL.EXE",   { fileType: "exe", appId: "tos-only" });
+  store.createFile(hellDir.id, "README.TXT", { fileType: "text", content: HELL_README, readonly: true });
+
+  const tttDir = store.createFolder(GAMES_ID, "Tic-Tac-Toe");
+  store.createFile(tttDir.id, "Tic-Tac-Toe.exe", { fileType: "exe", appId: "tictactoe" });
+  store.createFile(tttDir.id, "SCORES.DAT",       { fileType: "dat", content: "" });
+
+  const wwDir = store.createFolder(GAMES_ID, "Word Whirlwind");
+  store.createFile(wwDir.id, "Word Whirlwind.exe", { fileType: "exe", appId: "wordwhirlwind" });
+  store.createFile(wwDir.id, "SCORES.DAT",         { fileType: "dat", content: "" });
+
+  const crDir = store.createFolder(GAMES_ID, "Chain Reaction");
+  store.createFile(crDir.id, "Chain Reaction.exe", { fileType: "exe", appId: "chain-reaction" });
+  store.createFile(crDir.id, "SCORES.DAT",         { fileType: "dat", content: "" });
+
+  const nmDir = store.createFolder(GAMES_ID, "Number Muncher");
+  store.createFile(nmDir.id, "Number Muncher.exe", { fileType: "exe", appId: "nomnom" });
+  store.createFile(nmDir.id, "SCORES.DAT",         { fileType: "dat", content: "" });
+
+  const cardsDir = store.createFolder(GAMES_ID, "Cards");
+  store.createFile(cardsDir.id, "Cards.exe", { fileType: "exe", appId: "cards" });
+
+  const poolDir = store.createFolder(GAMES_ID, "8-Ball Pool");
+  store.createFile(poolDir.id, "Pool.exe", { fileType: "exe", appId: "pool" });
+
+  const dhDir = store.createFolder(GAMES_ID, "Duck & Learn");
+  store.createFile(dhDir.id, "Duck & Learn.exe", { fileType: "exe", appId: "duckhunt" });
+  store.createFile(dhDir.id, "SCORES.DAT",       { fileType: "dat", content: "", id: DH_SCORES_ID });
+
+  const bfDir = store.createFolder(GAMES_ID, "Bomb Finder");
+  store.createFile(bfDir.id, "Bomb Finder.exe", { fileType: "exe", appId: "bombfinder" });
+
+  const wordsDir = store.createFolder(GAMES_ID, "WORDS");
+  store.createFile(wordsDir.id, "WORDS.exe",  { fileType: "exe", appId: "words" });
+  store.createFile(wordsDir.id, "SCORES.DAT", { fileType: "dat", content: "" });
+
+  const pegDir = store.createFolder(GAMES_ID, "Peg Solitaire");
+  store.createFile(pegDir.id, "Peg Solitaire.exe", { fileType: "exe", appId: "peg-solitaire" });
+
+  const trDir = store.createFolder(GAMES_ID, "Typing Racer");
+  store.createFile(trDir.id, "Typing Racer.exe", { fileType: "exe", appId: "typing-racer" });
+  store.createFile(trDir.id, "SCORES.DAT",       { fileType: "dat", content: "", id: TR_SCORES_ID });
+
+  // Stub / unimplemented games (no appId — opens "not a valid NS Doors application")
+  store.createFile(GAMES_ID, "Solitaire.exe",   { fileType: "exe" });
+  store.createFile(GAMES_ID, "Minesweeper.exe", { fileType: "exe" });
+  store.createFile(GAMES_ID, "SkiFree.exe",     { fileType: "exe" });
+
+  // Programs > Accessories
+  store.createFolder(PROGRAMS_ID, "Accessories", { id: ACC_ID });
+
+  const notebookDir = store.createFolder(ACC_ID, "Notebook");
+  store.createFile(notebookDir.id, "Notebook.exe", { fileType: "exe", appId: "notebook" });
+
+  const nsartDir = store.createFolder(ACC_ID, "NS Art");
+  store.createFile(nsartDir.id, "NS Art.exe", { fileType: "exe", appId: "nsart" });
+  store.createFile(nsartDir.id, "Untitled.nsart", { id: NS_ART_BACKUP_ID, fileType: "dat", appId: "nsart" });
+
+  const soundDir = store.createFolder(ACC_ID, "Sound Recorder");
+  store.createFile(soundDir.id, "Sound Recorder.exe", { fileType: "exe", appId: "sound-recorder" });
+
+  const midiDir = store.createFolder(ACC_ID, "MIDI Editor");
+  store.createFile(midiDir.id, "MIDI Editor.exe", { fileType: "exe", appId: "midi-editor" });
+
+  // Programs > Internet
+  const internetDir = store.createFolder(PROGRAMS_ID, "Internet");
+  store.createFile(internetDir.id, "Internet Explorer.exe",  { fileType: "exe", appId: "internet" });
+  store.createFile(internetDir.id, "Netscape Navigator.exe", { fileType: "exe" });
+  store.createFile(internetDir.id, "WinZip.exe",             { fileType: "exe" });
+
+  // Programs > Screensavers
+  const ssDir = store.createFolder(PROGRAMS_ID, "Screensavers");
+  store.createFile(ssDir.id, "Starfield.scr",       { fileType: "scr", appId: "screensavers" });
+  store.createFile(ssDir.id, "Fireworks.scr",       { fileType: "scr", appId: "screensavers" });
+  store.createFile(ssDir.id, "Bouncing Shapes.scr", { fileType: "scr", appId: "screensavers" });
+  store.createFile(ssDir.id, "Flying Toasters.scr", { fileType: "scr" });
+
+  // ── System ────────────────────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "System", { id: SYSTEM_ID });
+  store.createFile(SYSTEM_ID, "config.sys",   { fileType: "sys", content: CONFIG_SYS, readonly: true });
+  store.createFile(SYSTEM_ID, "autoexec.bat", { fileType: "bat", content: AUTOEXEC,   readonly: true });
+  store.createFile(SYSTEM_ID, "doors.ini",    { fileType: "ini", content: DOORS_INI });
+  store.createFile(SYSTEM_ID, "system.ini",   { id: SYSTEM_INI_ID, fileType: "ini", content: SYSTEM_INI });
+
+  const driversDir = store.createFolder(SYSTEM_ID, "Drivers");
+  store.createFile(driversDir.id, "mouse.drv",   { fileType: "drv" });
+  store.createFile(driversDir.id, "display.drv", { fileType: "drv" });
+  store.createFile(driversDir.id, "sound.drv",   { fileType: "drv" });
+  store.createFile(driversDir.id, "comm.drv",    { fileType: "drv" });
+
+  const tempDir = store.createFolder(SYSTEM_ID, "Temp");
+  store.createFile(tempDir.id, "~tmp0001.tmp", { fileType: "tmp" });
+  store.createFile(tempDir.id, "~tmp0002.tmp", { fileType: "tmp" });
+  store.createFile(tempDir.id, "~tmp0087.tmp", { fileType: "tmp" });
+
+  // ── Downloads ─────────────────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "Downloads", { id: DOWNLOADS_ID });
+  store.createFile(DOWNLOADS_ID, "netscape_40_setup.exe",    { fileType: "exe" });
+  store.createFile(DOWNLOADS_ID, "clipart_pack_vol2.zip",    { fileType: "zip" });
+  store.createFile(DOWNLOADS_ID, "cool_space_wallpaper.bmp", { fileType: "bmp" });
+  store.createFile(DOWNLOADS_ID, "AUTORUN.INF",              { fileType: "ini" });
+
+  // ── EGO ───────────────────────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "EGO", { id: EGO_ID });
+  store.createFile(EGO_ID, "HELL.EXE",    { fileType: "exe",  appId: "tos-only" });
+  store.createFile(EGO_ID, "README.TXT",  { fileType: "text", content: HELL_README, readonly: true });
+  store.createFile(EGO_ID, "INSTALL.BAT", {
+    fileType: "bat",
+    content: "@ECHO OFF\nECHO HELL is already installed.\nECHO Launch NS-TOS and type HELL.EXE to play.\n",
+    readonly: true,
+  });
+
+  const spritesDir = store.createFolder(EGO_ID, "SPRITES");
+  const spriteNames = [
+    "enemy-0.png", "enemy-1.png", "enemy-2.png", "enemy-dead.png",
+    "gun-pistol.png", "gun-claws.png", "gun-flamethrower.png",
+    "gun-subwoofer.png", "gun-woofer.png", "gun-tennis.png",
+    "key-red.png", "key-blue.png", "key-green.png",
+    "key-orange.png", "key-purple.png", "key-yellow.png",
+    "pickup-health.png", "pickup-ammo.png", "pickup-fuel.png",
+    "pickup-bullets.png", "pickup-balls.png",
+    "pickup-weapon-woofer.png", "pickup-weapon-tennis.png", "pickup-weapon-flamethrower.png",
+    "flame-particle.png", "projectile-tennis.png",
+    "impact-wall.png", "impact-enemy.png",
+    "target-dummy.png", "target-dummy-dead.png",
+    "wall-rock.png", "wall-lava.png",
+  ];
+  for (const name of spriteNames) {
+    store.createFile(spritesDir.id, name, { fileType: "png", appId: "nsart" });
+  }
+
+  const soundsDir = store.createFolder(EGO_ID, "SOUNDS");
+  const soundNames = [
+    "intro.wav", "shoot.wav", "hit-wall.wav", "hit-enemy.wav",
+    "hurt.wav", "death.wav", "level-complete.wav",
+    "pickup.wav", "pickup-weapon.wav", "weapon-switch.wav",
+    "alert.wav", "door-open.wav",
+    "shoot-subwoofer.wav", "shoot-woofer.wav", "swipe-claws.wav", "hit-claws.wav",
+    "shoot-tennis.wav", "bounce-tennis.wav",
+    "shoot-flamethrower.wav", "burning.wav",
+  ];
+  for (const name of soundNames) {
+    store.createFile(soundsDir.id, name, { fileType: "wav", appId: "sound-recorder" });
+  }
+
+  // ── Recycle Bin (Dumpster) ────────────────────────────────────────────────
+  store.createFolder(ROOT_ID, "Recycle Bin", { id: DUMPSTER_ID, system: true });
+  store.createFile(DUMPSTER_ID, "old_draft.txt",       { fileType: "text", content: RECYCLE_DRAFT });
+  store.createFile(DUMPSTER_ID, "budget_old_1996.txt", {
+    fileType: "text",
+    content: "1996 budget - SUPERSEDED\n\nSee Budget 1997.txt for current version.\n",
+  });
+  store.createFile(DUMPSTER_ID, "ns95_uninstall.exe",  { fileType: "exe" });
+}

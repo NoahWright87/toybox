@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import "./SoundRecorder.css";
+
+// Find Sound Recorder's FS folder by its known path
+function getSoundDirId(): string | undefined {
+  const node = fsStore.getNodeByPath("C:\\Programs\\Accessories\\Sound Recorder");
+  return node?.kind === "folder" ? node.id : undefined;
+}
 
 // ── IndexedDB helpers ──────────────────────────────────────────────────────────
 
@@ -82,22 +89,6 @@ function draftTimestamp(): string {
   if (!raw) return "unknown time";
   const d = new Date(parseInt(raw, 10));
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-// ── localStorage: saved sound file names (for desktop icons) ──────────────────
-
-const LS_SOUNDS = "ns97_sound_names";
-
-export function lsGetSoundNames(): string[] {
-  try { return JSON.parse(localStorage.getItem(LS_SOUNDS) ?? "[]") as string[]; }
-  catch { return []; }
-}
-
-function lsAddSoundName(name: string): void {
-  const names = lsGetSoundNames();
-  if (!names.includes(name)) {
-    localStorage.setItem(LS_SOUNDS, JSON.stringify([...names, name]));
-  }
 }
 
 // ── WAV export: 8-bit, 8 kHz, mono (authentic lo-fi) ─────────────────────────
@@ -210,12 +201,16 @@ function fmtTime(samplePos: number, sr: number): string {
 
 export interface SoundRecorderProps {
   fileName?: string;
+  fileId?: string;       // FS file to write WAV data URL to when saving (for EGO/SOUNDS)
+  fallbackUrl?: string;  // fetch from here if IDB has no audio (for bundled game sounds)
   onQuit?: () => void;
   onFileSaved?: (name: string) => void;
 }
 
 export default function SoundRecorder({
   fileName: initFileName,
+  fileId: initFileId,
+  fallbackUrl: initFallbackUrl,
   onQuit,
   onFileSaved,
 }: SoundRecorderProps = {}) {
@@ -248,6 +243,7 @@ export default function SoundRecorder({
   const fwdTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const fileNameRef    = useRef<string>(initFileName ?? "Untitled.wav");
+  const fileIdRef      = useRef<string | undefined>(initFileId);
 
   // ── React state (only for UI rendering) ──────────────────────────────────
   const [isPlaying,   setIsPlaying]   = useState(false);
@@ -402,14 +398,37 @@ export default function SoundRecorder({
 
   useEffect(() => {
     if (initFileName) {
-      // Opening a saved file — load it directly, ignore any draft
+      // Opening a saved file — try IDB first, then fall back to bundled URL
       idbLoad(initFileName).then(result => {
-        if (!result) return;
-        samplesRef.current = result.samples;
-        srRef.current = result.sr;
-        playheadRef.current = 0;
-        setHasSamples(true);
-        setStatusMsg("File loaded");
+        if (result) {
+          samplesRef.current = result.samples;
+          srRef.current = result.sr;
+          playheadRef.current = 0;
+          setHasSamples(true);
+          setStatusMsg("File loaded");
+        } else if (initFallbackUrl) {
+          // Not in IDB yet — load from the bundled game asset
+          fetch(initFallbackUrl)
+            .then(r => r.arrayBuffer())
+            .then(buf => ensureCtx().decodeAudioData(buf))
+            .then(decoded => {
+              const mono = new Float32Array(decoded.length);
+              for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+                const d = decoded.getChannelData(ch);
+                for (let i = 0; i < decoded.length; i++) mono[i] += d[i];
+              }
+              if (decoded.numberOfChannels > 1) {
+                for (let i = 0; i < mono.length; i++) mono[i] /= decoded.numberOfChannels;
+              }
+              samplesRef.current = mono;
+              srRef.current = decoded.sampleRate;
+              playheadRef.current = 0;
+              setHasSamples(true);
+              setStatusMsg("File loaded");
+              drawCanvas();
+            })
+            .catch(() => setStatusMsg("Could not load file"));
+        }
       }).catch(() => setStatusMsg("Could not load file"));
     } else {
       // Fresh session — check for an auto-saved draft
@@ -590,10 +609,21 @@ export default function SoundRecorder({
   }
 
   function handleOpenFile() {
-    idbListNames().then(names => {
-      setOpenDlgFiles(names);
+    const soundDirId = getSoundDirId();
+    if (soundDirId) {
+      // List .wav files registered in the FS
+      const wavNames = fsStore.getChildren(soundDirId)
+        .filter((n) => n.kind === "file" && (n as { fileType: string }).fileType === "wav")
+        .map((n) => n.name);
+      setOpenDlgFiles(wavNames);
       setShowOpenDlg(true);
-    }).catch(() => setStatusMsg("Error reading saved files"));
+    } else {
+      // Fallback: query IDB directly (no FS folder found)
+      idbListNames().then(names => {
+        setOpenDlgFiles(names.filter(n => !n.startsWith("__")));
+        setShowOpenDlg(true);
+      }).catch(() => setStatusMsg("Error reading saved files"));
+    }
   }
 
   function handleOpenFileSelect(name: string) {
@@ -660,13 +690,30 @@ export default function SoundRecorder({
     const saveName = name.endsWith(".wav") ? name : `${name}.wav`;
     setShowSaveDlg(false);
     idbSave(saveName, samplesRef.current, srRef.current).then(() => {
-      lsAddSoundName(saveName);
-      setFileName(saveName);
-      fileNameRef.current = saveName;
-      setStatusMsg("Saved");
-      onFileSaved?.(saveName);
-      downloadWav(encodeWav(samplesRef.current, srRef.current), saveName);
-      clearDraft().catch(() => {});
+      if (fileIdRef.current) {
+        // Saving a game asset override — write WAV data URL to the FS file
+        const wavBuf = encodeWav(samplesRef.current, srRef.current);
+        const uint8 = new Uint8Array(wavBuf);
+        let binary = "";
+        for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+        fsStore.writeFile(fileIdRef.current, `data:audio/wav;base64,${btoa(binary)}`);
+        setFileName(saveName);
+        fileNameRef.current = saveName;
+        setStatusMsg("Saved to system");
+        clearDraft().catch(() => {});
+      } else {
+        // Normal save to Sound Recorder library
+        const soundDirId = getSoundDirId();
+        if (soundDirId) {
+          fsStore.ensureFile(soundDirId, saveName, { fileType: "wav", appId: "sound-recorder" });
+        }
+        setFileName(saveName);
+        fileNameRef.current = saveName;
+        setStatusMsg("Saved");
+        onFileSaved?.(saveName);
+        downloadWav(encodeWav(samplesRef.current, srRef.current), saveName);
+        clearDraft().catch(() => {});
+      }
     }).catch(() => setStatusMsg("Error saving"));
   }
 
