@@ -121,7 +121,13 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
   const [playerHand,    setPlayerHand]    = useState<Card[]>([]);
   const [dealerHand,    setDealerHand]    = useState<Card[]>([]);
   const [holeRevealed,  setHoleRevealed]  = useState(false);
-  const [chips,         setChips]         = useState(STARTING_CHIPS);
+  const [chips,         setChips]         = useState<number>(() => {
+    try {
+      const v = parseInt(localStorage.getItem("cards-bj-chips") ?? "", 10);
+      if (!isNaN(v) && v > 0) return v;
+    } catch {}
+    return STARTING_CHIPS;
+  });
   const [bet,           setBet]           = useState(10);
   const [outcome,       setOutcome]       = useState<Outcome | null>(null);
   const [chipDelta,     setChipDelta]     = useState(0);
@@ -148,6 +154,10 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
   }, []);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
+
+  useEffect(() => {
+    try { localStorage.setItem("cards-bj-chips", String(chips)); } catch {}
+  }, [chips]);
 
   // ── Layout helper ─────────────────────────────────────────────────────────
 

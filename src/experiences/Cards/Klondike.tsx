@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import "./Cards.css";
 import "./Klondike.css";
 import { PermCard } from "./PermCard";
@@ -28,6 +28,27 @@ const COL_X: number[] = (() => {
 })();
 
 const Z_DRAG = 9000;
+const KLONDIKE_SAVE_KEY = "cards-klondike-save";
+
+// ── Persistence helpers ───────────────────────────────────────────────────────
+
+interface SnapshotEntry { id: string; suit: string; rank: string; faceDown: boolean; }
+interface KlondikeSnapshot {
+  version: number;
+  moves: number;
+  tableau: SnapshotEntry[][];
+  foundations: SnapshotEntry[][];
+  stock: SnapshotEntry[];
+  waste: SnapshotEntry[];
+}
+
+function snapshotStack(stack: CardStack): SnapshotEntry[] {
+  const lays = stack.layout(0);
+  return stack.cards.map(c => ({
+    id: c.id, suit: c.suit as string, rank: c.rank as string,
+    faceDown: lays[c.id]?.faceDown ?? false,
+  }));
+}
 
 // ── Game logic helpers ────────────────────────────────────────────────────────
 
@@ -190,6 +211,66 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
     return result;
   }
 
+  // ── restoreKlondike ────────────────────────────────────────────────────────
+
+  function restoreKlondike(snap: KlondikeSnapshot): void {
+    clearTimers();
+    stopTimer();
+    setElapsed(0);
+    startTimeRef.current = null;
+    setSelectedRun([]);
+    setMoves(snap.moves ?? 0);
+    setAutoComplete(false);
+
+    const seen = new Set<string>();
+    const allC: Card[] = [];
+    const collect = (entries: SnapshotEntry[]) => {
+      for (const e of entries) {
+        if (!seen.has(e.id)) {
+          seen.add(e.id);
+          allC.push({ id: e.id, suit: e.suit as Suit, rank: e.rank as Rank });
+        }
+      }
+    };
+    snap.tableau.forEach(col => collect(col));
+    collect(snap.stock);
+    collect(snap.waste);
+    snap.foundations.forEach(f => collect(f));
+
+    const byId = new Map(allC.map(c => [c.id, c]));
+
+    for (const t of tableau.current)     t.clear();
+    for (const f of foundations.current) f.clear();
+    stockStack.current.clear();
+    wasteStack.current.clear();
+
+    snap.tableau.forEach((col, i) => {
+      for (const e of col) {
+        const c = byId.get(e.id); if (!c) continue;
+        tableau.current[i].addCard(c, { toTop: true, faceDown: e.faceDown });
+      }
+    });
+    snap.foundations.forEach((fi, i) => {
+      for (const e of fi) {
+        const c = byId.get(e.id); if (!c) continue;
+        foundations.current[i].addCard(c, { toTop: true, faceDown: false });
+      }
+    });
+    for (const e of snap.stock) {
+      const c = byId.get(e.id); if (!c) continue;
+      stockStack.current.addCard(c, { toTop: true, faceDown: true });
+    }
+    for (const e of snap.waste) {
+      const c = byId.get(e.id); if (!c) continue;
+      wasteStack.current.addCard(c, { toTop: true, faceDown: false });
+    }
+
+    setStockLeft(stockStack.current.size);
+    setAllCards(allC);
+    setCardStates(allLayouts(0));
+    setPhase("idle");
+  }
+
   // ── startGame ──────────────────────────────────────────────────────────────
 
   const startGame = useCallback(() => {
@@ -201,6 +282,7 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
     setMoves(0);
     setAutoComplete(false);
     setPhase("shuffle");
+    try { localStorage.removeItem(KLONDIKE_SAVE_KEY); } catch {}
 
     const deck = shuffle(buildDeck({
       ...settings,
@@ -307,7 +389,32 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
+  // Save game state after every move
   useEffect(() => {
+    if (allCards.length === 0 || phase === "shuffle") return;
+    try {
+      const snap: KlondikeSnapshot = {
+        version: 1, moves,
+        tableau: tableau.current.map(snapshotStack),
+        foundations: foundations.current.map(snapshotStack),
+        stock: snapshotStack(stockStack.current),
+        waste: snapshotStack(wasteStack.current),
+      };
+      localStorage.setItem(KLONDIKE_SAVE_KEY, JSON.stringify(snap));
+    } catch {}
+  }, [moves, phase, allCards.length]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KLONDIKE_SAVE_KEY);
+      if (raw) {
+        const snap = JSON.parse(raw) as KlondikeSnapshot;
+        if (snap.version === 1 && Array.isArray(snap.tableau)) {
+          restoreKlondike(snap);
+          return clearTimers;
+        }
+      }
+    } catch {}
     startGame();
     return clearTimers;
   // eslint-disable-next-line react-hooks/exhaustive-deps

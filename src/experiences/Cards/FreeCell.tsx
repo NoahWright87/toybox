@@ -31,6 +31,7 @@ const COL_X = (() => {
 const CARD_W = 52;
 const CARD_H = 72;
 
+const FC_SAVE_KEY = "cards-fc-save";
 const SUIT_SYMBOL: Record<string, string> = { spades:"♠", hearts:"♥", diamonds:"♦", clubs:"♣" };
 const FOUNDATION_SUITS: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
 
@@ -246,6 +247,32 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
     return () => obs.disconnect();
   }, []);
 
+  // Save game state after every move (not during the deal animation)
+  useEffect(() => {
+    if (allCards.length === 0 || phase === "dealing") return;
+    try { localStorage.setItem(FC_SAVE_KEY, JSON.stringify({ version: 1, game, moves })); } catch {}
+  }, [game, moves, phase, allCards.length]);
+
+  // ── restoreGame ───────────────────────────────────────────────────────────────
+
+  function restoreGame(savedGame: FCGame, savedMoves: number): void {
+    clearTimers();
+    isAnim.current = false;
+    setSelected(null);
+    setMoves(savedMoves);
+    const allC: Card[] = [
+      ...savedGame.cascades.flat(),
+      ...savedGame.freeCells.filter((c): c is Card => c !== null),
+      ...savedGame.foundations.flat(),
+    ];
+    syncStacks(savedGame);
+    gameRef.current = savedGame;
+    setAllCards(allC);
+    setGame(savedGame);
+    setCardStates(allLayouts(0));
+    setPhase(savedGame.foundations.every(f => f.length === 13) ? "won" : "playing");
+  }
+
   // ── startGame ────────────────────────────────────────────────────────────────
 
   const startGame = useCallback(() => {
@@ -254,6 +281,7 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
     setSelected(null);
     setMoves(0);
     setPhase("dealing");
+    try { localStorage.removeItem(FC_SAVE_KEY); } catch {}
 
     const deck: Card[] = [];
     for (const suit of SUITS) for (const rank of RANKS) deck.push({ suit, rank, id:`${suit}-${rank}` });
@@ -302,7 +330,21 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, clearTimers]);
 
-  useEffect(() => { startGame(); return clearTimers; }, []); // eslint-disable-line
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FC_SAVE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { version: number; game: FCGame; moves: number };
+        if (saved.version === 1 && saved.game && Array.isArray(saved.game.cascades)) {
+          restoreGame(saved.game, saved.moves ?? 0);
+          return clearTimers;
+        }
+      }
+    } catch {}
+    startGame();
+    return clearTimers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Move executors ────────────────────────────────────────────────────────────
 
