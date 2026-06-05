@@ -242,19 +242,38 @@
 
 /* ─── Large-index face style ─────────────────────────────────────────── */
 
-.playing-card--large-idx .playing-card__large-rank {
-  font-family: "Press Start 2P", monospace;
-  font-size: 18px;
+.playing-card--large-idx .playing-card__li-center {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -58%);
-  line-height: 1;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   pointer-events: none;
 }
 
-.playing-card--large-idx.playing-card--sm .playing-card__large-rank {
-  font-size: 12px;
+/* Standard card (72×100): max rank size where "10" still fits the 64px usable width */
+.playing-card--large-idx .playing-card__li-rank {
+  font-family: "Press Start 2P", monospace;
+  font-size: 28px;
+  line-height: 1;
+  display: block;
+}
+
+.playing-card--large-idx .playing-card__li-suit {
+  font-size: 30px;
+  line-height: 1;
+  display: block;
+}
+
+/* sm card (52×72): scaled to fit "10" in the 44px usable width */
+.playing-card--large-idx.playing-card--sm .playing-card__li-rank {
+  font-size: 20px;
+}
+
+.playing-card--large-idx.playing-card--sm .playing-card__li-suit {
+  font-size: 22px;
 }
 
 /* ─── Empty slot ─────────────────────────────────────────────────────── */

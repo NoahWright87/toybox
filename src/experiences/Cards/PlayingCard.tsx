@@ -140,9 +140,9 @@ export function PlayingCard({
         className={`playing-card playing-card--front playing-card--large-idx ${colorClass}${sizeClass}${textClass}${dealClass}`}
         style={dealStyle}
       >
-        <div className="playing-card__large-rank">{card.rank}</div>
-        <div className="playing-card__corner playing-card__corner--br">
-          <span className="playing-card__suit-pip">{symbol}</span>
+        <div className="playing-card__li-center">
+          <span className="playing-card__li-rank">{card.rank}</span>
+          <span className="playing-card__li-suit">{symbol}</span>
         </div>
       </div>
     );
