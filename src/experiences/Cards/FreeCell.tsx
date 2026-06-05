@@ -178,46 +178,61 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
     }
   }
 
-  function applyAutoMoves(g: FCGame): FCGame {
-    let changed = true, s = g;
-    while (changed) {
-      changed = false;
-      for (let i = 0; i < 4; i++) {
-        const c = s.freeCells[i]; if (!c) continue;
-        const fi = SUITS.indexOf(c.suit as Suit);
-        if (fi >= 0 && canFound(c, s.foundations[fi]) && isSafeAuto(c, s.foundations)) {
-          s = { ...s,
-            foundations: s.foundations.map((f,j) => j===fi ? [...f,c] : f),
-            freeCells: s.freeCells.map((fc,j): Card|null => j===i ? null : fc),
-          };
-          changed = true;
-        }
-      }
-      for (let col = 0; col < 8; col++) {
-        if (s.cascades[col].length === 0) continue;
-        const c = s.cascades[col][s.cascades[col].length - 1];
-        const fi = SUITS.indexOf(c.suit as Suit);
-        if (fi >= 0 && canFound(c, s.foundations[fi]) && isSafeAuto(c, s.foundations)) {
-          s = { ...s,
-            foundations: s.foundations.map((f,j) => j===fi ? [...f,c] : f),
-            cascades: s.cascades.map((col2,j) => j===col ? col2.slice(0,-1) : col2),
-          };
-          changed = true;
-        }
+  function findAutoMove(g: FCGame): {
+    card: Card; fi: number; fromKind: "freecell"|"cascade"; fromIdx: number; newG: FCGame;
+  } | null {
+    for (let i = 0; i < 4; i++) {
+      const c = g.freeCells[i]; if (!c) continue;
+      const fi = SUITS.indexOf(c.suit as Suit);
+      if (fi >= 0 && canFound(c, g.foundations[fi]) && isSafeAuto(c, g.foundations)) {
+        return { card:c, fi, fromKind:"freecell", fromIdx:i,
+          newG: { ...g, freeCells:g.freeCells.map((fc,j):Card|null => j===i ? null : fc),
+                        foundations:g.foundations.map((f,j) => j===fi ? [...f,c] : f) } };
       }
     }
-    return s;
+    for (let col = 0; col < 8; col++) {
+      if (g.cascades[col].length === 0) continue;
+      const c = g.cascades[col][g.cascades[col].length - 1];
+      const fi = SUITS.indexOf(c.suit as Suit);
+      if (fi >= 0 && canFound(c, g.foundations[fi]) && isSafeAuto(c, g.foundations)) {
+        return { card:c, fi, fromKind:"cascade", fromIdx:col,
+          newG: { ...g, cascades:g.cascades.map((col2,j) => j===col ? col2.slice(0,-1) : col2),
+                        foundations:g.foundations.map((f,j) => j===fi ? [...f,c] : f) } };
+      }
+    }
+    return null;
+  }
+
+  function animateAutoMoves(g: FCGame, onDone: (finalG: FCGame) => void): void {
+    const move = findAutoMove(g);
+    if (!move) { onDone(g); return; }
+    const { card, fi, fromKind, fromIdx, newG } = move;
+    setCardStates(prev => ({
+      ...prev,
+      [card.id]: { ...prev[card.id], x:COL_X[4+fi], y:TOP_Y, z:ANIM_Z+1, transitionMs:200, transitionDelay:0 },
+    }));
+    after(300, () => {
+      if (fromKind === "freecell") fcSt.current[fromIdx].clear();
+      else cascSt.current[fromIdx].removeTop();
+      foundSt.current[fi].addCard(card, { toTop:true, faceDown:false });
+      setCardStates(allLayouts(0));
+      animateAutoMoves(newG, onDone);
+    });
   }
 
   function completeMove(newG: FCGame): void {
-    const withAuto = applyAutoMoves(newG);
-    syncStacks(withAuto);
-    gameRef.current = withAuto;
-    setGame(withAuto);
+    syncStacks(newG);
+    gameRef.current = newG;
+    setGame(newG);
     setCardStates(allLayouts(0));
     setMoves(m => m + 1);
-    isAnim.current = false;
-    setPhase(withAuto.foundations.every(f => f.length === 13) ? "won" : "playing");
+    animateAutoMoves(newG, (finalG) => {
+      gameRef.current = finalG;
+      setGame(finalG);
+      setCardStates(allLayouts(0));
+      isAnim.current = false;
+      setPhase(finalG.foundations.every(f => f.length === 13) ? "won" : "playing");
+    });
   }
 
   // Scale to fit container
@@ -465,12 +480,15 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
 
   const handleAutoMove = useCallback(() => {
     if (isAnim.current || phase !== "playing") return;
-    const g = applyAutoMoves(gameRef.current);
-    syncStacks(g);
-    gameRef.current = g;
-    setGame(g);
-    setCardStates(allLayouts(0));
-    setPhase(g.foundations.every(f => f.length === 13) ? "won" : "playing");
+    isAnim.current = true;
+    setPhase("animating");
+    animateAutoMoves(gameRef.current, (finalG) => {
+      gameRef.current = finalG;
+      setGame(finalG);
+      setCardStates(allLayouts(0));
+      isAnim.current = false;
+      setPhase(finalG.foundations.every(f => f.length === 13) ? "won" : "playing");
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
