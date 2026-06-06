@@ -1,7 +1,8 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import "./Pyramid.css";
-import { PlayingCard } from "./PlayingCard";
-import type { Card, DeckSettings } from "./types";
+import { PermCard } from "./PermCard";
+import type { CardVisualState } from "./cardStack";
+import type { Card, CardAppearance, DeckSettings } from "./types";
 import { buildDeck } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
@@ -17,6 +18,17 @@ const V_STEP = 34; // vertical distance between row tops (overlap)
 
 const BASE_ROW_W = ROWS * CARD_W + (ROWS - 1) * H_GAP; // 388
 const GRID_H = (ROWS - 1) * V_STEP + CARD_H;            // 276
+
+const STAGE_W = BASE_ROW_W + 32;   // 420
+const PYRAMID_TOP = 20;
+const STAGE_H = PYRAMID_TOP + GRID_H + 28 + CARD_H + 24;  // ~440
+
+// Pile centers (x is card center, y is card center)
+const PILE_Y = PYRAMID_TOP + GRID_H + 28 + CARD_H / 2;
+const STOCK_X = STAGE_W / 2 - 44;
+const WASTE_X = STAGE_W / 2 + 44;
+const REMOVE_X = STAGE_W + 300;   // far off-screen right
+const REMOVE_Y = PILE_Y;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,14 +46,15 @@ function pyramidValue(card: Card): number {
   return parseInt(card.rank as string, 10);
 }
 
+// Card center helpers (return CENTER of card, not top-left)
 function cardX(row: number, col: number): number {
   const rowW = row * CARD_W + (row - 1) * H_GAP;
-  const startX = (BASE_ROW_W - rowW) / 2;
-  return startX + col * (CARD_W + H_GAP);
+  const startX = (STAGE_W - rowW) / 2;
+  return startX + col * (CARD_W + H_GAP) + CARD_W / 2;
 }
 
 function cardY(row: number): number {
-  return (row - 1) * V_STEP;
+  return PYRAMID_TOP + (row - 1) * V_STEP + CARD_H / 2;
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -53,7 +66,7 @@ interface PyramidSlot {
   removed: boolean;
 }
 
-type GamePhase = "playing" | "won" | "lost";
+type GamePhase = "dealing" | "playing" | "won" | "lost";
 
 interface PyramidState {
   slots: PyramidSlot[];
@@ -110,6 +123,73 @@ function checkLost(state: PyramidState): boolean {
   return true;
 }
 
+// ── computePositions ─────────────────────────────────────────────────────────
+
+function computePositions(
+  s: PyramidState,
+  peekedId: string | null,
+  ms: number
+): Record<string, CardVisualState> {
+  const result: Record<string, CardVisualState> = {};
+
+  // Pyramid slots
+  for (const slot of s.slots) {
+    if (slot.removed) {
+      result[slot.card.id] = {
+        x: REMOVE_X,
+        y: REMOVE_Y,
+        z: 5000 + slot.row * 10 + slot.col,
+        rotation: 12,
+        faceDown: false,
+        transitionMs: ms,
+      };
+    } else {
+      const isPeeked = peekedId === slot.card.id;
+      const isSelected = s.selected === slot.card.id;
+      result[slot.card.id] = {
+        x: cardX(slot.row, slot.col),
+        y: cardY(slot.row) - (isSelected ? 8 : 0),
+        z: (slot.row * 10 + slot.col) + (isPeeked ? 5000 : 0),
+        faceDown: false,
+        rotation: 0,
+        transitionMs: isPeeked ? 0 : ms,
+      };
+    }
+  }
+
+  // Stock: stacked face-down, depth goes LEFT so stack doesn't cover pyramid cards above.
+  // stock[0] is the next card drawn (logical top) → depth=0, highest z, no offset.
+  const n = s.stock.length;
+  s.stock.forEach((card, i) => {
+    const depth = i;           // 0 = top card (stock[0]), n-1 = bottom
+    result[card.id] = {
+      x: STOCK_X - depth * 0.5,
+      y: PILE_Y,
+      z: 100 + (n - 1 - i),   // stock[0] gets highest z
+      faceDown: true,
+      rotation: 0,
+      transitionMs: ms,
+    };
+  });
+
+  // Waste: stacked face-up, depth goes LEFT.
+  // waste[wn-1] is the top card (most recently drawn) → depth=0, highest z.
+  const wn = s.waste.length;
+  s.waste.forEach((card, i) => {
+    const depth = wn - 1 - i;
+    result[card.id] = {
+      x: WASTE_X - depth * 0.5,
+      y: PILE_Y,
+      z: 200 + i,
+      faceDown: false,
+      rotation: 0,
+      transitionMs: ms,
+    };
+  });
+
+  return result;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface PyramidProps {
@@ -118,12 +198,231 @@ interface PyramidProps {
   onQuit?: () => void;
 }
 
-export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
-  const [state, setState] = useState<PyramidState>(() => buildPyramid(settings));
-  const [cardBack, setCardBack] = useState(settings.cardBack);
-  const [showDeckModal, setShowDeckModal] = useState(false);
+const PYR_SAVE_KEY = "cards-pyramid-save";
 
-  const newGame = useCallback(() => setState(buildPyramid(settings)), [settings]);
+export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
+  const [allCards, setAllCards] = useState<Card[]>([]);
+  const [cardStates, setCardStates] = useState<Record<string, CardVisualState>>({});
+  const [peekedCardId, setPeekedCardId] = useState<string | null>(null);
+
+  const [state, setState] = useState<PyramidState>(() => {
+    try {
+      const raw = localStorage.getItem(PYR_SAVE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { version: number; state: PyramidState };
+        if (saved?.version === 1 && saved.state?.slots) {
+          return { ...saved.state, phase: saved.state.phase === "dealing" ? "playing" : saved.state.phase };
+        }
+      }
+    } catch {}
+    return buildPyramid(settings);
+  });
+  const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
+  const [showDeckModal, setShowDeckModal] = useState(false);
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearTimers = useCallback(() => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  function after(ms: number, fn: () => void) { timers.current.push(setTimeout(fn, ms)); }
+
+  // ── Scale to fit container ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // ── Persistence ─────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (state.phase === "won" || state.phase === "lost") {
+      try { localStorage.removeItem(PYR_SAVE_KEY); } catch {}
+      return;
+    }
+    if (state.phase === "dealing") return;
+    try {
+      localStorage.setItem(PYR_SAVE_KEY, JSON.stringify({ version: 1, state }));
+    } catch {}
+  }, [state]);
+
+  // ── Deal animation helper ───────────────────────────────────────────────────
+
+  function dealAnimation(s: PyramidState, cards: Card[]): void {
+    const total = cards.length;
+    const half = Math.floor(total / 2);
+
+    // Start: all cards stacked at stock, depth goes LEFT, no transition
+    const init: Record<string, CardVisualState> = {};
+    cards.forEach((c, i) => {
+      const d = total - 1 - i;
+      init[c.id] = { x: STOCK_X - d * 0.3, y: PILE_Y, z: 100 + i, rotation: 0, faceDown: true, transitionMs: 0 };
+    });
+    setCardStates(init);
+
+    // Riffle shuffle: split left/right then merge back
+    const shufflePass = (delay: number, onDone: () => void): void => {
+      after(delay, () => {
+        const split: Record<string, CardVisualState> = {};
+        cards.forEach((c, i) => {
+          const isLeft = i < half;
+          const pos = isLeft ? i : i - half;
+          const len = isLeft ? half : total - half;
+          const d = len - 1 - pos;
+          split[c.id] = {
+            x: (isLeft ? STOCK_X - 24 : STOCK_X + 24) + (isLeft ? -d : d) * 0.3,
+            y: PILE_Y,
+            z: 100 + i,
+            rotation: isLeft ? -3 : 3,
+            faceDown: true,
+            transitionMs: 200,
+          };
+        });
+        setCardStates(split);
+
+        after(280, () => {
+          const merged: Record<string, CardVisualState> = {};
+          cards.forEach((c, i) => {
+            const d = total - 1 - i;
+            merged[c.id] = {
+              x: STOCK_X - d * 0.3,
+              y: PILE_Y,
+              z: 100 + i,
+              rotation: 0,
+              faceDown: true,
+              transitionMs: 200,
+              transitionDelay: i * 3,
+            };
+          });
+          setCardStates(merged);
+          after(420, onDone);
+        });
+      });
+    };
+
+    // Two shuffle passes, then deal pyramid cards to their positions
+    shufflePass(60, () => {
+      shufflePass(0, () => {
+        after(60, () => {
+          const deal: Record<string, CardVisualState> = {};
+          // Stock cards snap to final pile positions (no transition).
+          // stock[0] = logical top: depth=0, highest z, no offset.
+          s.stock.forEach((card, i) => {
+            deal[card.id] = { x: STOCK_X - i * 0.5, y: PILE_Y, z: 100 + (s.stock.length - 1 - i), faceDown: true, rotation: 0, transitionMs: 0 };
+          });
+          // Pyramid cards fly to grid positions with stagger (apex first)
+          s.slots.forEach(slot => {
+            const stagger = (slot.row - 1) * 7 + slot.col;
+            deal[slot.card.id] = {
+              x: cardX(slot.row, slot.col),
+              y: cardY(slot.row),
+              z: slot.row * 10 + slot.col,
+              faceDown: false,
+              rotation: 0,
+              transitionMs: 280,
+              transitionDelay: stagger * 35,
+            };
+          });
+          setCardStates(deal);
+
+          after(28 * 35 + 280 + 80, () => {
+            setState(prev => ({ ...prev, phase: "playing" }));
+          });
+        });
+      });
+    });
+  }
+
+  // ── newGame ─────────────────────────────────────────────────────────────────
+
+  const newGame = useCallback(() => {
+    clearTimers();
+    try { localStorage.removeItem(PYR_SAVE_KEY); } catch {}
+    const s = buildPyramid(settings);
+    const cards = [...s.slots.map(sl => sl.card), ...s.stock];
+    setAllCards(cards);
+    setPeekedCardId(null);
+    const dealingState: PyramidState = { ...s, phase: "dealing" };
+    setState(dealingState);
+    dealAnimation(s, cards);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, clearTimers]);
+
+  // ── Initial load ────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const raw = localStorage.getItem(PYR_SAVE_KEY);
+    let restoredState: PyramidState | null = null;
+    try {
+      if (raw) {
+        const saved = JSON.parse(raw) as { version: number; state: PyramidState };
+        if (saved?.version === 1 && saved.state?.slots) {
+          restoredState = { ...saved.state, phase: "playing" };
+        }
+      }
+    } catch {}
+
+    if (restoredState) {
+      const s = restoredState;
+      const cards = [...s.slots.map(sl => sl.card), ...s.stock, ...s.waste];
+      setAllCards(cards);
+      setPeekedCardId(null);
+      setState({ ...s, phase: "dealing" });
+
+      // Deal animation for restore
+      const init: Record<string, CardVisualState> = {};
+      for (const c of cards) {
+        init[c.id] = { x: STOCK_X, y: PILE_Y, z: 100, rotation: 0, faceDown: true, transitionMs: 0 };
+      }
+      setCardStates(init);
+
+      after(60, () => {
+        const finalPositions = computePositions({ ...s, phase: "playing" }, null, 260);
+        // Add stagger for pyramid cards
+        s.slots.forEach(slot => {
+          if (!slot.removed && finalPositions[slot.card.id]) {
+            const staggerIdx = (slot.row - 1) * 7 + slot.col;
+            finalPositions[slot.card.id] = {
+              ...finalPositions[slot.card.id],
+              transitionDelay: staggerIdx * 30,
+            };
+          }
+        });
+        setCardStates(finalPositions);
+        const totalDelay = 28 * 30 + 260 + 80;
+        after(totalDelay, () => {
+          setState(prev => ({ ...prev, phase: "playing" }));
+        });
+      });
+    } else {
+      const s = buildPyramid(settings);
+      const cards = [...s.slots.map(sl => sl.card), ...s.stock];
+      setAllCards(cards);
+      setPeekedCardId(null);
+      const dealingState: PyramidState = { ...s, phase: "dealing" };
+      setState(dealingState);
+      dealAnimation(s, cards);
+    }
+
+    return clearTimers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Sync positions on every state change ────────────────────────────────────
+
+  useEffect(() => {
+    if (allCards.length === 0) return;
+    if (state.phase === "dealing") return;  // deal animation manages positions
+    setCardStates(computePositions(state, peekedCardId, 200));
+  }, [state, peekedCardId, allCards.length]);
+
+  // ── drawFromStock ───────────────────────────────────────────────────────────
 
   const drawFromStock = useCallback(() => {
     setState((s: PyramidState) => {
@@ -134,6 +433,8 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
       return checkLost(next) ? { ...next, phase: "lost" } : next;
     });
   }, []);
+
+  // ── selectCard ──────────────────────────────────────────────────────────────
 
   const selectCard = useCallback((cardId: string, fromWaste: boolean) => {
     setState((s: PyramidState) => {
@@ -199,17 +500,10 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
 
   // ── Derived values ────────────────────────────────────────────────────────
 
-  const availableIds = useMemo(
-    () => new Set(state.slots.filter((s) => isAvailable(s, state.slots)).map((s) => s.card.id)),
-    [state.slots]
-  );
-
-  const wasteTop = last<Card>(state.waste);
-  const pyramidDone = state.slots.every((s) => s.removed);
-
   function statusText(): string {
     if (state.phase === "won") return "You cleared the pyramid!";
     if (state.phase === "lost") return "No moves remaining.";
+    if (state.phase === "dealing") return "Dealing…";
     return `${state.removedCount} removed · ${state.stock.length} in stock`;
   }
 
@@ -223,7 +517,7 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
     ];
     return [
       { label: "Game", items },
-      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+      { label: "Options", items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }] },
     ];
   }, [newGame, onNewGame, onQuit]);
 
@@ -231,80 +525,111 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const wasteTop = last<Card>(state.waste);
+
   return (
     <div className="pyramid">
       {showDeckModal && (
         <DeckModal
-          cardBack={cardBack}
-          onSelect={setCardBack}
+          appearance={appearance}
+          onUpdate={setAppearance}
           onClose={() => setShowDeckModal(false)}
         />
       )}
-      <div className="pyramid__table">
-        {!pyramidDone && (
-          <div className="pyramid__grid" style={{ width: BASE_ROW_W, height: GRID_H }}>
-            {state.slots.map((slot) => {
-              const avail = availableIds.has(slot.card.id);
-              const selected = state.selected === slot.card.id;
-              const cls = [
-                "pyramid__card-wrap",
-                slot.removed ? "pyramid__card-wrap--removed"     : "",
-                !avail       ? "pyramid__card-wrap--unavailable" : "",
-                selected     ? "pyramid__card-wrap--selected"    : "",
-              ].join(" ");
-              return (
-                <div
-                  key={slot.card.id}
-                  className={cls}
-                  style={{ left: cardX(slot.row, slot.col), top: cardY(slot.row) }}
-                  onClick={() => avail && selectCard(slot.card.id, false)}
-                >
-                  <PlayingCard card={slot.card} size="sm" backColor={cardBack} />
-                </div>
-              );
-            })}
+      <div
+        className="pyramid__stage-container"
+        ref={containerRef}
+        style={{ height: Math.round(STAGE_H * scale) }}
+      >
+        <div
+          className="pyramid__stage"
+          style={{
+            width: STAGE_W,
+            height: STAGE_H,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
+          }}
+          onPointerUp={() => setPeekedCardId(null)}
+        >
+          {/* Pile slot outlines */}
+          <div
+            className="pyramid__pile-slot"
+            style={{ left: STOCK_X - CARD_W / 2, top: PILE_Y - CARD_H / 2 }}
+          >
+            {state.stock.length === 0 && <span className="pyramid__pile-icon">↺</span>}
           </div>
-        )}
+          <div
+            className="pyramid__pile-slot"
+            style={{ left: WASTE_X - CARD_W / 2, top: PILE_Y - CARD_H / 2 }}
+          />
 
-        <div className="pyramid__piles">
-          <div className="pyramid__pile">
-            <div className="pyramid__pile-label">Stock</div>
-            <div className="pyramid__stock-card" onClick={drawFromStock}>
-              {state.stock.length > 0
-                ? <PlayingCard card={state.stock[0]} faceDown size="sm" backColor={cardBack} />
-                : <div className="playing-card--empty" style={{ width: 52, height: 72 }} />
-              }
-            </div>
-            <div className="pyramid__pile-count">{state.stock.length}</div>
+          {/* Pile count labels */}
+          <div
+            className="pyramid__pile-label-abs"
+            style={{ left: STOCK_X, top: PILE_Y + CARD_H / 2 + 3 }}
+          >
+            Stock · {state.stock.length}
+          </div>
+          <div
+            className="pyramid__pile-label-abs"
+            style={{ left: WASTE_X, top: PILE_Y + CARD_H / 2 + 3 }}
+          >
+            Waste · {state.waste.length}
           </div>
 
-          <div className="pyramid__pile">
-            <div className="pyramid__pile-label">Waste</div>
-            {wasteTop
-              ? (
-                <div
-                  className={state.selected === wasteTop.id
-                    ? "pyramid__card-wrap pyramid__card-wrap--selected"
-                    : "pyramid__card-wrap"}
-                  style={{ position: "relative" }}
-                  onClick={() => selectCard(wasteTop.id, true)}
-                >
-                  <PlayingCard card={wasteTop} size="sm" backColor={cardBack} />
-                </div>
-              )
-              : <div className="playing-card--empty" style={{ width: 52, height: 72 }} />
-            }
-            <div className="pyramid__pile-count">{state.waste.length}</div>
-          </div>
+          {/* All cards as PermCards */}
+          {allCards.map(card => {
+            const cs = cardStates[card.id];
+            if (!cs) return null;
+            const slot = state.slots.find(sl => sl.card.id === card.id);
+            const inPyramid = !!slot && !slot.removed;
+            const avail = inPyramid ? isAvailable(slot, state.slots) : false;
+            const isSelected = state.selected === card.id;
+            const canAct = state.phase === "playing";
+            return (
+              <PermCard
+                key={card.id}
+                card={card}
+                cs={cs}
+                appearance={appearance}
+                size="sm"
+                highlightColor={isSelected ? "#ffdd00" : undefined}
+                onClick={canAct && avail ? () => selectCard(card.id, false) : undefined}
+                onPointerDown={canAct && inPyramid && !avail
+                  ? () => setPeekedCardId(card.id)
+                  : undefined}
+              />
+            );
+          })}
+
+          {/* Waste hit area — top waste card selectable */}
+          {state.phase === "playing" && wasteTop && (
+            <div
+              className="pyramid__hit-area"
+              style={{ left: WASTE_X - CARD_W / 2, top: PILE_Y - CARD_H / 2 }}
+              onClick={() => selectCard(wasteTop.id, true)}
+            />
+          )}
+
+          {/* Stock hit area */}
+          {state.phase === "playing" && (
+            <div
+              className="pyramid__hit-area"
+              style={{ left: STOCK_X - CARD_W / 2, top: PILE_Y - CARD_H / 2 }}
+              onClick={drawFromStock}
+            />
+          )}
         </div>
       </div>
 
       <div className="pyramid__controls">
-        <div className={`pyramid__status${state.phase === "won" ? " pyramid__status--win" : state.phase === "lost" ? " pyramid__status--lose" : ""}`}>
+        <div
+          className={`pyramid__status${state.phase === "won" ? " pyramid__status--win" : state.phase === "lost" ? " pyramid__status--lose" : ""}`}
+        >
           {statusText()}
         </div>
         <div className="pyramid__btn-row">
-          {state.phase !== "playing" && (
+          {(state.phase === "won" || state.phase === "lost") && (
             <button className="pyramid__btn pyramid__btn--primary" onClick={newGame}>
               New Game
             </button>
@@ -314,9 +639,11 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
               Restart
             </button>
           )}
-          {state.selected && (
-            <button className="pyramid__btn pyramid__btn--secondary"
-              onClick={() => setState((s) => ({ ...s, selected: null }))}>
+          {state.selected && state.phase === "playing" && (
+            <button
+              className="pyramid__btn pyramid__btn--secondary"
+              onClick={() => setState((s) => ({ ...s, selected: null }))}
+            >
               Deselect
             </button>
           )}

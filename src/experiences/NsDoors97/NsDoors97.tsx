@@ -36,6 +36,10 @@ import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
 import Blackjack from "../Cards/Blackjack";
 import Pyramid from "../Cards/Pyramid";
+import Memory from "../Cards/Memory";
+import Klondike from "../Cards/Klondike";
+import FreeCell from "../Cards/FreeCell";
+import Hearts from "../Cards/Hearts";
 import type { CardsGame, DeckSettings } from "../Cards/types";
 import BootScreen, { shouldShowBoot, playShutdownSound } from "./BootScreen";
 import DisplayApp, { WALLPAPER_PRESET_URLS } from "./DisplayApp";
@@ -181,8 +185,8 @@ let windowSeq = 0;
 let maxZ = 100;
 
 const TTT_WINDOW_WIDTHS: Record<3 | 5 | 7, number> = { 3: 380, 5: 480, 7: 580 };
-const CARDS_GAME_TITLES: Record<CardsGame, string> = { "war": "War", "blackjack": "Blackjack", "pyramid": "Pyramid" };
-const CARDS_GAME_WIDTHS: Record<CardsGame, number> = { "war": 440, "blackjack": 520, "pyramid": 460 };
+const CARDS_GAME_TITLES: Record<CardsGame, string> = { "war": "War", "blackjack": "Blackjack", "pyramid": "Pyramid", "memory": "Memory", "klondike": "Klondike", "freecell": "FreeCell", "hearts": "Hearts" };
+const CARDS_GAME_WIDTHS: Record<CardsGame, number> = { "war": 440, "blackjack": 520, "pyramid": 460, "memory": 460, "klondike": 620, "freecell": 620, "hearts": 560 };
 const BF_WINDOW_WIDTHS: Record<BfDifficulty, number> = {
   beginner: 310,
   intermediate: 470,
@@ -737,9 +741,9 @@ export default function NsDoors97() {
   const handleCardsLaunch = useCallback(
     (launcherWinId: string, game: CardsGame, settings: DeckSettings) => {
       setOpenWindows((prev) => {
+        const launcherPos = prev.find((w) => w.id === launcherWinId)?.defaultPosition
+          ?? { x: 80, y: 48 };
         const filtered = prev.filter((w) => w.id !== launcherWinId);
-        const offset = (windowSeq % 8) * 32;
-        windowSeq++;
         maxZ++;
         setActiveWindowId("cards-game");
         return [
@@ -750,7 +754,7 @@ export default function NsDoors97() {
             icon: "🃏",
             content: { type: "cards-game" as const, game, settings },
             zIndex: maxZ,
-            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            defaultPosition: launcherPos,
             width: CARDS_GAME_WIDTHS[game],
             minimized: false,
           },
@@ -763,9 +767,9 @@ export default function NsDoors97() {
   // Close the Cards game and reopen the launcher
   const handleCardsGameClose = useCallback((id: string) => {
     setOpenWindows((prev) => {
+      const gamePos = prev.find((w) => w.id === id)?.defaultPosition
+        ?? { x: 80, y: 48 };
       const filtered = prev.filter((w) => w.id !== id);
-      const offset = (windowSeq % 8) * 32;
-      windowSeq++;
       maxZ++;
       setActiveWindowId("cards");
       return [
@@ -776,7 +780,7 @@ export default function NsDoors97() {
           icon: "🃏",
           content: { type: "cards-launcher" as const },
           zIndex: maxZ,
-          defaultPosition: { x: 80 + offset, y: 48 + offset },
+          defaultPosition: gamePos,
           width: 320,
           minimized: false,
         },
@@ -922,6 +926,18 @@ export default function NsDoors97() {
           )}
           {win.content.type === "cards-game" && win.content.game === "pyramid" && (
             <Pyramid settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "cards-game" && win.content.game === "memory" && (
+            <Memory settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "cards-game" && win.content.game === "klondike" && (
+            <Klondike settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "cards-game" && win.content.game === "freecell" && (
+            <FreeCell settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "cards-game" && win.content.game === "hearts" && (
+            <Hearts settings={win.content.settings} onNewGame={() => handleCardsGameClose(win.id)} onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "bombfinder" && (
             <BombFinder

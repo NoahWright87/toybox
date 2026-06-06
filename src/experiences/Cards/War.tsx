@@ -1,14 +1,16 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import "./Cards.css";
 import "./War.css";
-import { PlayingCard } from "./PlayingCard";
-import type { Card, DeckSettings } from "./types";
+import type { Card, CardAppearance, DeckSettings } from "./types";
+import { PermCard } from "./PermCard";
 import { buildDeck, shuffle } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { DeckModal } from "./DeckModal";
+import { CardStack } from "./cardStack";
+import type { CardVisualState } from "./cardStack";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const RANK_ORDER = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"] as const;
 
@@ -17,57 +19,34 @@ function warValue(card: Card): number {
   return RANK_ORDER.indexOf(card.rank as typeof RANK_ORDER[number]);
 }
 
-const WAR_SPEED_MS: Record<string, number> = {
-  slow: 2000,
-  normal: 900,
-  fast: 250,
-};
-const GAME_OVER_DELAY_MS = 2500;
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type Phase =
-  | "ready"       // waiting to flip
-  | "revealed"    // cards flipped, showing result
-  | "war-ready"   // tie — waiting to place war cards
-  | "war-revealed"// war cards flipped
-  | "game-over";
-
-interface WarState {
-  playerPile: Card[];
-  dealerPile: Card[];
-  playerCard: Card | null;
-  dealerCard: Card | null;
-  warPlayerCards: Card[];  // face-down war cards
-  warDealerCards: Card[];
-  warPlayerFinal: Card | null;
-  warDealerFinal: Card | null;
-  phase: Phase;
-  roundResult: "player" | "dealer" | "war" | null;
-  gameResult: "player" | "dealer" | null;
-  roundCount: number;
+function rnd(min: number, max: number): number {
+  return min + Math.random() * (max - min);
 }
 
-function makeInitialState(settings: DeckSettings): WarState {
-  const deck = buildDeck(settings);
-  const mid = Math.floor(deck.length / 2);
-  return {
-    playerPile: deck.slice(0, mid),
-    dealerPile: deck.slice(mid),
-    playerCard: null,
-    dealerCard: null,
-    warPlayerCards: [],
-    warDealerCards: [],
-    warPlayerFinal: null,
-    warDealerFinal: null,
-    phase: "ready",
-    roundResult: null,
-    gameResult: null,
-    roundCount: 0,
-  };
-}
+// ─── Stage constants ──────────────────────────────────────────────────────────
 
-// ── Component ────────────────────────────────────────────────────────────────
+const STAGE_W = 420;
+const STAGE_H = 240;
+const CY = STAGE_H / 2;  // vertical center of stage
+
+const PLAYER_X = 76;
+const DEALER_X = 340;
+const WAR_X    = 208;
+
+// Battle zone (not stacks — fixed positions)
+const BP_X = 155;   // player battle card center-x
+const BD_X = 261;   // dealer battle card center-x
+const Z_BP  = 500;  // tier 5
+const Z_BD  = 600;  // tier 6
+
+const ANIM_MULT: Record<string, number> = { slow: 1.5, normal: 1.0, fast: 0.5 };
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Phase = "shuffle" | "idle" | "animating" | "game-over";
+type BannerType = "win" | "lose" | "war";
+
+// ─── War ──────────────────────────────────────────────────────────────────────
 
 interface WarProps {
   settings: DeckSettings;
@@ -76,359 +55,509 @@ interface WarProps {
 }
 
 export default function War({ settings, onNewGame, onQuit }: WarProps) {
-  const [state, setState] = useState<WarState>(() => makeInitialState(settings));
-  const [cardBack, setCardBack] = useState(settings.cardBack);
+  const [allCards,      setAllCards]      = useState<Card[]>([]);
+  const [cardStates,    setCardStates]    = useState<Record<string, CardVisualState>>({});
+  const [phase,         setPhase]         = useState<Phase>("shuffle");
+  const [playerCount,   setPlayerCount]   = useState(0);
+  const [dealerCount,   setDealerCount]   = useState(0);
+  const [roundCount,    setRoundCount]    = useState(0);
+  const [banner,        setBanner]        = useState("");
+  const [bannerType,    setBannerType]    = useState<BannerType>("win");
+  const [appearance,    setAppearance]    = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
+  const [scale,         setScale]         = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const autoPlay = settings.warAutoPlay;
-  const speedMs = WAR_SPEED_MS[settings.warSpeed] ?? 900;
+  // Card stacks — mutable refs, never triggers re-renders themselves
+  const ps = useRef(new CardStack({ zTier: 1, baseX: PLAYER_X, baseY: CY, offsetX:  0.5, offsetY: -0.5 }));
+  const ds = useRef(new CardStack({ zTier: 2, baseX: DEALER_X, baseY: CY, offsetX: -0.5, offsetY: -0.5 }));
+  const ws = useRef(new CardStack({ zTier: 8, baseX: WAR_X,    baseY: CY, offsetX:  2.0, offsetY:  0.5 }));
 
-  // ── Core actions ──────────────────────────────────────────────────────────
+  // Timer tracking for cleanup
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearTimers = useCallback(() => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }, []);
+
+  function after(ms: number, fn: () => void): void {
+    const id = setTimeout(fn, ms);
+    timers.current.push(id);
+  }
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const am = ANIM_MULT[settings.warSpeed] ?? 1.0;
+  function t(ms: number): number { return Math.round(ms * am); }
+
+  // Patch specific card states by id
+  function patchCards(patches: Record<string, Partial<CardVisualState>>): void {
+    setCardStates(prev => {
+      const next = { ...prev };
+      for (const [id, p] of Object.entries(patches)) {
+        if (next[id]) next[id] = { ...next[id], ...p };
+      }
+      return next;
+    });
+  }
+
+  // Merge one or more layout records into cardStates
+  function applyLayouts(...layouts: Record<string, CardVisualState>[]): void {
+    setCardStates(prev => {
+      const next = { ...prev };
+      for (const layout of layouts) Object.assign(next, layout);
+      return next;
+    });
+  }
+
+  // ── startGame ──────────────────────────────────────────────────────────────
+
+  const startGame = useCallback(() => {
+    clearTimers();
+    try { localStorage.removeItem("cards-war-save"); } catch {}
+
+    const deck = buildDeck(settings);
+    const mid  = Math.floor(deck.length / 2);
+    const pCards = deck.slice(0, mid);
+    const dCards = deck.slice(mid);
+
+    ps.current.clear();
+    ds.current.clear();
+    ws.current.clear();
+
+    setRoundCount(0);
+    setPlayerCount(0);
+    setDealerCount(0);
+    setBanner("");
+    setPhase("shuffle");
+
+    // Step 0: All cards stacked at deck center (instant — no transition)
+    const initStates: Record<string, CardVisualState> = {};
+    for (const card of deck) {
+      initStates[card.id] = { x: WAR_X, y: CY, z: 10, rotation: 0, faceDown: true, transitionMs: 0 };
+    }
+    setAllCards(deck);
+    setCardStates(initStates);
+
+    // Timing — all scaled by speed multiplier
+    const SPLIT   = t(280);
+    const PAUSE   = t(80);
+    const MERGE   = t(200);
+    const STAGGER = t(8);    // per-card delay in merge for riffle effect
+    const DEAL    = t(380);
+    // Total merge animation = MERGE + last card's delay
+    const MERGE_TOTAL = MERGE + (deck.length - 1) * STAGGER;
+    let now = 80;  // initial paint delay so browser renders the "all at center" frame first
+
+    // Helper: interleave cards from two halves (left[0], right[0], left[1], right[1], ...)
+    // then build merge states with per-card stagger
+    function mergeStates(cards1: Card[], cards2: Card[]): Record<string, CardVisualState> {
+      const interleaved: Card[] = [];
+      const len = Math.max(cards1.length, cards2.length);
+      for (let i = 0; i < len; i++) {
+        if (i < cards1.length) interleaved.push(cards1[i]);
+        if (i < cards2.length) interleaved.push(cards2[i]);
+      }
+      const states: Record<string, CardVisualState> = {};
+      interleaved.forEach((card, i) => {
+        states[card.id] = {
+          x: WAR_X, y: CY, z: 10 + i,
+          rotation: rnd(-5, 5), faceDown: true,
+          transitionMs: MERGE, transitionDelay: i * STAGGER,
+        };
+      });
+      return states;
+    }
+
+    // Step 1: Split deck into two halves (pCards left, dCards right)
+    after(now, () => {
+      const states: Record<string, CardVisualState> = {};
+      pCards.forEach((card, i) => {
+        states[card.id] = { x: 130 + i * 0.5, y: CY - i * 0.5, z: 300 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      dCards.forEach((card, i) => {
+        states[card.id] = { x: 286 - i * 0.5, y: CY - i * 0.5, z: 400 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      setCardStates(states);
+    });
+    now += SPLIT + PAUSE;
+
+    // Step 2: Merge — cards riffle together one by one
+    after(now, () => setCardStates(mergeStates(pCards, dCards)));
+    now += MERGE_TOTAL + PAUSE;
+
+    // Step 3: Split again (slightly tighter spread)
+    after(now, () => {
+      const states: Record<string, CardVisualState> = {};
+      pCards.forEach((card, i) => {
+        states[card.id] = { x: 136 + i * 0.4, y: CY - i * 0.4, z: 300 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      dCards.forEach((card, i) => {
+        states[card.id] = { x: 280 - i * 0.4, y: CY - i * 0.4, z: 400 + i, rotation: rnd(-2, 2), faceDown: true, transitionMs: SPLIT };
+      });
+      setCardStates(states);
+    });
+    now += SPLIT + PAUSE;
+
+    // Step 4: Merge again with riffle
+    after(now, () => setCardStates(mergeStates(pCards, dCards)));
+    now += MERGE_TOTAL + PAUSE;
+
+    // Step 5: Deal — all cards fan out to their pile positions (no stagger, clean spread)
+    after(now, () => {
+      for (const card of pCards) ps.current.addCard(card, { toTop: true, faceDown: true });
+      for (const card of dCards) ds.current.addCard(card, { toTop: true, faceDown: true });
+
+      setPlayerCount(ps.current.size);
+      setDealerCount(ds.current.size);
+      // transitionDelay resets to 0 since layout() doesn't set it
+      setCardStates({ ...ps.current.layout(DEAL), ...ds.current.layout(DEAL) });
+
+      after(DEAL + 100, () => setPhase("idle"));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
+  useEffect(() => {
+    const WAR_SAVE_KEY = "cards-war-save";
+    try {
+      const raw = localStorage.getItem(WAR_SAVE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { version: number; playerCards: Card[]; dealerCards: Card[]; roundCount: number };
+        if (saved?.version === 1 && Array.isArray(saved.playerCards) && Array.isArray(saved.dealerCards)) {
+          const allC = [...saved.playerCards, ...saved.dealerCards];
+          ps.current.clear(); ds.current.clear(); ws.current.clear();
+          for (const c of saved.playerCards) ps.current.addCard(c, { toTop: true, faceDown: true });
+          for (const c of saved.dealerCards) ds.current.addCard(c, { toTop: true, faceDown: true });
+          setRoundCount(saved.roundCount);
+          setPlayerCount(ps.current.size);
+          setDealerCount(ds.current.size);
+          setAllCards(allC);
+          setCardStates({ ...ps.current.layout(0), ...ds.current.layout(0) });
+          setPhase("idle");
+          return clearTimers;
+        }
+      }
+    } catch {}
+    startGame();
+    return clearTimers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const WAR_SAVE_KEY = "cards-war-save";
+    if (phase === "idle") {
+      try {
+        localStorage.setItem(WAR_SAVE_KEY, JSON.stringify({
+          version: 1,
+          playerCards: ps.current.cards,
+          dealerCards: ds.current.cards,
+          roundCount,
+        }));
+      } catch {}
+    } else if (phase === "game-over") {
+      try { localStorage.removeItem(WAR_SAVE_KEY); } catch {}
+    }
+  }, [phase, roundCount]);
+
+  // ── flip ──────────────────────────────────────────────────────────────────
 
   const flip = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "ready") return s;
-      if (s.playerPile.length === 0 || s.dealerPile.length === 0) return s;
+    if (ps.current.size === 0 || ds.current.size === 0) return;
+    setPhase("animating");
+    setBanner("");
 
-      const [pc, ...pRest] = s.playerPile;
-      const [dc, ...dRest] = s.dealerPile;
-      const pv = warValue(pc);
-      const dv = warValue(dc);
+    const pCard = ps.current.removeTop()!;
+    const dCard = ds.current.removeTop()!;
+    const pv = warValue(pCard);
+    const dv = warValue(dCard);
+    const result: "player" | "dealer" | "war" =
+      pv > dv ? "player" : pv < dv ? "dealer" : "war";
 
-      const roundResult: "player" | "dealer" | "war" =
-        pv > dv ? "player" : pv < dv ? "dealer" : "war";
+    setRoundCount(c => c + 1);
+    setPlayerCount(ps.current.size);
+    setDealerCount(ds.current.size);
 
-      let playerPile = pRest;
-      let dealerPile = dRest;
+    const FLY     = t(350);
+    const JUDGE   = t(200);
+    const SHOW    = t(600);
+    const COLLECT = t(350);
 
-      if (roundResult === "player") {
-        playerPile = [...pRest, ...shuffle([pc, dc])];
-      } else if (roundResult === "dealer") {
-        dealerPile = [...dRest, ...shuffle([pc, dc])];
-      }
-      // war: cards go to warCards, resolved after war
+    // Step 1: Fly both cards to battle zone (face-down, with transition)
+    setCardStates(prev => ({
+      ...prev,
+      ...ps.current.layout(FLY),
+      ...ds.current.layout(FLY),
+      [pCard.id]: { x: BP_X, y: CY, z: Z_BP, rotation: 0, faceDown: true, transitionMs: FLY },
+      [dCard.id]: { x: BD_X, y: CY, z: Z_BD, rotation: 0, faceDown: true, transitionMs: FLY },
+    }));
 
-      return {
-        ...s,
-        playerPile,
-        dealerPile,
-        playerCard: pc,
-        dealerCard: dc,
-        roundResult,
-        phase: "revealed",
-        roundCount: s.roundCount + 1,
-      };
+    // Step 2: Flip both cards mid-flight
+    after(FLY / 2, () => {
+      patchCards({
+        [pCard.id]: { faceDown: false },
+        [dCard.id]: { faceDown: false },
+      });
     });
-  }, []);
 
-  const resolveRevealed = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "revealed") return s;
-
-      if (s.roundResult === "war") {
-        // Check if both players have cards for war (need at least 1 for face-up)
-        if (s.playerPile.length === 0) {
-          return { ...s, phase: "game-over", gameResult: "dealer" };
-        }
-        if (s.dealerPile.length === 0) {
-          return { ...s, phase: "game-over", gameResult: "player" };
-        }
-        return { ...s, phase: "war-ready" };
-      }
-
-      // Check game over
-      if (s.playerPile.length === 0) {
-        return { ...s, phase: "game-over", gameResult: "dealer" };
-      }
-      if (s.dealerPile.length === 0) {
-        return { ...s, phase: "game-over", gameResult: "player" };
-      }
-
-      return { ...s, phase: "ready", playerCard: null, dealerCard: null };
-    });
-  }, []);
-
-  const flipWar = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "war-ready") return s;
-
-      // Each player puts up to 3 face-down + 1 face-up
-      const pSlice = s.playerPile.length;
-      const dSlice = s.dealerPile.length;
-
-      const pFaceDownCount = Math.min(3, pSlice - 1);
-      const dFaceDownCount = Math.min(3, dSlice - 1);
-
-      const pFaceDown = s.playerPile.slice(0, pFaceDownCount);
-      const pFaceUp   = s.playerPile[pFaceDownCount] ?? null;
-      const pRemain   = s.playerPile.slice(pFaceDownCount + 1);
-
-      const dFaceDown = s.dealerPile.slice(0, dFaceDownCount);
-      const dFaceUp   = s.dealerPile[dFaceDownCount] ?? null;
-      const dRemain   = s.dealerPile.slice(dFaceDownCount + 1);
-
-      // All battle cards: original face-up + war face-down + war face-up
-      const allBattleCards = [
-        s.playerCard!, s.dealerCard!,
-        ...pFaceDown, ...dFaceDown,
-      ];
-
-      let playerPile = pRemain;
-      let dealerPile = dRemain;
-      let roundResult: "player" | "dealer" | "war" = "war";
-
-      if (!pFaceUp) {
-        roundResult = "dealer";
-        dealerPile = [...dRemain, ...shuffle([...allBattleCards, ...dFaceDown])];
-      } else if (!dFaceUp) {
-        roundResult = "player";
-        playerPile = [...pRemain, ...shuffle([...allBattleCards, ...pFaceDown])];
+    // Step 3: Show round result
+    after(FLY + JUDGE, () => {
+      if (result === "player") {
+        setBanner("You win the round!"); setBannerType("win");
+      } else if (result === "dealer") {
+        setBanner("Dealer wins the round."); setBannerType("lose");
       } else {
-        const pv = warValue(pFaceUp);
-        const dv = warValue(dFaceUp);
-        roundResult = pv > dv ? "player" : pv < dv ? "dealer" : "war";
-        const spoils = shuffle([...allBattleCards, pFaceUp, dFaceUp]);
-        if (roundResult === "player") playerPile = [...pRemain, ...spoils];
-        else if (roundResult === "dealer") dealerPile = [...dRemain, ...spoils];
-        // war again: cards stay off table until next war resolution
+        setBanner("WAR!"); setBannerType("war");
       }
-
-      return {
-        ...s,
-        playerPile,
-        dealerPile,
-        warPlayerCards: pFaceDown,
-        warDealerCards: dFaceDown,
-        warPlayerFinal: pFaceUp,
-        warDealerFinal: dFaceUp,
-        roundResult,
-        phase: "war-revealed",
-        roundCount: s.roundCount + 1,
-      };
     });
+
+    if (result !== "war") {
+      // Step 4: Collect won cards to bottom of winner pile
+      after(FLY + JUDGE + SHOW, () => {
+        const spoils  = shuffle([pCard, dCard]);
+        const winner  = result === "player" ? ps.current : ds.current;
+        winner.addCard(spoils[0], { toTop: false, faceDown: true, rotation: rnd(-5, 5) });
+        winner.addCard(spoils[1], { toTop: false, faceDown: true, rotation: rnd(-5, 5) });
+
+        setPlayerCount(ps.current.size);
+        setDealerCount(ds.current.size);
+        setBanner("");
+
+        // Update winner's layout — won cards animate FROM battle zone TO pile bottom
+        applyLayouts(winner.layout(COLLECT));
+
+        after(COLLECT + 100, () => {
+          if (ps.current.size === 0) {
+            setPhase("game-over"); setBanner("Dealer wins."); setBannerType("lose");
+          } else if (ds.current.size === 0) {
+            setPhase("game-over"); setBanner("YOU WIN!"); setBannerType("win");
+          } else {
+            setPhase("idle");
+          }
+        });
+      });
+    } else {
+      // WAR — short pause before escalation
+      after(FLY + JUDGE + t(400), () => doWar(pCard, dCard));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const resolveWarRevealed = useCallback(() => {
-    setState((s) => {
-      if (s.phase !== "war-revealed") return s;
+  // ── doWar ─────────────────────────────────────────────────────────────────
 
-      if (s.roundResult === "war") {
-        if (s.playerPile.length === 0) return { ...s, phase: "game-over", gameResult: "dealer" };
-        if (s.dealerPile.length === 0) return { ...s, phase: "game-over", gameResult: "player" };
-        return { ...s, phase: "war-ready" };
-      }
-      if (s.playerPile.length === 0) return { ...s, phase: "game-over", gameResult: "dealer" };
-      if (s.dealerPile.length === 0) return { ...s, phase: "game-over", gameResult: "player" };
+  function doWar(pCard: Card, dCard: Card): void {
+    setBanner("I DECLARE WAR");
+    setBannerType("war");
 
-      return {
-        ...s,
-        phase: "ready",
-        playerCard: null,
-        dealerCard: null,
-        warPlayerCards: [],
-        warDealerCards: [],
-        warPlayerFinal: null,
-        warDealerFinal: null,
-        roundResult: null,
-      };
+    const WAR_FLY     = t(350);
+    const WAR_COLLECT = t(350);
+
+    ws.current.clear();
+
+    // Scatter the two battle cards to war pile at center
+    ws.current.addCard(pCard, { toTop: true, faceDown: true, rotation: rnd(-15, 15) });
+    ws.current.addCard(dCard, { toTop: true, faceDown: true, rotation: rnd(-15, 15) });
+
+    // Pull up to 3 face-down cards + 1 deciding card from each pile
+    const pFdN = Math.min(3, Math.max(0, ps.current.size - 1));
+    const dFdN = Math.min(3, Math.max(0, ds.current.size - 1));
+
+    const pFaceDowns: Card[] = [];
+    for (let i = 0; i < pFdN; i++) {
+      const c = ps.current.removeTop();
+      if (c) pFaceDowns.push(c);
+    }
+    const pDecider = ps.current.removeTop();  // may be null if pile exhausted
+
+    const dFaceDowns: Card[] = [];
+    for (let i = 0; i < dFdN; i++) {
+      const c = ds.current.removeTop();
+      if (c) dFaceDowns.push(c);
+    }
+    const dDecider = ds.current.removeTop();
+
+    for (const c of pFaceDowns) ws.current.addCard(c, { toTop: true, faceDown: true, rotation: rnd(-20, 20) });
+    for (const c of dFaceDowns) ws.current.addCard(c, { toTop: true, faceDown: true, rotation: rnd(-20, 20) });
+
+    setPlayerCount(ps.current.size + (pDecider ? 1 : 0));
+    setDealerCount(ds.current.size + (dDecider ? 1 : 0));
+
+    // Fly all face-down war cards to war pile simultaneously
+    setCardStates(prev => ({
+      ...prev,
+      ...ps.current.layout(WAR_FLY),
+      ...ds.current.layout(WAR_FLY),
+      ...ws.current.layout(WAR_FLY),
+    }));
+
+    // Fly deciders slightly after face-downs
+    after(t(200), () => {
+      if (pDecider) ws.current.addCard(pDecider, { toTop: true, faceDown: true, rotation: rnd(-10, 10) });
+      if (dDecider) ws.current.addCard(dDecider, { toTop: true, faceDown: true, rotation: rnd(-10, 10) });
+
+      setPlayerCount(ps.current.size);
+      setDealerCount(ds.current.size);
+
+      setCardStates(prev => ({ ...prev, ...ws.current.layout(WAR_FLY) }));
+
+      // Flip deciders mid-flight
+      after(WAR_FLY / 2, () => {
+        const patches: Record<string, Partial<CardVisualState>> = {};
+        if (pDecider) patches[pDecider.id] = { faceDown: false };
+        if (dDecider) patches[dDecider.id] = { faceDown: false };
+        if (Object.keys(patches).length > 0) patchCards(patches);
+      });
+
+      // Resolve war after deciders land
+      after(WAR_FLY + t(300), () => {
+        let warResult: "player" | "dealer";
+        if (!pDecider && !dDecider) {
+          warResult = Math.random() < 0.5 ? "player" : "dealer";
+        } else if (!pDecider) {
+          warResult = "dealer";
+        } else if (!dDecider) {
+          warResult = "player";
+        } else {
+          warResult = warValue(pDecider) >= warValue(dDecider) ? "player" : "dealer";
+        }
+
+        setRoundCount(c => c + 1);
+        setBanner(warResult === "player" ? "You win the war!" : "Dealer wins the war.");
+        setBannerType(warResult === "player" ? "win" : "lose");
+
+        after(t(600), () => {
+          const allWarCards = ws.current.cards;
+          ws.current.clear();
+
+          const winner  = warResult === "player" ? ps.current : ds.current;
+          const shuffled = shuffle(allWarCards);
+          for (const c of shuffled) {
+            winner.addCard(c, { toTop: false, faceDown: true, rotation: rnd(-6, 6) });
+          }
+
+          setPlayerCount(ps.current.size);
+          setDealerCount(ds.current.size);
+          setBanner("");
+          applyLayouts(winner.layout(WAR_COLLECT));
+
+          after(WAR_COLLECT + 100, () => {
+            if (ps.current.size === 0) {
+              setPhase("game-over"); setBanner("Dealer wins."); setBannerType("lose");
+            } else if (ds.current.size === 0) {
+              setPhase("game-over"); setBanner("YOU WIN!"); setBannerType("win");
+            } else {
+              setPhase("idle");
+            }
+          });
+        });
+      });
     });
-  }, []);
-
-  const newGame = useCallback(() => {
-    setState(makeInitialState(settings));
-  }, [settings]);
+  }
 
   // ── Menus ─────────────────────────────────────────────────────────────────
 
-  const warMenus = useMemo<MenuBarMenu[]>(() => {
-    const items: MenuBarMenu["items"] = [
-      { label: "Restart", onClick: newGame },
+  const menus = useMemo<MenuBarMenu[]>(() => {
+    const gameItems: MenuBarMenu["items"] = [
+      { label: "Restart", onClick: startGame },
       ...(onNewGame ? [{ label: "New Game", onClick: onNewGame }] : []),
       ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
     ];
     return [
-      { label: "Game", items },
-      { label: "Options", items: [{ label: "Deck…", onClick: () => setShowDeckModal(true) }] },
+      { label: "Game", items: gameItems },
+      { label: "Options", items: [{ label: "Card Appearance…", onClick: () => setShowDeckModal(true) }] },
     ];
-  }, [newGame, onNewGame, onQuit]);
+  }, [startGame, onNewGame, onQuit]);
 
-  useWindowMenus(warMenus);
+  useWindowMenus(menus);
 
   // ── Auto-play ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!autoPlay) return;
+    if (!settings.warAutoPlay || phase !== "idle") return;
+    const delay = Math.round(500 * (ANIM_MULT[settings.warSpeed] ?? 1.0));
+    const id = setTimeout(flip, delay);
+    return () => clearTimeout(id);
+  }, [settings.warAutoPlay, settings.warSpeed, phase, flip]);
 
-    const advance = () => {
-      setState((s) => {
-        switch (s.phase) {
-          case "ready":       { flip(); return s; }
-          case "revealed":    { resolveRevealed(); return s; }
-          case "war-ready":   { flipWar(); return s; }
-          case "war-revealed":{ resolveWarRevealed(); return s; }
-          default: return s;
-        }
-      });
-    };
+  useEffect(() => {
+    if (!settings.warAutoPlay || phase !== "game-over") return;
+    const id = setTimeout(startGame, 2500);
+    return () => clearTimeout(id);
+  }, [settings.warAutoPlay, phase, startGame]);
 
-    // For game-over, use a longer fixed delay then restart
-    if (state.phase === "game-over") {
-      const t = setTimeout(newGame, GAME_OVER_DELAY_MS);
-      return () => clearTimeout(t);
-    }
-
-    const t = setTimeout(() => {
-      if (state.phase === "ready") flip();
-      else if (state.phase === "revealed") resolveRevealed();
-      else if (state.phase === "war-ready") flipWar();
-      else if (state.phase === "war-revealed") resolveWarRevealed();
-    }, speedMs);
-
-    return () => { clearTimeout(t); void advance; };
-  }, [autoPlay, speedMs, state.phase, flip, resolveRevealed, flipWar, resolveWarRevealed, newGame]);
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-
-  const { phase, playerCard, dealerCard, playerPile, dealerPile,
-          warPlayerCards, warDealerCards, warPlayerFinal, warDealerFinal,
-          roundResult, gameResult, roundCount } = state as WarState;
-
-  const isWar = phase === "war-ready" || phase === "war-revealed";
-
-  function resultBanner(): string {
-    if (phase === "revealed" || phase === "war-revealed") {
-      if (roundResult === "player") return "You win the round!";
-      if (roundResult === "dealer") return "Dealer wins the round.";
-      if (roundResult === "war") return "WAR!";
-    }
-    if (phase === "game-over") {
-      if (gameResult === "player") return "🏆 YOU WIN!";
-      return "Dealer wins.";
-    }
-    return "";
-  }
-
-  function cardCount(pile: Card[], extra?: (Card | null)[]): number {
-    return pile.length + (extra ?? []).filter(Boolean).length;
-  }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="war">
       {showDeckModal && (
         <DeckModal
-          cardBack={cardBack}
-          onSelect={setCardBack}
+          appearance={appearance}
+          onUpdate={setAppearance}
           onClose={() => setShowDeckModal(false)}
         />
       )}
-      {/* Scoreboard */}
+
       <div className="war__scoreboard">
         <span>Round {roundCount}</span>
-        <span>You: {cardCount(playerPile, [playerCard, warPlayerFinal, ...warPlayerCards])} cards</span>
-        <span>Dealer: {cardCount(dealerPile, [dealerCard, warDealerFinal, ...warDealerCards])} cards</span>
+        <span>You: {playerCount}</span>
+        <span>Dealer: {dealerCount}</span>
       </div>
 
-      {/* Battle area */}
-      <div className="war__table">
-        {/* Player side */}
-        <div className="war__side war__side--player">
-          <div className="war__side-label">You</div>
-          <div className="war__pile-stack">
-            {playerPile.length > 0
-              ? <PlayingCard card={playerPile[0]} faceDown backColor={cardBack} />
-              : <div className="playing-card--empty" />
-            }
-            <div className="war__pile-count">{playerPile.length} left</div>
-          </div>
-          {isWar && (
-            <div className="war__war-cards">
-              {warPlayerCards.map((c) => (
-                <PlayingCard key={c.id} card={c} faceDown backColor={cardBack} />
-              ))}
-              {warPlayerFinal
-                ? <PlayingCard card={warPlayerFinal} />
-                : phase === "war-ready" ? null : null
-              }
-            </div>
-          )}
-          {playerCard && (
-            <div className="war__flipped">
-              <PlayingCard card={playerCard} />
-            </div>
-          )}
-        </div>
+      <div className="war__stage-container" ref={containerRef} style={{ height: Math.round(STAGE_H * scale) }}>
+        <div
+          className="war__stage"
+          style={{
+            width: STAGE_W,
+            height: STAGE_H,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
+          }}
+        >
+          {/* VS label when waiting for flip */}
+          {phase === "idle" && <div className="war__vs-label">VS</div>}
 
-        {/* Center VS */}
-        <div className="war__center">
-          <span className="war__vs">{isWar ? "WAR" : "VS"}</span>
-        </div>
-
-        {/* Dealer side */}
-        <div className="war__side war__side--dealer">
-          <div className="war__side-label">Dealer</div>
-          <div className="war__pile-stack">
-            {dealerPile.length > 0
-              ? <PlayingCard card={dealerPile[0]} faceDown backColor={cardBack} />
-              : <div className="playing-card--empty" />
-            }
-            <div className="war__pile-count">{dealerPile.length} left</div>
-          </div>
-          {isWar && (
-            <div className="war__war-cards">
-              {warDealerCards.map((c) => (
-                <PlayingCard key={c.id} card={c} faceDown backColor={cardBack} />
-              ))}
-              {warDealerFinal && <PlayingCard card={warDealerFinal} />}
-            </div>
-          )}
-          {dealerCard && (
-            <div className="war__flipped">
-              <PlayingCard card={dealerCard} />
-            </div>
-          )}
+          {/* All 52 cards — permanently mounted, CSS transitions drive all animation */}
+          {allCards.map(card => {
+            const cs = cardStates[card.id];
+            if (!cs) return null;
+            return <PermCard key={card.id} card={card} cs={cs} appearance={appearance} />;
+          })}
         </div>
       </div>
 
-      {/* Result / controls */}
       <div className="war__controls">
-        {resultBanner() && (
-          <div className={`war__banner ${gameResult === "player" ? "war__banner--win" : gameResult === "dealer" ? "war__banner--lose" : roundResult === "player" ? "war__banner--win" : roundResult === "dealer" ? "war__banner--lose" : "war__banner--war"}`}>
-            {resultBanner()}
+        {banner && (
+          <div className={`war__banner war__banner--${bannerType}`}>
+            {banner}
           </div>
         )}
 
-        {!autoPlay && (
-          <div className="war__btn-row">
-            {phase === "ready" && (
-              <button className="war__btn war__btn--primary"
-                disabled={playerPile.length === 0 || dealerPile.length === 0}
-                onClick={flip}>
-                ▶ Flip
-              </button>
-            )}
-            {phase === "revealed" && (
-              <button className="war__btn war__btn--secondary" onClick={resolveRevealed}>
-                {roundResult === "war" ? "Go to War →" : "Next Round →"}
-              </button>
-            )}
-            {phase === "war-ready" && (
-              <button className="war__btn war__btn--primary" onClick={flipWar}>
-                ⚔ Flip War Cards
-              </button>
-            )}
-            {phase === "war-revealed" && (
-              <button className="war__btn war__btn--secondary" onClick={resolveWarRevealed}>
-                {roundResult === "war" ? "War Again →" : "Next Round →"}
-              </button>
-            )}
-            {phase === "game-over" && (
-              <button className="war__btn war__btn--primary" onClick={newGame}>
-                New Game
-              </button>
-            )}
-          </div>
+        {phase === "idle" && !settings.warAutoPlay && (
+          <button
+            className="war__btn war__btn--primary"
+            onClick={flip}
+            disabled={playerCount === 0 || dealerCount === 0}
+          >
+            ▶ Flip
+          </button>
         )}
-        {autoPlay && phase === "game-over" && (
+
+        {phase === "game-over" && !settings.warAutoPlay && (
+          <button className="war__btn war__btn--primary" onClick={startGame}>
+            New Game
+          </button>
+        )}
+
+        {phase === "game-over" && settings.warAutoPlay && (
           <div className="war__auto-notice">Starting new game…</div>
         )}
       </div>

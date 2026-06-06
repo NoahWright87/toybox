@@ -9,74 +9,59 @@
   user-select: none;
 }
 
+/* Stage container — measures width for scaling, explicit height set in JS */
+.pyramid__stage-container {
+  margin: 8px 8px 4px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 /* Green felt play area */
-.pyramid__table {
+.pyramid__stage {
   background: #1a4a1a;
+  position: relative;
+  overflow: hidden;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  margin: 8px 8px 4px;
-  padding: 10px 8px 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  box-sizing: border-box;
 }
 
-/* The 7-row card triangle */
-.pyramid__grid {
-  position: relative;
-  /* width/height set by JS via style prop */
-}
-
-/* Each card slot in the pyramid */
-.pyramid__card-wrap {
+/* Dashed outline slot for stock and waste piles */
+.pyramid__pile-slot {
   position: absolute;
-  cursor: pointer;
+  width: 52px;
+  height: 72px;
+  border: 2px dashed rgba(255,255,255,0.2);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.pyramid__card-wrap--unavailable {
-  cursor: default;
-  opacity: 0.45;
+/* Recycle icon shown when stock is empty */
+.pyramid__pile-icon {
+  font-size: 18px;
+  color: rgba(255,255,255,0.3);
 }
 
-.pyramid__card-wrap--selected .playing-card {
-  outline: 2px solid #ffdd00;
-  outline-offset: 1px;
-  box-shadow: 0 0 6px #ffdd00;
-}
-
-.pyramid__card-wrap--removed {
-  visibility: hidden;
+/* Absolute-positioned pile count labels */
+.pyramid__pile-label-abs {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 5px;
+  color: rgba(255,255,255,0.45);
+  font-family: "Press Start 2P", monospace;
+  white-space: nowrap;
   pointer-events: none;
 }
 
-/* Stock + waste row */
-.pyramid__piles {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.pyramid__pile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.pyramid__pile-label {
-  font-size: 6px;
-  color: rgba(255,255,255,0.5);
-}
-
-.pyramid__pile-count {
-  font-size: 6px;
-  color: rgba(255,255,255,0.5);
-}
-
-/* Clickable stock pile */
-.pyramid__stock-card {
+/* Invisible click target over pile positions */
+.pyramid__hit-area {
+  position: absolute;
+  width: 52px;
+  height: 72px;
   cursor: pointer;
+  z-index: 9000;
 }
 
 /* Controls area */

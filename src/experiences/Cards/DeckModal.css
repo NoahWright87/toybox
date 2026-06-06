@@ -1,18 +1,21 @@
 .deck-modal-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: 10000;
+  overflow-y: auto;
 }
 
 .deck-modal {
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
-  min-width: 180px;
+  min-width: 300px;
+  max-width: 340px;
+  width: 100%;
 }
 
 .deck-modal__titlebar {
@@ -45,35 +48,325 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
-.deck-modal__body {
-  padding: 12px;
+/* ── Tabs ── */
+.deck-modal__tabs {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  gap: 0;
+  padding: 6px 8px 0;
+  border-bottom: 2px solid #808080;
 }
 
-.deck-modal__swatches {
+.deck-modal__tab {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 4px 10px;
+  border: 2px solid;
+  border-color: #ffffff #808080 transparent #ffffff;
+  background: #d4d0c8;
+  color: #444;
+  cursor: pointer;
+  margin-bottom: -2px;
+  position: relative;
+}
+
+.deck-modal__tab--active {
+  background: #c0c0c0;
+  color: #000;
+  border-bottom-color: #c0c0c0;
+  z-index: 1;
+}
+
+/* ── Body ── */
+.deck-modal__body {
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: "Press Start 2P", monospace;
+}
+
+.deck-modal__section-label {
+  font-size: 7px;
+  color: #000;
+  margin-top: 4px;
+}
+
+/* Patterns */
+.deck-modal__patterns {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  justify-content: center;
 }
 
-.deck-modal__swatch {
-  width: 24px;
-  height: 24px;
+.deck-modal__pattern-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
+  background: #d4d0c8;
   cursor: pointer;
 }
 
-.deck-modal__swatch:active,
-.deck-modal__swatch--selected {
+.deck-modal__pattern-btn--active {
   border-color: #808080 #ffffff #ffffff #808080;
-  box-shadow: inset 0 0 0 2px #000000;
+  background: #c0c0c0;
+  outline: 1px solid #000;
 }
 
+.deck-modal__pattern-thumb {
+  width: 32px;
+  height: 44px;
+  background-color: var(--cbp, #cc4400);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.2);
+}
+
+.deck-modal__pattern-thumb-inner {
+  position: absolute;
+  inset: 3px;
+}
+
+/* Crosshatch thumb */
+.deck-modal__pattern-thumb[data-pattern="crosshatch"] .deck-modal__pattern-thumb-inner {
+  background:
+    repeating-linear-gradient(45deg, transparent, transparent 4px, var(--cbs, #ffffff55) 4px, var(--cbs, #ffffff55) 5px),
+    repeating-linear-gradient(-45deg, transparent, transparent 4px, var(--cbs, #ffffff55) 4px, var(--cbs, #ffffff55) 5px);
+}
+
+/* Diagonal thumb */
+.deck-modal__pattern-thumb[data-pattern="diagonal"] .deck-modal__pattern-thumb-inner {
+  background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--cbs, #ffffff55) 6px, var(--cbs, #ffffff55) 8px);
+}
+
+/* Diamonds thumb */
+.deck-modal__pattern-thumb[data-pattern="diamonds"] .deck-modal__pattern-thumb-inner {
+  background:
+    repeating-linear-gradient(45deg, transparent, transparent 2px, var(--cbs, #ffffff55) 2px, var(--cbs, #ffffff55) 3px),
+    repeating-linear-gradient(-45deg, transparent, transparent 2px, var(--cbs, #ffffff55) 2px, var(--cbs, #ffffff55) 3px);
+}
+
+/* Noahsoft thumb */
+.deck-modal__pattern-thumb[data-pattern="noahsoft"] .deck-modal__pattern-thumb-inner {
+  background: repeating-linear-gradient(135deg, transparent, transparent 8px, var(--cbs, #ffffff55) 8px, var(--cbs, #ffffff55) 10px);
+}
+
+.deck-modal__pattern-ns {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: var(--cbs, rgba(255,255,255,0.5));
+  pointer-events: none;
+}
+
+.deck-modal__pattern-label {
+  font-size: 5px;
+  color: #444;
+}
+
+/* Color rows */
+.deck-modal__color-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.deck-modal__swatch {
+  width: 20px;
+  height: 20px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.deck-modal__swatch--selected {
+  border-color: #ffffff #808080 #808080 #ffffff;
+  outline: 2px solid #000;
+  outline-offset: 1px;
+}
+
+.deck-modal__custom-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  width: 22px;
+  height: 20px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deck-modal__custom-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.deck-modal__hidden-color {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Image upload */
+.deck-modal__image-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.deck-modal__img-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 3px 7px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+}
+
+.deck-modal__img-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.deck-modal__img-btn--clear {
+  color: #cc4400;
+}
+
+.deck-modal__img-name {
+  font-size: 6px;
+  color: #228833;
+}
+
+/* Face styles */
+.deck-modal__face-styles {
+  display: flex;
+  gap: 8px;
+}
+
+.deck-modal__face-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #d4d0c8;
+  cursor: pointer;
+}
+
+.deck-modal__face-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c0c0c0;
+  outline: 1px solid #000;
+}
+
+.deck-modal__face-preview {
+  pointer-events: none;
+}
+
+/* Card text size buttons */
+.deck-modal__text-sizes {
+  display: flex;
+  gap: 6px;
+}
+
+.deck-modal__size-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 10px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #d4d0c8;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  min-width: 52px;
+}
+
+.deck-modal__size-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c0c0c0;
+  outline: 1px solid #000;
+}
+
+.deck-modal__size-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.deck-modal__size-label {
+  font-size: 5px;
+  color: #444;
+}
+
+/* Suit color mode radio buttons */
+.deck-modal__suit-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deck-modal__suit-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.deck-modal__radio {
+  accent-color: #cc4400;
+  cursor: pointer;
+  width: 12px;
+  height: 12px;
+}
+
+/* Legacy check-row (kept for other uses) */
+.deck-modal__check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.deck-modal__check-label {
+  font-size: 7px;
+  color: #000;
+}
+
+.deck-modal__four-color-preview {
+  display: flex;
+  gap: 4px;
+}
+
+/* Preview */
+.deck-modal__preview-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 6px 0 4px;
+  border-top: 1px solid #808080;
+  margin-top: 4px;
+}
+
+/* Footer */
 .deck-modal__footer {
   padding: 8px;
   display: flex;
@@ -87,7 +380,7 @@
   border-color: #ffffff #808080 #808080 #ffffff;
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
-  padding: 4px 16px;
+  padding: 4px 20px;
   cursor: pointer;
   min-width: 60px;
 }

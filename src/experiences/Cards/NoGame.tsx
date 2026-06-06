@@ -52,7 +52,7 @@ export default function NoGame({ settings }: NoGameProps) {
           <div className="no-game__pile-label">Draw Pile</div>
           {isEmpty
             ? <div className="playing-card--empty" />
-            : <PlayingCard card={drawPile[0]} faceDown backColor={settings.cardBack} />
+            : <PlayingCard card={drawPile[0]} faceDown appearance={settings.appearance} />
           }
           <div className={`no-game__pile-count${isLow ? " no-game__pile-count--low" : ""}`}>
             {remaining} left

@@ -1,0 +1,321 @@
+/* ─── Hearts ──────────────────────────────────────────────────────────── */
+
+/* ── Outer shell ─────────────────────────────────────────────────────── */
+
+.hearts {
+  display: flex;
+  flex-direction: column;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  user-select: none;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Stage ───────────────────────────────────────────────────────────── */
+
+.hearts__stage-container {
+  flex-shrink: 0;
+  background: #1a4a1a;
+  overflow: hidden;
+}
+
+.hearts__stage {
+  background: #1a4a1a;
+  isolation: isolate;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Player labels ───────────────────────────────────────────────────── */
+
+.hearts__label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3000;
+}
+
+.hearts__label--north {
+  top: 88px;   /* just below North's card row (centered at y=52, bottom at y=88) */
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.hearts__label--south {
+  bottom: 86px;   /* just above human hand (centered at y=460, top at y=424) */
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+}
+
+.hearts__label--west {
+  left: 68px;   /* just right of West's cards (right edge at ~66px) */
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  gap: 3px;
+}
+
+.hearts__label--east {
+  right: 68px;   /* just left of East's cards (left edge at ~414px) */
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  gap: 3px;
+}
+
+.hearts__score-inline {
+  font-size: 5px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.hearts__badge {
+  font-size: 5px;
+  color: #ff9944;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+/* ── Turn dot ────────────────────────────────────────────────────────── */
+
+.hearts__turn-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ffdd44;
+  flex-shrink: 0;
+  animation: hearts-pulse 1s ease-in-out infinite;
+}
+
+.hearts__turn-dot--human { background: #ff8844; }
+
+@keyframes hearts-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* ── Center info ─────────────────────────────────────────────────────── */
+
+.hearts__center-info {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  z-index: 3000;
+}
+
+.hearts__trick-count {
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.hearts__broken {
+  font-size: 14px;
+  color: #ff4444;
+  line-height: 1;
+}
+
+/* ── Passing overlay ─────────────────────────────────────────────────── */
+
+.hearts__pass-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 6000;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.hearts__pass-hint {
+  font-size: 6px;
+  color: #ffdd88;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* ── Play hint ───────────────────────────────────────────────────────── */
+
+.hearts__play-hint {
+  position: absolute;
+  top: 380px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 5px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6000;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px 6px;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────── */
+
+.hearts__statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 6px;
+  color: #000;
+  border-top: 1px solid #808080;
+  background: #c0c0c0;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.hearts__scores-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hearts__score-item { white-space: nowrap; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+
+.hearts-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  border: 2px solid;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hearts-btn--primary {
+  background: #cc4400;
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  padding: 6px 12px;
+}
+
+.hearts-btn--primary:hover  { background: #ee5500; }
+.hearts-btn--primary:active { border-color: #664400 #ffcc88 #ffcc88 #664400; }
+
+.hearts-btn--sm {
+  background: #c0c0c0;
+  color: #000;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 3px 7px;
+  font-size: 6px;
+}
+
+.hearts-btn--sm:hover  { background: #d4d0c8; }
+.hearts-btn--sm:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+/* ── Modal ───────────────────────────────────────────────────────────── */
+
+.hearts-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.hearts-modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.5);
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.hearts-modal__titlebar {
+  background: linear-gradient(to right, #cc4400, #881a00);
+  color: #fff;
+  font-size: 8px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hearts-modal__close {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.hearts-modal__close:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+.hearts-modal__body { padding: 12px 16px; }
+
+.hearts-modal__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7px;
+}
+
+.hearts-modal__table th,
+.hearts-modal__table td {
+  padding: 4px 8px;
+  text-align: center;
+  border-bottom: 1px solid #808080;
+}
+
+.hearts-modal__table th {
+  font-size: 6px;
+  color: #444;
+  border-bottom: 2px solid #808080;
+}
+
+.hearts-modal__table td:first-child {
+  text-align: left;
+  font-size: 6px;
+  color: #333;
+}
+
+.hearts-modal__winner-row td { color: #228833; }
+
+.hearts-modal__winner-label {
+  font-size: 6px;
+  color: #228833;
+  white-space: nowrap;
+}
+
+.hearts-modal__moon { color: #5b2d8e; }
+
+.hearts-modal__footer {
+  padding: 8px 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  border-top: 1px solid #808080;
+}

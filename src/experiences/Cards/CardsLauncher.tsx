@@ -1,9 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import "./Cards.css";
 import {
+  DEFAULT_APPEARANCE,
   DEFAULT_DECK_SETTINGS,
   type CardsGame,
   type DeckSettings,
+  type MemoryDifficulty,
   type Suit,
   type WarSpeed,
 } from "./types";
@@ -11,6 +13,41 @@ import { totalCards } from "./deckUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { DeckModal } from "./DeckModal";
+
+const STORAGE_KEY = "toybox-cards-settings-v1";
+
+function loadPersistedState(): { game: CardsGame; settings: DeckSettings } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { game: "war", settings: DEFAULT_DECK_SETTINGS };
+    const parsed = JSON.parse(raw) as { game?: CardsGame; settings?: Partial<DeckSettings> };
+    return {
+      game: (parsed.game ?? "war") as CardsGame,
+      settings: {
+        ...DEFAULT_DECK_SETTINGS,
+        ...(parsed.settings ?? {}),
+        appearance: {
+          ...DEFAULT_APPEARANCE,
+          ...(parsed.settings?.appearance ?? {}),
+          backImageUrl: null, // don't restore large data URLs
+        },
+      },
+    };
+  } catch {
+    return { game: "war", settings: DEFAULT_DECK_SETTINGS };
+  }
+}
+
+function persistState(game: CardsGame, settings: DeckSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      game,
+      settings: { ...settings, appearance: { ...settings.appearance, backImageUrl: null } },
+    }));
+  } catch {
+    // localStorage unavailable or full — ignore
+  }
+}
 
 const SUITS: { id: Suit; symbol: string; isRed: boolean }[] = [
   { id: "spades",   symbol: "♠", isRed: false },
@@ -25,15 +62,27 @@ const WAR_SPEEDS: { value: WarSpeed; label: string }[] = [
   { value: "fast",   label: "Fast (0.25s)" },
 ];
 
+const MEMORY_DIFFICULTIES: { value: MemoryDifficulty; label: string }[] = [
+  { value: "easy",   label: "Easy (4×4)"  },
+  { value: "medium", label: "Medium (4×6)" },
+  { value: "hard",   label: "Hard (6×6)"  },
+];
+
 interface CardsLauncherProps {
   onLaunch: (game: CardsGame, settings: DeckSettings) => void;
   onQuit?: () => void;
 }
 
 export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) {
-  const [game, setGame] = useState<CardsGame>("war");
-  const [settings, setSettings] = useState<DeckSettings>(DEFAULT_DECK_SETTINGS);
+  const initial = useMemo(loadPersistedState, []);
+  const [game, setGame] = useState<CardsGame>(initial.game);
+  const [settings, setSettings] = useState<DeckSettings>(initial.settings);
   const [showDeckModal, setShowDeckModal] = useState(false);
+
+  // Persist whenever game or settings change
+  useEffect(() => {
+    persistState(game, settings);
+  }, [game, settings]);
 
   const toggleSuit = (suit: Suit) => {
     const active = settings.suits.includes(suit);
@@ -68,6 +117,13 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
 
   useWindowMenus(launcherMenus);
 
+  const showDeckCount = game === "blackjack";
+  const showSuits     = game === "war";
+  const showOptions   = showDeckCount || showSuits;
+  const showWarOpts   = game === "war";
+  const showMemOpts   = game === "memory";
+  const showKlonOpts  = game === "klondike";
+
   return (
     <div className="cards-launcher">
       {/* Game picker */}
@@ -80,20 +136,22 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
         >
           <option value="war">War</option>
           <option value="blackjack">Blackjack</option>
-          <option value="pyramid">Pyramid</option>
-          <option disabled>── More Coming Soon ──</option>
+          <option value="pyramid">Pyramid Solitaire</option>
+          <option value="memory">Memory</option>
+          <option value="klondike">Klondike Solitaire</option>
+          <option value="freecell">FreeCell</option>
+          <option value="hearts">Hearts</option>
         </select>
       </div>
 
-      {/* Per-game options */}
-      {(game === "war" || game === "blackjack") && (
+      {/* Deck options (War suits, Blackjack deck count) */}
+      {showOptions && (
         <>
           <div className="cards-launcher__divider" />
           <div>
             <div className="cards-launcher__section-title">Options:</div>
 
-            {/* Deck count — Blackjack only */}
-            {game === "blackjack" && (
+            {showDeckCount && (
               <div className="cards-launcher__row">
                 <span className="cards-launcher__option-label">Number of Decks:</span>
                 <div className="cards-launcher__stepper">
@@ -104,8 +162,7 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
               </div>
             )}
 
-            {/* Suits — War only */}
-            {game === "war" && (
+            {showSuits && (
               <div className="cards-launcher__row">
                 <span className="cards-launcher__option-label">Suits:</span>
                 <div className="cards-launcher__suits">
@@ -132,8 +189,8 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
         </>
       )}
 
-      {/* War-specific settings */}
-      {game === "war" && (
+      {/* War settings */}
+      {showWarOpts && (
         <>
           <div className="cards-launcher__divider" />
           <div>
@@ -144,6 +201,7 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
               <label className="cards-launcher__checkbox-wrap">
                 <input
                   type="checkbox"
+                  className="cards-launcher__checkbox"
                   checked={settings.warAutoPlay}
                   onChange={(e) => setSettings((prev) => ({ ...prev, warAutoPlay: e.target.checked }))}
                 />
@@ -170,6 +228,70 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
         </>
       )}
 
+      {/* Memory difficulty */}
+      {showMemOpts && (
+        <>
+          <div className="cards-launcher__divider" />
+          <div>
+            <div className="cards-launcher__section-title">Memory Options:</div>
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Difficulty:</span>
+              <select
+                className="cards-launcher__select"
+                style={{ width: "auto" }}
+                value={settings.memoryDifficulty}
+                onChange={(e) => setSettings((prev) => ({ ...prev, memoryDifficulty: e.target.value as MemoryDifficulty }))}
+              >
+                {MEMORY_DIFFICULTIES.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Klondike draw mode */}
+      {showKlonOpts && (
+        <>
+          <div className="cards-launcher__divider" />
+          <div>
+            <div className="cards-launcher__section-title">Klondike Options:</div>
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Draw:</span>
+              <select
+                className="cards-launcher__select"
+                style={{ width: "auto" }}
+                value={settings.klondikeDraw}
+                onChange={(e) => setSettings((prev) => ({ ...prev, klondikeDraw: parseInt(e.target.value) as 1 | 3 }))}
+              >
+                <option value={1}>Draw 1</option>
+                <option value={3}>Draw 3</option>
+              </select>
+            </div>
+            <div className="cards-launcher__row">
+              <span className="cards-launcher__option-label">Relaxed Rules:</span>
+              <label className="cards-launcher__checkbox-wrap">
+                <input
+                  type="checkbox"
+                  className="cards-launcher__checkbox"
+                  checked={settings.klondikeRelaxed}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, klondikeRelaxed: e.target.checked }))}
+                />
+                <span className="cards-launcher__checkbox-text">{settings.klondikeRelaxed ? "On" : "Off"}</span>
+              </label>
+            </div>
+            {settings.klondikeRelaxed && (
+              <div className="cards-launcher__row">
+                <span style={{ fontSize: "6px", color: "#666", lineHeight: 1.4 }}>
+                  Any card may be placed on empty columns
+                </span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="cards-launcher__divider" />
 
       <button className="cards-launcher__launch-btn" onClick={() => onLaunch(game, settings)}>
@@ -178,8 +300,8 @@ export default function CardsLauncher({ onLaunch, onQuit }: CardsLauncherProps) 
 
       {showDeckModal && (
         <DeckModal
-          cardBack={settings.cardBack}
-          onSelect={(color) => setSettings((prev) => ({ ...prev, cardBack: color }))}
+          appearance={settings.appearance}
+          onUpdate={(a) => setSettings((prev) => ({ ...prev, appearance: a }))}
           onClose={() => setShowDeckModal(false)}
         />
       )}

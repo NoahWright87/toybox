@@ -1,3 +1,33 @@
+/* ─── Animations ─────────────────────────────────────────────────────── */
+
+@keyframes card-deal-in {
+  from {
+    transform: translateY(-28px) scale(0.88);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes card-reveal {
+  from {
+    transform: translateY(-10px) scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes win-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(68, 204, 68, 0.6); }
+  50%  { box-shadow: 0 0 12px 4px rgba(68, 204, 68, 0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(68, 204, 68, 0); }
+}
+
 /* ─── Playing Card ──────────────────────────────────────────────────── */
 
 .playing-card {
@@ -10,6 +40,11 @@
   flex-shrink: 0;
   user-select: none;
   box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.playing-card--deal {
+  animation: card-deal-in 0.28s ease backwards;
+  animation-delay: calc(var(--deal-index, 0) * 55ms);
 }
 
 /* Small variant for pyramid layout */
@@ -40,31 +75,92 @@
   right: 3px;
 }
 
-/* Back face — color comes from inline style --card-back */
+/* Back face — primary color from --cbp, pattern color from --cbs */
 .playing-card--back {
-  background-color: var(--card-back, #cc4400);
+  background-color: var(--cbp, #cc4400);
   cursor: default;
 }
 
 .playing-card__back-inner {
   position: absolute;
   inset: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+/* Pattern: crosshatch (default) */
+.playing-card--back[data-pattern="crosshatch"] .playing-card__back-inner,
+.playing-card--back:not([data-pattern]) .playing-card__back-inner {
   background:
     repeating-linear-gradient(
       45deg,
       transparent,
       transparent 5px,
-      rgba(255, 255, 255, 0.12) 5px,
-      rgba(255, 255, 255, 0.12) 6px
+      var(--cbs, rgba(255, 255, 255, 0.15)) 5px,
+      var(--cbs, rgba(255, 255, 255, 0.15)) 6px
     ),
     repeating-linear-gradient(
       -45deg,
       transparent,
       transparent 5px,
-      rgba(255, 255, 255, 0.12) 5px,
-      rgba(255, 255, 255, 0.12) 6px
+      var(--cbs, rgba(255, 255, 255, 0.15)) 5px,
+      var(--cbs, rgba(255, 255, 255, 0.15)) 6px
     );
+}
+
+/* Pattern: diagonal */
+.playing-card--back[data-pattern="diagonal"] .playing-card__back-inner {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 7px,
+      var(--cbs, rgba(255, 255, 255, 0.25)) 7px,
+      var(--cbs, rgba(255, 255, 255, 0.25)) 9px
+    );
+}
+
+/* Pattern: diamonds (tight crosshatch makes diamond shapes) */
+.playing-card--back[data-pattern="diamonds"] .playing-card__back-inner {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 3px,
+      var(--cbs, rgba(255, 255, 255, 0.2)) 3px,
+      var(--cbs, rgba(255, 255, 255, 0.2)) 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 3px,
+      var(--cbs, rgba(255, 255, 255, 0.2)) 3px,
+      var(--cbs, rgba(255, 255, 255, 0.2)) 4px
+    );
+}
+
+/* Pattern: noahsoft (wide diagonal stripes + NS watermark) */
+.playing-card--back[data-pattern="noahsoft"] .playing-card__back-inner {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent,
+      transparent 10px,
+      var(--cbs, rgba(255, 255, 255, 0.18)) 10px,
+      var(--cbs, rgba(255, 255, 255, 0.18)) 12px
+    );
+}
+
+.playing-card__back-ns {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: var(--cbs, rgba(255, 255, 255, 0.4));
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* Front face */
@@ -114,12 +210,83 @@
   pointer-events: none;
 }
 
-.playing-card--red { color: #cc0000; }
+/* Suit colors — standard */
+.playing-card--red   { color: #cc0000; }
 .playing-card--black { color: #111111; }
+
+/* Suit colors — four-color mode (closest to traditional) */
+.playing-card--pink  { color: #cc0055; }   /* hearts */
+.playing-card--navy  { color: #1133aa; }   /* spades */
+.playing-card--green { color: #117733; }   /* clubs */
+/* diamonds stay --red */
+
+/* Suit colors — high-contrast mode (maximally distinct) */
+.playing-card--orange { color: #ee5500; }  /* diamonds: vivid orange */
+.playing-card--blue   { color: #0055ee; }  /* spades: vivid blue */
+/* hearts stay --pink, clubs stay --green */
+
+/* ─── Card text size ────────────────────────────────────────────────────── */
+
+/* Full-size cards (72×100) */
+.playing-card--text-lg:not(.playing-card--sm) .playing-card__rank { font-size: 9px; }
+.playing-card--text-lg:not(.playing-card--sm) .playing-card__suit-pip { font-size: 10px; }
+.playing-card--text-lg:not(.playing-card--sm) .playing-card__center { font-size: 30px; }
+
+.playing-card--text-xl:not(.playing-card--sm) .playing-card__rank { font-size: 12px; }
+.playing-card--text-xl:not(.playing-card--sm) .playing-card__suit-pip { font-size: 13px; }
+.playing-card--text-xl:not(.playing-card--sm) .playing-card__center { font-size: 36px; }
+
+/* Small cards (52×72) — proportionally scaled sizes */
+.playing-card--text-lg.playing-card--sm .playing-card__rank { font-size: 7px; }
+.playing-card--text-lg.playing-card--sm .playing-card__suit-pip { font-size: 8px; }
+.playing-card--text-lg.playing-card--sm .playing-card__center { font-size: 22px; }
+
+.playing-card--text-xl.playing-card--sm .playing-card__rank { font-size: 9px; }
+.playing-card--text-xl.playing-card--sm .playing-card__suit-pip { font-size: 10px; }
+.playing-card--text-xl.playing-card--sm .playing-card__center { font-size: 26px; }
+
 .playing-card--joker {
   color: #5b2d8e;
   font-family: "Press Start 2P", monospace;
 }
+
+/* ─── Large-index face style ─────────────────────────────────────────── */
+
+.playing-card--large-idx .playing-card__li-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+/* Standard card (72×100): max rank size where "10" still fits the 64px usable width */
+.playing-card--large-idx .playing-card__li-rank {
+  font-family: "Press Start 2P", monospace;
+  font-size: 28px;
+  line-height: 1;
+  display: block;
+}
+
+.playing-card--large-idx .playing-card__li-suit {
+  font-size: 30px;
+  line-height: 1;
+  display: block;
+}
+
+/* sm card (52×72): scaled to fit "10" in the 44px usable width */
+.playing-card--large-idx.playing-card--sm .playing-card__li-rank {
+  font-size: 20px;
+}
+
+.playing-card--large-idx.playing-card--sm .playing-card__li-suit {
+  font-size: 22px;
+}
+
+/* ─── Empty slot ─────────────────────────────────────────────────────── */
 
 .playing-card--empty {
   width: 72px;
@@ -258,11 +425,18 @@
   opacity: 1;
 }
 
-/* Jokers checkbox */
+/* Checkbox */
 .cards-launcher__checkbox-wrap {
   display: flex;
   align-items: center;
   gap: 6px;
+  cursor: pointer;
+}
+
+.cards-launcher__checkbox {
+  accent-color: #cc4400;
+  width: 14px;
+  height: 14px;
   cursor: pointer;
 }
 
@@ -409,4 +583,35 @@
 .no-game__btn--reshuffle:hover { background: #7b3dbe; }
 .no-game__btn--reshuffle:active {
   border-color: #331155 #9966cc #9966cc #331155;
+}
+
+/* ─── FlippableCard 3D flip ─────────────────────────────────────────── */
+
+.flippable {
+  perspective: 600px;
+  display: inline-block;
+}
+
+.flippable__inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(0deg);
+  transition: transform 260ms ease-in-out;
+}
+
+.flippable__inner--face-up {
+  transform: rotateY(180deg);
+}
+
+.flippable__face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flippable__face--front {
+  transform: rotateY(180deg);
 }
