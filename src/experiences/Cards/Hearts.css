@@ -40,7 +40,7 @@
   color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 200;
+  z-index: 3000;
 }
 
 .hearts__label--north {
@@ -117,7 +117,7 @@
   align-items: center;
   gap: 5px;
   pointer-events: none;
-  z-index: 50;
+  z-index: 3000;
 }
 
 .hearts__trick-count {
@@ -142,7 +142,7 @@
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  z-index: 200;
+  z-index: 3000;
 }
 
 .hearts__pass-hint {
@@ -163,7 +163,7 @@
   color: rgba(255, 255, 255, 0.4);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 200;
+  z-index: 3000;
 }
 
 /* ── Status bar ──────────────────────────────────────────────────────── */

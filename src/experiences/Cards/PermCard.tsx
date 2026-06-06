@@ -38,8 +38,6 @@ export function PermCard({ card, cs, appearance, size, highlightColor, onClick, 
         zIndex:      cs.z,
         transition:  posTrans,
         cursor:      onPointerDown || onClick ? "pointer" : "default",
-        boxShadow:   highlightColor ? `0 0 0 2px ${highlightColor}, 0 0 6px 1px ${highlightColor}` : undefined,
-        borderRadius: "4px",
         touchAction: onPointerDown ? "none" : undefined,
       }}
       onClick={onClick}
@@ -52,6 +50,8 @@ export function PermCard({ card, cs, appearance, size, highlightColor, onClick, 
           transform:       `rotate(${cs.rotation}deg)`,
           transformOrigin: "center",
           transition:      "transform 250ms ease-out",
+          borderRadius:    "4px",
+          boxShadow:       highlightColor ? `0 0 0 2px ${highlightColor}, 0 0 6px 1px ${highlightColor}` : undefined,
         }}
       >
         <div className="flippable" style={{ width: cw, height: ch }}>
