@@ -157,27 +157,29 @@ function computePositions(
     }
   }
 
-  // Stock: stacked face-down, depth offset goes UPWARD so stack doesn't cover the label
+  // Stock: stacked face-down, depth goes LEFT so stack doesn't cover pyramid cards above.
+  // stock[0] is the next card drawn (logical top) → depth=0, highest z, no offset.
   const n = s.stock.length;
   s.stock.forEach((card, i) => {
-    const depth = n - 1 - i;   // 0 for top card, n-1 for bottom
+    const depth = i;           // 0 = top card (stock[0]), n-1 = bottom
     result[card.id] = {
-      x: STOCK_X + depth * 0.5,
-      y: PILE_Y  - depth * 0.5,
-      z: 100 + i,
+      x: STOCK_X - depth * 0.5,
+      y: PILE_Y,
+      z: 100 + (n - 1 - i),   // stock[0] gets highest z
       faceDown: true,
       rotation: 0,
       transitionMs: ms,
     };
   });
 
-  // Waste: stacked face-up, same depth trick (upward)
+  // Waste: stacked face-up, depth goes LEFT.
+  // waste[wn-1] is the top card (most recently drawn) → depth=0, highest z.
   const wn = s.waste.length;
   s.waste.forEach((card, i) => {
     const depth = wn - 1 - i;
     result[card.id] = {
-      x: WASTE_X + depth * 0.5,
-      y: PILE_Y  - depth * 0.5,
+      x: WASTE_X - depth * 0.5,
+      y: PILE_Y,
       z: 200 + i,
       faceDown: false,
       rotation: 0,
@@ -256,11 +258,11 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
     const total = cards.length;
     const half = Math.floor(total / 2);
 
-    // Start: all cards stacked at stock, no transition
+    // Start: all cards stacked at stock, depth goes LEFT, no transition
     const init: Record<string, CardVisualState> = {};
     cards.forEach((c, i) => {
       const d = total - 1 - i;
-      init[c.id] = { x: STOCK_X + d * 0.3, y: PILE_Y - d * 0.3, z: 100 + i, rotation: 0, faceDown: true, transitionMs: 0 };
+      init[c.id] = { x: STOCK_X - d * 0.3, y: PILE_Y, z: 100 + i, rotation: 0, faceDown: true, transitionMs: 0 };
     });
     setCardStates(init);
 
@@ -274,8 +276,8 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
           const len = isLeft ? half : total - half;
           const d = len - 1 - pos;
           split[c.id] = {
-            x: (isLeft ? STOCK_X - 24 : STOCK_X + 24) + d * 0.3,
-            y: PILE_Y - d * 0.3,
+            x: (isLeft ? STOCK_X - 24 : STOCK_X + 24) + (isLeft ? -d : d) * 0.3,
+            y: PILE_Y,
             z: 100 + i,
             rotation: isLeft ? -3 : 3,
             faceDown: true,
@@ -289,8 +291,8 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
           cards.forEach((c, i) => {
             const d = total - 1 - i;
             merged[c.id] = {
-              x: STOCK_X + d * 0.3,
-              y: PILE_Y - d * 0.3,
+              x: STOCK_X - d * 0.3,
+              y: PILE_Y,
               z: 100 + i,
               rotation: 0,
               faceDown: true,
@@ -309,10 +311,10 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
       shufflePass(0, () => {
         after(60, () => {
           const deal: Record<string, CardVisualState> = {};
-          // Stock cards snap to final pile positions (no transition)
+          // Stock cards snap to final pile positions (no transition).
+          // stock[0] = logical top: depth=0, highest z, no offset.
           s.stock.forEach((card, i) => {
-            const d = s.stock.length - 1 - i;
-            deal[card.id] = { x: STOCK_X + d * 0.5, y: PILE_Y - d * 0.5, z: 100 + i, faceDown: true, rotation: 0, transitionMs: 0 };
+            deal[card.id] = { x: STOCK_X - i * 0.5, y: PILE_Y, z: 100 + (s.stock.length - 1 - i), faceDown: true, rotation: 0, transitionMs: 0 };
           });
           // Pyramid cards fly to grid positions with stagger (apex first)
           s.slots.forEach(slot => {
