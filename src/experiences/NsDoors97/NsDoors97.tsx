@@ -665,9 +665,9 @@ export default function NsDoors97() {
   const handleCardsLaunch = useCallback(
     (launcherWinId: string, game: CardsGame, settings: DeckSettings) => {
       setOpenWindows((prev) => {
+        const launcherPos = prev.find((w) => w.id === launcherWinId)?.defaultPosition
+          ?? { x: 80, y: 48 };
         const filtered = prev.filter((w) => w.id !== launcherWinId);
-        const offset = (windowSeq % 8) * 32;
-        windowSeq++;
         maxZ++;
         setActiveWindowId("cards-game");
         return [
@@ -678,7 +678,7 @@ export default function NsDoors97() {
             icon: "🃏",
             content: { type: "cards-game" as const, game, settings },
             zIndex: maxZ,
-            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            defaultPosition: launcherPos,
             width: CARDS_GAME_WIDTHS[game],
             minimized: false,
           },
@@ -691,9 +691,9 @@ export default function NsDoors97() {
   // Close the Cards game and reopen the launcher
   const handleCardsGameClose = useCallback((id: string) => {
     setOpenWindows((prev) => {
+      const gamePos = prev.find((w) => w.id === id)?.defaultPosition
+        ?? { x: 80, y: 48 };
       const filtered = prev.filter((w) => w.id !== id);
-      const offset = (windowSeq % 8) * 32;
-      windowSeq++;
       maxZ++;
       setActiveWindowId("cards");
       return [
@@ -704,7 +704,7 @@ export default function NsDoors97() {
           icon: "🃏",
           content: { type: "cards-launcher" as const },
           zIndex: maxZ,
-          defaultPosition: { x: 80 + offset, y: 48 + offset },
+          defaultPosition: gamePos,
           width: 320,
           minimized: false,
         },

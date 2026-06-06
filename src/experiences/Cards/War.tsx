@@ -25,8 +25,9 @@ function rnd(min: number, max: number): number {
 
 // ─── Stage constants ──────────────────────────────────────────────────────────
 
-// Stage inner: 416px wide × 240px tall (440 window − chrome − margin − border)
-const CY = 120;  // vertical center of stage
+const STAGE_W = 420;
+const STAGE_H = 240;
+const CY = STAGE_H / 2;  // vertical center of stage
 
 const PLAYER_X = 76;
 const DEALER_X = 340;
@@ -64,6 +65,8 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
   const [bannerType,    setBannerType]    = useState<BannerType>("win");
   const [appearance,    setAppearance]    = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
+  const [scale,         setScale]         = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Card stacks — mutable refs, never triggers re-renders themselves
   const ps = useRef(new CardStack({ zTier: 1, baseX: PLAYER_X, baseY: CY, offsetX:  0.5, offsetY: -0.5 }));
@@ -81,6 +84,17 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
     const id = setTimeout(fn, ms);
     timers.current.push(id);
   }
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   const am = ANIM_MULT[settings.warSpeed] ?? 1.0;
   function t(ms: number): number { return Math.round(ms * am); }
@@ -461,16 +475,26 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
         <span>Dealer: {dealerCount}</span>
       </div>
 
-      <div className="war__stage">
-        {/* VS label when waiting for flip */}
-        {phase === "idle" && <div className="war__vs-label">VS</div>}
+      <div className="war__stage-container" ref={containerRef} style={{ height: Math.round(STAGE_H * scale) }}>
+        <div
+          className="war__stage"
+          style={{
+            width: STAGE_W,
+            height: STAGE_H,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
+          }}
+        >
+          {/* VS label when waiting for flip */}
+          {phase === "idle" && <div className="war__vs-label">VS</div>}
 
-        {/* All 52 cards — permanently mounted, CSS transitions drive all animation */}
-        {allCards.map(card => {
-          const cs = cardStates[card.id];
-          if (!cs) return null;
-          return <PermCard key={card.id} card={card} cs={cs} appearance={appearance} />;
-        })}
+          {/* All 52 cards — permanently mounted, CSS transitions drive all animation */}
+          {allCards.map(card => {
+            const cs = cardStates[card.id];
+            if (!cs) return null;
+            return <PermCard key={card.id} card={card} cs={cs} appearance={appearance} />;
+          })}
+        </div>
       </div>
 
       <div className="war__controls">

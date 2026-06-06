@@ -227,6 +227,7 @@
 
 /* ─── Card text size ────────────────────────────────────────────────────── */
 
+/* Full-size cards (72×100) */
 .playing-card--text-lg:not(.playing-card--sm) .playing-card__rank { font-size: 9px; }
 .playing-card--text-lg:not(.playing-card--sm) .playing-card__suit-pip { font-size: 10px; }
 .playing-card--text-lg:not(.playing-card--sm) .playing-card__center { font-size: 30px; }
@@ -234,6 +235,15 @@
 .playing-card--text-xl:not(.playing-card--sm) .playing-card__rank { font-size: 12px; }
 .playing-card--text-xl:not(.playing-card--sm) .playing-card__suit-pip { font-size: 13px; }
 .playing-card--text-xl:not(.playing-card--sm) .playing-card__center { font-size: 36px; }
+
+/* Small cards (52×72) — proportionally scaled sizes */
+.playing-card--text-lg.playing-card--sm .playing-card__rank { font-size: 7px; }
+.playing-card--text-lg.playing-card--sm .playing-card__suit-pip { font-size: 8px; }
+.playing-card--text-lg.playing-card--sm .playing-card__center { font-size: 22px; }
+
+.playing-card--text-xl.playing-card--sm .playing-card__rank { font-size: 9px; }
+.playing-card--text-xl.playing-card--sm .playing-card__suit-pip { font-size: 10px; }
+.playing-card--text-xl.playing-card--sm .playing-card__center { font-size: 26px; }
 
 .playing-card--joker {
   color: #5b2d8e;

@@ -23,15 +23,20 @@
 
 /* ── Stage ──────────────────────────────────────────────────────────── */
 
-.war__stage {
-  position: relative;
-  height: 240px;
-  background: #1a4a1a;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
+.war__stage-container {
   margin: 8px 8px 4px;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.war__stage {
+  position: relative;
+  background: #1a4a1a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-sizing: border-box;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 /* ── Stacked pile ────────────────────────────────────────────────────── */

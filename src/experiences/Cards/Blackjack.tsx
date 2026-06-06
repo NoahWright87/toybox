@@ -12,20 +12,20 @@ import { DeckModal } from "./DeckModal";
 // ── Stage layout ──────────────────────────────────────────────────────────────
 
 const STAGE_W = 480;
-const STAGE_H = 300;
+const STAGE_H = 360;
 const DEAL_Y  = 72;   // dealer hand y center
-const PLAY_Y  = 178;  // player hand y center
+const PLAY_Y  = 230;  // player hand y center
 const HAND_X  = 44;   // first card center x for both hands
 const FAN_X   = 24;   // per-card horizontal fan offset
-const SHOE_X  = 452;  // shoe pile center x (right of dealer row)
+const SHOE_X  = 440;  // shoe pile center x (right of dealer row)
 const SHOE_Y  = 72;   // shoe pile center y (same level as dealer)
 const DISC_X  = -80;  // discard pile off-screen left
-const DISC_Y  = 125;
+const DISC_Y  = 145;
 
 // In-stage action button anchors
 const HIT_L   = 390;              // HIT card button left edge
-const HIT_T   = PLAY_Y - 36;     // 142 — aligns top of HIT card with player cards
-const STAY_T  = PLAY_Y + 54;     // 232 — below player card bottoms (PLAY_Y+36=214)
+const HIT_T   = PLAY_Y - 50;     // aligns top of HIT zone with top of player cards
+const STAY_T  = PLAY_Y + 60;     // below player card bottoms
 const DBL_L   = 152;
 const DBL_T   = STAY_T;
 
@@ -145,9 +145,8 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
     const el = containerRef.current;
     if (!el) return;
     const obs = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      const s = Math.min(width / STAGE_W, height / STAGE_H);
-      setScale(Math.max(0.4, s));
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
     });
     obs.observe(el);
     return () => obs.disconnect();
@@ -512,24 +511,22 @@ export default function Blackjack({ settings, onNewGame, onQuit }: BlackjackProp
         <DeckModal appearance={appearance} onUpdate={setAppearance} onClose={() => setShowDeckModal(false)} />
       )}
 
-      {/* Green felt area — fills all available space */}
-      <div className="bj__stage-container" ref={containerRef}>
+      {/* Green felt area — fixed height derived from scale so window self-sizes */}
+      <div className="bj__stage-container" ref={containerRef} style={{ height: Math.round(STAGE_H * scale) }}>
         <div
           className="bj__stage"
           style={{
             width:  STAGE_W,
             height: STAGE_H,
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: `translate(-50%, -50%) scale(${scale})`,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
           }}
         >
           {/* All cards: permanent DOM, positions driven by cardStates */}
           {allCards.current.map(card => {
             const cs = cardStates[card.id];
             if (!cs) return null;
-            return <PermCard key={card.id} card={card} cs={cs} appearance={appearance} size="sm" />;
+            return <PermCard key={card.id} card={card} cs={cs} appearance={appearance} />;
           })}
 
           {/* DEALER label */}
