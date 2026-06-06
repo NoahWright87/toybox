@@ -50,6 +50,17 @@ export interface BoardPlunger {
   launchPower?: number; // multiplier on max launch velocity (default 1.0)
 }
 
+export interface BoardRailPoint {
+  x: number;
+  y: number;
+}
+
+export interface BoardRail {
+  points: BoardRailPoint[];
+  magnetStrength: number; // 0 = off, 0.3 = subtle, 1.0 = strong
+  captureRadius: number;  // px beyond physical walls where capture pull begins
+}
+
 export interface Board {
   width: number;
   height: number;
@@ -62,4 +73,5 @@ export interface Board {
   plunger: BoardPlunger;
   ballStartX: number;
   ballStartY: number;
+  rails?: BoardRail[];
 }

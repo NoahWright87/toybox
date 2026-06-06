@@ -3,6 +3,8 @@ import * as Matter from "matter-js";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import type { Board } from "./boardTypes";
+import { sampleRailCenterline, RAIL_HALF_INNER, RAIL_WALL_OFFSET, RAIL_WALL_THICK } from "./railUtils";
+import type { RailSample } from "./railUtils";
 import "./Pinball.css";
 
 const SUBSTEPS = 3;
@@ -59,6 +61,12 @@ interface TargetState {
   hit: boolean;
 }
 
+interface RailPhysState {
+  samples: RailSample[];
+  magnetStrength: number;
+  captureRadius: number;
+}
+
 interface GameState {
   phase: Phase;
   score: number;
@@ -70,6 +78,7 @@ interface GameState {
   slingshots: SlingshotState[];
   targets: TargetState[];
   bonusMultiplier: number;
+  rails: RailPhysState[];
 }
 
 interface Props {
@@ -301,6 +310,30 @@ export default function Pinball({ board, onQuit }: Props) {
       )
     );
 
+    // Rails
+    const railPhysStates: RailPhysState[] = [];
+    for (const rail of board.rails ?? []) {
+      const samples = sampleRailCenterline(rail.points);
+      railPhysStates.push({ samples, magnetStrength: rail.magnetStrength, captureRadius: rail.captureRadius });
+      for (let i = 0; i < samples.length - 1; i++) {
+        const s0 = samples[i], s1 = samples[i + 1];
+        const cx = (s0.x + s1.x) / 2, cy = (s0.y + s1.y) / 2;
+        const segLen = Math.hypot(s1.x - s0.x, s1.y - s0.y) + 1;
+        const angle = Math.atan2(s1.y - s0.y, s1.x - s0.x);
+        const nx = -Math.sin(angle), ny = Math.cos(angle);
+        for (const side of [-1, 1]) {
+          Matter.Composite.add(engine.world,
+            Matter.Bodies.rectangle(
+              cx + nx * side * RAIL_WALL_OFFSET,
+              cy + ny * side * RAIL_WALL_OFFSET,
+              segLen, RAIL_WALL_THICK,
+              { ...staticWallOpts, angle, restitution: 0.3, friction: 0.05 }
+            )
+          );
+        }
+      }
+    }
+
     // Ball (static until launched)
     const ball = Matter.Bodies.circle(board.ballStartX, board.ballStartY, BALL_R, {
       restitution: 0.5,
@@ -325,6 +358,7 @@ export default function Pinball({ board, onQuit }: Props) {
       slingshots: slingshotStates,
       targets: targetStates,
       bonusMultiplier: 1,
+      rails: railPhysStates,
     };
     stateRef.current = state;
 
@@ -424,6 +458,35 @@ export default function Pinball({ board, onQuit }: Props) {
         }
         capSpeed(ball);
 
+        // Rail magnetic centering force
+        for (const rp of st.rails) {
+          if (rp.magnetStrength <= 0 || rp.samples.length === 0) continue;
+          let minDist = Infinity, bestIdx = -1;
+          for (let i = 0; i < rp.samples.length; i++) {
+            const d = Math.hypot(ball.position.x - rp.samples[i].x, ball.position.y - rp.samples[i].y);
+            if (d < minDist) { minDist = d; bestIdx = i; }
+          }
+          if (bestIdx < 0) continue;
+          const captureZone = RAIL_HALF_INNER + rp.captureRadius;
+          if (minDist > captureZone || minDist < 0.5) continue;
+          const s = rp.samples[bestIdx];
+          const dx = s.x - ball.position.x, dy = s.y - ball.position.y;
+          const forceMag = rp.magnetStrength * minDist * 0.0004;
+          Matter.Body.applyForce(ball, ball.position, { x: dx / minDist * forceMag, y: dy / minDist * forceMag });
+        }
+
+        // Plunger re-catch: ball returned down the launch rail, reset without losing a life
+        if (st.phase === "playing" && ball.velocity.y > 0) {
+          const bx = ball.position.x, by = ball.position.y;
+          if (bx > board.plunger.x - BALL_R - 10 && by > board.ballStartY - BALL_R * 2) {
+            Matter.Body.setStatic(ball, true);
+            Matter.Body.setPosition(ball, { x: board.ballStartX, y: board.ballStartY });
+            Matter.Body.setVelocity(ball, { x: 0, y: 0 });
+            st.phase = "ready";
+            st.plungerCharge = 0;
+          }
+        }
+
         // Drain check
         if (ball.position.y > H - 10) {
           st.lives -= 1;
@@ -451,6 +514,24 @@ export default function Pinball({ board, onQuit }: Props) {
 
       ctx.fillStyle = "#0a0018";
       ctx.fillRect(0, 0, W, H);
+
+      // Rails
+      for (const rail of board.rails ?? []) {
+        const samples = sampleRailCenterline(rail.points);
+        if (samples.length < 2) continue;
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          for (let i = 0; i < samples.length; i++) {
+            const s = samples[i];
+            const nx = -s.tanY * side, ny = s.tanX * side;
+            const wx = s.x + nx * RAIL_HALF_INNER, wy = s.y + ny * RAIL_HALF_INNER;
+            if (i === 0) ctx.moveTo(wx, wy); else ctx.lineTo(wx, wy);
+          }
+          ctx.strokeStyle = "#5030a0";
+          ctx.lineWidth = RAIL_WALL_THICK;
+          ctx.stroke();
+        }
+      }
 
       // Walls
       ctx.fillStyle = "#1a0050";

@@ -110,6 +110,7 @@
 .pbed__canvas--select { cursor: default; }
 .pbed__canvas--delete { cursor: crosshair; }
 .pbed__canvas--place  { cursor: crosshair; }
+.pbed__canvas--rail   { cursor: crosshair; }
 
 /* ── ✏️ FAB — bottom-LEFT corner ───────────────────────────────────────────── */
 

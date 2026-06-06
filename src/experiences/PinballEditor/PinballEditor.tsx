@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import type {
   Board, BoardWall, BoardBumper, BoardPost, BoardFlipper,
-  BoardSlingshot, BoardTarget,
+  BoardSlingshot, BoardTarget, BoardRail, BoardRailPoint,
 } from "../Pinball/boardTypes";
+import { sampleRailCenterline, RAIL_HALF_INNER, RAIL_WALL_THICK } from "../Pinball/railUtils";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import Pinball from "../Pinball/Pinball";
@@ -19,9 +20,9 @@ const BALL_R = 10; // matches game physics
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Tool = "select" | "wall" | "bumper" | "post" | "flipper-l" | "flipper-r"
-  | "slingshot" | "target" | "delete";
+  | "slingshot" | "target" | "delete" | "rail";
 
-type SelKind = "wall" | "bumper" | "post" | "flipper" | "slingshot" | "target" | "plunger";
+type SelKind = "wall" | "bumper" | "post" | "flipper" | "slingshot" | "target" | "plunger" | "rail";
 interface SelItem { kind: SelKind; idx: number; }
 
 interface ViewXform { x: number; y: number; scale: number; }
@@ -132,6 +133,13 @@ function hitTest(board: Board, bx: number, by: number): SelItem | null {
     const ly = dx * Math.sin(-a) + dy * Math.cos(-a);
     if (Math.abs(lx) <= w.w / 2 + 4 && Math.abs(ly) <= w.h / 2 + 4) return { kind: "wall", idx: i };
   }
+  for (let i = (board.rails ?? []).length - 1; i >= 0; i--) {
+    const rail = board.rails![i];
+    const samples = sampleRailCenterline(rail.points);
+    for (const s of samples) {
+      if (Math.hypot(bx - s.x, by - s.y) < 20) return { kind: "rail", idx: i };
+    }
+  }
   return null;
 }
 
@@ -146,6 +154,9 @@ function selectAllInBand(board: Board, bx1: number, by1: number, bx2: number, by
   board.flippers.forEach((f, i) => { if (inBox(f.pivotX, f.pivotY)) result.push({ kind: "flipper", idx: i }); });
   board.slingshots.forEach((sl, i) => { if (inBox(sl.x, sl.y)) result.push({ kind: "slingshot", idx: i }); });
   board.targets.forEach((t, i) => { if (inBox(t.x, t.y)) result.push({ kind: "target", idx: i }); });
+  (board.rails ?? []).forEach((r, i) => {
+    if (r.points.some(p => inBox(p.x, p.y))) result.push({ kind: "rail", idx: i });
+  });
   return result;
 }
 
@@ -242,6 +253,11 @@ function moveItems(board: Board, items: SelItem[], dbx: number, dby: number): Bo
     plunger: movedPlunger ? { ...board.plunger, x: snap(board.plunger.x + dbx) } : board.plunger,
     ballStartX: movedPlunger ? snap(board.ballStartX + dbx) : board.ballStartX,
     ballStartY: movedPlunger ? snap(board.ballStartY + dby) : board.ballStartY,
+    rails: (board.rails ?? []).map((r, i) =>
+      new Set<number>(items.filter(s => s.kind === "rail").map(s => s.idx)).has(i)
+        ? { ...r, points: r.points.map(p => ({ x: snap(p.x + dbx), y: snap(p.y + dby) })) }
+        : r
+    ),
   };
 }
 
@@ -256,6 +272,7 @@ function deleteItems(board: Board, items: SelItem[]): Board {
     flippers: board.flippers.filter((_, i) => !toDelete("flipper").has(i)),
     slingshots: board.slingshots.filter((_, i) => !toDelete("slingshot").has(i)),
     targets: board.targets.filter((_, i) => !toDelete("target").has(i)),
+    rails: (board.rails ?? []).filter((_, i) => !toDelete("rail").has(i)),
   };
 }
 
@@ -284,6 +301,10 @@ function duplicateItem(board: Board, s: SelItem): { board: Board; newSel: SelIte
   if (s.kind === "target") {
     const t = { ...board.targets[s.idx], x: board.targets[s.idx].x + D, y: board.targets[s.idx].y + D };
     return { board: { ...board, targets: [...board.targets, t] }, newSel: { kind: "target", idx: board.targets.length } };
+  }
+  if (s.kind === "rail") {
+    const r = { ...(board.rails ?? [])[s.idx], points: (board.rails ?? [])[s.idx].points.map(p => ({ x: p.x + D, y: p.y + D })) };
+    return { board: { ...board, rails: [...(board.rails ?? []), r] }, newSel: { kind: "rail", idx: (board.rails ?? []).length } };
   }
   return { board, newSel: s };
 }
@@ -360,6 +381,15 @@ const IconDelete = () => (
   </svg>
 );
 
+const IconRail = () => (
+  <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M3 16 Q8 4 17 4" strokeLinecap="round"/>
+    <path d="M3 13 Q8 1 17 1" strokeLinecap="round"/>
+    <circle cx="3" cy="14.5" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="17" cy="2.5" r="1.5" fill="currentColor" stroke="none"/>
+  </svg>
+);
+
 const IconPlay = () => (
   <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
     <polygon points="4,2 18,10 4,18"/>
@@ -375,6 +405,13 @@ function getElementCenter(board: Board, sel: SelItem): { cx: number; cy: number 
   if (sel.kind === "flipper") return { cx: board.flippers[sel.idx].pivotX, cy: board.flippers[sel.idx].pivotY };
   if (sel.kind === "slingshot") return { cx: board.slingshots[sel.idx].x, cy: board.slingshots[sel.idx].y };
   if (sel.kind === "target") return { cx: board.targets[sel.idx].x, cy: board.targets[sel.idx].y };
+  if (sel.kind === "rail") {
+    const r = (board.rails ?? [])[sel.idx];
+    if (!r || r.points.length === 0) return { cx: 0, cy: 0 };
+    const cx = r.points.reduce((sum, p) => sum + p.x, 0) / r.points.length;
+    const cy = r.points.reduce((sum, p) => sum + p.y, 0) / r.points.length;
+    return { cx, cy };
+  }
   // plunger
   return { cx: board.plunger.x, cy: (board.plunger.topY + board.plunger.bottomY) / 2 };
 }
@@ -385,6 +422,25 @@ function ghostOpacityValue(preset: GhostOpacity): number {
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
+function drawRailOutline(ctx: CanvasRenderingContext2D, pts: BoardRailPoint[], color: string, lineWidth: number, dashed?: boolean) {
+  const samples = sampleRailCenterline(pts);
+  if (samples.length < 2) return;
+  if (dashed) ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    for (let i = 0; i < samples.length; i++) {
+      const s = samples[i];
+      const nx = -s.tanY * side, ny = s.tanX * side;
+      const wx = s.x + nx * RAIL_HALF_INNER, wy = s.y + ny * RAIL_HALF_INNER;
+      if (i === 0) ctx.moveTo(wx, wy); else ctx.lineTo(wx, wy);
+    }
+    ctx.stroke();
+  }
+  if (dashed) ctx.setLineDash([]);
+}
+
 function drawScene(
   ctx: CanvasRenderingContext2D,
   board: Board,
@@ -393,6 +449,8 @@ function drawScene(
   rubber: { bx1: number; by1: number; bx2: number; by2: number } | null,
   preview: { bx1: number; by1: number; bx2: number; by2: number } | null,
   trailCanvas?: HTMLCanvasElement | null,
+  railInProgress?: BoardRailPoint[] | null,
+  railMouse?: { x: number; y: number } | null,
 ) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#404040";
@@ -484,6 +542,40 @@ function drawScene(
     ctx.lineWidth = sel ? 2 : 1;
     ctx.fill(); ctx.stroke();
   });
+
+  // Rails (committed)
+  (board.rails ?? []).forEach((rail, i) => {
+    const sel = isSel("rail", i);
+    drawRailOutline(ctx, rail.points, sel ? "#00ff88" : "#5030a0", sel ? 2 : RAIL_WALL_THICK);
+    if (sel) {
+      // Show control points
+      for (const pt of rail.points) {
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffff00"; ctx.fill();
+      }
+    }
+  });
+
+  // Rail in-progress overlay
+  if (railInProgress && railInProgress.length > 0) {
+    const previewPts = railMouse ? [...railInProgress, railMouse] : railInProgress;
+    if (previewPts.length >= 2) drawRailOutline(ctx, previewPts, "rgba(0,255,136,0.5)", 1.5, true);
+    // Placed control points
+    for (const pt of railInProgress) {
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#00ff88"; ctx.fill();
+    }
+    // Ghost line to cursor
+    if (railMouse && railInProgress.length > 0) {
+      const last = railInProgress[railInProgress.length - 1];
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = "#00ff88"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(railMouse.x, railMouse.y); ctx.stroke();
+      ctx.setLineDash([]);
+      // Next point indicator
+      ctx.beginPath(); ctx.arc(railMouse.x, railMouse.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,255,136,0.6)"; ctx.fill();
+    }
+  }
 
   // Flippers
   board.flippers.forEach((f, i) => {
@@ -607,6 +699,7 @@ const TOOLS: { id: Tool; label: string; Icon: React.FC }[] = [
   { id: "flipper-r", label: "Flip R",    Icon: IconFlipperR },
   { id: "slingshot", label: "Sling",     Icon: IconSlingshot },
   { id: "target",    label: "Target",    Icon: IconTarget },
+  { id: "rail",      label: "Rail",      Icon: IconRail },
   { id: "delete",    label: "Delete",    Icon: IconDelete },
 ];
 
@@ -636,6 +729,11 @@ export default function PinballEditor() {
   const rubberRef = useRef(rubber); rubberRef.current = rubber;
   const previewRef = useRef(preview); previewRef.current = preview;
   const ghostOpacityRef = useRef(ghostOpacity); ghostOpacityRef.current = ghostOpacity;
+
+  // Rail drawing state (refs — no React state to avoid rerender on every mousemove)
+  const railInProgressRef = useRef<BoardRailPoint[] | null>(null);
+  const railMouseRef = useRef<{ x: number; y: number } | null>(null);
+  const lastRailClickRef = useRef(0);
 
   // Ghost ball worker + trail canvas
   const workerRef = useRef<Worker | null>(null);
@@ -679,12 +777,12 @@ export default function PinballEditor() {
     setShowBoardSize(false);
   }, [setBoard]);
 
-  // Direct canvas redraw from worker RAF callback (all values via refs)
+  // Direct canvas redraw from worker RAF callback and rail preview (all values via refs)
   const drawSceneNow = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    drawScene(ctx, boardRef.current, viewRef.current, selectedRef.current, rubberRef.current, previewRef.current, trailCanvasRef.current);
+    drawScene(ctx, boardRef.current, viewRef.current, selectedRef.current, rubberRef.current, previewRef.current, trailCanvasRef.current, railInProgressRef.current, railMouseRef.current);
   }, []);
 
   // Clear the offscreen trail canvas and redraw
@@ -739,7 +837,7 @@ export default function PinballEditor() {
 
   const handleClearAll = useCallback(() => {
     if (!window.confirm("Clear the entire board?")) return;
-    setBoard(prev => ({ ...prev, walls: [], bumpers: [], posts: [], flippers: [], slingshots: [], targets: [] }));
+    setBoard(prev => ({ ...prev, walls: [], bumpers: [], posts: [], flippers: [], slingshots: [], targets: [], rails: [] }));
     setSelected([]);
   }, [setBoard]);
 
@@ -833,6 +931,14 @@ export default function PinballEditor() {
 
   useWindowMenus(menus);
 
+  // Cancel in-progress rail when switching away from the rail tool
+  useEffect(() => {
+    if (tool !== "rail") {
+      railInProgressRef.current = null;
+      railMouseRef.current = null;
+    }
+  }, [tool]);
+
   // ── Canvas draw ─────────────────────────────────────────────────────────────
 
   // Initialise the offscreen trail canvas once (sized to board)
@@ -854,7 +960,7 @@ export default function PinballEditor() {
       const w = container.clientWidth, h = container.clientHeight;
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     }
-    drawScene(ctx, board, view, selected, rubber, preview, trailCanvasRef.current);
+    drawScene(ctx, board, view, selected, rubber, preview, trailCanvasRef.current, railInProgressRef.current, railMouseRef.current);
   }, [board, view, selected, rubber, preview]);
 
   useEffect(() => {
@@ -867,7 +973,7 @@ export default function PinballEditor() {
       if (!ctx) return;
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
-      drawScene(ctx, boardRef.current, viewRef.current, selectedRef.current, null, null, trailCanvasRef.current);
+      drawScene(ctx, boardRef.current, viewRef.current, selectedRef.current, null, null, trailCanvasRef.current, railInProgressRef.current, railMouseRef.current);
     });
     ro.observe(container);
     return () => ro.disconnect();
@@ -1001,6 +1107,44 @@ export default function PinballEditor() {
       return;
     }
 
+    if (toolRef.current === "rail") {
+      const now = Date.now();
+      const isDouble = now - lastRailClickRef.current < 380;
+      lastRailClickRef.current = now;
+      const snapped: BoardRailPoint = { x: snap(bx), y: snap(by) };
+
+      if (isDouble) {
+        // Finish rail — use all points placed so far (the double-click itself is not a new point)
+        const pts = railInProgressRef.current;
+        if (pts && pts.length >= 2) {
+          const newIdx = (boardRef.current.rails ?? []).length;
+          setBoard(b => ({ ...b, rails: [...(b.rails ?? []), { points: pts, magnetStrength: 0.3, captureRadius: 20 }] }));
+          setSelected([{ kind: "rail", idx: newIdx }]);
+        }
+        railInProgressRef.current = null;
+        railMouseRef.current = null;
+        drawSceneNow();
+        return;
+      }
+
+      // Single click: add a control point (check angle constraint)
+      const current = railInProgressRef.current;
+      if (current && current.length >= 2) {
+        const prev2 = current[current.length - 2];
+        const prev1 = current[current.length - 1];
+        const v1x = prev1.x - prev2.x, v1y = prev1.y - prev2.y;
+        const v2x = snapped.x - prev1.x, v2y = snapped.y - prev1.y;
+        const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+        if (l1 > 1 && l2 > 1 && (v1x * v2x + v1y * v2y) / (l1 * l2) < 0) {
+          return; // Turn too sharp (>90°) — ignore
+        }
+      }
+      railInProgressRef.current = current ? [...current, snapped] : [snapped];
+      railMouseRef.current = snapped;
+      drawSceneNow();
+      return;
+    }
+
     if (toolRef.current === "wall" || toolRef.current === "slingshot" || toolRef.current === "target") {
       setPreview({ bx1: bx, by1: by, bx2: bx, by2: by });
       dragRef.current = { type: "draw", startSX: sx, startSY: sy, startBX: bx, startBY: by };
@@ -1021,7 +1165,7 @@ export default function PinballEditor() {
       const nf: BoardFlipper = { side: "right", pivotX: snap(bx), pivotY: snap(by), length: 60 };
       setBoard(prev => ({ ...prev, flippers: [...prev.flippers, nf] }));
     }
-  }, [getCanvasXY, setBoard]);
+  }, [getCanvasXY, setBoard, drawSceneNow]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -1087,7 +1231,13 @@ export default function PinballEditor() {
       setBoard(() => applyHandleDrag(drag.origBoard!, sel[0], drag.handle!, bx, by));
       return;
     }
-  }, [getCanvasXY, setBoard]);
+
+    // Rail tool preview (no drag needed — just update mouse position)
+    if (toolRef.current === "rail" && railInProgressRef.current) {
+      railMouseRef.current = { x: bx, y: by };
+      drawSceneNow();
+    }
+  }, [getCanvasXY, setBoard, drawSceneNow]);
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -1165,7 +1315,11 @@ export default function PinballEditor() {
         const sel = selectedRef.current;
         if (sel.length > 0) { setBoard(prev => deleteItems(prev, sel)); setSelected([]); }
       }
-      if (e.key === "Escape") { setSelected([]); setContextMenu(null); }
+      if (e.key === "Escape") {
+        setSelected([]); setContextMenu(null);
+        railInProgressRef.current = null; railMouseRef.current = null;
+        drawSceneNow();
+      }
       if (e.key === "+" || e.key === "=") zoomIn();
       if (e.key === "-") zoomOut();
       if (e.key === "f" || e.key === "F") fitToScreen();
@@ -1173,7 +1327,7 @@ export default function PinballEditor() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setBoard, zoomIn, zoomOut, fitToScreen, duplicateSelected]);
+  }, [setBoard, zoomIn, zoomOut, fitToScreen, duplicateSelected, drawSceneNow]);
 
   // Close context menu on click-away
   useEffect(() => {
@@ -1264,6 +1418,20 @@ export default function PinballEditor() {
         {numField("Angle (rad)", t.angle ?? 0, v => upd({ angle: v }))}
         {strField("Label", t.label ?? "", v => upd({ label: v }))}
       </>;
+    } else if (s.kind === "rail") {
+      const r = (board.rails ?? [])[s.idx];
+      if (!r) return { title: "RAIL", fields: null, canDelete: true };
+      const upd = (p: Partial<BoardRail>) => setBoard(prev => {
+        const rails = [...(prev.rails ?? [])];
+        rails[s.idx] = { ...rails[s.idx], ...p };
+        return { ...prev, rails };
+      });
+      title = "RAIL";
+      fields = <>
+        {numField("Magnet Strength", r.magnetStrength, v => upd({ magnetStrength: Math.max(0, Math.min(3, v)) }))}
+        {numField("Capture Radius", r.captureRadius, v => upd({ captureRadius: Math.max(0, v) }))}
+        <div className="pbed__field" key="pts"><label>Points</label><span style={{ fontSize: 6 }}>{r.points.length} ctrl pts</span></div>
+      </>;
     }
 
     return { title, fields, canDelete: s.kind !== "plunger" };
@@ -1297,7 +1465,7 @@ export default function PinballEditor() {
     );
   };
 
-  const canvasMode = tool === null ? "pan" : tool === "select" ? "select" : tool === "delete" ? "delete" : "place";
+  const canvasMode = tool === null ? "pan" : tool === "select" ? "select" : tool === "delete" ? "delete" : tool === "rail" ? "rail" : "place";
 
   // Sidebar content — shown on large screens, replaces modal
   const sidebarItem = selected.length === 1 ? selected[0] : null;

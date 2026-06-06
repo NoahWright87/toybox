@@ -1,5 +1,6 @@
 import * as Matter from "matter-js";
 import type { Board } from "../Pinball/boardTypes";
+import { sampleRailCenterline, RAIL_WALL_OFFSET, RAIL_WALL_THICK } from "../Pinball/railUtils";
 
 // ── Constants (must match Pinball.tsx) ────────────────────────────────────────
 
@@ -103,6 +104,28 @@ function buildWorld(b: Board) {
     Matter.Composite.add(engine.world, Matter.Bodies.rectangle(s.x, s.y, s.w, s.h, { ...sOpts, angle: s.angle ?? 0, restitution: 1.2, friction: 0 }));
   for (const t of b.targets)
     Matter.Composite.add(engine.world, Matter.Bodies.rectangle(t.x, t.y, t.w, t.h, { ...sOpts, angle: t.angle ?? 0, restitution: 0.6, friction: 0 }));
+
+  // Rails
+  for (const rail of b.rails ?? []) {
+    const samples = sampleRailCenterline(rail.points);
+    for (let i = 0; i < samples.length - 1; i++) {
+      const s0 = samples[i], s1 = samples[i + 1];
+      const cx = (s0.x + s1.x) / 2, cy = (s0.y + s1.y) / 2;
+      const segLen = Math.hypot(s1.x - s0.x, s1.y - s0.y) + 1;
+      const angle = Math.atan2(s1.y - s0.y, s1.x - s0.x);
+      const nx = -Math.sin(angle), ny = Math.cos(angle);
+      for (const side of [-1, 1]) {
+        Matter.Composite.add(engine.world,
+          Matter.Bodies.rectangle(
+            cx + nx * side * RAIL_WALL_OFFSET,
+            cy + ny * side * RAIL_WALL_OFFSET,
+            segLen, RAIL_WALL_THICK,
+            { ...sOpts, angle, restitution: 0.3, friction: 0.05 }
+          )
+        );
+      }
+    }
+  }
 
   // Plunger lane divider
   const pl = b.plunger;
