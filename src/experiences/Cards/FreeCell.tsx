@@ -269,8 +269,38 @@ export default function FreeCell({ settings, onNewGame, onQuit }: FCProps) {
     gameRef.current = savedGame;
     setAllCards(allC);
     setGame(savedGame);
-    setCardStates(allLayouts(0));
-    setPhase(savedGame.foundations.every(f => f.length === 13) ? "won" : "playing");
+
+    // Deal animation: cards start off-screen top, stagger into position
+    const initStates: Record<string, CardVisualState> = {};
+    for (const c of allC) {
+      initStates[c.id] = { x: STAGE_W / 2, y: -80, z: 100, rotation: 0, faceDown: false, transitionMs: 0 };
+    }
+    setCardStates(initStates);
+    setPhase("dealing");
+
+    const DEAL_MS = 240;
+    const finalLayout = allLayouts(DEAL_MS);
+    for (let col = 0; col < 8; col++) {
+      cascSt.current[col].cards.forEach((c, i) => {
+        if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: (col + i) * 28 };
+      });
+    }
+    for (let i = 0; i < 4; i++) {
+      fcSt.current[i].cards.forEach((c, j) => {
+        if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: (8 + i + j) * 28 };
+      });
+      foundSt.current[i].cards.forEach((c, j) => {
+        if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: (12 + i + j) * 28 };
+      });
+    }
+
+    after(80, () => {
+      setCardStates(finalLayout);
+      after(DEAL_MS + 14 * 28 + 150, () => {
+        setCardStates(allLayouts(0));
+        setPhase(savedGame.foundations.every(f => f.length === 13) ? "won" : "playing");
+      });
+    });
   }
 
   // ── startGame ────────────────────────────────────────────────────────────────

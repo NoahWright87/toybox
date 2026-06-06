@@ -30,9 +30,9 @@ const HAND_CY = [460,  52, 258, 258] as const;
 const TRICK_X = [240, 152, 240, 328] as const;  // indexed by playerIndex
 const TRICK_Y = [352, 258, 168, 258] as const;
 
-// Off-screen pile per player (won tricks fly here)
-const PILE_X = [240,  -80, 240, 560] as const;
-const PILE_Y = [620,  258,  -80, 258] as const;
+// Off-screen pile per player (won tricks fly here — far outside stage bounds)
+const PILE_X = [240, -500, 240, 900] as const;
+const PILE_Y = [900,  258, -500, 258] as const;
 
 // ── Deck helpers ──────────────────────────────────────────────────────────────
 
@@ -235,8 +235,8 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
   useEffect(() => {
     const el = containerRef.current; if (!el) return;
     const obs = new ResizeObserver(e => {
-      const { width, height } = e[0].contentRect;
-      setScale(Math.min(1, width / STAGE_W, height / STAGE_H));
+      const w = e[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
     });
     obs.observe(el);
     return () => obs.disconnect();
@@ -450,7 +450,7 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
   // ── Human card click ───────────────────────────────────────────────────────
 
   const { phase, currentPlayer, hands, scores, handScores, passDir, passedCards,
-    receivedCards, ledSuit, heartsAreBroken, isFirstTrick,
+    ledSuit, heartsAreBroken, isFirstTrick,
     tricksThisHand, handNumber, selectedCard } = state;
 
   const isHumanTurn = phase === "playing" && currentPlayer === 0;
@@ -458,7 +458,6 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     ? getValidHeartPlays(hands[0], ledSuit, heartsAreBroken, isFirstTrick)
     : [];
   const validIds    = useMemo(() => new Set(validPlays.map(c => c.id)), [validPlays]);
-  const receivedIds = useMemo(() => new Set(receivedCards.map(c => c.id)), [receivedCards]);
 
   const handleCardClick = useCallback((card: Card) => {
     if (phase === "passing") { togglePassCard(card.id); return; }
@@ -619,10 +618,10 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
       )}
 
       {/* Stage */}
-      <div ref={containerRef} className="hearts__stage-container">
+      <div ref={containerRef} className="hearts__stage-container" style={{ height: Math.round(STAGE_H * scale) }}>
         <div
           className="hearts__stage"
-          style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${scale})`, transformOrigin: "top left" }}
+          style={{ width: STAGE_W, height: STAGE_H, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "top left" }}
         >
           {/* Player labels — absolutely positioned within stage */}
           <div className="hearts__label hearts__label--north">
@@ -685,11 +684,9 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
             const isPassSel   = passedCards.some(c => c.id === card.id);
             const isPlaySel   = selectedCard === card.id;
             const isValid     = validIds.has(card.id);
-            const isReceived  = receivedIds.has(card.id);
             let highlightColor: string | undefined;
-            if (isPassSel || isPlaySel)                          highlightColor = "#cc4400";
-            else if (isValid && isHumanTurn)                     highlightColor = "#228833";
-            else if (isReceived)                                  highlightColor = "#5b2d8e";
+            if (isPassSel || isPlaySel)       highlightColor = "#cc4400";
+            else if (isValid && isHumanTurn)  highlightColor = "#228833";
             return (
               <PermCard
                 key={card.id}

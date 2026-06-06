@@ -44,7 +44,7 @@
 
 .pyramid__card-wrap--unavailable {
   cursor: default;
-  opacity: 0.45;
+  filter: brightness(0.5) saturate(0.6);
 }
 
 .pyramid__card-wrap--selected .playing-card {

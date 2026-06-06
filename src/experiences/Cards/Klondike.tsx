@@ -267,8 +267,39 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
 
     setStockLeft(stockStack.current.size);
     setAllCards(allC);
-    setCardStates(allLayouts(0));
-    setPhase("idle");
+
+    // Deal animation: all cards start at stock position, then fan out
+    const initStates: Record<string, CardVisualState> = {};
+    for (const c of allC) {
+      initStates[c.id] = { x: COL_X[0], y: TOP_Y, z: 100, rotation: 0, faceDown: true, transitionMs: 0 };
+    }
+    setCardStates(initStates);
+    setPhase("shuffle");
+
+    const DEAL_MS = 250;
+    const finalLayout = allLayouts(DEAL_MS);
+    let di = 0;
+    for (let col = 0; col < 7; col++) {
+      for (const c of tableau.current[col].cards) {
+        if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: di++ * 28 };
+      }
+    }
+    for (const c of wasteStack.current.cards) {
+      if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: di++ * 14 };
+    }
+    for (let f = 0; f < 4; f++) {
+      for (const c of foundations.current[f].cards) {
+        if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: di++ * 14 };
+      }
+    }
+    for (const c of stockStack.current.cards) {
+      if (finalLayout[c.id]) finalLayout[c.id] = { ...finalLayout[c.id], transitionDelay: di++ * 6 };
+    }
+
+    after(60, () => {
+      setCardStates(finalLayout);
+      after(DEAL_MS + di * 28 + 200, () => { setCardStates(allLayouts(0)); setPhase("idle"); });
+    });
   }
 
   // ── startGame ──────────────────────────────────────────────────────────────

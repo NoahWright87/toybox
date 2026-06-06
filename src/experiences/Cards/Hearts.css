@@ -16,9 +16,7 @@
 /* ── Stage ───────────────────────────────────────────────────────────── */
 
 .hearts__stage-container {
-  flex: 1;
-  min-height: 200px;
-  position: relative;
+  flex-shrink: 0;
   background: #1a4a1a;
   overflow: hidden;
 }
@@ -27,6 +25,7 @@
   background: #1a4a1a;
   isolation: isolate;
   position: relative;
+  overflow: hidden;
 }
 
 /* ── Player labels ───────────────────────────────────────────────────── */
@@ -37,41 +36,41 @@
   align-items: center;
   gap: 4px;
   font-size: 6px;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.9);
   white-space: nowrap;
   pointer-events: none;
   z-index: 3000;
 }
 
 .hearts__label--north {
-  top: 4px;
+  top: 88px;   /* just below North's card row (centered at y=52, bottom at y=88) */
   left: 50%;
   transform: translateX(-50%);
 }
 
 .hearts__label--south {
-  bottom: 64px;   /* just above the human hand arc */
+  bottom: 86px;   /* just above human hand (centered at y=460, top at y=424) */
   left: 50%;
   transform: translateX(-50%);
   color: #fff;
 }
 
 .hearts__label--west {
-  left: 4px;
+  left: 68px;   /* just right of West's cards (right edge at ~66px) */
   top: 50%;
   transform: translateY(-50%);
-  flex-direction: column;
-  gap: 2px;
-  font-size: 5px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  gap: 3px;
 }
 
 .hearts__label--east {
-  right: 4px;
+  right: 68px;   /* just left of East's cards (left edge at ~414px) */
   top: 50%;
   transform: translateY(-50%);
-  flex-direction: column;
-  gap: 2px;
-  font-size: 5px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  gap: 3px;
 }
 
 .hearts__score-inline {
@@ -135,14 +134,17 @@
 
 .hearts__pass-overlay {
   position: absolute;
-  bottom: 66px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  z-index: 3000;
+  gap: 8px;
+  z-index: 6000;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .hearts__pass-hint {
@@ -156,14 +158,16 @@
 
 .hearts__play-hint {
   position: absolute;
-  bottom: 66px;
+  top: 380px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 5px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.5);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 3000;
+  z-index: 6000;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px 6px;
 }
 
 /* ── Status bar ──────────────────────────────────────────────────────── */
