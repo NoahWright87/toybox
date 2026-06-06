@@ -123,6 +123,7 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
 
   const startGame = useCallback(() => {
     clearTimers();
+    try { localStorage.removeItem("cards-war-save"); } catch {}
 
     const deck = buildDeck(settings);
     const mid  = Math.floor(deck.length / 2);
@@ -227,10 +228,46 @@ export default function War({ settings, onNewGame, onQuit }: WarProps) {
   }, [settings]);
 
   useEffect(() => {
+    const WAR_SAVE_KEY = "cards-war-save";
+    try {
+      const raw = localStorage.getItem(WAR_SAVE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { version: number; playerCards: Card[]; dealerCards: Card[]; roundCount: number };
+        if (saved?.version === 1 && Array.isArray(saved.playerCards) && Array.isArray(saved.dealerCards)) {
+          const allC = [...saved.playerCards, ...saved.dealerCards];
+          ps.current.clear(); ds.current.clear(); ws.current.clear();
+          for (const c of saved.playerCards) ps.current.addCard(c, { toTop: true, faceDown: true });
+          for (const c of saved.dealerCards) ds.current.addCard(c, { toTop: true, faceDown: true });
+          setRoundCount(saved.roundCount);
+          setPlayerCount(ps.current.size);
+          setDealerCount(ds.current.size);
+          setAllCards(allC);
+          setCardStates({ ...ps.current.layout(0), ...ds.current.layout(0) });
+          setPhase("idle");
+          return clearTimers;
+        }
+      }
+    } catch {}
     startGame();
     return clearTimers;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const WAR_SAVE_KEY = "cards-war-save";
+    if (phase === "idle") {
+      try {
+        localStorage.setItem(WAR_SAVE_KEY, JSON.stringify({
+          version: 1,
+          playerCards: ps.current.cards,
+          dealerCards: ds.current.cards,
+          roundCount,
+        }));
+      } catch {}
+    } else if (phase === "game-over") {
+      try { localStorage.removeItem(WAR_SAVE_KEY); } catch {}
+    }
+  }, [phase, roundCount]);
 
   // ── flip ──────────────────────────────────────────────────────────────────
 

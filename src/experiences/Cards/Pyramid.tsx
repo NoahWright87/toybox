@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import "./Pyramid.css";
 import { PlayingCard } from "./PlayingCard";
 import type { Card, CardAppearance, DeckSettings } from "./types";
@@ -17,6 +17,10 @@ const V_STEP = 34; // vertical distance between row tops (overlap)
 
 const BASE_ROW_W = ROWS * CARD_W + (ROWS - 1) * H_GAP; // 388
 const GRID_H = (ROWS - 1) * V_STEP + CARD_H;            // 276
+
+// Stage dimensions for scale calculation (table width + horizontal padding; height is approximate)
+const STAGE_W = BASE_ROW_W + 16;  // 404 — table padding 8px each side
+const STAGE_H = GRID_H + CARD_H + 40 + 28;  // grid + piles + gaps + padding ≈ 416
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,12 +122,49 @@ interface PyramidProps {
   onQuit?: () => void;
 }
 
+const PYR_SAVE_KEY = "cards-pyramid-save";
+
 export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
-  const [state, setState] = useState<PyramidState>(() => buildPyramid(settings));
+  const [state, setState] = useState<PyramidState>(() => {
+    try {
+      const raw = localStorage.getItem(PYR_SAVE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { version: number; state: PyramidState };
+        if (saved?.version === 1 && saved.state?.slots) return saved.state;
+      }
+    } catch {}
+    return buildPyramid(settings);
+  });
   const [appearance, setAppearance] = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const newGame = useCallback(() => setState(buildPyramid(settings)), [settings]);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (state.phase === "won" || state.phase === "lost") {
+      try { localStorage.removeItem(PYR_SAVE_KEY); } catch {}
+      return;
+    }
+    try {
+      localStorage.setItem(PYR_SAVE_KEY, JSON.stringify({ version: 1, state }));
+    } catch {}
+  }, [state]);
+
+  const newGame = useCallback(() => {
+    try { localStorage.removeItem(PYR_SAVE_KEY); } catch {}
+    setState(buildPyramid(settings));
+  }, [settings]);
 
   const drawFromStock = useCallback(() => {
     setState((s: PyramidState) => {
@@ -240,7 +281,8 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
           onClose={() => setShowDeckModal(false)}
         />
       )}
-      <div className="pyramid__table">
+      <div className="pyramid__stage-container" ref={containerRef} style={{ height: Math.round(STAGE_H * scale) }}>
+      <div className="pyramid__table" style={{ width: STAGE_W, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "top left" }}>
         {!pyramidDone && (
           <div className="pyramid__grid" style={{ width: BASE_ROW_W, height: GRID_H }}>
             {state.slots.map((slot) => {
@@ -297,6 +339,7 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
             <div className="pyramid__pile-count">{state.waste.length}</div>
           </div>
         </div>
+      </div>
       </div>
 
       <div className="pyramid__controls">

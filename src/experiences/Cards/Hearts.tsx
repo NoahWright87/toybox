@@ -180,6 +180,18 @@ function makeInitialState(handNumber: number, prevScores: number[]): HeartsState
 
 function freshGame(): HeartsState { return makeInitialState(0, [0,0,0,0]); }
 
+const HEARTS_SAVE_KEY = "cards-hearts-save";
+
+function loadHeartsData(): { state: HeartsState; wonBy: Record<string, number> } | null {
+  try {
+    const raw = localStorage.getItem(HEARTS_SAVE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { version: number; state: HeartsState; wonBy: Record<string, number> };
+    if (saved?.version === 1 && saved.state?.hands) return { state: saved.state, wonBy: saved.wonBy ?? {} };
+  } catch {}
+  return null;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface HeartsProps {
@@ -189,7 +201,11 @@ interface HeartsProps {
 }
 
 export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
-  const [state,         setState]        = useState<HeartsState>(freshGame);
+  // Try to restore in-progress game from localStorage (runs on every render but
+  // React only uses the initial value for useRef/useState lazy init)
+  const savedData = useRef(loadHeartsData());
+
+  const [state,         setState]        = useState<HeartsState>(() => savedData.current?.state ?? freshGame());
   const [cardStates,    setCardStates]   = useState<Record<string, CardVisualState>>({});
   const [appearance,    setAppearance]   = useState<CardAppearance>(settings.appearance);
   const [showDeckModal, setShowDeckModal] = useState(false);
@@ -198,8 +214,9 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const aiTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevHandNum   = useRef(-1);
-  const wonByRef      = useRef<Record<string, number>>({});  // cardId → winning playerIndex
+  // Initialize from saved data so deal animation doesn't replay on restore
+  const prevHandNum   = useRef(savedData.current?.state.handNumber ?? -1);
+  const wonByRef      = useRef<Record<string, number>>(savedData.current?.wonBy ?? {});
 
   // ── CardStack refs for the 4 hands ────────────────────────────────────────
   // Player 0 (human): horizontal fan, centered, with arc
@@ -324,6 +341,22 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
 
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  // ── Persist game state ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (state.phase === "game-over") {
+      try { localStorage.removeItem(HEARTS_SAVE_KEY); } catch {}
+      return;
+    }
+    try {
+      localStorage.setItem(HEARTS_SAVE_KEY, JSON.stringify({
+        version: 1,
+        state,
+        wonBy: wonByRef.current,
+      }));
+    } catch {}
   }, [state]);
 
   // ── Pass phase ─────────────────────────────────────────────────────────────
@@ -492,7 +525,10 @@ export default function Hearts({ settings, onNewGame, onQuit }: HeartsProps) {
     setState(s => makeInitialState(s.handNumber + 1, s.scores));
   }, []);
 
-  const startNewGame = useCallback(() => { setState(freshGame()); }, []);
+  const startNewGame = useCallback(() => {
+    try { localStorage.removeItem(HEARTS_SAVE_KEY); } catch {}
+    setState(freshGame());
+  }, []);
 
   // ── Pass label ─────────────────────────────────────────────────────────────
 

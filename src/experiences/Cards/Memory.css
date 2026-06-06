@@ -19,14 +19,19 @@
   border-bottom: 1px solid #808080;
 }
 
+.memory__stage-container {
+  margin: 8px 8px 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 .memory__stage {
   background: #1a4a1a;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  margin: 8px 8px 4px;
+  box-sizing: border-box;
   position: relative;
   overflow: hidden;
-  flex-shrink: 0;
 }
 
 .memory__win-banner {

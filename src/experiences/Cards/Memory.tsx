@@ -154,6 +154,9 @@ export default function Memory({ settings, onNewGame, onQuit }: MemoryProps) {
     offsetY: -0.3,
   }));
 
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearTimers = useCallback(() => {
     timers.current.forEach(clearTimeout);
@@ -193,6 +196,7 @@ export default function Memory({ settings, onNewGame, onQuit }: MemoryProps) {
   const startGame = useCallback(() => {
     clearTimers();
     stopTimer();
+    try { localStorage.removeItem("cards-memory-save"); } catch {};
     setElapsed(0);
     startTimeRef.current = null;
     setSelectedIds([]);
@@ -365,9 +369,72 @@ export default function Memory({ settings, onNewGame, onQuit }: MemoryProps) {
   }, [allCards, difficulty]);
 
   useEffect(() => {
+    const MEM_SAVE_KEY = "cards-memory-save";
+    try {
+      const raw = localStorage.getItem(MEM_SAVE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          version: number; allCards: MemCardData[]; scoredIds: string[];
+          attempts: number; pairsFound: number; elapsed: number;
+        };
+        if (saved?.version === 1 && Array.isArray(saved.allCards) && saved.allCards.length > 0) {
+          const scoredSet = new Set<string>(saved.scoredIds ?? []);
+          scoredStack.current.clear();
+          const initStates: Record<string, CardVisualState> = {};
+          saved.allCards.forEach((mc, idx) => {
+            const pos = gridPos(idx, difficulty);
+            if (scoredSet.has(mc.card.id)) {
+              scoredStack.current.addCard(mc.card, { toTop: true, faceDown: false });
+            } else {
+              initStates[mc.card.id] = { x: pos.x, y: pos.y, z: 200 + idx, rotation: 0, faceDown: true, transitionMs: 0 };
+            }
+          });
+          Object.assign(initStates, scoredStack.current.layout(0));
+          setAllCards(saved.allCards);
+          setCardStates(initStates);
+          setScoredIds(scoredSet);
+          setAttempts(saved.attempts ?? 0);
+          setPairsFound(saved.pairsFound ?? 0);
+          setElapsed(saved.elapsed ?? 0);
+          setSelectedIds([]);
+          setPhase("idle");
+          return clearTimers;
+        }
+      }
+    } catch {}
     startGame();
     return clearTimers;
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const MEM_SAVE_KEY = "cards-memory-save";
+    if (allCards.length === 0 || phase === "shuffle") return;
+    if (phase === "game-over") {
+      try { localStorage.removeItem(MEM_SAVE_KEY); } catch {}
+      return;
+    }
+    try {
+      localStorage.setItem(MEM_SAVE_KEY, JSON.stringify({
+        version: 1,
+        allCards,
+        scoredIds: [...scoredIds],
+        attempts,
+        pairsFound,
+        elapsed,
+      }));
+    } catch {}
+  }, [allCards, scoredIds, attempts, pairsFound, elapsed, phase]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width;
+      setScale(Math.min(1, w / STAGE_W));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
   // ── Card click ────────────────────────────────────────────────────────────
@@ -502,7 +569,8 @@ export default function Memory({ settings, onNewGame, onQuit }: MemoryProps) {
         <span>{difficultyLabel()}</span>
       </div>
 
-      <div className="memory__stage" style={{ width: STAGE_W, height: sh }}>
+      <div className="memory__stage-container" ref={containerRef} style={{ height: Math.round(sh * scale) }}>
+      <div className="memory__stage" style={{ width: STAGE_W, height: sh, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "top left" }}>
         {phase === "game-over" && (
           <div className="memory__win-banner">
             <div className="memory__win-title">You Won!</div>
@@ -537,6 +605,7 @@ export default function Memory({ settings, onNewGame, onQuit }: MemoryProps) {
             />
           );
         })}
+      </div>
       </div>
 
       <div className="memory__statusbar">

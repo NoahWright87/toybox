@@ -9,12 +9,19 @@
   user-select: none;
 }
 
+/* Stage container — measures width for scaling, explicit height set in JS */
+.pyramid__stage-container {
+  margin: 8px 8px 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 /* Green felt play area */
 .pyramid__table {
   background: #1a4a1a;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  margin: 8px 8px 4px;
+  box-sizing: border-box;
   padding: 10px 8px 8px;
   display: flex;
   flex-direction: column;
