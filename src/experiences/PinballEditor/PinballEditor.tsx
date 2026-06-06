@@ -625,6 +625,8 @@ export default function PinballEditor() {
   const [ghostBalls, setGhostBalls] = useState(false);
   const [ghostOpacity, setGhostOpacity] = useState<GhostOpacity>("normal");
   const [ghostClearOnSelect, setGhostClearOnSelect] = useState(false);
+  const [showBoardSize, setShowBoardSize] = useState(false);
+  const [boardSizeInput, setBoardSizeInput] = useState({ w: 320, h: 560 });
 
   const viewRef = useRef(view); viewRef.current = view;
   const boardRef = useRef(board); boardRef.current = board;
@@ -656,6 +658,26 @@ export default function PinballEditor() {
       return next;
     });
   }, []);
+
+  // Board size dialog
+  const openBoardSize = useCallback(() => {
+    setBoardSizeInput({ w: boardRef.current.width, h: boardRef.current.height });
+    setShowBoardSize(true);
+  }, []);
+
+  const applyBoardSize = useCallback((w: number, h: number) => {
+    const nw = Math.max(200, Math.round(w));
+    const nh = Math.max(400, Math.round(h));
+    setBoard(prev => ({ ...prev, width: nw, height: nh }));
+    // Resize the trail canvas to match the new board dimensions
+    const tc = trailCanvasRef.current;
+    if (tc) {
+      tc.width = nw;
+      tc.height = nh;
+      trailCtxRef.current?.clearRect(0, 0, nw, nh);
+    }
+    setShowBoardSize(false);
+  }, [setBoard]);
 
   // Direct canvas redraw from worker RAF callback (all values via refs)
   const drawSceneNow = useCallback(() => {
@@ -771,6 +793,8 @@ export default function PinballEditor() {
         { label: "Export JSON",        onClick: () => exportBoard(boardRef.current) },
         { label: "Import JSON",        onClick: handleImport },
         { separator: true },
+        { label: "Board Size…",        onClick: openBoardSize },
+        { separator: true },
         { label: "Reset to Classic",   onClick: handleResetToClassic },
         { label: "Clear All",          onClick: handleClearAll },
         { separator: true },
@@ -805,7 +829,7 @@ export default function PinballEditor() {
         ]),
       ],
     },
-  ], [handleImport, handleClearAll, handleResetToClassic, deleteSelected, duplicateSelected, zoomIn, zoomOut, fitToScreen, ghostBalls, ghostOpacity, ghostClearOnSelect, clearGhostTrails]);
+  ], [handleImport, handleClearAll, handleResetToClassic, openBoardSize, deleteSelected, duplicateSelected, zoomIn, zoomOut, fitToScreen, ghostBalls, ghostOpacity, ghostClearOnSelect, clearGhostTrails]);
 
   useWindowMenus(menus);
 
@@ -855,9 +879,9 @@ export default function PinballEditor() {
     if (!ghostBalls) {
       workerRef.current?.terminate();
       workerRef.current = null;
-      // Clear trails when preview is switched off
       const tc = trailCanvasRef.current;
       if (tc) trailCtxRef.current?.clearRect(0, 0, tc.width, tc.height);
+      drawSceneNow();
       return;
     }
     const worker = new Worker(new URL("./ghostWorker.ts", import.meta.url), { type: "module" });
@@ -877,7 +901,7 @@ export default function PinballEditor() {
     };
     return () => { worker.terminate(); workerRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ghostBalls, flushGhostTrails]);
+  }, [ghostBalls, flushGhostTrails, drawSceneNow]);
 
   // When selection changes, update the worker's target (and optionally clear trails)
   useEffect(() => {
@@ -1401,6 +1425,34 @@ export default function PinballEditor() {
           ) : (
             <div className="pbed__ctx-empty">Nothing here</div>
           )}
+        </div>
+      )}
+
+      {/* Board size modal */}
+      {showBoardSize && (
+        <div className="pbed__modal-backdrop" onClick={() => setShowBoardSize(false)}>
+          <div className="pbed__modal" onClick={e => e.stopPropagation()}>
+            <div className="pbed__modal-header">
+              <span>BOARD SIZE</span>
+              <button className="pbed__modal-close" onClick={() => setShowBoardSize(false)}>✕</button>
+            </div>
+            <div className="pbed__modal-body">
+              <div className="pbed__field">
+                <label>Width (px)</label>
+                <input type="number" value={boardSizeInput.w} min={200} step={4}
+                  onChange={e => setBoardSizeInput(prev => ({ ...prev, w: Number(e.target.value) }))} />
+              </div>
+              <div className="pbed__field">
+                <label>Height (px)</label>
+                <input type="number" value={boardSizeInput.h} min={400} step={4}
+                  onChange={e => setBoardSizeInput(prev => ({ ...prev, h: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <div className="pbed__modal-footer">
+              <button className="pbed__ok-btn" onClick={() => applyBoardSize(boardSizeInput.w, boardSizeInput.h)}>APPLY</button>
+              <button className="pbed__ok-btn" onClick={() => setShowBoardSize(false)}>CANCEL</button>
+            </div>
+          </div>
         </div>
       )}
 
