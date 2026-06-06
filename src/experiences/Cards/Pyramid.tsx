@@ -138,7 +138,7 @@ function computePositions(
       result[slot.card.id] = {
         x: REMOVE_X,
         y: REMOVE_Y,
-        z: 50,
+        z: 5000 + slot.row * 10 + slot.col,
         rotation: 12,
         faceDown: false,
         transitionMs: ms,
@@ -157,13 +157,13 @@ function computePositions(
     }
   }
 
-  // Stock: stacked face-down, each card slightly offset so depth is visible
+  // Stock: stacked face-down, depth offset goes UPWARD so stack doesn't cover the label
   const n = s.stock.length;
   s.stock.forEach((card, i) => {
     const depth = n - 1 - i;   // 0 for top card, n-1 for bottom
     result[card.id] = {
       x: STOCK_X + depth * 0.5,
-      y: PILE_Y  + depth * 0.5,
+      y: PILE_Y  - depth * 0.5,
       z: 100 + i,
       faceDown: true,
       rotation: 0,
@@ -171,13 +171,13 @@ function computePositions(
     };
   });
 
-  // Waste: stacked face-up, same depth trick
+  // Waste: stacked face-up, same depth trick (upward)
   const wn = s.waste.length;
   s.waste.forEach((card, i) => {
     const depth = wn - 1 - i;
     result[card.id] = {
       x: WASTE_X + depth * 0.5,
-      y: PILE_Y  + depth * 0.5,
+      y: PILE_Y  - depth * 0.5,
       z: 200 + i,
       faceDown: false,
       rotation: 0,
@@ -253,46 +253,86 @@ export default function Pyramid({ settings, onNewGame, onQuit }: PyramidProps) {
   // ── Deal animation helper ───────────────────────────────────────────────────
 
   function dealAnimation(s: PyramidState, cards: Card[]): void {
-    // All cards start at stock position, face-down, no transition
+    const total = cards.length;
+    const half = Math.floor(total / 2);
+
+    // Start: all cards stacked at stock, no transition
     const init: Record<string, CardVisualState> = {};
-    for (const c of cards) {
-      init[c.id] = { x: STOCK_X, y: PILE_Y, z: 100, rotation: 0, faceDown: true, transitionMs: 0 };
-    }
+    cards.forEach((c, i) => {
+      const d = total - 1 - i;
+      init[c.id] = { x: STOCK_X + d * 0.3, y: PILE_Y - d * 0.3, z: 100 + i, rotation: 0, faceDown: true, transitionMs: 0 };
+    });
     setCardStates(init);
 
-    after(60, () => {
-      // Animate pyramid cards to their positions with stagger
-      const deal: Record<string, CardVisualState> = { ...init };
-      for (const slot of s.slots) {
-        const staggerIdx = (slot.row - 1) * 7 + slot.col;
-        deal[slot.card.id] = {
-          x: cardX(slot.row, slot.col),
-          y: cardY(slot.row),
-          z: slot.row * 10 + slot.col,
-          faceDown: false,
-          rotation: 0,
-          transitionMs: 280,
-          transitionDelay: staggerIdx * 35,
-        };
-      }
-      // Stock cards stay put (already at stock position)
-      s.stock.forEach((card, i) => {
-        const depth = s.stock.length - 1 - i;
-        deal[card.id] = {
-          x: STOCK_X + depth * 0.5,
-          y: PILE_Y + depth * 0.5,
-          z: 100 + i,
-          faceDown: true,
-          rotation: 0,
-          transitionMs: 0,
-        };
-      });
-      setCardStates(deal);
+    // Riffle shuffle: split left/right then merge back
+    const shufflePass = (delay: number, onDone: () => void): void => {
+      after(delay, () => {
+        const split: Record<string, CardVisualState> = {};
+        cards.forEach((c, i) => {
+          const isLeft = i < half;
+          const pos = isLeft ? i : i - half;
+          const len = isLeft ? half : total - half;
+          const d = len - 1 - pos;
+          split[c.id] = {
+            x: (isLeft ? STOCK_X - 24 : STOCK_X + 24) + d * 0.3,
+            y: PILE_Y - d * 0.3,
+            z: 100 + i,
+            rotation: isLeft ? -3 : 3,
+            faceDown: true,
+            transitionMs: 200,
+          };
+        });
+        setCardStates(split);
 
-      const totalDelay = 28 * 35 + 280 + 80;
-      after(totalDelay, () => {
-        setState(prev => ({ ...prev, phase: "playing" }));
-        // Let the useEffect below sync final positions cleanly
+        after(280, () => {
+          const merged: Record<string, CardVisualState> = {};
+          cards.forEach((c, i) => {
+            const d = total - 1 - i;
+            merged[c.id] = {
+              x: STOCK_X + d * 0.3,
+              y: PILE_Y - d * 0.3,
+              z: 100 + i,
+              rotation: 0,
+              faceDown: true,
+              transitionMs: 200,
+              transitionDelay: i * 3,
+            };
+          });
+          setCardStates(merged);
+          after(420, onDone);
+        });
+      });
+    };
+
+    // Two shuffle passes, then deal pyramid cards to their positions
+    shufflePass(60, () => {
+      shufflePass(0, () => {
+        after(60, () => {
+          const deal: Record<string, CardVisualState> = {};
+          // Stock cards snap to final pile positions (no transition)
+          s.stock.forEach((card, i) => {
+            const d = s.stock.length - 1 - i;
+            deal[card.id] = { x: STOCK_X + d * 0.5, y: PILE_Y - d * 0.5, z: 100 + i, faceDown: true, rotation: 0, transitionMs: 0 };
+          });
+          // Pyramid cards fly to grid positions with stagger (apex first)
+          s.slots.forEach(slot => {
+            const stagger = (slot.row - 1) * 7 + slot.col;
+            deal[slot.card.id] = {
+              x: cardX(slot.row, slot.col),
+              y: cardY(slot.row),
+              z: slot.row * 10 + slot.col,
+              faceDown: false,
+              rotation: 0,
+              transitionMs: 280,
+              transitionDelay: stagger * 35,
+            };
+          });
+          setCardStates(deal);
+
+          after(28 * 35 + 280 + 80, () => {
+            setState(prev => ({ ...prev, phase: "playing" }));
+          });
+        });
       });
     });
   }
