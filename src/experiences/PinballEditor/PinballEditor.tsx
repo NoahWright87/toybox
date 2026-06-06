@@ -27,8 +27,8 @@ interface SelItem { kind: SelKind; idx: number; }
 
 interface ViewXform { x: number; y: number; scale: number; }
 
-type HandleKind = "nw" | "ne" | "sw" | "se" | "rotate" | "radius";
-interface Handle { kind: HandleKind; bx: number; by: number; }
+type HandleKind = "nw" | "ne" | "sw" | "se" | "rotate" | "radius" | "cp";
+interface Handle { kind: HandleKind; bx: number; by: number; cpIdx?: number; }
 
 interface DragState {
   type: "pan" | "move" | "draw" | "rubber" | "handle";
@@ -191,6 +191,11 @@ function getHandles(board: Board, sel: SelItem[], view: ViewXform): Handle[] {
     const p = board.posts[s.idx];
     return [{ kind: "radius", bx: p.x + p.r, by: p.y }];
   }
+  if (s.kind === "rail") {
+    const r = (board.rails ?? [])[s.idx];
+    if (!r) return [];
+    return r.points.map((p, i) => ({ kind: "cp" as HandleKind, bx: p.x, by: p.y, cpIdx: i }));
+  }
   return [];
 }
 
@@ -225,6 +230,13 @@ function applyHandleDrag(board: Board, sel: SelItem, handle: Handle, bx: number,
     const b = board.bumpers[sel.idx];
     const newR = Math.max(8, Math.hypot(bx - b.x, by - b.y));
     return { ...board, bumpers: board.bumpers.map((bm, i) => i === sel.idx ? { ...bm, r: newR } : bm) };
+  }
+  if (sel.kind === "rail" && handle.kind === "cp" && handle.cpIdx !== undefined) {
+    const rails = [...(board.rails ?? [])];
+    const pts = [...rails[sel.idx].points];
+    pts[handle.cpIdx] = { x: snap(bx), y: snap(by) };
+    rails[sel.idx] = { ...rails[sel.idx], points: pts };
+    return { ...board, rails };
   }
   if (sel.kind === "post") {
     const p = board.posts[sel.idx];
@@ -547,13 +559,6 @@ function drawScene(
   (board.rails ?? []).forEach((rail, i) => {
     const sel = isSel("rail", i);
     drawRailOutline(ctx, rail.points, sel ? "#00ff88" : "#5030a0", sel ? 2 : RAIL_WALL_THICK);
-    if (sel) {
-      // Show control points
-      for (const pt of rail.points) {
-        ctx.beginPath(); ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffff00"; ctx.fill();
-      }
-    }
   });
 
   // Rail in-progress overlay
@@ -680,9 +685,10 @@ function drawScene(
     }
     handles.forEach(h => {
       const [sx, sy] = b2s(h.bx, h.by, view);
-      ctx.beginPath(); ctx.arc(sx, sy, HANDLE_R, 0, Math.PI * 2);
-      ctx.fillStyle = h.kind === "rotate" ? "#00ff88" : "#ffffff";
-      ctx.strokeStyle = h.kind === "rotate" ? "#004400" : "#0044cc";
+      const r = h.kind === "cp" ? 6 : HANDLE_R;
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = h.kind === "rotate" ? "#00ff88" : h.kind === "cp" ? "#ffdd00" : "#ffffff";
+      ctx.strokeStyle = h.kind === "rotate" ? "#004400" : h.kind === "cp" ? "#664400" : "#0044cc";
       ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
     });
   }

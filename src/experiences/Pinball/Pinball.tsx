@@ -444,11 +444,9 @@ export default function Pinball({ board, onQuit }: Props) {
         Matter.Body.setAngularVelocity(f.body, (f.angle - prevAngle) * 60);
       }
 
-      // Plunger charge + move ball down with the rod
+      // Plunger charge — ball stays at rest position; only track charge level
       if (st.phase === "launching" && plungerRef.current) {
         st.plungerCharge = Math.min(1, st.plungerCharge + 0.025);
-        const pullMax = Math.min(36, (board.plunger.bottomY - board.ballStartY) * 0.3);
-        Matter.Body.setPosition(ball, { x: board.plunger.x, y: board.ballStartY + st.plungerCharge * pullMax });
       }
 
       // Physics
@@ -659,22 +657,22 @@ export default function Pinball({ board, onQuit }: Props) {
       ctx.fillStyle = "#1a0040";
       ctx.fillRect(pl.x - BALL_R - 8, pl.topY, 6, pl.bottomY - pl.topY);
 
-      // Plunger rod: silver rectangle below the ball that retracts as charge increases
+      // Plunger rod: tip rests just below ball; retracts downward as charge grows
       if (st.phase === "ready" || st.phase === "launching") {
-        const rodTop = ball.position.y + BALL_R + 2;
+        const pullMax = Math.min(40, (pl.bottomY - board.ballStartY) * 0.4);
+        const rodRestY = board.ballStartY + BALL_R + 2;
+        const rodTipY = rodRestY + st.plungerCharge * pullMax;
         const rodBottom = pl.bottomY - 4;
-        const rodFullH = rodBottom - rodTop;
-        const rodH = rodFullH * (1 - st.plungerCharge);
+        const rodH = rodBottom - rodTipY;
         if (rodH > 1) {
-          const rodY = rodBottom - rodH; // rod base is at bottom, shrinks upward as charge grows
           ctx.fillStyle = "#909090";
-          ctx.fillRect(pl.x - BALL_R, rodY, BALL_R * 2, rodH);
+          ctx.fillRect(pl.x - BALL_R, rodTipY, BALL_R * 2, rodH);
           ctx.fillStyle = "#d0d0d0"; // left highlight
-          ctx.fillRect(pl.x - BALL_R, rodY, 3, rodH);
+          ctx.fillRect(pl.x - BALL_R, rodTipY, 3, rodH);
           ctx.fillStyle = "#606060"; // right shadow
-          ctx.fillRect(pl.x + BALL_R - 3, rodY, 3, rodH);
+          ctx.fillRect(pl.x + BALL_R - 3, rodTipY, 3, rodH);
           ctx.fillStyle = "#c0c0c0"; // rod face (cap)
-          ctx.fillRect(pl.x - BALL_R, rodY, BALL_R * 2, 3);
+          ctx.fillRect(pl.x - BALL_R, rodTipY, BALL_R * 2, 3);
         }
       }
 
