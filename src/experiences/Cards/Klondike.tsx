@@ -740,6 +740,23 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allCards, cardStates, selectedRun, relaxed]);
 
+  // Double-click: auto-send top card to foundation
+  const handleCardDoubleClick = useCallback((cardId: string) => {
+    if (phase !== "idle") return;
+    const stackId = findStack(cardId);
+    if (!stackId) return;
+    if (stackById(stackId).top?.id !== cardId) return;
+    const card = allCards.find(c => c.id === cardId);
+    if (!card) return;
+    for (let fi = 0; fi < 4; fi++) {
+      if (canPlaceOnFoundation(card, foundations.current[fi].top)) {
+        executeMove([card], stackId, `found-${fi}`);
+        return;
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, allCards]);
+
   // 2-click: click a foundation slot directly
   const handleFoundationClick = useCallback((foundIdx: number) => {
     if (phase !== "idle" || selectedRun.length === 0) return;
@@ -845,6 +862,7 @@ export default function Klondike({ settings, onNewGame, onQuit }: KlondikeProps)
                 appearance={appearance}
                 highlightColor={isSelected ? "#cc4400" : undefined}
                 onClick={isTopStock ? drawCard : undefined}
+                onDoubleClick={canInteract && !isTopStock ? () => handleCardDoubleClick(card.id) : undefined}
                 onPointerDown={canInteract ? (e) => handleCardPointerDown(e, card.id) : undefined}
               />
             );

@@ -11,6 +11,7 @@ interface PermCardProps {
   size?: "sm";
   highlightColor?: string;
   onClick?: () => void;
+  onDoubleClick?: () => void;
   onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
 }
 
@@ -19,7 +20,7 @@ interface PermCardProps {
  * All animation is driven by changes to `cs` — CSS transitions fire automatically
  * because the element always has a prior position in the DOM.
  */
-export function PermCard({ card, cs, appearance, size, highlightColor, onClick, onPointerDown }: PermCardProps) {
+export function PermCard({ card, cs, appearance, size, highlightColor, onClick, onDoubleClick, onPointerDown }: PermCardProps) {
   const cw = size === "sm" ? 52 : 72;
   const ch = size === "sm" ? 72 : 100;
   const delay = cs.transitionDelay ?? 0;
@@ -41,6 +42,7 @@ export function PermCard({ card, cs, appearance, size, highlightColor, onClick, 
         touchAction: onPointerDown ? "none" : undefined,
       }}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onPointerDown={onPointerDown}
     >
       <div
