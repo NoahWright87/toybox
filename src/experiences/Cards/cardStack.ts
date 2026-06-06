@@ -27,6 +27,11 @@ interface StackEntry {
  * accumulates Y positions using the per-card state rather than a uniform step.
  * This lets Klondike tableau columns fan face-down cards tightly and face-up
  * cards wider so rank/suit remains readable.
+ *
+ * Fan arc: startRotation / endRotation interpolate per-card rotation linearly
+ * from first card to last. centered=true treats baseX/baseY as the midpoint of
+ * the fan rather than the anchor of the first card — essential for hand fans
+ * that need to rebalance as cards are played.
  */
 export class CardStack {
   readonly zTier: number;
@@ -36,6 +41,9 @@ export class CardStack {
   readonly offsetY: number;
   readonly faceDownOffsetY?: number;
   readonly faceUpOffsetY?: number;
+  readonly centered: boolean;
+  readonly startRotation: number;
+  readonly endRotation: number;
   private entries: StackEntry[] = [];
 
   constructor(opts: {
@@ -46,6 +54,9 @@ export class CardStack {
     offsetY?: number;
     faceDownOffsetY?: number;
     faceUpOffsetY?: number;
+    centered?: boolean;
+    startRotation?: number;
+    endRotation?: number;
   }) {
     this.zTier            = opts.zTier;
     this.baseX            = opts.baseX;
@@ -54,6 +65,9 @@ export class CardStack {
     this.offsetY          = opts.offsetY ?? 0;
     this.faceDownOffsetY  = opts.faceDownOffsetY;
     this.faceUpOffsetY    = opts.faceUpOffsetY;
+    this.centered         = opts.centered      ?? false;
+    this.startRotation    = opts.startRotation ?? 0;
+    this.endRotation      = opts.endRotation   ?? 0;
   }
 
   get size(): number { return this.entries.length; }
@@ -125,20 +139,33 @@ export class CardStack {
    * If faceDownOffsetY / faceUpOffsetY are set, Y positions are accumulated
    * (each card's Y = previous card's Y + that card's step), allowing columns
    * where face-down cards are packed tighter than face-up cards.
+   *
+   * If centered=true and not in variable-fan mode, baseX/baseY is treated as
+   * the midpoint so the fan rebalances symmetrically as cards are added/removed.
+   *
+   * startRotation/endRotation interpolate per-card rotation linearly from the
+   * first card (startRotation) to the last (endRotation), creating an arc.
+   * When both are equal the fan is flat; all existing callers default to 0/0.
    */
   layout(transitionMs = 350): Record<string, CardVisualState> {
     const result: Record<string, CardVisualState> = {};
+    const n = this.entries.length;
     const variableFan = this.faceDownOffsetY !== undefined || this.faceUpOffsetY !== undefined;
+    // Center offset: shift indices so midpoint lands on baseX/baseY.
+    // Only applied in uniform-offset mode; variable-fan (Klondike tableau) ignores it.
+    const centerOff = (this.centered && !variableFan) ? (n - 1) / 2 : 0;
 
     if (variableFan) {
       let accumY = this.baseY;
-      for (let i = 0; i < this.entries.length; i++) {
+      for (let i = 0; i < n; i++) {
         const e = this.entries[i];
+        const t = n > 1 ? i / (n - 1) : 0.5;
+        const rot = e.rotation + this.startRotation + t * (this.endRotation - this.startRotation);
         result[e.card.id] = {
           x:          this.baseX + i * this.offsetX,
           y:          accumY,
           z:          this.zTier * 100 + i,
-          rotation:   e.rotation,
+          rotation:   rot,
           faceDown:   e.faceDown,
           transitionMs,
         };
@@ -148,13 +175,15 @@ export class CardStack {
         accumY += step;
       }
     } else {
-      for (let i = 0; i < this.entries.length; i++) {
+      for (let i = 0; i < n; i++) {
         const e = this.entries[i];
+        const t = n > 1 ? i / (n - 1) : 0.5;
+        const rot = e.rotation + this.startRotation + t * (this.endRotation - this.startRotation);
         result[e.card.id] = {
-          x:          this.baseX + i * this.offsetX,
-          y:          this.baseY + i * this.offsetY,
+          x:          this.baseX + (i - centerOff) * this.offsetX,
+          y:          this.baseY + (i - centerOff) * this.offsetY,
           z:          this.zTier * 100 + i,
-          rotation:   e.rotation,
+          rotation:   rot,
           faceDown:   e.faceDown,
           transitionMs,
         };

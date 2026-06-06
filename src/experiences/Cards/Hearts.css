@@ -1,75 +1,5 @@
 /* ─── Hearts ──────────────────────────────────────────────────────────── */
 
-/* ── Flying card overlay ─────────────────────────────────────────────── */
-
-@keyframes hearts-fly-card {
-  from {
-    transform: translate(var(--from-tx), var(--from-ty)) rotate(0deg) scale(1.08);
-  }
-  to {
-    transform: translate(var(--to-tx), var(--to-ty)) rotate(var(--land-angle)) scale(1);
-  }
-}
-
-/* 3D flip for AI cards: back → front */
-@keyframes hearts-card-flip {
-  from { transform: rotateY(0deg); }
-  to   { transform: rotateY(180deg); }
-}
-
-.hearts__flying-card {
-  position: absolute;
-  left: 0;
-  top: 0;
-  pointer-events: none;
-  z-index: 60;
-  animation: hearts-fly-card 320ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-  will-change: transform;
-}
-
-/* Inner flipper — two faces stacked with 3D perspective */
-.hearts__fcard-flipper {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  transform-style: preserve-3d;
-  /* Flip starts halfway through the flight */
-  animation: hearts-card-flip 160ms ease-in-out forwards;
-  animation-delay: 160ms;
-  animation-fill-mode: both;
-}
-
-.hearts__fcard-back,
-.hearts__fcard-front {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-/* Front starts rotated away so back is visible first */
-.hearts__fcard-front {
-  transform: rotateY(180deg);
-}
-
-/* ── Deal fan animation ───────────────────────────────────────────────── */
-
-@keyframes hearts-deal-fan {
-  from {
-    opacity: 0;
-    transform: rotate(var(--fan-angle, 0deg)) translateY(-22px) scale(0.72);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(var(--fan-angle, 0deg)) translateY(0px) scale(1);
-  }
-}
-
-@keyframes hearts-trick-play {
-  from { opacity: 0; transform: scale(0.65) translateY(-12px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0); }
-}
-
 /* ── Outer shell ─────────────────────────────────────────────────────── */
 
 .hearts {
@@ -79,97 +9,86 @@
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   user-select: none;
-  position: relative;
-  /* Fill whatever container the window gives us */
-  min-height: 420px;
-  height: 100%;
-}
-
-/* ── Felt table — all children absolutely positioned ─────────────────── */
-
-.hearts__table {
   flex: 1;
-  background: #1a4a1a;
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  margin: 6px 6px 4px;
+  min-height: 0;
+}
+
+/* ── Stage ───────────────────────────────────────────────────────────── */
+
+.hearts__stage-container {
+  flex: 1;
+  min-height: 200px;
   position: relative;
+  background: #1a4a1a;
   overflow: hidden;
-  min-height: 360px;
 }
 
-/* ── Zones ───────────────────────────────────────────────────────────── */
-
-.hearts__zone {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-}
-
-.hearts__zone--north {
-  top: 7px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.hearts__zone--south {
-  bottom: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  gap: 4px;
-}
-
-.hearts__zone--west {
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.hearts__zone--east {
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+.hearts__stage {
+  background: #1a4a1a;
+  isolation: isolate;
+  position: relative;
 }
 
 /* ── Player labels ───────────────────────────────────────────────────── */
 
-.hearts__player-label {
-  font-size: 6px;
-  color: #ffffff;
+.hearts__label {
+  position: absolute;
   display: flex;
   align-items: center;
   gap: 4px;
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
+  pointer-events: none;
+  z-index: 200;
 }
 
-.hearts__player-label--ai {
-  color: rgba(255, 255, 255, 0.65);
+.hearts__label--north {
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.hearts__player-label--side {
+.hearts__label--south {
+  bottom: 64px;   /* just above the human hand arc */
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+}
+
+.hearts__label--west {
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   flex-direction: column;
   gap: 2px;
-  align-items: center;
+  font-size: 5px;
+}
+
+.hearts__label--east {
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: column;
+  gap: 2px;
   font-size: 5px;
 }
 
 .hearts__score-inline {
   font-size: 5px;
   color: rgba(255, 255, 255, 0.45);
-  margin-left: 4px;
 }
 
-.hearts__hand-score-badge {
+.hearts__badge {
   font-size: 5px;
   color: #ff9944;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.35);
   padding: 1px 3px;
   border-radius: 2px;
 }
 
-/* Turn dot */
+/* ── Turn dot ────────────────────────────────────────────────────────── */
+
 .hearts__turn-dot {
   width: 5px;
   height: 5px;
@@ -186,186 +105,70 @@
   50%       { opacity: 0.3; }
 }
 
-/* ── AI fans ─────────────────────────────────────────────────────────── */
+/* ── Center info ─────────────────────────────────────────────────────── */
 
-.hearts__ai-fan {
-  display: flex;
-}
-
-/* North: horizontal overlap */
-.hearts__ai-fan--horiz {
-  flex-direction: row;
-  align-items: center;
-}
-
-.hearts__ai-fan--horiz .playing-card--sm + .playing-card--sm {
-  margin-left: calc(-1 * var(--ai-overlap, 28px));
-}
-
-/* West / East: vertical overlap, max 8 visible */
-.hearts__ai-fan--vert {
-  flex-direction: column;
-  align-items: center;
-}
-
-.hearts__ai-fan--vert .playing-card--sm + .playing-card--sm {
-  margin-top: -58px;
-}
-
-.hearts__ai-extra {
-  font-size: 5px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 2px;
-  text-align: center;
-}
-
-/* ── Trick area ──────────────────────────────────────────────────────── */
-
-.hearts__trick-area {
+.hearts__center-info {
   position: absolute;
-  top: 50%;
   left: 50%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  /* 3-column grid: west | center | east */
-  display: grid;
-  grid-template-columns: 60px 56px 60px;
-  grid-template-rows: 80px 52px 80px;
-  align-items: center;
-  justify-items: center;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 5px;
-  padding: 6px;
-}
-
-.hearts__trick-slot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 76px;
-}
-
-.hearts__trick-slot--n { grid-column: 2; grid-row: 1; }
-.hearts__trick-slot--w { grid-column: 1; grid-row: 2; }
-.hearts__trick-center-info {
-  grid-column: 2;
-  grid-row: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-}
-.hearts__trick-slot--e { grid-column: 3; grid-row: 2; }
-.hearts__trick-slot--s { grid-column: 2; grid-row: 3; }
-
-.hearts__trick-card {
-  /* Delay slightly so the flying card overlay arrives before the real card appears */
-  animation: hearts-trick-play 0.16s ease backwards;
-  animation-delay: 0.26s;
+  gap: 5px;
+  pointer-events: none;
+  z-index: 50;
 }
 
 .hearts__trick-count {
   font-size: 6px;
-  color: rgba(255, 255, 255, 0.55);
-  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .hearts__broken {
-  font-size: 13px;
+  font-size: 14px;
   color: #ff4444;
   line-height: 1;
 }
 
-/* ── Human fan hand ──────────────────────────────────────────────────── */
+/* ── Passing overlay ─────────────────────────────────────────────────── */
 
-.hearts__human-hand {
+.hearts__pass-overlay {
+  position: absolute;
+  bottom: 66px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  justify-content: center;
-  /* padding-bottom leaves room for cards that arc up at edges */
-  padding: 4px 8px 16px;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  z-index: 200;
 }
-
-.hearts__fan-item {
-  position: relative;
-  flex-shrink: 0;
-  /* Pivot below card bottom for natural fan arc */
-  transform-origin: center 115%;
-  transform: rotate(var(--fan-angle, 0deg)) translateY(0px);
-  transition: transform 0.12s ease, z-index 0s;
-  /* Deal-in animation — plays once on mount */
-  animation: hearts-deal-fan 0.24s ease backwards;
-  animation-delay: calc(var(--fan-i, 0) * 44ms);
-}
-
-.hearts__fan-item + .hearts__fan-item {
-  margin-left: calc(-1 * var(--hand-overlap, 0px));
-}
-
-/* Hover lift (non-selected, clickable) */
-.hearts__fan-item--clickable:hover:not(.hearts__fan-item--selected) {
-  transform: rotate(var(--fan-angle, 0deg)) translateY(-9px);
-  z-index: 15 !important;
-}
-
-/* Selected — lift further + subtle scale */
-.hearts__fan-item--selected {
-  transform: rotate(var(--fan-angle, 0deg)) translateY(-20px) scale(1.04) !important;
-}
-
-/* Valid play outline */
-.hearts__fan-item--valid .playing-card {
-  box-shadow: 0 0 0 2px #ffdd44, 0 0 8px rgba(255, 221, 68, 0.5);
-}
-
-/* Selected glow */
-.hearts__fan-item--selected .playing-card {
-  box-shadow: 0 0 0 2px #ff6600, 0 0 10px rgba(255, 102, 0, 0.65);
-}
-
-/* Received card in passing phase */
-.hearts__fan-item--received .playing-card {
-  box-shadow: 0 0 0 2px #9966cc, 0 0 8px rgba(153, 102, 204, 0.5);
-}
-
-.hearts__fan-item--clickable { cursor: pointer; }
-
-/* Passing phase: slightly wider spread */
-.hearts__human-hand--passing .hearts__fan-item + .hearts__fan-item {
-  margin-left: calc(-1 * max(0px, var(--hand-overlap, 0px) - 10px));
-}
-
-/* ── Passing hints ───────────────────────────────────────────────────── */
 
 .hearts__pass-hint {
   font-size: 6px;
   color: #ffdd88;
-  text-align: center;
-  padding: 1px 0;
   white-space: nowrap;
-}
-
-.hearts__pass-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
+  text-align: center;
 }
 
 /* ── Play hint ───────────────────────────────────────────────────────── */
 
 .hearts__play-hint {
+  position: absolute;
+  bottom: 66px;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 5px;
-  color: rgba(255, 255, 255, 0.45);
-  text-align: center;
-  height: 11px;
+  color: rgba(255, 255, 255, 0.4);
   white-space: nowrap;
+  pointer-events: none;
+  z-index: 200;
 }
 
 /* ── Status bar ──────────────────────────────────────────────────────── */
 
-.hearts__status-bar {
+.hearts__statusbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -373,6 +176,7 @@
   font-size: 6px;
   color: #000;
   border-top: 1px solid #808080;
+  background: #c0c0c0;
   gap: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -384,9 +188,7 @@
   flex-wrap: wrap;
 }
 
-.hearts__score-item {
-  white-space: nowrap;
-}
+.hearts__score-item { white-space: nowrap; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 
@@ -416,8 +218,8 @@
   font-size: 6px;
 }
 
-.hearts-btn--sm:hover:not(:disabled)  { background: #d4d0c8; }
-.hearts-btn--sm:active:not(:disabled) { border-color: #808080 #ffffff #ffffff #808080; }
+.hearts-btn--sm:hover  { background: #d4d0c8; }
+.hearts-btn--sm:active { border-color: #808080 #ffffff #ffffff #808080; }
 
 /* ── Modal ───────────────────────────────────────────────────────────── */
 
@@ -428,7 +230,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
 }
 
 .hearts-modal {
