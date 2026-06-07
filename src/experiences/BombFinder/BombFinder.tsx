@@ -493,6 +493,11 @@ export default function BombFinder({ onDifficultyChange }: BombFinderProps = {})
                   // Mouse: press visual on mousedown, execute on mouseup
                   onMouseDown={(e) => {
                     if (pointerTypeRef.current === "touch") return;
+                    if (e.ctrlKey && e.button === 0) {
+                      e.preventDefault();
+                      toggleFlag(r, c);
+                      return;
+                    }
                     if (e.buttons === 3) {
                       setPressedCell(null);
                       setChordingCell([r, c]);
