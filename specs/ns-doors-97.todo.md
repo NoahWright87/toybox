@@ -12,14 +12,15 @@
 
 ## Later
 
-- [#26](https://github.com/NoahWright87/toybox/issues/26) "Working" internet browser window — simulate a 1990s web experience
-  - Modem connection screen with characteristic dial-up noises in semi-random sequence
+- [#117](https://github.com/NoahWright87/toybox/issues/117) Internet browser: add dial-up modem connection experience
+  - Modem connection screen shown before each page load
+  - Characteristic dial-up handshake sounds in semi-random sequence
   - Pages and images load jerkily and slowly
-  - Broken layout / crazy resolution — pages do not render correctly
-  - Generally: anything that makes it feel like a janky 90s connection
-  - Sub-item: [#53](https://github.com/NoahWright87/toybox/issues/53) Create a fake "flash games" website accessible through the browser
-    - Recreate old-school games: eat-smaller-fish, helicopter dodge, bubble pop, Snood-like, etc.
-    - Accessed by navigating to a fake URL inside the browser
+  - Broken layout / wrong resolution — pages render like a janky 90s browser
+
+- [#53](https://github.com/NoahWright87/toybox/issues/53) Create a fake "flash games" website accessible through the browser
+  - Recreate old-school games: eat-smaller-fish, helicopter dodge, bubble pop, Snood-like, etc.
+  - Accessed by navigating to a fake URL inside the browser
 
 - Wire up `win.ini` / `system.ini` to real OS behavior
   - `[Desktop] Wallpaper=` → set desktop wallpaper from FS path
@@ -49,14 +50,6 @@
   - Wildcard expansion for `DIR *.exe`, `DEL *.tmp`, etc.
   - `CLS` — clear terminal output
   - `VER` — print OS version string
-
-- [#31](https://github.com/NoahWright87/toybox/issues/31) Documents folder with humorous realistic-feeling contents
-  - `password.txt` with an obvious/guessable password and ridiculous username
-  - `CHEAT CODES.txt` with fake cheat codes and what they (pretend to) do
-  - A long walkthrough for "that hard stage" in some classic game
-  - Random people's phone numbers in contacts documents
-  - Multiple drafts of `IMPORTANT.txt` / `DON'T FORGET.txt` with absurd to-do lists
-  - 90s nerd/gamer references throughout; keep it humorous and era-appropriate
 
 - [#72](https://github.com/NoahWright87/toybox/issues/72) Task Manager — "Peephole"
   - Win95-style task manager showing running Doors 97 apps/windows

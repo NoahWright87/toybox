@@ -9,12 +9,6 @@
   - "Foozpong" variant: multiple paddles per side, smaller goal, paddles all move together (foosball-style)
   - Ball spin: sliding the paddle while hitting puts spin on the ball, affecting bounce direction
   - Options: multiple balls, multiple players, different colors, obstacles in the center
-- [#20](https://github.com/NoahWright87/toybox/issues/20) Fruity Loops–style drum beat sequencer
-  - Grid: rows = instruments (4–5 drum sounds), columns = beats; click to toggle cells, click-drag to fill/erase a row
-  - BPM control and configurable number of measures (assume 4/4 time)
-  - Loops by default (toggle to disable); spacebar starts/stops
-  - Placeholder bleeps/bloops for now; swap in real drum samples later
-
 ## Backlog
 
 ### New game ideas
@@ -27,8 +21,6 @@
 - [#19](https://github.com/NoahWright87/toybox/issues/19) Minimal shmup (shoot-'em-up)
   - All vector graphics; single enemy type spawning from the top
   - Random upgrades drop from defeated enemies
-- [#28](https://github.com/NoahWright87/toybox/issues/28) First-person shooter (Wolfenstein-style)
-  - Simpler than Doom; basic raycasting or equivalent; runs in-browser
 - [#61](https://github.com/NoahWright87/toybox/issues/61) Sudoku
 - [#62](https://github.com/NoahWright87/toybox/issues/62) Connections-style word grouping game (à la NYT Connections / Red Herring)
 - [#64](https://github.com/NoahWright87/toybox/issues/64) Pinball
