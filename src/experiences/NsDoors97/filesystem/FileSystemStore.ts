@@ -1,6 +1,7 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
   ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -493,6 +494,35 @@ export class FileSystemStore {
           system: false, readonly: false, appId: "sound-recorder",
         } as FSFile);
       }
+      changed = true;
+    }
+
+    // Ensure Goober Dress-Up folder exists
+    if (!this.nodes.has(GOOBER_FOLDER_ID)) {
+      const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+      if (gamesDir?.kind === "folder") {
+        this.nodes.set(GOOBER_FOLDER_ID, {
+          id: GOOBER_FOLDER_ID, kind: "folder", name: "Goober Dress-Up",
+          parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        } as FSFolder);
+        this.nodes.set("fs:goober-exe", {
+          id: "fs:goober-exe", kind: "file", name: "Goober Dress-Up.exe",
+          parentId: GOOBER_FOLDER_ID, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "exe", content: "", mimeType: "application/octet-stream",
+          system: false, readonly: false, appId: "goober-dressup",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Goober Sprites subfolder exists
+    if (!this.nodes.has(GOOBER_SPRITES_ID) && this.nodes.has(GOOBER_FOLDER_ID)) {
+      this.nodes.set(GOOBER_SPRITES_ID, {
+        id: GOOBER_SPRITES_ID, kind: "folder", name: "Sprites",
+        parentId: GOOBER_FOLDER_ID, createdAt: Date.now(), modifiedAt: Date.now(),
+        system: false,
+      } as FSFolder);
       changed = true;
     }
 

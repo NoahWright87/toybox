@@ -108,8 +108,9 @@ const GAMES_ITEMS = [
   { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
   { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
   { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
-  { id: "chain-reaction", icon: "🔗", label: "Chain Reaction"   },
-  { id: "peg-solitaire",  icon: "🔴", label: "Peg Solitaire"    },
+  { id: "chain-reaction",  icon: "🔗", label: "Chain Reaction"   },
+  { id: "peg-solitaire",   icon: "🔴", label: "Peg Solitaire"    },
+  { id: "goober-dressup",  icon: "🐱", label: "Goober Dress-Up"  },
 ] as const;
 
 const TOOLS_ITEMS = [

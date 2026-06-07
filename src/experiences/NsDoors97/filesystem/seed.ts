@@ -3,6 +3,7 @@ import {
   ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -278,6 +279,30 @@ Ego Software is not responsible for
 nightmares or sinful thoughts.
 `;
 
+const GOOBER_README = `GOOBER DRESS-UP — ARTIST GUIDE
+================================
+
+To replace the placeholder art with your own drawings:
+
+1. Open NS Art from Start > Programs > Accessories > NS Art
+2. Set your canvas size (e.g. 128x128 or 256x256)
+3. Draw one option per FRAME using the animation panel
+   - Each frame = one outfit / hat / eye style / etc.
+   - Use a single strip (Strip 1)
+4. When done, click: File > Goober Dress-Up > [Layer Name]
+   e.g. "File > Goober Dress-Up > Ears"
+5. Open Goober Dress-Up to see your art in the game!
+
+LAYER NAMES:
+  Background, Body Shape, Outfit, Ears,
+  Nose & Whiskers, Mouth, Eyes,
+  Glasses, Necklace, Hat, Held Item
+
+Saved sprite files appear in C:\\Programs\\Games\\Goober Dress-Up\\Sprites\\
+
+Have fun! :)
+`;
+
 const RECYCLE_DRAFT = `Draft letter - never sent
 
 June 3, 1997
@@ -368,6 +393,11 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const pegDir = store.createFolder(GAMES_ID, "Peg Solitaire");
   store.createFile(pegDir.id, "Peg Solitaire.exe", { fileType: "exe", appId: "peg-solitaire" });
+
+  const gooberDir = store.createFolder(GAMES_ID, "Goober Dress-Up", { id: GOOBER_FOLDER_ID });
+  store.createFile(gooberDir.id, "Goober Dress-Up.exe", { fileType: "exe", appId: "goober-dressup" });
+  store.createFile(gooberDir.id, "README.TXT", { fileType: "text", content: GOOBER_README, readonly: true });
+  store.createFolder(gooberDir.id, "Sprites", { id: GOOBER_SPRITES_ID });
 
   const trDir = store.createFolder(GAMES_ID, "Typing Racer");
   store.createFile(trDir.id, "Typing Racer.exe", { fileType: "exe", appId: "typing-racer" });
