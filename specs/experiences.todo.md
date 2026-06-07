@@ -29,7 +29,20 @@
   - Random upgrades drop from defeated enemies
 - [#28](https://github.com/NoahWright87/toybox/issues/28) First-person shooter (Wolfenstein-style)
   - Simpler than Doom; basic raycasting or equivalent; runs in-browser
-- [#37](https://github.com/NoahWright87/toybox/issues/37) Pool / billiards game
+- [#61](https://github.com/NoahWright87/toybox/issues/61) Sudoku
+- [#62](https://github.com/NoahWright87/toybox/issues/62) Connections-style word grouping game (à la NYT Connections / Red Herring)
+- [#64](https://github.com/NoahWright87/toybox/issues/64) Pinball
+- [#65](https://github.com/NoahWright87/toybox/issues/65) Rat Park / Hamsters
+- [#89](https://github.com/NoahWright87/toybox/issues/89) Goober cat dress-up game
+- [#101](https://github.com/NoahWright87/toybox/issues/101) Lemonade tycoon — grow from lemonade stand to supermarket chain
+  - MVP can be small; long-term vision: multiple locations, branching growth path
+  - Related to / supersedes [#18](https://github.com/NoahWright87/toybox/issues/18) (basic lemonade stand)
+- [#104](https://github.com/NoahWright87/toybox/issues/104) Jigsaw puzzle game
+- [#111](https://github.com/NoahWright87/toybox/issues/111) Mahjong solitaire (match pairs to clear the board; tile bombs as a variant)
+- [#112](https://github.com/NoahWright87/toybox/issues/112) Oregon Trail–style adventure game
+- [#113](https://github.com/NoahWright87/toybox/issues/113) Brick breaker / Breakout clone
+- [#114](https://github.com/NoahWright87/toybox/issues/114) Chess
+- [#115](https://github.com/NoahWright87/toybox/issues/115) Checkers
 
 ### Stealth learning / educational
 

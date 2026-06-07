@@ -6,10 +6,11 @@ Future work for this repo. Add projects and features here as they are planned.
 
 ## Sooner
 
-- [#54](https://github.com/NoahWright87/toybox/issues/54) Clean up "toybox" remnants — replace back-links and floating `?` buttons with consistent Doors OS chrome
-  - Replace all "return to toybox" links with a Win95-style frame/window wrapper (X button in corner)
-  - Replace the floating HelpOverlay `?` button with a Help menu item in the window toolbar
-  - Audit every standalone experience page for any remaining HomePage-era UI
+- [#74](https://github.com/NoahWright87/toybox/issues/74) Code review by Opus — identify code quality improvements and file issues
+  - Review CLAUDE.md and codebase for negative statements; suggest positive rewrites
+  - Flag important rules that appear only once and would benefit from reinforcement
+  - Find functionality duplicated across components (custom menu bars, window chrome, etc.)
+  - Output: new GitHub issues for each finding; Opus identifies, Sonnet/Haiku cleans up
 
 ## Later
 
