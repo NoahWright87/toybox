@@ -500,7 +500,7 @@ export default function NsDoors97() {
         case "midi-editor":    content = { type: "midi-editor" as const };    width = 860; break;
         case "chain-reaction":  content = { type: "chain-reaction" as const };  width = 540; break;
         case "peg-solitaire":   content = { type: "peg-solitaire" as const };   width = 580; break;
-        case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 680; break;
+        case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 500; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };

@@ -1,12 +1,14 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
+import { Tabs } from "../../components/Tabs/Tabs";
+import type { TabItem } from "../../components/Tabs/Tabs";
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import {
   DEFAULT_CONFIG, saveGoober, loadGoober, listGoobers, loadGooberSprites,
   type GooberConfig,
 } from "./gooberFs";
-import { LAYERS } from "./layers";
+import { LAYERS, type LayerDef } from "./layers";
 import "./GooberDressup.css";
 
 interface Props {
@@ -14,11 +16,48 @@ interface Props {
   initialFileId?: string;
 }
 
+const TABS: TabItem[] = LAYERS.map(l => ({ id: l.key as string, label: l.label }));
+
+// ── Mini option preview ───────────────────────────────────────────────────────
+
+function MiniPreview({
+  layer,
+  frameIdx,
+  loadedImages,
+}: {
+  layer: LayerDef;
+  frameIdx: number;
+  loadedImages: HTMLImageElement[] | undefined;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const size = canvas.width;
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, size, size);
+    const img = loadedImages?.[frameIdx];
+    if (img) {
+      ctx.drawImage(img, 0, 0, size, size);
+    } else {
+      layer.drawFrame(ctx, frameIdx, size);
+    }
+  }, [layer, frameIdx, loadedImages]);
+
+  return <canvas ref={canvasRef} width={72} height={72} className="goober-mini-canvas" />;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function GooberDressup({ onQuit, initialFileId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [config, setConfig] = useState<GooberConfig>(DEFAULT_CONFIG);
-  const [activeLayerIdx, setActiveLayerIdx] = useState(0);
+  const [activeTabKey, setActiveTabKey] = useState<string>(LAYERS[0].key as string);
   const [loadedSprites, setLoadedSprites] = useState<Map<string, HTMLImageElement[]>>(new Map());
   const [currentFile, setCurrentFile] = useState<{ id: string; name: string } | null>(null);
 
@@ -26,7 +65,7 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
   const [saveName, setSaveName] = useState("My Goober");
   const [gooberList, setGooberList] = useState<{ id: string; name: string }[]>([]);
 
-  // Load initial file if provided (opened via double-click from FilesApp)
+  // Load initial file (opened via double-click from FilesApp)
   useEffect(() => {
     if (!initialFileId) return;
     const loaded = loadGoober(initialFileId);
@@ -37,7 +76,7 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
     }
   }, [initialFileId]);
 
-  // Load sprite images from FS on mount and on FS changes
+  // Load sprites on mount; reload on FS changes
   useEffect(() => {
     loadGooberSprites().then(setLoadedSprites);
   }, []);
@@ -47,20 +86,7 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
     });
   }, []);
 
-  // Helpers
-  function getFrameCount(layerIdx: number): number {
-    const layer = LAYERS[layerIdx];
-    const imgs = loadedSprites.get(layer.key as string);
-    return imgs ? imgs.length : layer.defaultFrameCount;
-  }
-
-  function getFrameIdx(layerIdx: number): number {
-    const layer = LAYERS[layerIdx];
-    const count = getFrameCount(layerIdx);
-    return Math.min(config[layer.key], count - 1);
-  }
-
-  // Redraw canvas whenever config or sprites change
+  // Redraw full preview whenever config or sprites change
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -68,9 +94,7 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
     if (!ctx) return;
     const size = canvas.width;
     ctx.clearRect(0, 0, size, size);
-
-    for (let i = 0; i < LAYERS.length; i++) {
-      const layer = LAYERS[i];
+    for (const layer of LAYERS) {
       const imgs = loadedSprites.get(layer.key as string);
       const count = imgs ? imgs.length : layer.defaultFrameCount;
       const frameIdx = Math.min(config[layer.key], count - 1);
@@ -82,32 +106,10 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
     }
   }, [config, loadedSprites]);
 
-  // Navigation
-  const activeLayer = LAYERS[activeLayerIdx];
-  const activeFrameCount = getFrameCount(activeLayerIdx);
-  const activeFrameIdx = getFrameIdx(activeLayerIdx);
-
-  const activeFrameName: string = (() => {
-    const imgs = loadedSprites.get(activeLayer.key as string);
-    if (imgs) return `Frame ${activeFrameIdx + 1}`;
-    return activeLayer.names[activeFrameIdx] ?? `Option ${activeFrameIdx + 1}`;
-  })();
-
-  function prevFrame() {
-    const count = activeFrameCount;
-    setConfig(c => ({
-      ...c,
-      [activeLayer.key]: (c[activeLayer.key] - 1 + count) % count,
-    }));
-  }
-
-  function nextFrame() {
-    const count = activeFrameCount;
-    setConfig(c => ({
-      ...c,
-      [activeLayer.key]: (c[activeLayer.key] + 1) % count,
-    }));
-  }
+  // Active layer
+  const activeLayerDef: LayerDef = LAYERS.find(l => (l.key as string) === activeTabKey) ?? LAYERS[0];
+  const activeImgs = loadedSprites.get(activeTabKey);
+  const frameCount = activeImgs ? activeImgs.length : activeLayerDef.defaultFrameCount;
 
   // File operations
   const handleNew = useCallback(() => {
@@ -154,7 +156,6 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
     a.click();
   }, [currentFile]);
 
-  // Window menus
   const menus = useMemo<MenuBarMenu[]>(() => {
     const quitItems: MenuBarMenu["items"] = onQuit
       ? [{ separator: true }, { label: "Quit", onClick: onQuit }]
@@ -177,61 +178,49 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
 
   useWindowMenus(menus);
 
-  const fileName = currentFile ? currentFile.name : "untitled";
-
   return (
     <div className="goober-dressup">
-      {/* Left panel: layer list */}
-      <div className="goober-left">
-        <div className="goober-left__title">Features</div>
-        {LAYERS.map((layer, idx) => (
-          <button
-            key={layer.key}
-            className={`goober-layer-btn${idx === activeLayerIdx ? " goober-layer-btn--active" : ""}`}
-            onClick={() => setActiveLayerIdx(idx)}
-          >
-            {layer.label}
-          </button>
-        ))}
+
+      {/* Full preview at top */}
+      <div className="goober-preview-area">
+        <div className="goober-preview-wrapper">
+          <canvas ref={canvasRef} width={256} height={256} className="goober-canvas" />
+        </div>
+        <div className="goober-preview-caption">
+          {currentFile ? currentFile.name : "untitled"}
+        </div>
       </div>
 
-      {/* Right panel: preview + controls */}
-      <div className="goober-right">
-        <div className="goober-preview">
-          <canvas
-            ref={canvasRef}
-            className="goober-canvas"
-            width={280}
-            height={280}
-          />
-        </div>
+      {/* Feature tabs */}
+      <Tabs
+        tabs={TABS}
+        activeTab={activeTabKey}
+        onTabChange={setActiveTabKey}
+      />
 
-        <div className="goober-controls">
-          <button className="goober-nav-btn" onClick={prevFrame}>&#9664;</button>
-          <span className="goober-frame-label">
-            {activeFrameName}
-            <span className="goober-frame-count">
-              {activeFrameIdx + 1}/{activeFrameCount}
-            </span>
-          </span>
-          <button className="goober-nav-btn" onClick={nextFrame}>&#9654;</button>
-        </div>
-
-        <div className="goober-layer-label">{activeLayer.label}</div>
-      </div>
-
-      {/* Bottom bar */}
-      <div className="goober-bottom">
-        <span className="goober-filename">
-          <span className="goober-filename__label">File:</span>
-          <span className="goober-filename__name">{fileName}</span>
-        </span>
-        <div className="goober-bottom-btns">
-          <button className="goober-btn" onClick={handleNew}>New</button>
-          <button className="goober-btn" onClick={openSaveDialog}>Save As…</button>
-          <button className="goober-btn" onClick={openLoadDialog}>Load…</button>
-          <button className="goober-btn" onClick={handleExport}>Export PNG</button>
-        </div>
+      {/* Option grid — fills remaining space */}
+      <div className="goober-options">
+        {Array.from({ length: frameCount }, (_, i) => {
+          const name = activeImgs
+            ? `Frame ${i + 1}`
+            : (activeLayerDef.names[i] ?? `Option ${i + 1}`);
+          const isSelected = config[activeLayerDef.key] === i;
+          return (
+            <button
+              key={i}
+              className={`goober-option-btn${isSelected ? " goober-option-btn--selected" : ""}`}
+              onClick={() => setConfig(c => ({ ...c, [activeLayerDef.key]: i } as GooberConfig))}
+              title={name}
+            >
+              <MiniPreview
+                layer={activeLayerDef}
+                frameIdx={i}
+                loadedImages={activeImgs}
+              />
+              <span className="goober-option-label">{name}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Save As dialog */}
