@@ -50,6 +50,11 @@ export const GOOBER_LAYER_TARGETS = [
 
 export type GooberLayerKey = (typeof GOOBER_LAYER_TARGETS)[number]["key"];
 
+// Stable FS ID for a single frame of a layer
+export function gooberSpriteFileId(layerKey: string, frameIdx: number): string {
+  return `fs:goober-spr-${layerKey}-${frameIdx}`;
+}
+
 // ── Config save / load ────────────────────────────────────────────────────────
 
 export function saveGoober(name: string, config: GooberConfig): void {
@@ -86,27 +91,43 @@ export function listGoobers(): { id: string; name: string }[] {
     .map(n => ({ id: n.id, name: n.name.replace(/\.DAT$/i, "") }));
 }
 
-// ── Sprite FS integration ─────────────────────────────────────────────────────
+// ── Sprite FS integration — individual PNG files per frame ────────────────────
 
-export function saveGooberSprite(layerKey: string, nsArtBackupJson: string): void {
-  const fileName = `${layerKey}.nsart`;
-  const existing = fsStore.findChild(GOOBER_SPRITES_ID, fileName);
-  if (existing?.kind === "file") {
-    fsStore.writeFile(existing.id, nsArtBackupJson);
-  } else {
-    fsStore.createFile(GOOBER_SPRITES_ID, fileName, {
-      fileType: "dat",
-      content: nsArtBackupJson,
-    });
+// Save all frames for a layer as individual PNG files in the Sprites folder.
+// Frames are stored at C:\Programs\Games\Goober Dress-Up\Sprites\{key}-{i}.png
+// Each file's content is a PNG data URL.
+// Extra frames from a previous save (if new count < old count) are cleared.
+export function saveGooberLayer(layerKey: string, pngDataUrls: (string | null)[]): void {
+  // Collect non-null urls (stop at first null — maintains frame order)
+  const urls: string[] = [];
+  for (const url of pngDataUrls) {
+    if (!url) break;
+    urls.push(url);
   }
-}
 
-interface NsArtBackup {
-  version: 2;
-  frameW: number;
-  frameH: number;
-  strips: { name: string }[];
-  frames: (string | null)[][];
+  // Count existing frames
+  let existingCount = 0;
+  while (fsStore.getFile(gooberSpriteFileId(layerKey, existingCount))) {
+    existingCount++;
+  }
+
+  fsStore.batch(() => {
+    // Write / create each new frame
+    urls.forEach((url, i) => {
+      const id = gooberSpriteFileId(layerKey, i);
+      if (fsStore.getFile(id)) {
+        fsStore.writeFile(id, url);
+      } else {
+        fsStore.createFile(GOOBER_SPRITES_ID, `${layerKey}-${i}.png`, {
+          fileType: "png", appId: "nsart", content: url, id,
+        });
+      }
+    });
+    // Clear any extra frames beyond the new count
+    for (let i = urls.length; i < existingCount; i++) {
+      fsStore.writeFile(gooberSpriteFileId(layerKey, i), "");
+    }
+  });
 }
 
 async function dataUrlToImage(url: string): Promise<HTMLImageElement> {
@@ -118,27 +139,26 @@ async function dataUrlToImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+// Load all layer sprites from the FS.
+// Reads {key}-0.png, {key}-1.png, ... until a file is missing or has empty content.
 export async function loadGooberSprites(): Promise<Map<string, HTMLImageElement[]>> {
   const result = new Map<string, HTMLImageElement[]>();
 
   await Promise.all(
     GOOBER_LAYER_TARGETS.map(async ({ key }) => {
-      const file = fsStore.findChild(GOOBER_SPRITES_ID, `${key}.nsart`);
-      if (!file || file.kind !== "file" || !file.content) return;
-      try {
-        const backup = JSON.parse(file.content) as NsArtBackup;
-        if (backup.version !== 2 || !Array.isArray(backup.frames[0])) return;
-        const strip0 = backup.frames[0];
-        const maybeImgs = await Promise.all(
-          strip0.map(async url => {
-            if (!url) return null;
-            try { return await dataUrlToImage(url); }
-            catch { return null; }
-          })
-        );
-        const imgs = maybeImgs.filter((img): img is HTMLImageElement => img !== null);
-        if (imgs.length > 0) result.set(key, imgs);
-      } catch { /* parse error */ }
+      const imgs: HTMLImageElement[] = [];
+      let i = 0;
+      while (true) {
+        const file = fsStore.getFile(gooberSpriteFileId(key, i));
+        if (!file?.content) break;
+        try {
+          imgs.push(await dataUrlToImage(file.content));
+        } catch {
+          break;
+        }
+        i++;
+      }
+      if (imgs.length > 0) result.set(key, imgs);
     })
   );
 

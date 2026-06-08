@@ -526,6 +526,30 @@ export class FileSystemStore {
       changed = true;
     }
 
+    // Ensure per-frame sprite stubs exist (content filled by GooberDressup on first launch)
+    if (this.nodes.has(GOOBER_SPRITES_ID)) {
+      const GOOBER_SPRITE_FRAMES: Record<string, number> = {
+        background: 6, bodyShape: 4, bodyOutfit: 5, ears: 5,
+        noseWhiskers: 4, mouth: 5, eyes: 6, glasses: 5,
+        necklace: 5, hat: 6, heldItem: 5,
+      };
+      for (const [key, count] of Object.entries(GOOBER_SPRITE_FRAMES)) {
+        for (let i = 0; i < count; i++) {
+          const id = `fs:goober-spr-${key}-${i}`;
+          if (!this.nodes.has(id)) {
+            this.nodes.set(id, {
+              id, kind: "file", name: `${key}-${i}.png`,
+              parentId: GOOBER_SPRITES_ID,
+              createdAt: Date.now(), modifiedAt: Date.now(),
+              fileType: "png", content: "", mimeType: "image/png",
+              system: false, readonly: false, appId: "nsart",
+            } as FSFile);
+            changed = true;
+          }
+        }
+      }
+    }
+
     if (changed) this.save();
   }
 }

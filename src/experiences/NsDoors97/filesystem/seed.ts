@@ -324,6 +324,13 @@ A Very Patient Customer
 And NS Doors 97 is actually pretty good. Delete this.]
 `;
 
+// Frame counts per Goober layer (must match layers.ts defaultFrameCount)
+const GOOBER_SPRITE_FRAMES: Record<string, number> = {
+  background: 6, bodyShape: 4, bodyOutfit: 5, ears: 5,
+  noseWhiskers: 4, mouth: 5, eyes: 6, glasses: 5,
+  necklace: 5, hat: 6, heldItem: 5,
+};
+
 // ── Seed function ─────────────────────────────────────────────────────────────
 
 export function seedFileSystem(store: FileSystemStore): void {
@@ -398,6 +405,14 @@ export function seedFileSystem(store: FileSystemStore): void {
   store.createFile(gooberDir.id, "Goober Dress-Up.exe", { fileType: "exe", appId: "goober-dressup" });
   store.createFile(gooberDir.id, "README.TXT", { fileType: "text", content: GOOBER_README, readonly: true });
   store.createFolder(gooberDir.id, "Sprites", { id: GOOBER_SPRITES_ID });
+  // Seed one empty stub per layer frame — content filled by GooberDressup on first launch
+  for (const [key, count] of Object.entries(GOOBER_SPRITE_FRAMES)) {
+    for (let i = 0; i < count; i++) {
+      store.createFile(GOOBER_SPRITES_ID, `${key}-${i}.png`, {
+        fileType: "png", appId: "nsart", id: `fs:goober-spr-${key}-${i}`,
+      });
+    }
+  }
 
   const trDir = store.createFolder(GAMES_ID, "Typing Racer");
   store.createFile(trDir.id, "Typing Racer.exe", { fileType: "exe", appId: "typing-racer" });

@@ -6,7 +6,7 @@ import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { NS_ART_BACKUP_ID } from "../NsDoors97/filesystem/types";
-import { saveGooberSprite, GOOBER_LAYER_TARGETS } from "../GooberDressup/gooberFs";
+import { saveGooberLayer, GOOBER_LAYER_TARGETS } from "../GooberDressup/gooberFs";
 import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -773,13 +773,9 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
       })
     );
 
-    saveGooberSprite(layerKey, JSON.stringify({
-      version: 2,
-      frameW: fw,
-      frameH: fh,
-      strips: stripsRef.current,
-      frames: framesUrls,
-    }));
+    // Save strip 0's frames as individual PNG files in the Goober Sprites folder
+    const strip0: (string | null)[] = framesUrls[0] ?? [];
+    saveGooberLayer(layerKey, strip0);
 
     setGooberSavedLabel(layerLabel);
     if (gooberSaveTimerRef.current) clearTimeout(gooberSaveTimerRef.current);

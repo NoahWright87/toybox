@@ -586,9 +586,12 @@ export default function NsDoors97() {
         );
         return;
       }
-      // .png sprite files in EGO/SPRITES open NS Art loaded with that sprite
+      // .png sprite files with appId "nsart" open in NS Art
+      // EGO sprites have a bundled public fallback; Goober sprites do not
       if (file.fileType === "png" && file.appId === "nsart") {
         const winId = `nsart:${file.id}`;
+        const filePath = fsStore.getPath(file.id);
+        const isEgoSprite = filePath.toUpperCase().startsWith("C:\\EGO\\");
         setOpenWindows((prev) => {
           if (prev.some((w) => w.id === winId)) {
             maxZ++;
@@ -606,7 +609,7 @@ export default function NsDoors97() {
             content: {
               type: "nsart" as const,
               fileId: file.id,
-              fileUrl: `/sprites/${file.name}`,
+              ...(isEgoSprite ? { fileUrl: `/sprites/${file.name}` } : {}),
             },
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },

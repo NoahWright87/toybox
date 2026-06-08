@@ -6,6 +6,7 @@ import type { TabItem } from "../../components/Tabs/Tabs";
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import {
   DEFAULT_CONFIG, saveGoober, loadGoober, listGoobers, loadGooberSprites,
+  saveGooberLayer, gooberSpriteFileId,
   type GooberConfig,
 } from "./gooberFs";
 import { LAYERS, type LayerDef } from "./layers";
@@ -75,6 +76,33 @@ export default function GooberDressup({ onQuit, initialFileId }: Props) {
       if (file) setCurrentFile({ id: initialFileId, name: file.name.replace(/\.DAT$/i, "") });
     }
   }, [initialFileId]);
+
+  // Seed procedural placeholder PNGs for any empty sprite file on first launch.
+  // Runs synchronously before the sprite load effect so the load effect sees the content.
+  useEffect(() => {
+    const needsSeeding = LAYERS.filter(
+      layer => !fsStore.getFile(gooberSpriteFileId(layer.key as string, 0))?.content
+    );
+    if (needsSeeding.length === 0) return;
+
+    const SIZE = 128;
+    const tmp = document.createElement("canvas");
+    tmp.width = SIZE; tmp.height = SIZE;
+    const ctx = tmp.getContext("2d");
+    if (!ctx) return;
+
+    fsStore.batch(() => {
+      for (const layer of needsSeeding) {
+        const urls: string[] = [];
+        for (let i = 0; i < layer.defaultFrameCount; i++) {
+          ctx.clearRect(0, 0, SIZE, SIZE);
+          layer.drawFrame(ctx, i, SIZE);
+          urls.push(tmp.toDataURL("image/png"));
+        }
+        saveGooberLayer(layer.key as string, urls);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load sprites on mount; reload on FS changes
   useEffect(() => {
