@@ -161,4 +161,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/peg-solitaire",
   },
+  {
+    id: "goober-dressup",
+    title: "Goober Dress-Up",
+    description: "Mix and match hats, eyes, ears, and more to dress up Goober the cat. Draw your own art in NS Art to replace the placeholders!",
+    category: "toy",
+    path: "/goober-dressup",
+  },
 ];

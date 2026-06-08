@@ -1,0 +1,58 @@
+/* Win95-style horizontal tab strip */
+
+.win95-tabs {
+  flex-shrink: 0;
+}
+
+.win95-tabs__strip {
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-bottom: 2px solid #808080;
+  padding: 2px 4px 0;
+  gap: 2px;
+  background: #c0c0c0;
+  align-items: flex-end;
+}
+
+.win95-tabs__strip::-webkit-scrollbar {
+  height: 6px;
+}
+
+.win95-tabs__strip::-webkit-scrollbar-track {
+  background: #c0c0c0;
+}
+
+.win95-tabs__strip::-webkit-scrollbar-thumb {
+  background: #808080;
+  border: 1px solid #ffffff;
+}
+
+.win95-tabs__tab {
+  flex-shrink: 0;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 transparent #ffffff;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  margin-bottom: -2px;
+  z-index: 0;
+  line-height: 1.5;
+}
+
+.win95-tabs__tab:hover:not(.win95-tabs__tab--active) {
+  background: #d4d0c8;
+}
+
+.win95-tabs__tab--active {
+  background: #c0c0c0;
+  border-bottom-color: #c0c0c0;
+  z-index: 2;
+  padding-top: 5px;
+}

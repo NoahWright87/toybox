@@ -143,6 +143,12 @@ export default function FilesApp({
   }
 
   function handleFile(file: FSFile) {
+    // Goober Dress-Up configs — open in the game (must be checked before text fallback)
+    if (file.appId === "goober-dressup") {
+      onOpenFSNode?.(file.id);
+      return;
+    }
+
     // Readable text-like files
     const textTypes = ["text", "bat", "sys", "ini", "dat"] as const;
     const isTextLike = (textTypes as readonly string[]).includes(file.fileType);

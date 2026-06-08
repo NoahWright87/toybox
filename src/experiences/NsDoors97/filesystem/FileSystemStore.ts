@@ -1,6 +1,7 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
   ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -494,6 +495,59 @@ export class FileSystemStore {
         } as FSFile);
       }
       changed = true;
+    }
+
+    // Ensure Goober Dress-Up folder exists
+    if (!this.nodes.has(GOOBER_FOLDER_ID)) {
+      const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+      if (gamesDir?.kind === "folder") {
+        this.nodes.set(GOOBER_FOLDER_ID, {
+          id: GOOBER_FOLDER_ID, kind: "folder", name: "Goober Dress-Up",
+          parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        } as FSFolder);
+        this.nodes.set("fs:goober-exe", {
+          id: "fs:goober-exe", kind: "file", name: "Goober Dress-Up.exe",
+          parentId: GOOBER_FOLDER_ID, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "exe", content: "", mimeType: "application/octet-stream",
+          system: false, readonly: false, appId: "goober-dressup",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Goober Sprites subfolder exists
+    if (!this.nodes.has(GOOBER_SPRITES_ID) && this.nodes.has(GOOBER_FOLDER_ID)) {
+      this.nodes.set(GOOBER_SPRITES_ID, {
+        id: GOOBER_SPRITES_ID, kind: "folder", name: "Sprites",
+        parentId: GOOBER_FOLDER_ID, createdAt: Date.now(), modifiedAt: Date.now(),
+        system: false,
+      } as FSFolder);
+      changed = true;
+    }
+
+    // Ensure per-frame sprite stubs exist (content filled by GooberDressup on first launch)
+    if (this.nodes.has(GOOBER_SPRITES_ID)) {
+      const GOOBER_SPRITE_FRAMES: Record<string, number> = {
+        background: 6, bodyShape: 4, bodyOutfit: 5, ears: 5,
+        noseWhiskers: 4, mouth: 5, eyes: 6, glasses: 5,
+        necklace: 5, hat: 6, heldItem: 5,
+      };
+      for (const [key, count] of Object.entries(GOOBER_SPRITE_FRAMES)) {
+        for (let i = 0; i < count; i++) {
+          const id = `fs:goober-spr-${key}-${i}`;
+          if (!this.nodes.has(id)) {
+            this.nodes.set(id, {
+              id, kind: "file", name: `${key}-${i}.png`,
+              parentId: GOOBER_SPRITES_ID,
+              createdAt: Date.now(), modifiedAt: Date.now(),
+              fileType: "png", content: "", mimeType: "image/png",
+              system: false, readonly: false, appId: "nsart",
+            } as FSFile);
+            changed = true;
+          }
+        }
+      }
     }
 
     if (changed) this.save();

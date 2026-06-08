@@ -1,0 +1,257 @@
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+
+.goober-dressup {
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+  width: 100%;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Preview area ─────────────────────────────────────────────────────────── */
+
+.goober-preview-area {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 12px 6px;
+  gap: 5px;
+  background: #c0c0c0;
+}
+
+.goober-preview-wrapper {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffffff;
+  line-height: 0;
+}
+
+.goober-canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.goober-preview-caption {
+  font-size: 6px;
+  color: #555;
+  letter-spacing: 0.3px;
+  min-height: 10px;
+}
+
+/* ── Option grid ──────────────────────────────────────────────────────────── */
+
+.goober-options {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  background: #c0c0c0;
+  scrollbar-width: thin;
+}
+
+.goober-options::-webkit-scrollbar {
+  width: 8px;
+}
+
+.goober-options::-webkit-scrollbar-track {
+  background: #c0c0c0;
+}
+
+.goober-options::-webkit-scrollbar-thumb {
+  background: #808080;
+  border: 1px solid #ffffff;
+}
+
+/* ── Option buttons ───────────────────────────────────────────────────────── */
+
+.goober-option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 3px;
+  font-family: inherit;
+}
+
+.goober-option-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.goober-option-btn--selected {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d0d0f8;
+}
+
+.goober-mini-canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.goober-option-label {
+  font-size: 5px;
+  color: #000;
+  text-align: center;
+  width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Press Start 2P", monospace;
+}
+
+/* ── Shared button ────────────────────────────────────────────────────────── */
+
+.goober-btn {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 4px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.goober-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.goober-btn--primary {
+  background: #000080;
+  color: #fff;
+  border-color: #0000dd #000044 #000044 #0000dd;
+}
+
+.goober-btn--primary:active {
+  border-color: #000044 #0000dd #0000dd #000044;
+}
+
+/* ── Dialogs ──────────────────────────────────────────────────────────────── */
+
+.goober-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.goober-dialog {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.goober-dialog__titlebar {
+  background: linear-gradient(to right, #000080, #1084d0);
+  color: #fff;
+  font-size: 7px;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.goober-dialog__close {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  font-size: 8px;
+  width: 18px;
+  height: 16px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Arial, sans-serif;
+}
+
+.goober-dialog__close:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.goober-dialog__body {
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goober-dialog__body--list {
+  min-height: 80px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.goober-dialog__label {
+  font-size: 6px;
+  margin-bottom: 2px;
+}
+
+.goober-dialog__input {
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 4px 5px;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.goober-dialog__input:focus {
+  outline: 1px solid #000080;
+}
+
+.goober-dialog__btns {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 6px 10px 10px;
+}
+
+.goober-dialog__empty {
+  font-size: 6px;
+  color: #666;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.goober-dialog__file-btn {
+  background: transparent;
+  border: none;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  text-align: left;
+  padding: 5px 6px;
+  cursor: pointer;
+  width: 100%;
+  display: block;
+}
+
+.goober-dialog__file-btn:hover {
+  background: #000080;
+  color: #fff;
+}

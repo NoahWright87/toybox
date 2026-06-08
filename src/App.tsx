@@ -22,6 +22,7 @@ import MidiEditorPage from "./pages/MidiEditorPage";
 import WordsPage from "./pages/WordsPage";
 import ChainReactionPage from "./pages/ChainReactionPage";
 import PegSolitairePage from "./pages/PegSolitairePage";
+import GooberDressupPage from "./pages/GooberDressupPage";
 import HellMapEditorPage from "./pages/HellMapEditorPage";
 
 export default function App() {
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/component-test" element={<ComponentTestPage />} />
         <Route path="/chain-reaction" element={<ChainReactionPage />} />
         <Route path="/peg-solitaire" element={<PegSolitairePage />} />
+        <Route path="/goober-dressup" element={<GooberDressupPage />} />
         <Route path="/hell-map-editor" element={<HellMapEditorPage />} />
       </Routes>
     </BrowserRouter>

@@ -31,6 +31,7 @@ import SoundRecorder from "./SoundRecorder";
 import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
+import GooberDressup from "../GooberDressup/GooberDressup";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -83,7 +84,8 @@ type AppAction =
   | "sound-recorder"
   | "midi-editor"
   | "chain-reaction"
-  | "peg-solitaire";
+  | "peg-solitaire"
+  | "goober-dressup";
 
 interface AppDef {
   title: string;
@@ -112,8 +114,9 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "typing-racer":   { title: "Type 'Em Up",        icon: "⌨️", action: "experience"      },
   "sound-recorder": { title: "Sound Recorder",     icon: "🎙️", action: "sound-recorder"  },
   "midi-editor":    { title: "MIDI Editor",         icon: "🎹", action: "midi-editor"     },
-  "chain-reaction": { title: "Chain Reaction",      icon: "🔗", action: "chain-reaction"  },
-  "peg-solitaire":  { title: "Peg Solitaire",       icon: "🔴", action: "peg-solitaire"   },
+  "chain-reaction":  { title: "Chain Reaction",    icon: "🔗", action: "chain-reaction"  },
+  "peg-solitaire":   { title: "Peg Solitaire",     icon: "🔴", action: "peg-solitaire"   },
+  "goober-dressup":  { title: "Goober Dress-Up",   icon: "🐱", action: "goober-dressup"  },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -168,7 +171,8 @@ type WindowContent =
   | { type: "sound-recorder"; fileName?: string; fileId?: string; fallbackUrl?: string }
   | { type: "midi-editor" }
   | { type: "chain-reaction" }
-  | { type: "peg-solitaire" };
+  | { type: "peg-solitaire" }
+  | { type: "goober-dressup"; fileId?: string };
 
 interface OpenWindow {
   id: string;
@@ -494,8 +498,9 @@ export default function NsDoors97() {
         case "cards":          content = { type: "cards-launcher" };          width = 320; break;
         case "sound-recorder": content = { type: "sound-recorder" as const }; width = 420; break;
         case "midi-editor":    content = { type: "midi-editor" as const };    width = 860; break;
-        case "chain-reaction": content = { type: "chain-reaction" as const }; width = 540; break;
-        case "peg-solitaire":  content = { type: "peg-solitaire" as const };  width = 580; break;
+        case "chain-reaction":  content = { type: "chain-reaction" as const };  width = 540; break;
+        case "peg-solitaire":   content = { type: "peg-solitaire" as const };   width = 580; break;
+        case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 500; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -581,9 +586,12 @@ export default function NsDoors97() {
         );
         return;
       }
-      // .png sprite files in EGO/SPRITES open NS Art loaded with that sprite
+      // .png sprite files with appId "nsart" open in NS Art
+      // EGO sprites have a bundled public fallback; Goober sprites do not
       if (file.fileType === "png" && file.appId === "nsart") {
         const winId = `nsart:${file.id}`;
+        const filePath = fsStore.getPath(file.id);
+        const isEgoSprite = filePath.toUpperCase().startsWith("C:\\EGO\\");
         setOpenWindows((prev) => {
           if (prev.some((w) => w.id === winId)) {
             maxZ++;
@@ -601,7 +609,7 @@ export default function NsDoors97() {
             content: {
               type: "nsart" as const,
               fileId: file.id,
-              fileUrl: `/sprites/${file.name}`,
+              ...(isEgoSprite ? { fileUrl: `/sprites/${file.name}` } : {}),
             },
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
@@ -640,6 +648,31 @@ export default function NsDoors97() {
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
             width: 420, minimized: false,
+          }];
+        });
+        return;
+      }
+      // Goober Dress-Up configs open the app pre-loaded with that file
+      if (file.appId === "goober-dressup") {
+        const winId = `goober-dressup:${file.id}`;
+        setOpenWindows((prev) => {
+          if (prev.some((w) => w.id === winId)) {
+            maxZ++;
+            setActiveWindowId(winId);
+            return prev.map((w) => (w.id === winId ? { ...w, zIndex: maxZ } : w));
+          }
+          const offset = (windowSeq % 8) * 32;
+          windowSeq++;
+          maxZ++;
+          setActiveWindowId(winId);
+          return [...prev, {
+            id: winId,
+            title: `Goober Dress-Up — ${file.name.replace(/\.DAT$/i, "")}`,
+            icon: "🐱",
+            content: { type: "goober-dressup" as const, fileId: file.id },
+            zIndex: maxZ,
+            defaultPosition: { x: 80 + offset, y: 48 + offset },
+            width: 680, minimized: false,
           }];
         });
         return;
@@ -1008,6 +1041,12 @@ export default function NsDoors97() {
           )}
           {win.content.type === "peg-solitaire" && (
             <PegSolitaire onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "goober-dressup" && (
+            <GooberDressup
+              onQuit={() => closeWindow(win.id)}
+              initialFileId={win.content.fileId}
+            />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

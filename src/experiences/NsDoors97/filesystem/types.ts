@@ -10,10 +10,12 @@ export const SYSTEM_ID        = "fs:system";
 export const DOWNLOADS_ID     = "fs:downloads";
 export const EGO_ID           = "fs:ego";
 // Stable IDs for app-owned files that need reliable direct access
-export const NS_ART_BACKUP_ID = "fs:nsart-backup";
-export const DH_SCORES_ID     = "fs:scores-dh";
-export const TR_SCORES_ID     = "fs:scores-tr";
-export const SYSTEM_INI_ID    = "fs:system-ini";
+export const NS_ART_BACKUP_ID  = "fs:nsart-backup";
+export const DH_SCORES_ID      = "fs:scores-dh";
+export const TR_SCORES_ID      = "fs:scores-tr";
+export const SYSTEM_INI_ID     = "fs:system-ini";
+export const GOOBER_FOLDER_ID  = "fs:goober-dressup";
+export const GOOBER_SPRITES_ID = "fs:goober-sprites";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

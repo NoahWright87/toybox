@@ -6,6 +6,7 @@ import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { NS_ART_BACKUP_ID } from "../NsDoors97/filesystem/types";
+import { saveGooberLayer, GOOBER_LAYER_TARGETS } from "../GooberDressup/gooberFs";
 import "./NsArt.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -386,6 +387,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const [showPaletteDlg, setShowPaletteDlg] = useState(false);
   const [paletteTarget, setPaletteTarget] = useState<"primary" | "secondary" | null>(null);
   const [spriteSaved, setSpriteSaved] = useState(false);
+  const [gooberSavedLabel, setGooberSavedLabel] = useState("");
 
   // Animation state
   const [strips,        setStrips]        = useState<Strip[]>([{ name: "Strip 1" }]);
@@ -428,6 +430,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   const isDirtyRef          = useRef(false);
   const saveTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spriteSaveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gooberSaveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBackupSavedRef    = useRef(onBackupSaved);
 
   // Animation refs
@@ -749,6 +752,35 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
   }, []);
 
   useEffect(() => { scheduleAutoSaveRef.current = scheduleAutoSave; }, [scheduleAutoSave]);
+
+  // ── Save to Goober Dress-Up ───────────────────────────────────────────
+
+  const saveToGooberLayer = useCallback((layerKey: string, layerLabel: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    saveFrameRef.current();
+
+    const fw = canvas.width, fh = canvas.height;
+    const tmp = document.createElement("canvas");
+    tmp.width = fw; tmp.height = fh;
+    const tmpCtx = tmp.getContext("2d")!;
+
+    const framesUrls: (string | null)[][] = framesDataRef.current.map(strip =>
+      strip.map(frame => {
+        if (!frame) return null;
+        tmpCtx.putImageData(frame, 0, 0);
+        return tmp.toDataURL("image/png");
+      })
+    );
+
+    // Save strip 0's frames as individual PNG files in the Goober Sprites folder
+    const strip0: (string | null)[] = framesUrls[0] ?? [];
+    saveGooberLayer(layerKey, strip0);
+
+    setGooberSavedLabel(layerLabel);
+    if (gooberSaveTimerRef.current) clearTimeout(gooberSaveTimerRef.current);
+    gooberSaveTimerRef.current = setTimeout(() => setGooberSavedLabel(""), 2500);
+  }, []);
 
   // ── Undo ──────────────────────────────────────────────────────────────
 
@@ -1730,6 +1762,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         { label: "Show: None",          checked: animPanelMode === "hidden",  onClick: () => setAnimPanelMode("hidden")  },
       ],
     },
+    {
+      label: "Goober",
+      items: GOOBER_LAYER_TARGETS.map(({ key, label }) => ({
+        label,
+        onClick: () => saveToGooberLayer(key, label),
+      })),
+    },
   ], [
     newCanvas, exportCurrentFrame, exportSpriteSheet, undo,
     fitCanvas, zoom, showGrid,
@@ -1737,6 +1776,7 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
     addStrip, deleteStrip, strips, currentStrip,
     onionSkin, onionOpacity, onionRange,
     playFps, animPanelMode,
+    saveToGooberLayer,
   ]);
 
   useWindowMenus(artMenus);
@@ -2122,6 +2162,13 @@ const NsArt = forwardRef<NsArtHandle, NsArtProps>(function NsArt(
         {fileId && (
           <span className={`ns-art__sprite-status${spriteSaved ? " ns-art__sprite-status--visible" : ""}`}>
             ✓ Saved
+          </span>
+        )}
+
+        {/* Goober save status */}
+        {gooberSavedLabel && (
+          <span className="ns-art__sprite-status ns-art__sprite-status--visible">
+            ✓ Goober: {gooberSavedLabel}
           </span>
         )}
 
