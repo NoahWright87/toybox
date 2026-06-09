@@ -76,27 +76,41 @@ function getSimpleMovesFrom(board: Board, row: number, col: number, piece: Piece
   return moves;
 }
 
-// Recursively extend a jump to find all multi-jump chains
-function expandJumps(board: Board, move: Move, piece: Piece): Move[] {
-  const afterBoard = applyMove(board, move);
-  const promoted =
-    (piece.color === "red" && move.to[0] === 0) ||
-    (piece.color === "black" && move.to[0] === 7);
-  const pieceAfter: Piece = { color: piece.color, isKing: piece.isKing || promoted };
-
-  if (promoted) return [move];
-
-  const continuations = getJumpsFrom(afterBoard, move.to[0], move.to[1], pieceAfter);
-  if (continuations.length === 0) return [move];
+// Collect all complete multi-jump chains from (pieceRow, pieceCol) in board.
+// board must have the piece at (pieceRow, pieceCol).
+// originalFrom tracks the starting square before any jumps for the final Move record.
+function collectJumpChains(
+  board: Board,
+  pieceRow: number,
+  pieceCol: number,
+  originalFrom: [number, number],
+  capturesSoFar: [number, number][],
+  piece: Piece,
+): Move[] {
+  const moreJumps = getJumpsFrom(board, pieceRow, pieceCol, piece);
+  if (moreJumps.length === 0) {
+    return [{ from: originalFrom, to: [pieceRow, pieceCol], captures: capturesSoFar }];
+  }
 
   const result: Move[] = [];
-  for (const cont of continuations) {
-    const extended: Move = {
-      from: move.from,
-      to: cont.to,
-      captures: [...move.captures, ...cont.captures],
-    };
-    result.push(...expandJumps(afterBoard, extended, pieceAfter));
+  for (const j of moreJumps) {
+    // j.from === [pieceRow, pieceCol], which is present in board — safe to apply
+    const afterBoard = applyMove(board, j);
+    const promoted =
+      (piece.color === "red" && j.to[0] === 0) ||
+      (piece.color === "black" && j.to[0] === 7);
+    const nextPiece: Piece = { color: piece.color, isKing: piece.isKing || promoted };
+    if (promoted) {
+      result.push({ from: originalFrom, to: j.to, captures: [...capturesSoFar, ...j.captures] });
+    } else {
+      result.push(...collectJumpChains(
+        afterBoard,
+        j.to[0], j.to[1],
+        originalFrom,
+        [...capturesSoFar, ...j.captures],
+        nextPiece,
+      ));
+    }
   }
   return result;
 }
@@ -109,14 +123,30 @@ export function getLegalMoves(board: Board, color: Color): Move[] {
     for (let col = 0; col < 8; col++) {
       const piece = board[row][col];
       if (!piece || piece.color !== color) continue;
+
       const pieceJumps = getJumpsFrom(board, row, col, piece);
       for (const j of pieceJumps) {
-        jumps.push(...expandJumps(board, j, piece));
+        const afterBoard = applyMove(board, j);
+        const promoted =
+          (piece.color === "red" && j.to[0] === 0) ||
+          (piece.color === "black" && j.to[0] === 7);
+        const nextPiece: Piece = { color: piece.color, isKing: piece.isKing || promoted };
+        if (promoted) {
+          jumps.push(j);
+        } else {
+          jumps.push(...collectJumpChains(
+            afterBoard,
+            j.to[0], j.to[1],
+            [row, col],
+            j.captures,
+            nextPiece,
+          ));
+        }
       }
+
       simples.push(...getSimpleMovesFrom(board, row, col, piece));
     }
   }
-  // Mandatory captures
   return jumps.length > 0 ? jumps : simples;
 }
 
@@ -141,7 +171,7 @@ function evaluate(board: Board): number {
       const pieceScore =
         10 +
         (piece.isKing ? 5 : 0) +
-        (piece.color === "red" ? (7 - row) : row); // advancement bonus
+        (piece.color === "red" ? (7 - row) : row);
       if (piece.color === "red") score += pieceScore;
       else score -= pieceScore;
     }
@@ -154,7 +184,7 @@ function minimax(
   depth: number,
   alpha: number,
   beta: number,
-  maximizing: boolean, // true = red's turn
+  maximizing: boolean,
 ): number {
   const color: Color = maximizing ? "red" : "black";
   const status = getGameStatus(board, color);

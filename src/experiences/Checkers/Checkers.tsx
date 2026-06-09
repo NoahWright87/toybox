@@ -132,13 +132,17 @@ export default function Checkers({ onQuit }: CheckersProps = {}) {
     setAiThinking(true);
     const delay = 400 + Math.random() * 300;
     aiTimerRef.current = setTimeout(() => {
-      const b = boardRef.current;
-      const move = getAiMove(b, currentColor, config[currentColor].difficulty);
-      setAiThinking(false);
-      if (move) {
-        executeMove(move, b, config, currentColor);
-      } else {
-        handleGameOver(currentColor === "red" ? "black-wins" : "red-wins", config);
+      try {
+        const b = boardRef.current;
+        const move = getAiMove(b, currentColor, config[currentColor].difficulty);
+        setAiThinking(false);
+        if (move) {
+          executeMove(move, b, config, currentColor);
+        } else {
+          handleGameOver(currentColor === "red" ? "black-wins" : "red-wins", config);
+        }
+      } catch {
+        setAiThinking(false);
       }
     }, delay);
     return () => {
