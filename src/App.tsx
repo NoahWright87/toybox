@@ -24,6 +24,7 @@ import ChainReactionPage from "./pages/ChainReactionPage";
 import PegSolitairePage from "./pages/PegSolitairePage";
 import GooberDressupPage from "./pages/GooberDressupPage";
 import HellMapEditorPage from "./pages/HellMapEditorPage";
+import CheckersPage from "./pages/CheckersPage";
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/peg-solitaire" element={<PegSolitairePage />} />
         <Route path="/goober-dressup" element={<GooberDressupPage />} />
         <Route path="/hell-map-editor" element={<HellMapEditorPage />} />
+        <Route path="/checkers" element={<CheckersPage />} />
       </Routes>
     </BrowserRouter>
   );

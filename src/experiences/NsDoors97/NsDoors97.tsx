@@ -32,6 +32,7 @@ import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import GooberDressup from "../GooberDressup/GooberDressup";
+import Checkers from "../Checkers/Checkers";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -85,7 +86,8 @@ type AppAction =
   | "midi-editor"
   | "chain-reaction"
   | "peg-solitaire"
-  | "goober-dressup";
+  | "goober-dressup"
+  | "checkers";
 
 interface AppDef {
   title: string;
@@ -117,6 +119,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "chain-reaction":  { title: "Chain Reaction",    icon: "🔗", action: "chain-reaction"  },
   "peg-solitaire":   { title: "Peg Solitaire",     icon: "🔴", action: "peg-solitaire"   },
   "goober-dressup":  { title: "Goober Dress-Up",   icon: "🐱", action: "goober-dressup"  },
+  "checkers":        { title: "Checkers",           icon: "⚫", action: "checkers"        },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -172,7 +175,8 @@ type WindowContent =
   | { type: "midi-editor" }
   | { type: "chain-reaction" }
   | { type: "peg-solitaire" }
-  | { type: "goober-dressup"; fileId?: string };
+  | { type: "goober-dressup"; fileId?: string }
+  | { type: "checkers" };
 
 interface OpenWindow {
   id: string;
@@ -501,6 +505,7 @@ export default function NsDoors97() {
         case "chain-reaction":  content = { type: "chain-reaction" as const };  width = 540; break;
         case "peg-solitaire":   content = { type: "peg-solitaire" as const };   width = 580; break;
         case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 500; break;
+        case "checkers":        content = { type: "checkers" as const };         width = 420; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -1047,6 +1052,9 @@ export default function NsDoors97() {
               onQuit={() => closeWindow(win.id)}
               initialFileId={win.content.fileId}
             />
+          )}
+          {win.content.type === "checkers" && (
+            <Checkers onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

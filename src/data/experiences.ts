@@ -162,6 +162,13 @@ export const experiences: Experience[] = [
     path: "/peg-solitaire",
   },
   {
+    id: "checkers",
+    title: "Checkers",
+    description: "Classic 8×8 checkers with mandatory captures. Play vs. the computer or a friend.",
+    category: "game",
+    path: "/checkers",
+  },
+  {
     id: "goober-dressup",
     title: "Goober Dress-Up",
     description: "Mix and match hats, eyes, ears, and more to dress up Goober the cat. Draw your own art in NS Art to replace the placeholders!",
