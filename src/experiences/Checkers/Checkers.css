@@ -21,7 +21,7 @@
   color: #000;
 }
 
-.checkers__turn-red  { color: #cc4400; }
+.checkers__turn-red   { color: #cc4400; }
 .checkers__turn-black { color: #333; }
 
 .checkers__scores {
@@ -31,7 +31,17 @@
   color: #444;
 }
 
-/* ── Board wrapper ── */
+/* ── Board container (holds overlays + stage) ── */
+.checkers__board-container {
+  position: relative;
+}
+
+/* ── Stage: board + pile area, establishes stacking context for piece layer ── */
+.checkers__stage {
+  position: relative;
+}
+
+/* ── Board frame ── */
 .checkers__board-wrap {
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
@@ -46,33 +56,61 @@
   grid-template-rows: repeat(8, 44px);
 }
 
-/* ── Individual cells ── */
+/* ── Cells (click targets only — pieces rendered in overlay layer) ── */
 .checkers__cell {
   width: 44px;
   height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
   cursor: default;
 }
 
-.checkers__cell--light { background: #d4d0c8; }
-.checkers__cell--dark  { background: #555555; }
-
+.checkers__cell--light    { background: #d4d0c8; }
+.checkers__cell--dark     { background: #555555; }
 .checkers__cell--selected { background: #cc7700; }
 .checkers__cell--valid    { background: #447744; cursor: pointer; }
 .checkers__cell--valid::after {
   content: "";
+  display: block;
   width: 14px;
   height: 14px;
+  margin: 15px auto 0;
   border-radius: 50%;
   background: rgba(120, 255, 120, 0.55);
   pointer-events: none;
 }
 
-/* ── Pieces ── */
+/* ── Pile area below board ── */
+.checkers__pile-area {
+  display: flex;
+  height: 68px;
+  align-items: flex-end;
+  padding-bottom: 6px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-top: none;
+  border-color: transparent #ffffff #808080 #808080;
+}
+
+.checkers__pile-label {
+  width: 50%;
+  text-align: center;
+  font-size: 5px;
+  color: #666;
+}
+
+/* ── Piece overlay layer ── */
+/* top/left: board-wrap border(2) + padding(4) = 6px offset to align with board grid */
+.checkers__piece-layer {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+/* ── Pieces (absolutely positioned within piece layer) ── */
 .checkers__piece {
+  position: absolute;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -80,9 +118,6 @@
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  cursor: pointer;
-  position: relative;
-  flex-shrink: 0;
 }
 
 .checkers__piece--red {
@@ -101,13 +136,25 @@
   color: #dddddd;
 }
 
+/* Lift animation: scale up and float */
+.checkers__piece--lifted {
+  transform: scale(1.12) translateY(-7px);
+  z-index: 20;
+}
+
+/* Selected piece highlight */
 .checkers__piece--selected-piece {
   outline: 3px solid #ffcc00;
   outline-offset: 1px;
 }
 
+/* Movable piece: subtle yellow ring */
 .checkers__piece--can-move {
-  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(255, 230, 50, 0.75), 1px 2px 4px rgba(0,0,0,0.4);
+}
+
+.checkers__piece--black.checkers__piece--can-move {
+  box-shadow: 0 0 0 2px rgba(255, 230, 50, 0.75), 1px 2px 4px rgba(0,0,0,0.5);
 }
 
 .checkers__king {
@@ -267,9 +314,4 @@
 
 .checkers__dialog-btn:active {
   border-color: #808080 #ffffff #ffffff #808080;
-}
-
-/* ── Board container needs relative position for overlays ── */
-.checkers__board-container {
-  position: relative;
 }
