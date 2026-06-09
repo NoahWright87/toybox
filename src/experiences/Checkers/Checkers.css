@@ -1,0 +1,317 @@
+.checkers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #c0c0c0;
+  padding: 8px;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+  min-height: 100%;
+}
+
+/* ── Status bar ── */
+.checkers__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 6px;
+  font-size: 7px;
+  color: #000;
+}
+
+.checkers__turn-red   { color: #cc4400; }
+.checkers__turn-black { color: #333; }
+
+.checkers__scores {
+  display: flex;
+  gap: 8px;
+  font-size: 6px;
+  color: #444;
+}
+
+/* ── Board container (holds overlays + stage) ── */
+.checkers__board-container {
+  position: relative;
+}
+
+/* ── Stage: board + pile area, establishes stacking context for piece layer ── */
+.checkers__stage {
+  position: relative;
+}
+
+/* ── Board frame ── */
+.checkers__board-wrap {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 4px;
+  background: #c0c0c0;
+}
+
+/* ── Board grid ── */
+.checkers__board {
+  display: grid;
+  grid-template-columns: repeat(8, 44px);
+  grid-template-rows: repeat(8, 44px);
+}
+
+/* ── Cells (click targets only — pieces rendered in overlay layer) ── */
+.checkers__cell {
+  width: 44px;
+  height: 44px;
+  cursor: default;
+}
+
+.checkers__cell--light    { background: #d4d0c8; }
+.checkers__cell--dark     { background: #555555; }
+.checkers__cell--selected { background: #cc7700; }
+.checkers__cell--valid    { background: #447744; cursor: pointer; }
+.checkers__cell--valid::after {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 15px auto 0;
+  border-radius: 50%;
+  background: rgba(120, 255, 120, 0.55);
+  pointer-events: none;
+}
+
+/* ── Pile area below board ── */
+.checkers__pile-area {
+  display: flex;
+  height: 68px;
+  align-items: flex-end;
+  padding-bottom: 6px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-top: none;
+  border-color: transparent #ffffff #808080 #808080;
+}
+
+.checkers__pile-label {
+  width: 50%;
+  text-align: center;
+  font-size: 5px;
+  color: #666;
+}
+
+/* ── Piece overlay layer ── */
+/* top/left: board-wrap border(2) + padding(4) = 6px offset to align with board grid */
+.checkers__piece-layer {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+/* ── Pieces (absolutely positioned within piece layer) ── */
+.checkers__piece {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.checkers__piece--red {
+  background: radial-gradient(circle at 35% 35%, #ff9966, #cc4400);
+  border: 2px solid;
+  border-color: #ffcc88 #663300 #663300 #ffcc88;
+  box-shadow: 1px 2px 4px rgba(0,0,0,0.4);
+  color: #fff8f0;
+}
+
+.checkers__piece--black {
+  background: radial-gradient(circle at 35% 35%, #777777, #222222);
+  border: 2px solid;
+  border-color: #aaaaaa #333333 #333333 #aaaaaa;
+  box-shadow: 1px 2px 4px rgba(0,0,0,0.5);
+  color: #dddddd;
+}
+
+/* Lift animation: scale up and float */
+.checkers__piece--lifted {
+  transform: scale(1.12) translateY(-7px);
+  z-index: 20;
+}
+
+/* Selected piece highlight */
+.checkers__piece--selected-piece {
+  outline: 3px solid #ffcc00;
+  outline-offset: 1px;
+}
+
+/* Movable piece: subtle yellow ring */
+.checkers__piece--can-move {
+  box-shadow: 0 0 0 2px rgba(255, 230, 50, 0.75), 1px 2px 4px rgba(0,0,0,0.4);
+}
+
+.checkers__piece--black.checkers__piece--can-move {
+  box-shadow: 0 0 0 2px rgba(255, 230, 50, 0.75), 1px 2px 4px rgba(0,0,0,0.5);
+}
+
+.checkers__king {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ── AI thinking indicator ── */
+.checkers__thinking {
+  margin-top: 4px;
+  font-size: 6px;
+  color: #555;
+  height: 12px;
+}
+
+/* ── Game-over overlay ── */
+.checkers__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.checkers__result-box {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-family: "Press Start 2P", monospace;
+}
+
+.checkers__result-title {
+  font-size: 10px;
+  color: #000;
+}
+
+.checkers__result-sub {
+  font-size: 7px;
+  color: #444;
+}
+
+.checkers__result-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 6px 14px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+}
+
+.checkers__result-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* ── New-game dialog ── */
+.checkers__dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.checkers__dialog {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 12px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 280px;
+  font-family: "Press Start 2P", monospace;
+}
+
+.checkers__dialog-title {
+  font-size: 9px;
+  color: #000;
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.checkers__dialog-players {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.checkers__dialog-player {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  min-width: 110px;
+}
+
+.checkers__dialog-player-label {
+  font-size: 7px;
+  font-weight: bold;
+}
+
+.checkers__dialog-player-label--red   { color: #cc4400; }
+.checkers__dialog-player-label--black { color: #222; }
+
+.checkers__dialog-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkers__dialog-radio {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 7px;
+  cursor: pointer;
+  color: #000;
+}
+
+.checkers__dialog-radio input { cursor: pointer; }
+
+.checkers__dialog-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding-left: 4px;
+}
+
+.checkers__dialog-diff-label {
+  font-size: 6px;
+  color: #555;
+}
+
+.checkers__dialog-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 7px 16px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+  align-self: center;
+}
+
+.checkers__dialog-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
