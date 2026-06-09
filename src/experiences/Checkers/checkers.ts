@@ -191,7 +191,7 @@ export function getAiMove(board: Board, color: Color, difficulty: "easy" | "hard
   const moves = getLegalMoves(board, color);
   if (moves.length === 0) return null;
 
-  const depth = difficulty === "easy" ? 3 : 6;
+  const depth = difficulty === "easy" ? 2 : 4;
   const maximizing = color === "red";
 
   const scored = moves.map((move) => ({

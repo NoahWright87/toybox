@@ -61,7 +61,9 @@ export default function Checkers({ onQuit }: CheckersProps = {}) {
   const [gameStatus, setGameStatus]           = useState<string>("");
   const [scores, setScores]                   = useState<Scores>(loadScores);
 
-  const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boardRef    = useRef<Board>(board);
+  useEffect(() => { boardRef.current = board; }, [board]);
 
   // ── Start a new game ──────────────────────────────────────────────────────
   const startGame = useCallback((cfg: Config) => {
@@ -130,18 +132,14 @@ export default function Checkers({ onQuit }: CheckersProps = {}) {
     setAiThinking(true);
     const delay = 400 + Math.random() * 300;
     aiTimerRef.current = setTimeout(() => {
-      setBoard((b) => {
-        const move = getAiMove(b, currentColor, config[currentColor].difficulty);
-        if (move) {
-          executeMove(move, b, config, currentColor);
-        } else {
-          const nextColor: Color = currentColor === "red" ? "black" : "red";
-          handleGameOver(currentColor === "red" ? "black-wins" : "red-wins", config);
-          setCurrentColor(nextColor);
-        }
-        setAiThinking(false);
-        return b;
-      });
+      const b = boardRef.current;
+      const move = getAiMove(b, currentColor, config[currentColor].difficulty);
+      setAiThinking(false);
+      if (move) {
+        executeMove(move, b, config, currentColor);
+      } else {
+        handleGameOver(currentColor === "red" ? "black-wins" : "red-wins", config);
+      }
     }, delay);
     return () => {
       if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
