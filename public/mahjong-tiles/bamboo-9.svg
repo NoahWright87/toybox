@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 88">
+<rect x="1" y="1" width="62" height="86" rx="4" fill="#f5f0e0" stroke="#a0907a" stroke-width="2"/>
+<rect x="13.0" y="14.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="13.5" y1="19.4" x2="18.5" y2="19.4" stroke="#145522" stroke-width="1.2"/><line x1="13.5" y1="24.4" x2="18.5" y2="24.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="29.0" y="14.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="29.5" y1="19.4" x2="34.5" y2="19.4" stroke="#145522" stroke-width="1.2"/><line x1="29.5" y1="24.4" x2="34.5" y2="24.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="45.0" y="14.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="45.5" y1="19.4" x2="50.5" y2="19.4" stroke="#145522" stroke-width="1.2"/><line x1="45.5" y1="24.4" x2="50.5" y2="24.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="13.0" y="36.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="13.5" y1="41.4" x2="18.5" y2="41.4" stroke="#145522" stroke-width="1.2"/><line x1="13.5" y1="46.4" x2="18.5" y2="46.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="29.0" y="36.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="29.5" y1="41.4" x2="34.5" y2="41.4" stroke="#145522" stroke-width="1.2"/><line x1="29.5" y1="46.4" x2="34.5" y2="46.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="45.0" y="36.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="45.5" y1="41.4" x2="50.5" y2="41.4" stroke="#145522" stroke-width="1.2"/><line x1="45.5" y1="46.4" x2="50.5" y2="46.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="13.0" y="58.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="13.5" y1="63.4" x2="18.5" y2="63.4" stroke="#145522" stroke-width="1.2"/><line x1="13.5" y1="68.4" x2="18.5" y2="68.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="29.0" y="58.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="29.5" y1="63.4" x2="34.5" y2="63.4" stroke="#145522" stroke-width="1.2"/><line x1="29.5" y1="68.4" x2="34.5" y2="68.4" stroke="#145522" stroke-width="1.2"/>
+<rect x="45.0" y="58.4" width="6.0" height="15.3" rx="2.7" fill="#228833"/><line x1="45.5" y1="63.4" x2="50.5" y2="63.4" stroke="#145522" stroke-width="1.2"/><line x1="45.5" y1="68.4" x2="50.5" y2="68.4" stroke="#145522" stroke-width="1.2"/>
+</svg>

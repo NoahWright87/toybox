@@ -32,6 +32,7 @@ import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import GooberDressup from "../GooberDressup/GooberDressup";
+import MahjongSolitaire from "../MahjongSolitaire/MahjongSolitaire";
 import Checkers from "../Checkers/Checkers";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
@@ -87,7 +88,8 @@ type AppAction =
   | "chain-reaction"
   | "peg-solitaire"
   | "goober-dressup"
-  | "checkers";
+  | "checkers"
+  | "mahjong-solitaire";
 
 interface AppDef {
   title: string;
@@ -120,6 +122,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "peg-solitaire":   { title: "Peg Solitaire",     icon: "🔴", action: "peg-solitaire"   },
   "goober-dressup":  { title: "Goober Dress-Up",   icon: "🐱", action: "goober-dressup"  },
   "checkers":        { title: "Checkers",           icon: "⚫", action: "checkers"        },
+  "mahjong-solitaire": { title: "Mahjong Solitaire", icon: "🀄", action: "mahjong-solitaire" },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -176,7 +179,8 @@ type WindowContent =
   | { type: "chain-reaction" }
   | { type: "peg-solitaire" }
   | { type: "goober-dressup"; fileId?: string }
-  | { type: "checkers" };
+  | { type: "checkers" }
+  | { type: "mahjong-solitaire" };
 
 interface OpenWindow {
   id: string;
@@ -506,6 +510,7 @@ export default function NsDoors97() {
         case "peg-solitaire":   content = { type: "peg-solitaire" as const };   width = 580; break;
         case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 500; break;
         case "checkers":        content = { type: "checkers" as const };         width = 420; break;
+        case "mahjong-solitaire": content = { type: "mahjong-solitaire" as const }; width = 660; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -1046,6 +1051,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "peg-solitaire" && (
             <PegSolitaire onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "mahjong-solitaire" && (
+            <MahjongSolitaire onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "goober-dressup" && (
             <GooberDressup

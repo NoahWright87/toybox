@@ -1,0 +1,211 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mahjong Solitaire — Win95-style HUD + layered turtle board
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.mj {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+  min-height: 100%;
+}
+
+/* ── HUD bar ────────────────────────────────────────────────────────────── */
+
+.mj__hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 660px;
+  padding: 6px 10px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.mj__hud-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.mj__hud-label {
+  font-size: 6px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.mj__hud-value {
+  font-size: 9px;
+  color: #cc4400;
+}
+
+.mj__hud-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Win95 raised button ────────────────────────────────────────────────── */
+
+.mj__btn {
+  padding: 6px 10px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  cursor: pointer;
+}
+
+.mj__btn:hover:not(:disabled) {
+  background: #cccccc;
+}
+
+.mj__btn:active:not(:disabled) {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.mj__btn:disabled {
+  color: #808080;
+  cursor: not-allowed;
+}
+
+.mj__btn--big {
+  font-size: 9px;
+  padding: 10px 18px;
+  margin-top: 12px;
+}
+
+/* ── Message strip ─────────────────────────────────────────────────────── */
+
+.mj__message {
+  width: 100%;
+  max-width: 660px;
+  padding: 5px 10px;
+  background: #ffffcc;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  color: #664400;
+  font-size: 7px;
+  text-align: center;
+}
+
+/* ── Board ──────────────────────────────────────────────────────────────── */
+
+.mj__board-wrap {
+  position: relative;
+  padding: 16px;
+  background: #2a4d2a;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.mj__board {
+  position: relative;
+}
+
+/* ── Tile ───────────────────────────────────────────────────────────────── */
+
+.mj-tile {
+  position: absolute;
+  width: 32px;
+  height: 44px;
+  border-radius: 3px;
+  background: #f5f0e0;
+  border: 1px solid #a0907a;
+  box-shadow:
+    1px 1px 0 #d8cdb0,
+    2px 2px 0 #c4b896,
+    3px 3px 0 #b0a37e,
+    0 0 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.mj-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.mj-tile--locked {
+  filter: brightness(0.82);
+  cursor: not-allowed;
+}
+
+.mj-tile--selected {
+  outline: 2px solid #ff6b00;
+  transform: translateY(-2px);
+}
+
+.mj-tile--hint {
+  animation: mj-hint-pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes mj-hint-pulse {
+  from {
+    box-shadow:
+      1px 1px 0 #d8cdb0,
+      2px 2px 0 #c4b896,
+      3px 3px 0 #b0a37e,
+      0 0 4px rgba(0, 0, 0, 0.4);
+  }
+  to {
+    box-shadow:
+      1px 1px 0 #d8cdb0,
+      2px 2px 0 #c4b896,
+      3px 3px 0 #b0a37e,
+      0 0 14px 4px rgba(255, 221, 0, 0.85);
+  }
+}
+
+/* ── Win overlay ────────────────────────────────────────────────────────── */
+
+.mj__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10000;
+}
+
+.mj__overlay-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 32px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  text-align: center;
+}
+
+.mj__overlay-title {
+  font-size: 12px;
+  color: #cc4400;
+  margin-bottom: 12px;
+}
+
+.mj__overlay-score {
+  font-size: 9px;
+  color: #000;
+  margin-bottom: 8px;
+}
+
+.mj__overlay-record {
+  font-size: 8px;
+  color: #228833;
+  margin-bottom: 8px;
+}

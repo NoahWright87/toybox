@@ -175,4 +175,11 @@ export const experiences: Experience[] = [
     category: "toy",
     path: "/goober-dressup",
   },
+  {
+    id: "mahjong-solitaire",
+    title: "Mahjong Solitaire",
+    description: "Classic turtle-layout tile match. Clear all 144 tiles by matching free pairs — use Hint and Shuffle if you get stuck.",
+    category: "game",
+    path: "/mahjong-solitaire",
+  },
 ];

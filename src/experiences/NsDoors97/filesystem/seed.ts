@@ -4,6 +4,7 @@ import {
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
+  MJ_SCORES_ID, MJ_TILES_FOLDER_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -331,6 +332,16 @@ const GOOBER_SPRITE_FRAMES: Record<string, number> = {
   necklace: 5, hat: 6, heldItem: 5,
 };
 
+// Tile design ids (must match MahjongSolitaire/tiles.ts TILE_DESIGNS)
+const MJ_TILE_IDS = [
+  "dots-1", "dots-2", "dots-3", "dots-4", "dots-5", "dots-6", "dots-7", "dots-8", "dots-9",
+  "bamboo-1", "bamboo-2", "bamboo-3", "bamboo-4", "bamboo-5", "bamboo-6", "bamboo-7", "bamboo-8", "bamboo-9",
+  "chars-1", "chars-2", "chars-3", "chars-4", "chars-5", "chars-6", "chars-7", "chars-8", "chars-9",
+  "wind-east", "wind-south", "wind-west", "wind-north",
+  "dragon-red", "dragon-green", "dragon-white",
+  "flower-1", "flower-2",
+];
+
 // ── Seed function ─────────────────────────────────────────────────────────────
 
 export function seedFileSystem(store: FileSystemStore): void {
@@ -421,6 +432,17 @@ export function seedFileSystem(store: FileSystemStore): void {
   const trDir = store.createFolder(GAMES_ID, "Typing Racer");
   store.createFile(trDir.id, "Typing Racer.exe", { fileType: "exe", appId: "typing-racer" });
   store.createFile(trDir.id, "SCORES.DAT",       { fileType: "dat", content: "", id: TR_SCORES_ID });
+
+  const mjDir = store.createFolder(GAMES_ID, "Mahjong Solitaire");
+  store.createFile(mjDir.id, "Mahjong Solitaire.exe", { fileType: "exe", appId: "mahjong-solitaire" });
+  store.createFile(mjDir.id, "SCORES.DAT",            { fileType: "dat", content: "", id: MJ_SCORES_ID });
+
+  const mjTilesDir = store.createFolder(mjDir.id, "TILES", { id: MJ_TILES_FOLDER_ID });
+  for (const tileId of MJ_TILE_IDS) {
+    store.createFile(mjTilesDir.id, `${tileId}.png`, {
+      fileType: "png", appId: "nsart", content: "", id: `fs:mj-tile-${tileId}`,
+    });
+  }
 
   // Stub / unimplemented games (no appId — opens "not a valid NS Doors application")
   store.createFile(GAMES_ID, "Solitaire.exe",   { fileType: "exe" });
