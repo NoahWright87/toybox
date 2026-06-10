@@ -9,60 +9,60 @@ import "./Jazzball.css";
 
 const CW = 480;
 const CH = 320;
-const BORDER = 10;
-const BALL_RADIUS = 6;
-const WALL_HALF_THICKNESS = 2;
-const WALL_SPEED = 220; // px / second
+const CELL = 8;
+const COLS = CW / CELL; // 60
+const ROWS = CH / CELL; // 40
+const BALL_RADIUS = 3;
+const WALL_GROW_RATE = 40; // cells per second, per direction
+const FLASH_DURATION = 0.4;
 const TARGET_PERCENT = 75;
 const MAX_LIVES = 3;
 const INITIAL_BALLS = 2;
 const BALL_BASE_SPEED = 70; // px / second
 const BALL_SPEED_STEP = 8;
-const MIN_GAP = BALL_RADIUS + 4;
+
+// Cell states
+const OPEN = 0;
+const WALL = 1;
+const FILLED = 2;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Orientation = "horizontal" | "vertical";
 type Phase = "playing" | "levelComplete" | "gameOver";
-
-interface Region {
-  id: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+type BallMode = "smooth" | "diagonal";
 
 interface Ball {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  regionId: number;
 }
 
 interface BuildingWall {
   orientation: Orientation;
-  regionId: number;
-  fixed: number;   // constant coordinate of the wall line (y for horizontal, x for vertical)
-  extent1: number; // grows down/toward region's min bound on the growth axis
-  extent2: number; // grows up/toward region's max bound on the growth axis
+  fixed: number;  // col (vertical wall) or row (horizontal wall)
+  front1: number; // current position along the growth axis, growing toward 0
+  front2: number; // current position along the growth axis, growing toward max
   done1: boolean;
   done2: boolean;
+  accum1: number;
+  accum2: number;
+  cells: Set<number>; // grid indices belonging to this wall (incl. origin)
 }
 
 interface GameState {
-  regions: Map<number, Region>;
-  filledRegions: Region[];
+  grid: Uint8Array;
   balls: Ball[];
   buildingWall: BuildingWall | null;
   orientation: Orientation;
+  ballMode: BallMode;
   lives: number;
   level: number;
   score: number;
   percentCleared: number;
+  filledCount: number;
   phase: Phase;
-  nextRegionId: number;
   flashTimer: number;
   lastFrameTime: number;
 }
@@ -75,203 +75,279 @@ interface ScoresData {
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
 
 function totalArea(): number {
-  return (CW - 2 * BORDER) * (CH - 2 * BORDER);
+  return (COLS - 2) * (ROWS - 2);
 }
 
 function ballSpeedForLevel(level: number): number {
   return BALL_BASE_SPEED + (level - 1) * BALL_SPEED_STEP;
 }
 
-function spawnBalls(region: Region, count: number, speed: number, regionId: number): Ball[] {
+function cellIndex(col: number, row: number): number {
+  return row * COLS + col;
+}
+
+function createGrid(): Uint8Array {
+  const grid = new Uint8Array(COLS * ROWS);
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      if (row === 0 || row === ROWS - 1 || col === 0 || col === COLS - 1) {
+        grid[cellIndex(col, row)] = WALL;
+      }
+    }
+  }
+  return grid;
+}
+
+function spawnBalls(count: number, speed: number, mode: BallMode): Ball[] {
   const balls: Ball[] = [];
+  const margin = CELL + BALL_RADIUS;
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    balls.push({
-      x: region.x + BALL_RADIUS + Math.random() * Math.max(1, region.w - 2 * BALL_RADIUS),
-      y: region.y + BALL_RADIUS + Math.random() * Math.max(1, region.h - 2 * BALL_RADIUS),
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      regionId,
-    });
+    let x = 0;
+    let y = 0;
+    let attempts = 0;
+    do {
+      x = margin + Math.random() * (CW - 2 * margin);
+      y = margin + Math.random() * (CH - 2 * margin);
+      attempts++;
+    } while (attempts < 20 && balls.some((b) => Math.hypot(b.x - x, b.y - y) < BALL_RADIUS * 4));
+
+    let vx: number;
+    let vy: number;
+    if (mode === "diagonal") {
+      vx = (Math.random() < 0.5 ? -1 : 1) * speed;
+      vy = (Math.random() < 0.5 ? -1 : 1) * speed;
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      vx = Math.cos(angle) * speed;
+      vy = Math.sin(angle) * speed;
+    }
+    balls.push({ x, y, vx, vy });
   }
   return balls;
 }
 
-function newGameState(level: number, lives: number, score: number, orientation: Orientation): GameState {
-  const region: Region = { id: 0, x: BORDER, y: BORDER, w: CW - 2 * BORDER, h: CH - 2 * BORDER };
-  const regions = new Map<number, Region>([[0, region]]);
+function newGameState(level: number, lives: number, score: number, orientation: Orientation, ballMode: BallMode): GameState {
   const ballCount = INITIAL_BALLS + (level - 1);
-  const balls = spawnBalls(region, ballCount, ballSpeedForLevel(level), 0);
   return {
-    regions,
-    filledRegions: [],
-    balls,
+    grid: createGrid(),
+    balls: spawnBalls(ballCount, ballSpeedForLevel(level), ballMode),
     buildingWall: null,
     orientation,
+    ballMode,
     lives,
     level,
     score,
     percentCleared: 0,
+    filledCount: 0,
     phase: "playing",
-    nextRegionId: 1,
     flashTimer: 0,
     lastFrameTime: performance.now(),
   };
 }
 
-function wallHitsBall(wall: BuildingWall, ball: Ball): boolean {
-  const r = BALL_RADIUS + WALL_HALF_THICKNESS;
-  if (wall.orientation === "horizontal") {
-    if (Math.abs(ball.y - wall.fixed) > r) return false;
-    return ball.x >= wall.extent1 - r && ball.x <= wall.extent2 + r;
-  }
-  if (Math.abs(ball.x - wall.fixed) > r) return false;
-  return ball.y >= wall.extent1 - r && ball.y <= wall.extent2 + r;
+function isSolid(grid: Uint8Array, col: number, row: number): boolean {
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
+  return grid[cellIndex(col, row)] !== OPEN;
 }
 
-// Grows the active wall, checks for ball collisions, and finalizes a region
-// split once both ends reach the bounds of the region they're growing in.
-function advanceWall(state: GameState, dt: number): void {
-  const wall = state.buildingWall;
-  if (!wall) return;
-  const region = state.regions.get(wall.regionId);
-  if (!region) { state.buildingWall = null; return; }
-
-  const delta = WALL_SPEED * dt;
-  if (!wall.done1) {
-    const bound = wall.orientation === "horizontal" ? region.x : region.y;
-    wall.extent1 -= delta;
-    if (wall.extent1 <= bound) { wall.extent1 = bound; wall.done1 = true; }
-  }
-  if (!wall.done2) {
-    const bound = wall.orientation === "horizontal" ? region.x + region.w : region.y + region.h;
-    wall.extent2 += delta;
-    if (wall.extent2 >= bound) { wall.extent2 = bound; wall.done2 = true; }
-  }
-
-  for (const ball of state.balls) {
-    if (ball.regionId !== wall.regionId) continue;
-    if (wallHitsBall(wall, ball)) {
-      state.buildingWall = null;
-      state.lives -= 1;
-      state.flashTimer = 0.4;
-      if (state.lives <= 0) state.phase = "gameOver";
-      return;
-    }
-  }
-
-  if (wall.done1 && wall.done2) {
-    completeWall(state, wall, region);
-  }
+function cellHitsBall(idx: number, ball: Ball): boolean {
+  const col = idx % COLS;
+  const row = (idx - col) / COLS;
+  const cx = col * CELL;
+  const cy = row * CELL;
+  const closestX = Math.min(Math.max(ball.x, cx), cx + CELL);
+  const closestY = Math.min(Math.max(ball.y, cy), cy + CELL);
+  const dx = ball.x - closestX;
+  const dy = ball.y - closestY;
+  return dx * dx + dy * dy < BALL_RADIUS * BALL_RADIUS;
 }
 
-function completeWall(state: GameState, wall: BuildingWall, region: Region): void {
+function startWall(state: GameState, col: number, row: number, orientation: Orientation): void {
+  const idx = cellIndex(col, row);
+  if (state.grid[idx] !== OPEN) return;
+  state.grid[idx] = WALL;
+  const cells = new Set<number>([idx]);
+  const fixed = orientation === "vertical" ? col : row;
+  const origin = orientation === "vertical" ? row : col;
+  state.buildingWall = {
+    orientation, fixed, front1: origin, front2: origin,
+    done1: false, done2: false, accum1: 0, accum2: 0, cells,
+  };
+}
+
+function shatterWall(state: GameState, wall: BuildingWall): void {
+  for (const idx of wall.cells) state.grid[idx] = OPEN;
+  state.buildingWall = null;
+  state.lives -= 1;
+  state.flashTimer = FLASH_DURATION;
+  if (state.lives <= 0) state.phase = "gameOver";
+}
+
+function completeWall(state: GameState, wall: BuildingWall): void {
+  state.filledCount += wall.cells.size;
   state.buildingWall = null;
 
-  let regionA: Region;
-  let regionB: Region;
-  if (wall.orientation === "horizontal") {
-    regionA = { id: state.nextRegionId++, x: region.x, y: region.y, w: region.w, h: wall.fixed - region.y };
-    regionB = { id: state.nextRegionId++, x: region.x, y: wall.fixed, w: region.w, h: (region.y + region.h) - wall.fixed };
-  } else {
-    regionA = { id: state.nextRegionId++, x: region.x, y: region.y, w: wall.fixed - region.x, h: region.h };
-    regionB = { id: state.nextRegionId++, x: wall.fixed, y: region.y, w: (region.x + region.w) - wall.fixed, h: region.h };
+  const ballCells = new Set<number>();
+  for (const ball of state.balls) {
+    const bcol = Math.floor(ball.x / CELL);
+    const brow = Math.floor(ball.y / CELL);
+    ballCells.add(cellIndex(bcol, brow));
   }
 
-  state.regions.delete(region.id);
+  const visited = new Uint8Array(COLS * ROWS);
+  for (let idx = 0; idx < COLS * ROWS; idx++) {
+    if (state.grid[idx] !== OPEN || visited[idx]) continue;
 
-  for (const candidate of [regionA, regionB]) {
-    if (candidate.w <= 0 || candidate.h <= 0) continue;
-    const ballsInside = state.balls.filter(
-      (b) => b.regionId === region.id
-        && b.x >= candidate.x && b.x <= candidate.x + candidate.w
-        && b.y >= candidate.y && b.y <= candidate.y + candidate.h,
-    );
-    if (ballsInside.length === 0) {
-      state.filledRegions.push(candidate);
-    } else {
-      state.regions.set(candidate.id, candidate);
-      for (const b of ballsInside) b.regionId = candidate.id;
+    const component: number[] = [];
+    const queue: number[] = [idx];
+    visited[idx] = 1;
+    let hasBall = false;
+
+    while (queue.length > 0) {
+      const cur = queue.pop() as number;
+      component.push(cur);
+      if (ballCells.has(cur)) hasBall = true;
+
+      const col = cur % COLS;
+      const row = (cur - col) / COLS;
+      const neighbors: number[] = [];
+      if (col > 0) neighbors.push(cur - 1);
+      if (col < COLS - 1) neighbors.push(cur + 1);
+      if (row > 0) neighbors.push(cur - COLS);
+      if (row < ROWS - 1) neighbors.push(cur + COLS);
+
+      for (const n of neighbors) {
+        if (!visited[n] && state.grid[n] === OPEN) {
+          visited[n] = 1;
+          queue.push(n);
+        }
+      }
+    }
+
+    if (!hasBall) {
+      for (const c of component) state.grid[c] = FILLED;
+      state.filledCount += component.length;
     }
   }
 
-  const filledArea = state.filledRegions.reduce((sum, r) => sum + r.w * r.h, 0);
-  state.percentCleared = (filledArea / totalArea()) * 100;
+  state.percentCleared = (state.filledCount / totalArea()) * 100;
   if (state.percentCleared >= TARGET_PERCENT) {
     state.score += Math.round(state.percentCleared);
     state.phase = "levelComplete";
   }
 }
 
+// Grows the active wall (one or more cells per direction depending on dt),
+// shatters it if a ball touches a newly-grown cell, and finalizes it once
+// both ends have reached a non-open cell.
+function advanceWall(state: GameState, dt: number): void {
+  const wall = state.buildingWall;
+  if (!wall) return;
+
+  const pending: number[] = [];
+  const maxFront = wall.orientation === "vertical" ? ROWS - 1 : COLS - 1;
+
+  if (!wall.done1) {
+    wall.accum1 += WALL_GROW_RATE * dt;
+    while (wall.accum1 >= 1 && !wall.done1) {
+      const candidate = wall.front1 - 1;
+      const idx = wall.orientation === "vertical" ? cellIndex(wall.fixed, candidate) : cellIndex(candidate, wall.fixed);
+      if (candidate < 0 || state.grid[idx] !== OPEN) { wall.done1 = true; break; }
+      wall.front1 = candidate;
+      pending.push(idx);
+      wall.accum1 -= 1;
+    }
+  }
+
+  if (!wall.done2) {
+    wall.accum2 += WALL_GROW_RATE * dt;
+    while (wall.accum2 >= 1 && !wall.done2) {
+      const candidate = wall.front2 + 1;
+      const idx = wall.orientation === "vertical" ? cellIndex(wall.fixed, candidate) : cellIndex(candidate, wall.fixed);
+      if (candidate > maxFront || state.grid[idx] !== OPEN) { wall.done2 = true; break; }
+      wall.front2 = candidate;
+      pending.push(idx);
+      wall.accum2 -= 1;
+    }
+  }
+
+  if (pending.length > 0) {
+    for (const ball of state.balls) {
+      for (const idx of pending) {
+        if (cellHitsBall(idx, ball)) {
+          shatterWall(state, wall);
+          return;
+        }
+      }
+    }
+    for (const idx of pending) {
+      state.grid[idx] = WALL;
+      wall.cells.add(idx);
+    }
+  }
+
+  if (wall.done1 && wall.done2) {
+    completeWall(state, wall);
+  }
+}
+
 function moveBalls(state: GameState, dt: number): void {
   for (const ball of state.balls) {
-    const region = state.regions.get(ball.regionId);
-    if (!region) continue;
+    let nx = ball.x + ball.vx * dt;
+    let ny = ball.y + ball.vy * dt;
 
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
+    const edgeX = ball.vx > 0 ? nx + BALL_RADIUS : nx - BALL_RADIUS;
+    const rowForX = Math.floor(ball.y / CELL);
+    const colX = Math.floor(edgeX / CELL);
+    if (isSolid(state.grid, colX, rowForX)) {
+      ball.vx = -ball.vx;
+      nx = ball.x;
+    }
 
-    if (ball.x - BALL_RADIUS < region.x) { ball.x = region.x + BALL_RADIUS; ball.vx = Math.abs(ball.vx); }
-    if (ball.x + BALL_RADIUS > region.x + region.w) { ball.x = region.x + region.w - BALL_RADIUS; ball.vx = -Math.abs(ball.vx); }
-    if (ball.y - BALL_RADIUS < region.y) { ball.y = region.y + BALL_RADIUS; ball.vy = Math.abs(ball.vy); }
-    if (ball.y + BALL_RADIUS > region.y + region.h) { ball.y = region.y + region.h - BALL_RADIUS; ball.vy = -Math.abs(ball.vy); }
+    const edgeY = ball.vy > 0 ? ny + BALL_RADIUS : ny - BALL_RADIUS;
+    const colForY = Math.floor(nx / CELL);
+    const rowY = Math.floor(edgeY / CELL);
+    if (isSolid(state.grid, colForY, rowY)) {
+      ball.vy = -ball.vy;
+      ny = ball.y;
+    }
+
+    ball.x = nx;
+    ball.y = ny;
   }
 }
 
 // ─── Rendering ─────────────────────────────────────────────────────────────────
 
-function drawBevel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, raised: boolean): void {
-  ctx.fillStyle = raised ? "#ffcc88" : "#3a1a5e";
-  ctx.fillRect(x, y, w, 2);
-  ctx.fillRect(x, y, 2, h);
-  ctx.fillStyle = raised ? "#664400" : "#0c0418";
-  ctx.fillRect(x, y + h - 2, w, 2);
-  ctx.fillRect(x + w - 2, y, 2, h);
-}
-
 function render(ctx: CanvasRenderingContext2D, state: GameState): void {
-  // Outer frame
-  ctx.fillStyle = "#180800";
-  ctx.fillRect(0, 0, CW, CH);
-
-  // Play field
-  ctx.fillStyle = "#1a0a2e";
-  ctx.fillRect(BORDER, BORDER, CW - 2 * BORDER, CH - 2 * BORDER);
-  drawBevel(ctx, BORDER, BORDER, CW - 2 * BORDER, CH - 2 * BORDER, false);
-
-  // Captured area
-  for (const r of state.filledRegions) {
-    ctx.fillStyle = "#7b3dbe";
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    if (r.w > 2 && r.h > 2) drawBevel(ctx, r.x, r.y, r.w, r.h, true);
-  }
-
-  // Building wall
-  const wall = state.buildingWall;
-  if (wall) {
-    ctx.fillStyle = state.flashTimer > 0 ? "#ff3333" : "#ff6b00";
-    if (wall.orientation === "horizontal") {
-      ctx.fillRect(wall.extent1, wall.fixed - WALL_HALF_THICKNESS, wall.extent2 - wall.extent1, WALL_HALF_THICKNESS * 2);
-    } else {
-      ctx.fillRect(wall.fixed - WALL_HALF_THICKNESS, wall.extent1, WALL_HALF_THICKNESS * 2, wall.extent2 - wall.extent1);
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const v = state.grid[cellIndex(col, row)];
+      ctx.fillStyle = v === FILLED ? "#7b3dbe" : v === WALL ? "#ff6b00" : "#1a0a2e";
+      ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
     }
   }
 
-  // Balls
+  const wall = state.buildingWall;
+  if (wall) {
+    const pulse = Math.sin(state.lastFrameTime / 80) > 0;
+    ctx.fillStyle = state.flashTimer > 0 ? "#ff3333" : pulse ? "#ffcc66" : "#ff6b00";
+    for (const idx of wall.cells) {
+      const col = idx % COLS;
+      const row = (idx - col) / COLS;
+      ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
+    }
+  }
+
   for (const ball of state.balls) {
     ctx.fillStyle = "#ff6b00";
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ffcc88";
-    ctx.beginPath();
-    ctx.arc(ball.x - 2, ball.y - 2, BALL_RADIUS / 3, 0, Math.PI * 2);
-    ctx.fill();
   }
 
-  // Life-lost flash
   if (state.flashTimer > 0) {
-    ctx.fillStyle = `rgba(255, 0, 0, ${(state.flashTimer / 0.4) * 0.3})`;
+    ctx.fillStyle = `rgba(255, 0, 0, ${(state.flashTimer / FLASH_DURATION) * 0.3})`;
     ctx.fillRect(0, 0, CW, CH);
   }
 }
@@ -288,6 +364,7 @@ export default function Jazzball({ onQuit }: JazzballProps) {
   const rafRef = useRef<number>(0);
 
   const [orientation, setOrientation] = useState<Orientation>("vertical");
+  const [ballMode, setBallMode] = useState<BallMode>("smooth");
   const [phase, setPhase] = useState<Phase>("playing");
   const [level, setLevel] = useState(1);
   const [lives, setLives] = useState(MAX_LIVES);
@@ -370,7 +447,7 @@ export default function Jazzball({ onQuit }: JazzballProps) {
 
   // Start the game on mount
   useEffect(() => {
-    gameRef.current = newGameState(1, MAX_LIVES, 0, "vertical");
+    gameRef.current = newGameState(1, MAX_LIVES, 0, "vertical", "smooth");
     rafRef.current = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [gameLoop]);
@@ -378,23 +455,23 @@ export default function Jazzball({ onQuit }: JazzballProps) {
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   const startNewGame = useCallback(() => {
-    gameRef.current = newGameState(1, MAX_LIVES, 0, orientation);
+    gameRef.current = newGameState(1, MAX_LIVES, 0, orientation, ballMode);
     setLevel(1);
     setLives(MAX_LIVES);
     setScore(0);
     setPercentCleared(0);
     setPhase("playing");
-  }, [orientation]);
+  }, [orientation, ballMode]);
 
   const startNextLevel = useCallback(() => {
     const state = gameRef.current;
     if (!state) return;
     const nextLevel = state.level + 1;
-    gameRef.current = newGameState(nextLevel, state.lives, state.score, orientation);
+    gameRef.current = newGameState(nextLevel, state.lives, state.score, orientation, ballMode);
     setLevel(nextLevel);
     setPercentCleared(0);
     setPhase("playing");
-  }, [orientation]);
+  }, [orientation, ballMode]);
 
   const toggleOrientation = useCallback(() => {
     setOrientation((prev) => {
@@ -402,6 +479,20 @@ export default function Jazzball({ onQuit }: JazzballProps) {
       if (gameRef.current) gameRef.current.orientation = next;
       return next;
     });
+  }, []);
+
+  const setBallModeAndRemap = useCallback((mode: BallMode) => {
+    setBallMode(mode);
+    const state = gameRef.current;
+    if (!state) return;
+    state.ballMode = mode;
+    if (mode === "diagonal") {
+      const speed = ballSpeedForLevel(state.level);
+      for (const ball of state.balls) {
+        ball.vx = (ball.vx >= 0 ? 1 : -1) * speed;
+        ball.vy = (ball.vy >= 0 ? 1 : -1) * speed;
+      }
+    }
   }, []);
 
   // ── Pointer / wall-building input ───────────────────────────────────────────
@@ -421,26 +512,13 @@ export default function Jazzball({ onQuit }: JazzballProps) {
 
     const point = getCanvasPoint(e.clientX, e.clientY);
     if (!point) return;
-    const { x, y } = point;
 
-    for (const region of state.regions.values()) {
-      if (x < region.x || x > region.x + region.w || y < region.y || y > region.y + region.h) continue;
+    const col = Math.floor(point.x / CELL);
+    const row = Math.floor(point.y / CELL);
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
+    if (state.grid[cellIndex(col, row)] !== OPEN) return;
 
-      if (state.orientation === "horizontal") {
-        if (y <= region.y + MIN_GAP || y >= region.y + region.h - MIN_GAP) return;
-        state.buildingWall = {
-          orientation: "horizontal", regionId: region.id,
-          fixed: y, extent1: x, extent2: x, done1: false, done2: false,
-        };
-      } else {
-        if (x <= region.x + MIN_GAP || x >= region.x + region.w - MIN_GAP) return;
-        state.buildingWall = {
-          orientation: "vertical", regionId: region.id,
-          fixed: x, extent1: y, extent2: y, done1: false, done2: false,
-        };
-      }
-      return;
-    }
+    startWall(state, col, row, state.orientation);
   }, [getCanvasPoint]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -458,7 +536,14 @@ export default function Jazzball({ onQuit }: JazzballProps) {
         ...(onQuit ? [{ separator: true as const }, { label: "Quit", onClick: onQuit }] : []),
       ],
     },
-  ], [startNewGame, onQuit]);
+    {
+      label: "Options",
+      items: [
+        { label: "Smooth Movement", checked: ballMode === "smooth", onClick: () => setBallModeAndRemap("smooth") },
+        { label: "Diagonal Movement", checked: ballMode === "diagonal", onClick: () => setBallModeAndRemap("diagonal") },
+      ],
+    },
+  ], [startNewGame, onQuit, ballMode, setBallModeAndRemap]);
   useWindowMenus(menus);
 
   // ── Render ───────────────────────────────────────────────────────────────────
