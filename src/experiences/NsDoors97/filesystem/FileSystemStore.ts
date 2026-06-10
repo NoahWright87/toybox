@@ -1,7 +1,7 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
   ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
-  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID, JB_SCORES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -522,6 +522,38 @@ export class FileSystemStore {
         this.nodes.set(CK_SCORES_ID, {
           id: CK_SCORES_ID, kind: "file", name: "SCORES.DAT",
           parentId: ckDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Jazzball folder + SCORES.DAT exist
+    if (!this.nodes.has(JB_SCORES_ID)) {
+      let jbDir = this.getNodeByPath("C:\\Programs\\Games\\Jazzball");
+      if (!jbDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: "fs:games-jb", kind: "folder", name: "Jazzball",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:games-jb-exe", {
+            id: "fs:games-jb-exe", kind: "file", name: "Jazzball.exe",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "exe", content: "", mimeType: "application/octet-stream",
+            system: false, readonly: false, appId: "jazzball",
+          } as FSFile);
+          jbDir = folder;
+        }
+      }
+      if (jbDir?.kind === "folder") {
+        this.nodes.set(JB_SCORES_ID, {
+          id: JB_SCORES_ID, kind: "file", name: "SCORES.DAT",
+          parentId: jbDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
         } as FSFile);

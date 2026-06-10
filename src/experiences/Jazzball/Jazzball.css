@@ -1,0 +1,166 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Jazzball — Jezzball-style wall-building game
+   Win95 chrome around a canvas-rendered play field.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.jzb {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: min(480px, 96vw);
+}
+
+/* ── HUD bar ─────────────────────────────────────────────────────────────── */
+
+.jzb__hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+
+.jzb__hud-item {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  color: #333;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.jzb__hud-lives {
+  color: #cc0000;
+}
+
+/* ── Game wrapper / canvas ───────────────────────────────────────────────── */
+
+.jzb__game-wrapper {
+  position: relative;
+  display: block;
+}
+
+.jzb__canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  image-rendering: pixelated;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* ── Overlays (level complete / game over) ───────────────────────────────── */
+
+.jzb__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(12, 4, 24, 0.82);
+}
+
+.jzb__overlay-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 14px;
+  color: #ff6b00;
+  text-shadow: 2px 2px 0 #663300, 4px 4px 0 rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+.jzb__overlay-title--dead {
+  color: #cc0000;
+  text-shadow: 2px 2px 0 #660000, 4px 4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.jzb__overlay-sub {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #d4d0c8;
+  letter-spacing: 0.05em;
+}
+
+.jzb__btn {
+  margin-top: 6px;
+  padding: 10px 24px;
+  background: #ff6b00;
+  color: #ffffff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+  letter-spacing: 0.06em;
+}
+
+.jzb__btn:hover {
+  background: #ff7a1a;
+}
+
+.jzb__btn:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+  background: #cc4400;
+  transform: translateY(1px);
+}
+
+/* ── Controls bar ─────────────────────────────────────────────────────────── */
+
+.jzb__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  border-top: none;
+}
+
+.jzb__toggle-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jzb__toggle-btn:hover {
+  background: #d4d0c8;
+}
+
+.jzb__toggle-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  transform: translateY(1px);
+}
+
+.jzb__controls-hint {
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+/* ── Mobile ───────────────────────────────────────────────────────────────── */
+
+@media (pointer: coarse) {
+  .jzb__controls-hint {
+    display: none;
+  }
+}

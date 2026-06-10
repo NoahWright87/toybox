@@ -17,6 +17,7 @@ export const SYSTEM_INI_ID     = "fs:system-ini";
 export const GOOBER_FOLDER_ID  = "fs:goober-dressup";
 export const GOOBER_SPRITES_ID = "fs:goober-sprites";
 export const CK_SCORES_ID      = "fs:scores-ck";
+export const JB_SCORES_ID      = "fs:scores-jb";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"
