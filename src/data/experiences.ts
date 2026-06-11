@@ -175,4 +175,11 @@ export const experiences: Experience[] = [
     category: "toy",
     path: "/goober-dressup",
   },
+  {
+    id: "brick-breaker",
+    title: "Brick Breaker",
+    description: "Smash through endless procedurally-generated brick walls. Catch power-ups and chase a high score.",
+    category: "game",
+    path: "/brick-breaker",
+  },
 ];
