@@ -16,9 +16,11 @@ Also embedded as a window inside NS Doors 97 (Start → Games → Jazzball, or v
 ## Rules
 
 - The play field starts fully open (bordered by a permanent wall edge) containing 2 balls (level 1); each subsequent level adds one more ball and increases ball speed slightly.
-- **Building a wall** — click (or tap) any open cell to start a wall there. The wall grows outward one cell at a time along the current orientation (horizontal or vertical) until each end reaches the field's border or an existing wall/filled cell.
-- **Wall destroyed** — if a ball touches a cell as the wall grows into it, the entire wall (including already-grown cells) shatters back to open space, and the player loses one life (shown as ♥/♡ icons). The board flashes red briefly.
-- **Wall completed** — once both ends stop growing, the new wall cells become permanent. A flood fill then finds every connected group of open cells; any group with no ball inside becomes permanently captured (filled, rendered as a solid purple block).
+- **Building a wall** — click (or tap) any open cell to start a wall there. The clicked cell locks in immediately as a permanent wall segment. From it, two independent **arms** grow outward in opposite directions (one cell at a time) along the current orientation (horizontal or vertical), each stopping when it reaches the field's border or an existing wall/filled cell.
+- **Growing cells don't block balls** — while an arm is growing, its cells are visually distinct (pulsing orange) but balls pass through them freely; they don't bounce.
+- **Arm destroyed** — if any ball touches *any* cell belonging to a growing arm — including cells already grown ("the flat side"), not just the leading edge — that arm alone shatters back to open space and the player loses one life (shown as ♥/♡ icons). The board flashes red briefly. The other arm is unaffected and keeps growing independently; if it's later hit too, that's a second life lost.
+- **Stub walls** — if one arm finishes (reaches the border or another wall) before the other arm is destroyed, the finished arm's cells become permanent wall immediately and remain even if the other arm is later shattered.
+- **Wall completed** — once both arms are resolved (each either finished or destroyed), all surviving wall cells (including the origin cell and any stub) become permanent. A flood fill then finds every connected group of open cells; any group with no ball inside becomes permanently captured (filled, rendered as a solid purple block).
 - **Level complete** — when captured area reaches ≥75% of the total play field, the level ends. Score increases by the rounded percent cleared, and the player advances to the next level (lives carry over, board resets to fully open with one additional ball).
 - **Game over** — losing all 3 lives ends the game. A "New Game" button resets to level 1, 3 lives, and score 0.
 - Lives are shared across the whole game (3 total, never replenished between levels).

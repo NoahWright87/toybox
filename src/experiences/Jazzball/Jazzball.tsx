@@ -25,6 +25,7 @@ const BALL_SPEED_STEP = 8;
 const OPEN = 0;
 const WALL = 1;
 const FILLED = 2;
+const GROWING = 3;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,16 +40,22 @@ interface Ball {
   vy: number;
 }
 
+// One growing arm of a wall — the two arms grow independently in opposite
+// directions from the origin cell, and can be shattered independently.
+interface WallArm {
+  front: number; // current position along the growth axis
+  done: boolean;
+  destroyed: boolean;
+  accum: number;
+  cells: Set<number>; // grid indices grown by this arm
+}
+
 interface BuildingWall {
   orientation: Orientation;
-  fixed: number;  // col (vertical wall) or row (horizontal wall)
-  front1: number; // current position along the growth axis, growing toward 0
-  front2: number; // current position along the growth axis, growing toward max
-  done1: boolean;
-  done2: boolean;
-  accum1: number;
-  accum2: number;
-  cells: Set<number>; // grid indices belonging to this wall (incl. origin)
+  fixed: number;     // col (vertical wall) or row (horizontal wall)
+  originIdx: number; // the clicked cell, locked in immediately and permanently
+  arm1: WallArm;      // grows toward 0
+  arm2: WallArm;      // grows toward max
 }
 
 interface GameState {
@@ -145,9 +152,12 @@ function newGameState(level: number, lives: number, score: number, orientation: 
   };
 }
 
+// GROWING cells aren't solid — balls pass through them, and any contact
+// instead shatters that arm of the wall (checked separately).
 function isSolid(grid: Uint8Array, col: number, row: number): boolean {
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
-  return grid[cellIndex(col, row)] !== OPEN;
+  const v = grid[cellIndex(col, row)];
+  return v === WALL || v === FILLED;
 }
 
 function cellHitsBall(idx: number, ball: Ball): boolean {
@@ -162,29 +172,35 @@ function cellHitsBall(idx: number, ball: Ball): boolean {
   return dx * dx + dy * dy < BALL_RADIUS * BALL_RADIUS;
 }
 
+function newArm(front: number): WallArm {
+  return { front, done: false, destroyed: false, accum: 0, cells: new Set<number>() };
+}
+
 function startWall(state: GameState, col: number, row: number, orientation: Orientation): void {
   const idx = cellIndex(col, row);
   if (state.grid[idx] !== OPEN) return;
-  state.grid[idx] = WALL;
-  const cells = new Set<number>([idx]);
+  state.grid[idx] = WALL; // origin is locked in immediately and permanently
   const fixed = orientation === "vertical" ? col : row;
   const origin = orientation === "vertical" ? row : col;
   state.buildingWall = {
-    orientation, fixed, front1: origin, front2: origin,
-    done1: false, done2: false, accum1: 0, accum2: 0, cells,
+    orientation, fixed, originIdx: idx,
+    arm1: newArm(origin),
+    arm2: newArm(origin),
   };
 }
 
-function shatterWall(state: GameState, wall: BuildingWall): void {
-  for (const idx of wall.cells) state.grid[idx] = OPEN;
-  state.buildingWall = null;
+// Reverts an arm's grown cells back to open space and costs one life.
+function destroyArm(state: GameState, arm: WallArm): void {
+  for (const idx of arm.cells) state.grid[idx] = OPEN;
+  arm.cells.clear();
+  arm.destroyed = true;
   state.lives -= 1;
   state.flashTimer = FLASH_DURATION;
   if (state.lives <= 0) state.phase = "gameOver";
 }
 
 function completeWall(state: GameState, wall: BuildingWall): void {
-  state.filledCount += wall.cells.size;
+  state.filledCount += 1 + wall.arm1.cells.size + wall.arm2.cells.size;
   state.buildingWall = null;
 
   const ballCells = new Set<number>();
@@ -237,56 +253,60 @@ function completeWall(state: GameState, wall: BuildingWall): void {
   }
 }
 
-// Grows the active wall (one or more cells per direction depending on dt),
-// shatters it if a ball touches a newly-grown cell, and finalizes it once
-// both ends have reached a non-open cell.
+// Grows one arm of the wall by one or more cells (depending on dt), marking
+// new cells as GROWING. Once the arm reaches a non-open cell, all of its
+// cells lock in as permanent WALL.
+function growArm(state: GameState, wall: BuildingWall, arm: WallArm, direction: 1 | -1): void {
+  if (arm.done || arm.destroyed) return;
+  const maxFront = wall.orientation === "vertical" ? ROWS - 1 : COLS - 1;
+
+  while (!arm.done) {
+    const candidate = arm.front + direction;
+    const idx = wall.orientation === "vertical" ? cellIndex(wall.fixed, candidate) : cellIndex(candidate, wall.fixed);
+    if (candidate < 0 || candidate > maxFront || state.grid[idx] !== OPEN) { arm.done = true; break; }
+    if (arm.accum < 1) break;
+    arm.front = candidate;
+    state.grid[idx] = GROWING;
+    arm.cells.add(idx);
+    arm.accum -= 1;
+  }
+
+  if (arm.done) {
+    for (const idx of arm.cells) state.grid[idx] = WALL;
+  }
+}
+
+// A growing arm shatters the moment any ball touches any of its cells —
+// including cells already grown ("the flat side"), not just the leading tip.
+function armIsHit(state: GameState, arm: WallArm): boolean {
+  if (arm.done || arm.destroyed || arm.cells.size === 0) return false;
+  for (const idx of arm.cells) {
+    for (const ball of state.balls) {
+      if (cellHitsBall(idx, ball)) return true;
+    }
+  }
+  return false;
+}
+
+// Grows both arms of the active wall, shatters either arm independently if
+// a ball touches it, and finalizes the wall once both arms are done/destroyed.
 function advanceWall(state: GameState, dt: number): void {
   const wall = state.buildingWall;
   if (!wall) return;
 
-  const pending: number[] = [];
-  const maxFront = wall.orientation === "vertical" ? ROWS - 1 : COLS - 1;
+  wall.arm1.accum += WALL_GROW_RATE * dt;
+  wall.arm2.accum += WALL_GROW_RATE * dt;
+  growArm(state, wall, wall.arm1, -1);
+  growArm(state, wall, wall.arm2, 1);
 
-  if (!wall.done1) {
-    wall.accum1 += WALL_GROW_RATE * dt;
-    while (wall.accum1 >= 1 && !wall.done1) {
-      const candidate = wall.front1 - 1;
-      const idx = wall.orientation === "vertical" ? cellIndex(wall.fixed, candidate) : cellIndex(candidate, wall.fixed);
-      if (candidate < 0 || state.grid[idx] !== OPEN) { wall.done1 = true; break; }
-      wall.front1 = candidate;
-      pending.push(idx);
-      wall.accum1 -= 1;
-    }
-  }
+  if (armIsHit(state, wall.arm1)) destroyArm(state, wall.arm1);
+  if (state.phase !== "playing") return;
+  if (armIsHit(state, wall.arm2)) destroyArm(state, wall.arm2);
+  if (state.phase !== "playing") return;
 
-  if (!wall.done2) {
-    wall.accum2 += WALL_GROW_RATE * dt;
-    while (wall.accum2 >= 1 && !wall.done2) {
-      const candidate = wall.front2 + 1;
-      const idx = wall.orientation === "vertical" ? cellIndex(wall.fixed, candidate) : cellIndex(candidate, wall.fixed);
-      if (candidate > maxFront || state.grid[idx] !== OPEN) { wall.done2 = true; break; }
-      wall.front2 = candidate;
-      pending.push(idx);
-      wall.accum2 -= 1;
-    }
-  }
-
-  if (pending.length > 0) {
-    for (const ball of state.balls) {
-      for (const idx of pending) {
-        if (cellHitsBall(idx, ball)) {
-          shatterWall(state, wall);
-          return;
-        }
-      }
-    }
-    for (const idx of pending) {
-      state.grid[idx] = WALL;
-      wall.cells.add(idx);
-    }
-  }
-
-  if (wall.done1 && wall.done2) {
+  const arm1Resolved = wall.arm1.done || wall.arm1.destroyed;
+  const arm2Resolved = wall.arm2.done || wall.arm2.destroyed;
+  if (arm1Resolved && arm2Resolved) {
     completeWall(state, wall);
   }
 }
@@ -320,21 +340,13 @@ function moveBalls(state: GameState, dt: number): void {
 // ─── Rendering ─────────────────────────────────────────────────────────────────
 
 function render(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const pulse = Math.sin(state.lastFrameTime / 80) > 0;
+  const growingColor = state.flashTimer > 0 ? "#ff3333" : pulse ? "#ffcc66" : "#ff6b00";
+
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const v = state.grid[cellIndex(col, row)];
-      ctx.fillStyle = v === FILLED ? "#7b3dbe" : v === WALL ? "#ff6b00" : "#1a0a2e";
-      ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
-    }
-  }
-
-  const wall = state.buildingWall;
-  if (wall) {
-    const pulse = Math.sin(state.lastFrameTime / 80) > 0;
-    ctx.fillStyle = state.flashTimer > 0 ? "#ff3333" : pulse ? "#ffcc66" : "#ff6b00";
-    for (const idx of wall.cells) {
-      const col = idx % COLS;
-      const row = (idx - col) / COLS;
+      ctx.fillStyle = v === FILLED ? "#7b3dbe" : v === WALL ? "#ff6b00" : v === GROWING ? growingColor : "#1a0a2e";
       ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
     }
   }
