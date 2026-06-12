@@ -15,7 +15,7 @@ export const PADDLE_H = 12;
 export const PADDLE_Y = LOGICAL_H - 40;
 
 export const BALL_RADIUS = 6;
-export const BASE_BALL_SPEED = 240;
+export const BASE_BALL_SPEED = 300;
 export const MAX_BOUNCE_ANGLE = (75 * Math.PI) / 180;
 
 export const MAX_BALLS = 6;
@@ -201,7 +201,7 @@ export function generateLevel(
 ): LevelData {
   const ramp = difficulty.rampMult;
   const rows = Math.min(3 + Math.floor((level - 1) / 2), 10);
-  const density = Math.min(0.55 + level * 0.03 * ramp, 0.95);
+  const density = Math.min(0.72 + level * 0.025 * ramp, 0.97);
   const toughChance = Math.min(0.05 + level * 0.025 * ramp, 0.5);
   const unbreakableChance = Math.max(0, Math.min((level - 8) * 0.02 * ramp, 0.12));
   const iceChance = level >= 2 ? Math.min((level - 1) * 0.012 * ramp, 0.12) : 0;
