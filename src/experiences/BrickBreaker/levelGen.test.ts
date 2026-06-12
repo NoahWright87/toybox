@@ -38,7 +38,7 @@ describe("generateLevel", () => {
 
   it("scales rows up with level, capped at 10", () => {
     const rngLow = mulberry32(1);
-    expect(generateLevel(1, rngLow).rows).toBe(3);
+    expect(generateLevel(1, rngLow).rows).toBe(8);
     const rngHigh = mulberry32(2);
     expect(generateLevel(50, rngHigh).rows).toBe(10);
   });

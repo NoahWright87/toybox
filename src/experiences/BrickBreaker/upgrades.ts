@@ -53,10 +53,10 @@ export function upgradeCost(def: UpgradeDef, owned: number, priceMult: number): 
 }
 
 // ── Reroll cost ───────────────────────────────────────────────────────────────
-export const REROLL_BASE_COST = 4;
+export const REROLL_BASE_COST = 1;
 
 export function rerollCost(rerollsUsed: number, priceMult: number): number {
-  return Math.round((REROLL_BASE_COST + rerollsUsed * 3) * priceMult);
+  return Math.round((REROLL_BASE_COST + rerollsUsed * 2) * priceMult);
 }
 
 // ── Derived stats ────────────────────────────────────────────────────────────

@@ -63,7 +63,7 @@ A status bar above the canvas shows `SCORE`, `LEVEL`, `LIVES` (as heart icons), 
 
 Each level is generated from a brick grid of 8 columns. As the level number increases (scaled by the difficulty's ramp multiplier):
 
-- **Rows** grow from 3 up to a cap of 10.
+- **Rows** start at 8 and grow up to a cap of 10.
 - **Brick density** (chance a cell contains a brick) increases from ~55% toward ~95%; any row that would generate empty is forced to contain at least one brick.
 - **Tough bricks** (2 hit points, shown with a crack overlay after the first hit) become more common as level increases.
 - **Unbreakable bricks** (infinite hit points, gray) start appearing around level 9 and cap at a 12% chance per cell. They do not block level completion and never receive the explosive or regenerating traits.
@@ -106,7 +106,7 @@ Destroyed breakable bricks roll independently for a coin drop and a power-up dro
 
 ## Permanent upgrades (shop)
 
-Between every level, the player enters the **Shop**: three random upgrade offers are rolled (excluding upgrades already at max stacks), each showing its icon, name, current/max stacks, description, and coin cost. Costs grow exponentially with owned stacks (`baseCost × costGrowth^owned`, scaled by the difficulty's price multiplier). Buying an upgrade deducts coins, increments its stack count, recomputes derived stats, and rerolls just that offer slot. "Reroll All" re-rolls all three offers for an increasing cost (`(4 + rerollsUsed × 3) × price multiplier`). "Continue" advances to the next level.
+Between every level, the player enters the **Shop**: three random upgrade offers are rolled (excluding upgrades already at max stacks), each showing its icon, name, current/max stacks, description, and coin cost. Costs grow exponentially with owned stacks (`baseCost × costGrowth^owned`, scaled by the difficulty's price multiplier). Buying an upgrade deducts coins, increments its stack count, recomputes derived stats, and removes that offer from the list (the store does not refill until the next shop visit or a reroll). "Reroll All" re-rolls all remaining offers back up to three for an increasing cost (`(1 + rerollsUsed × 2) × price multiplier`, starting at 1 coin). "Continue" advances to the next level.
 
 | Upgrade | Icon | Max stacks | Per-stack effect |
 |---|---|---|---|

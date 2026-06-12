@@ -389,11 +389,8 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
         setMaxLives(maxLivesRef.current);
       }
 
-      const st = stateRef.current;
-      const replacements = rollShopOffers(upgradeCountsRef.current, st.rng, st.difficulty, 1);
       const newOffers = [...shopOffers];
-      if (replacements.length > 0) newOffers[idx] = replacements[0];
-      else newOffers.splice(idx, 1);
+      newOffers.splice(idx, 1);
       setShopOffers(newOffers);
     },
     [shopOffers]

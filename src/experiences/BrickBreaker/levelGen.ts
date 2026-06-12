@@ -200,7 +200,7 @@ export function generateLevel(
   difficulty: DifficultySettings = DIFFICULTIES.normal
 ): LevelData {
   const ramp = difficulty.rampMult;
-  const rows = Math.min(3 + Math.floor((level - 1) / 2), 10);
+  const rows = Math.min(8 + Math.floor((level - 1) / 5), 10);
   const density = Math.min(0.72 + level * 0.025 * ramp, 0.97);
   const toughChance = Math.min(0.05 + level * 0.025 * ramp, 0.5);
   const unbreakableChance = Math.max(0, Math.min((level - 8) * 0.02 * ramp, 0.12));
