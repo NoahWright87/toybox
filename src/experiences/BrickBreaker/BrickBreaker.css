@@ -48,6 +48,10 @@
   letter-spacing: 1px;
 }
 
+.bb-hud__coins {
+  color: #aa7700;
+}
+
 /* ── Canvas ──────────────────────────────────────────────────────────────────── */
 
 .bb-canvas-wrap {
@@ -117,6 +121,125 @@
   margin: 0 0 12px 0;
 }
 
+/* ── Pre-game menu / shop (wide, scrollable) ────────────────────────────────── */
+
+.bb-panel--menu {
+  max-width: 400px;
+  max-height: 90%;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.bb-panel--menu .bb-panel__title {
+  text-align: center;
+}
+
+.bb-menu__stats {
+  font-size: 7px;
+  line-height: 1.8;
+  color: #333333;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.bb-menu__section-title {
+  font-size: 8px;
+  color: #5b2d8e;
+  margin: 10px 0 6px 0;
+  text-align: center;
+}
+
+.bb-menu__swatches {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.bb-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.bb-swatch--active {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.bb-menu__difficulty {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.bb-btn--option {
+  font-size: 7px;
+}
+
+.bb-btn--option-active {
+  background: #cc6600;
+  color: #ffffff;
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+/* ── Shop ────────────────────────────────────────────────────────────────────── */
+
+.bb-shop__offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.bb-shop__offer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px;
+}
+
+.bb-shop__offer-icon {
+  font-size: 16px;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.bb-shop__offer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bb-shop__offer-name {
+  font-size: 7px;
+  color: #cc4400;
+  margin-bottom: 4px;
+}
+
+.bb-shop__offer-desc {
+  font-size: 6px;
+  line-height: 1.5;
+  color: #333333;
+}
+
+.bb-shop__buy {
+  font-size: 7px;
+  flex-shrink: 0;
+}
+
+.bb-shop__buy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
 
 .bb-btn {
@@ -181,5 +304,17 @@
   }
   .bb-hint {
     font-size: 6px;
+  }
+  .bb-menu__stats,
+  .bb-shop__offer-name {
+    font-size: 6px;
+  }
+  .bb-shop__offer-desc,
+  .bb-btn--option,
+  .bb-shop__buy {
+    font-size: 5px;
+  }
+  .bb-menu__section-title {
+    font-size: 7px;
   }
 }

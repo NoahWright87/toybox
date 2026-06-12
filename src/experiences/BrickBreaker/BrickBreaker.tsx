@@ -12,22 +12,56 @@ import {
   PADDLE_Y,
   BALL_RADIUS,
   MAX_BALLS,
-  POWERUP_FALL_SPEED,
+  PICKUP_FALL_SPEED,
   POWERUP_W,
   POWERUP_H,
+  COIN_RADIUS,
   POWERUP_DROP_CHANCE,
+  COIN_DROP_CHANCE,
   WIDE_DURATION_MS,
+  LASER_DURATION_MS,
+  PIERCE_DURATION_MS,
+  STICKY_DURATION_MS,
   POWERUP_CATCH_BONUS,
+  LASER_FIRE_INTERVAL_MS,
+  LASER_SPEED,
+  LASER_W,
+  LASER_H,
+  ICE_SLOW_DURATION_MS,
+  ICE_SLOW_FACTOR,
   generateLevel,
   isLevelClear,
   paddleBounce,
   mulberry32,
+  updateBrickMotion,
+  updateBrickRegen,
+  triggerExplosion,
+  applyHoming,
+  DIFFICULTIES,
+  DIFFICULTY_LABELS,
+  PADDLE_COLORS,
+  getPaddleColor,
   type Phase,
   type Brick,
   type Ball,
   type Paddle,
   type PowerUp,
+  type PowerUpType,
+  type Laser,
+  type Difficulty,
+  type DifficultySettings,
 } from "./levelGen";
+import {
+  emptyUpgradeCounts,
+  computeDerivedStats,
+  rollShopOffers,
+  rerollCost,
+  parseSaveData,
+  type UpgradeCounts,
+  type DerivedStats,
+  type ShopOffer,
+  type SaveData,
+} from "./upgrades";
 import "./BrickBreaker.css";
 
 interface BrickBreakerProps {
@@ -38,13 +72,22 @@ interface MutableState {
   bricks: Brick[];
   balls: Ball[];
   paddle: Paddle;
-  powerUps: PowerUp[];
+  pickups: PowerUp[];
+  lasers: Laser[];
   ballSpeed: number;
   widePaddleUntil: number;
+  laserUntil: number;
+  pierceUntil: number;
+  stickyUntil: number;
+  lastLaserShot: number;
+  stuckBalls: Ball[];
+  shieldCharges: number;
+  explodeCharges: number;
   awaitingLaunch: boolean;
   rng: () => number;
-  nextPowerUpId: number;
+  nextPickupId: number;
   lastFrameTime: number;
+  difficulty: DifficultySettings;
 }
 
 const PADDLE_LERP_MOUSE = 0.35;
@@ -52,9 +95,40 @@ const PADDLE_LERP_TOUCH = 0.18;
 const KEYBOARD_SPEED = 360;
 const LEVEL_TRANSITION_MS = 1200;
 const BRICK_SCORE = 10;
-const STARTING_LIVES = 3;
 const BOUNCE_LAUNCH_FRACTION = 0.35;
 const MULTIBALL_SPLIT_ANGLE = (25 * Math.PI) / 180;
+
+const RANDOM_POWERUP_TYPES: PowerUpType[] = [
+  "wide",
+  "multiball",
+  "laser",
+  "pierce",
+  "sticky",
+  "shield",
+  "exploding-ball",
+];
+
+const PICKUP_LABELS: Record<PowerUpType, string> = {
+  wide: "W",
+  multiball: "M",
+  laser: "L",
+  pierce: "P",
+  sticky: "S",
+  shield: "H",
+  "exploding-ball": "E",
+  coin: "$",
+};
+
+const PICKUP_COLORS: Record<PowerUpType, string> = {
+  wide: "#ff6b00",
+  multiball: "#7b3dbe",
+  laser: "#cc1100",
+  pierce: "#00aaaa",
+  sticky: "#33aa33",
+  shield: "#cccc00",
+  "exploding-ball": "#ff3300",
+  coin: "#ffcc00",
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -70,26 +144,42 @@ function createBall(state: MutableState): Ball {
   };
 }
 
-function createState(level: number, rng: () => number): MutableState {
-  const data = generateLevel(level, rng);
+function createState(
+  level: number,
+  rng: () => number,
+  difficulty: DifficultySettings,
+  derived: DerivedStats,
+  paddleWidth: number
+): MutableState {
+  const data = generateLevel(level, rng, difficulty);
   const state: MutableState = {
     bricks: data.bricks,
     balls: [],
     paddle: {
-      x: LOGICAL_W / 2 - PADDLE_BASE_W / 2,
-      width: PADDLE_BASE_W,
+      x: LOGICAL_W / 2 - paddleWidth / 2,
+      width: paddleWidth,
       height: PADDLE_H,
       y: PADDLE_Y,
     },
-    powerUps: [],
+    pickups: [],
+    lasers: [],
     ballSpeed: data.ballSpeed,
     widePaddleUntil: 0,
+    laserUntil: 0,
+    pierceUntil: 0,
+    stickyUntil: 0,
+    lastLaserShot: 0,
+    stuckBalls: [],
+    shieldCharges: 0,
+    explodeCharges: 0,
     awaitingLaunch: true,
     rng,
-    nextPowerUpId: 0,
+    nextPickupId: 0,
     lastFrameTime: performance.now(),
+    difficulty,
   };
-  state.balls = [createBall(state)];
+  const ballCount = 1 + derived.extraBalls;
+  for (let i = 0; i < ballCount; i++) state.balls.push(createBall(state));
   return state;
 }
 
@@ -132,59 +222,106 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
   const rafRef = useRef<number | null>(null);
   const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [phase, setPhase] = useState<Phase>("start");
-  const phaseRef = useRef<Phase>("start");
+  const [phase, setPhase] = useState<Phase>("menu");
+  const phaseRef = useRef<Phase>("menu");
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
 
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
-  const [lives, setLives] = useState(STARTING_LIVES);
+  const [lives, setLives] = useState(DIFFICULTIES.normal.startingLives);
+  const [maxLives, setMaxLives] = useState(DIFFICULTIES.normal.startingLives);
+  const maxLivesRef = useRef(DIFFICULTIES.normal.startingLives);
+  const [coins, setCoins] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [bestLevel, setBestLevel] = useState(0);
+  const [gamesPlayed, setGamesPlayed] = useState(0);
   const [newHighScore, setNewHighScore] = useState(false);
   const [awaitingLaunch, setAwaitingLaunch] = useState(true);
 
+  const [paddleColorId, setPaddleColorId] = useState<string>(PADDLE_COLORS[0].id);
+  const [difficultyId, setDifficultyId] = useState<Difficulty>("normal");
+  const difficultyRef = useRef<Difficulty>("normal");
+
+  const [shopOffers, setShopOffers] = useState<ShopOffer[]>([]);
+  const [rerollsUsed, setRerollsUsed] = useState(0);
+
   const scoreRef = useRef(0);
   const levelRef = useRef(1);
-  const livesRef = useRef(STARTING_LIVES);
+  const livesRef = useRef(DIFFICULTIES.normal.startingLives);
   const highScoreRef = useRef(0);
+  const bestLevelRef = useRef(0);
+  const gamesPlayedRef = useRef(0);
+  const coinsRef = useRef(0);
+  const upgradeCountsRef = useRef<UpgradeCounts>(emptyUpgradeCounts());
+  const derivedRef = useRef<DerivedStats>(computeDerivedStats(upgradeCountsRef.current));
+  const paddleColorRef = useRef<string>(PADDLE_COLORS[0].id);
 
-  const stateRef = useRef<MutableState>(createState(1, mulberry32(Date.now() >>> 0)));
+  const stateRef = useRef<MutableState>(
+    createState(1, mulberry32(Date.now() >>> 0), DIFFICULTIES.normal, derivedRef.current, PADDLE_BASE_W)
+  );
 
   const paddleTargetXRef = useRef(LOGICAL_W / 2);
   const paddleCenterXRef = useRef(LOGICAL_W / 2);
   const pointerLerpRef = useRef(PADDLE_LERP_TOUCH);
   const keysRef = useRef({ left: false, right: false });
 
-  // ── High score persistence ──────────────────────────────────────────────────
+  // ── Persistence ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     try {
       const content = fsStore.getFile(BB_SCORES_ID)?.content;
-      const hs = content ? parseInt(content, 10) || 0 : 0;
-      highScoreRef.current = hs;
-      setHighScore(hs);
+      const save = parseSaveData(content);
+      highScoreRef.current = save.highScore;
+      bestLevelRef.current = save.bestLevel;
+      gamesPlayedRef.current = save.gamesPlayed;
+      setHighScore(save.highScore);
+      setBestLevel(save.bestLevel);
+      setGamesPlayed(save.gamesPlayed);
+      setPaddleColorId(save.paddleColor);
+      paddleColorRef.current = save.paddleColor;
+      setDifficultyId(save.difficulty);
+      difficultyRef.current = save.difficulty;
     } catch {
       /* ignore */
     }
   }, []);
 
-  function persistHighScore(value: number) {
+  const persistSave = useCallback(() => {
     try {
-      fsStore.writeFile(BB_SCORES_ID, String(value));
+      const save: SaveData = {
+        highScore: highScoreRef.current,
+        bestLevel: bestLevelRef.current,
+        gamesPlayed: gamesPlayedRef.current,
+        paddleColor: paddleColorRef.current,
+        difficulty: difficultyRef.current,
+      };
+      fsStore.writeFile(BB_SCORES_ID, JSON.stringify(save));
     } catch {
       /* ignore */
     }
-  }
+  }, []);
 
   function maybeUpdateHighScore() {
     if (scoreRef.current > highScoreRef.current) {
       highScoreRef.current = scoreRef.current;
       setHighScore(scoreRef.current);
       setNewHighScore(true);
-      persistHighScore(scoreRef.current);
+      persistSave();
     }
+  }
+
+  function selectPaddleColor(id: string) {
+    setPaddleColorId(id);
+    paddleColorRef.current = id;
+    persistSave();
+  }
+
+  function selectDifficulty(id: Difficulty) {
+    setDifficultyId(id);
+    difficultyRef.current = id;
+    persistSave();
   }
 
   // ── Game lifecycle ───────────────────────────────────────────────────────────
@@ -196,14 +333,24 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
     }
     scoreRef.current = 0;
     levelRef.current = 1;
-    livesRef.current = STARTING_LIVES;
+    coinsRef.current = 0;
+    upgradeCountsRef.current = emptyUpgradeCounts();
+    derivedRef.current = computeDerivedStats(upgradeCountsRef.current);
+
+    const diffSettings = DIFFICULTIES[difficultyRef.current];
+    livesRef.current = diffSettings.startingLives;
+    maxLivesRef.current = diffSettings.startingLives;
     setScore(0);
     setLevel(1);
-    setLives(STARTING_LIVES);
+    setLives(livesRef.current);
+    setMaxLives(maxLivesRef.current);
+    setCoins(0);
     setNewHighScore(false);
+    setShopOffers([]);
+    setRerollsUsed(0);
 
     const rng = mulberry32((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
-    stateRef.current = createState(1, rng);
+    stateRef.current = createState(1, rng, diffSettings, derivedRef.current, PADDLE_BASE_W);
     paddleCenterXRef.current = LOGICAL_W / 2;
     paddleTargetXRef.current = LOGICAL_W / 2;
     setAwaitingLaunch(true);
@@ -212,7 +359,57 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
     phaseRef.current = "playing";
   }, []);
 
-  const beginLevelTransition = useCallback(() => {
+  const enterShop = useCallback(() => {
+    setPhase("shop");
+    phaseRef.current = "shop";
+    setRerollsUsed(0);
+    const st = stateRef.current;
+    setShopOffers(rollShopOffers(upgradeCountsRef.current, st.rng, st.difficulty));
+  }, []);
+
+  const buyUpgrade = useCallback(
+    (idx: number) => {
+      const offer = shopOffers[idx];
+      if (!offer) return;
+      if (coinsRef.current < offer.cost) return;
+      if (upgradeCountsRef.current[offer.def.id] >= offer.def.maxStacks) return;
+
+      coinsRef.current -= offer.cost;
+      setCoins(coinsRef.current);
+
+      const nextCounts: UpgradeCounts = { ...upgradeCountsRef.current };
+      nextCounts[offer.def.id] += 1;
+      upgradeCountsRef.current = nextCounts;
+      derivedRef.current = computeDerivedStats(nextCounts);
+
+      if (offer.def.id === "vitality") {
+        livesRef.current += 1;
+        maxLivesRef.current += 1;
+        setLives(livesRef.current);
+        setMaxLives(maxLivesRef.current);
+      }
+
+      const st = stateRef.current;
+      const replacements = rollShopOffers(upgradeCountsRef.current, st.rng, st.difficulty, 1);
+      const newOffers = [...shopOffers];
+      if (replacements.length > 0) newOffers[idx] = replacements[0];
+      else newOffers.splice(idx, 1);
+      setShopOffers(newOffers);
+    },
+    [shopOffers]
+  );
+
+  const rerollAllOffers = useCallback(() => {
+    const st = stateRef.current;
+    const cost = rerollCost(rerollsUsed, st.difficulty.priceMult);
+    if (coinsRef.current < cost) return;
+    coinsRef.current -= cost;
+    setCoins(coinsRef.current);
+    setRerollsUsed((r) => r + 1);
+    setShopOffers(rollShopOffers(upgradeCountsRef.current, st.rng, st.difficulty));
+  }, [rerollsUsed]);
+
+  const continueFromShop = useCallback(() => {
     setPhase("level-transition");
     phaseRef.current = "level-transition";
     transitionTimeoutRef.current = setTimeout(() => {
@@ -221,11 +418,21 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
       setLevel(nextLevel);
 
       const st = stateRef.current;
-      const data = generateLevel(nextLevel, st.rng);
+      const derived = derivedRef.current;
+      const data = generateLevel(nextLevel, st.rng, st.difficulty);
       st.bricks = data.bricks;
       st.ballSpeed = data.ballSpeed;
-      st.powerUps = [];
-      st.balls = [createBall(st)];
+      st.pickups = [];
+      st.lasers = [];
+
+      const paddleWidth = PADDLE_BASE_W + derived.paddleWidthBonus;
+      st.paddle.width = paddleWidth;
+      st.paddle.x = clamp(st.paddle.x, 0, LOGICAL_W - paddleWidth);
+
+      st.balls = [];
+      const ballCount = 1 + derived.extraBalls;
+      for (let i = 0; i < ballCount; i++) st.balls.push(createBall(st));
+      st.stuckBalls = [];
       st.awaitingLaunch = true;
       setAwaitingLaunch(true);
 
@@ -238,7 +445,15 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
   const endGame = useCallback(() => {
     setPhase("game-over");
     phaseRef.current = "game-over";
-  }, []);
+    const gp = gamesPlayedRef.current + 1;
+    gamesPlayedRef.current = gp;
+    setGamesPlayed(gp);
+    if (levelRef.current > bestLevelRef.current) {
+      bestLevelRef.current = levelRef.current;
+      setBestLevel(levelRef.current);
+    }
+    persistSave();
+  }, [persistSave]);
 
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
@@ -252,11 +467,24 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
 
   const launchBall = useCallback(() => {
     const st = stateRef.current;
-    if (phaseRef.current !== "playing" || !st.awaitingLaunch || st.balls.length === 0) return;
+    if (phaseRef.current !== "playing") return;
+
+    if (st.stuckBalls.length > 0) {
+      const effectiveSpeed = st.ballSpeed * derivedRef.current.ballSpeedMultiplier;
+      for (const ball of st.stuckBalls) {
+        paddleBounce(ball, st.paddle, effectiveSpeed);
+        st.balls.push(ball);
+      }
+      st.stuckBalls = [];
+      return;
+    }
+
+    if (!st.awaitingLaunch || st.balls.length === 0) return;
+    const effectiveSpeed = st.ballSpeed * derivedRef.current.ballSpeedMultiplier;
     const ball = st.balls[0];
     const dir = st.rng() < 0.5 ? -1 : 1;
-    const vx = st.ballSpeed * BOUNCE_LAUNCH_FRACTION * dir;
-    const vy = -Math.sqrt(Math.max(st.ballSpeed * st.ballSpeed - vx * vx, 0));
+    const vx = effectiveSpeed * BOUNCE_LAUNCH_FRACTION * dir;
+    const vy = -Math.sqrt(Math.max(effectiveSpeed * effectiveSpeed - vx * vx, 0));
     ball.vx = vx;
     ball.vy = vy;
     st.awaitingLaunch = false;
@@ -287,10 +515,7 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       pointerLerpRef.current = e.pointerType === "mouse" ? PADDLE_LERP_MOUSE : PADDLE_LERP_TOUCH;
       paddleTargetXRef.current = getLogicalX(e.clientX);
-      if (phaseRef.current === "start") {
-        setPhase("playing");
-        phaseRef.current = "playing";
-      } else if (phaseRef.current === "playing") {
+      if (phaseRef.current === "playing") {
         launchBall();
       }
     },
@@ -312,15 +537,14 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
         e.preventDefault();
       } else if (e.key === " ") {
         e.preventDefault();
-        if (phaseRef.current === "start") {
-          setPhase("playing");
-          phaseRef.current = "playing";
-        } else if (phaseRef.current === "playing") {
-          if (stateRef.current.awaitingLaunch) launchBall();
+        if (phaseRef.current === "playing") {
+          if (stateRef.current.awaitingLaunch || stateRef.current.stuckBalls.length > 0) launchBall();
           else togglePause();
         } else if (phaseRef.current === "paused") {
           togglePause();
         } else if (phaseRef.current === "game-over") {
+          resetGame();
+        } else if (phaseRef.current === "menu") {
           resetGame();
         }
       } else if (e.key === "Escape") {
@@ -342,71 +566,175 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
     };
   }, [launchBall, togglePause, resetGame]);
 
-  // ── Power-ups ────────────────────────────────────────────────────────────────
+  // ── Brick damage / drops ─────────────────────────────────────────────────────
 
-  function maybeDropPowerUp(state: MutableState, brick: Brick) {
-    if (state.rng() >= POWERUP_DROP_CHANCE) return;
-    const type = state.rng() < 0.5 ? "wide" : "multiball";
-    state.powerUps.push({
-      id: state.nextPowerUpId++,
-      x: brick.x + brick.w / 2,
-      y: brick.y + brick.h / 2,
-      vy: POWERUP_FALL_SPEED,
-      type,
-    });
+  function maybeDropPickups(state: MutableState, brick: Brick, derived: DerivedStats) {
+    const coinChance = COIN_DROP_CHANCE * state.difficulty.coinMult + derived.dropChanceBonus;
+    if (state.rng() < coinChance) {
+      state.pickups.push({
+        id: state.nextPickupId++,
+        x: brick.x + brick.w / 2,
+        y: brick.y + brick.h / 2,
+        vy: PICKUP_FALL_SPEED,
+        type: "coin",
+        value: brick.maxHp === 2 ? 2 : 1,
+      });
+    }
+    const powerupChance = POWERUP_DROP_CHANCE + derived.dropChanceBonus;
+    if (state.rng() < powerupChance) {
+      const type = RANDOM_POWERUP_TYPES[Math.floor(state.rng() * RANDOM_POWERUP_TYPES.length)];
+      state.pickups.push({
+        id: state.nextPickupId++,
+        x: brick.x + brick.w / 2,
+        y: brick.y + brick.h / 2,
+        vy: PICKUP_FALL_SPEED,
+        type,
+      });
+    }
   }
 
-  function applyPowerUp(state: MutableState, powerUp: PowerUp, now: number) {
-    if (powerUp.type === "wide") {
-      state.widePaddleUntil = now + WIDE_DURATION_MS;
-      return;
-    }
-    const current = state.balls.slice();
-    for (const ball of current) {
-      const speed = Math.hypot(ball.vx, ball.vy) || state.ballSpeed;
-      const baseAngle = Math.atan2(ball.vy, ball.vx);
-      for (const offset of [MULTIBALL_SPLIT_ANGLE, -MULTIBALL_SPLIT_ANGLE]) {
-        if (state.balls.length >= MAX_BALLS) break;
-        const angle = baseAngle + offset;
-        state.balls.push({
-          x: ball.x,
-          y: ball.y,
-          vx: speed * Math.cos(angle),
-          vy: speed * Math.sin(angle),
-          radius: ball.radius,
-        });
+  function addScore(amount: number, derived: DerivedStats) {
+    scoreRef.current += Math.round(amount * derived.scoreMultiplier);
+    setScore(scoreRef.current);
+    maybeUpdateHighScore();
+  }
+
+  function damageBrick(state: MutableState, brick: Brick, amount: number, derived: DerivedStats, allowExplode: boolean) {
+    if (brick.hp === Infinity) return;
+    brick.hp -= amount;
+    addScore(BRICK_SCORE, derived);
+    if (brick.hp <= 0) {
+      brick.alive = false;
+      maybeDropPickups(state, brick, derived);
+
+      if (brick.explosive) {
+        const destroyed = triggerExplosion(state.bricks, brick);
+        for (const d of destroyed) {
+          addScore(BRICK_SCORE, derived);
+          maybeDropPickups(state, d, derived);
+        }
       }
-      if (state.balls.length >= MAX_BALLS) break;
+
+      if (allowExplode && state.explodeCharges > 0) {
+        state.explodeCharges -= 1;
+        const destroyed = triggerExplosion(state.bricks, brick);
+        for (const d of destroyed) {
+          addScore(BRICK_SCORE, derived);
+          maybeDropPickups(state, d, derived);
+        }
+      }
     }
   }
 
-  function updatePowerUps(state: MutableState, dt: number, now: number) {
+  function applyPickup(state: MutableState, pickup: PowerUp, now: number) {
+    switch (pickup.type) {
+      case "wide":
+        state.widePaddleUntil = now + WIDE_DURATION_MS;
+        break;
+      case "laser":
+        state.laserUntil = now + LASER_DURATION_MS;
+        break;
+      case "pierce":
+        state.pierceUntil = now + PIERCE_DURATION_MS;
+        break;
+      case "sticky":
+        state.stickyUntil = now + STICKY_DURATION_MS;
+        break;
+      case "shield":
+        state.shieldCharges += 1;
+        break;
+      case "exploding-ball":
+        state.explodeCharges += 1;
+        break;
+      case "coin":
+        coinsRef.current += pickup.value ?? 1;
+        setCoins(coinsRef.current);
+        break;
+      case "multiball": {
+        const current = state.balls.slice();
+        for (const ball of current) {
+          const speed = Math.hypot(ball.vx, ball.vy) || state.ballSpeed;
+          const baseAngle = Math.atan2(ball.vy, ball.vx);
+          for (const offset of [MULTIBALL_SPLIT_ANGLE, -MULTIBALL_SPLIT_ANGLE]) {
+            if (state.balls.length >= MAX_BALLS) break;
+            const angle = baseAngle + offset;
+            state.balls.push({
+              x: ball.x,
+              y: ball.y,
+              vx: speed * Math.cos(angle),
+              vy: speed * Math.sin(angle),
+              radius: ball.radius,
+            });
+          }
+          if (state.balls.length >= MAX_BALLS) break;
+        }
+        break;
+      }
+    }
+  }
+
+  function updatePickups(state: MutableState, dt: number, now: number, derived: DerivedStats) {
     const remaining: PowerUp[] = [];
     const paddle = state.paddle;
-    for (const p of state.powerUps) {
+    const magnet = derived.magnetRadiusBonus;
+    const px0 = paddle.x - magnet;
+    const px1 = paddle.x + paddle.width + magnet;
+    const py0 = paddle.y - magnet;
+    const py1 = paddle.y + paddle.height + magnet;
+    for (const p of state.pickups) {
       p.y += p.vy * dt;
+      const halfW = p.type === "coin" ? COIN_RADIUS : POWERUP_W / 2;
+      const halfH = p.type === "coin" ? COIN_RADIUS : POWERUP_H / 2;
       const overlapsPaddle =
-        p.y + POWERUP_H / 2 >= paddle.y &&
-        p.y - POWERUP_H / 2 <= paddle.y + paddle.height &&
-        p.x + POWERUP_W / 2 >= paddle.x &&
-        p.x - POWERUP_W / 2 <= paddle.x + paddle.width;
+        p.x + halfW >= px0 && p.x - halfW <= px1 && p.y + halfH >= py0 && p.y - halfH <= py1;
       if (overlapsPaddle) {
-        applyPowerUp(state, p, now);
-        scoreRef.current += POWERUP_CATCH_BONUS;
-        setScore(scoreRef.current);
-        maybeUpdateHighScore();
+        applyPickup(state, p, now);
+        if (p.type !== "coin") addScore(POWERUP_CATCH_BONUS, derived);
         continue;
       }
-      if (p.y - POWERUP_H / 2 <= LOGICAL_H) remaining.push(p);
+      if (p.y - halfH <= LOGICAL_H) remaining.push(p);
     }
-    state.powerUps = remaining;
+    state.pickups = remaining;
+  }
+
+  function updateLasers(state: MutableState, dt: number, now: number, derived: DerivedStats) {
+    if (now < state.laserUntil && now - state.lastLaserShot >= LASER_FIRE_INTERVAL_MS) {
+      state.lastLaserShot = now;
+      const paddle = state.paddle;
+      state.lasers.push({ x: paddle.x + 4, y: paddle.y });
+      state.lasers.push({ x: paddle.x + paddle.width - 4, y: paddle.y });
+    }
+    const remaining: Laser[] = [];
+    for (const laser of state.lasers) {
+      laser.y -= LASER_SPEED * dt;
+      if (laser.y < -LASER_H) continue;
+      let hit = false;
+      for (const brick of state.bricks) {
+        if (!brick.alive || brick.hp === Infinity) continue;
+        if (
+          laser.x >= brick.x &&
+          laser.x <= brick.x + brick.w &&
+          laser.y >= brick.y &&
+          laser.y <= brick.y + brick.h
+        ) {
+          damageBrick(state, brick, 1, derived, false);
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) remaining.push(laser);
+    }
+    state.lasers = remaining;
   }
 
   // ── Ball physics ─────────────────────────────────────────────────────────────
 
-  function updateBalls(state: MutableState, dt: number) {
+  function updateBalls(state: MutableState, dt: number, now: number, derived: DerivedStats) {
     const remaining: Ball[] = [];
+    const effectiveSpeed = state.ballSpeed * derived.ballSpeedMultiplier;
     for (const ball of state.balls) {
+      if (derived.homing) applyHoming(ball, state.bricks, dt);
+
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
 
@@ -430,36 +758,43 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
         ball.x + ball.radius >= paddle.x &&
         ball.x - ball.radius <= paddle.x + paddle.width
       ) {
-        paddleBounce(ball, paddle, state.ballSpeed);
+        if (now < state.stickyUntil) {
+          ball.vx = 0;
+          ball.vy = 0;
+          ball.x = clamp(ball.x, paddle.x + ball.radius, paddle.x + paddle.width - ball.radius);
+          ball.y = paddle.y - ball.radius;
+          state.stuckBalls.push(ball);
+          continue;
+        }
+        paddleBounce(ball, paddle, effectiveSpeed);
       }
 
       for (const brick of state.bricks) {
         if (!brick.alive) continue;
         if (!circleRectCollide(ball, brick)) continue;
-        resolveBrickCollision(ball, brick);
-        if (brick.hp !== Infinity) {
-          brick.hp -= 1;
-          scoreRef.current += BRICK_SCORE;
-          setScore(scoreRef.current);
-          maybeUpdateHighScore();
-          if (brick.hp <= 0) {
-            brick.alive = false;
-            maybeDropPowerUp(state, brick);
-          }
-        }
-        break;
+        const pierceActive = now < state.pierceUntil && brick.hp !== Infinity;
+        if (!pierceActive) resolveBrickCollision(ball, brick);
+        if (brick.ice) ball.slowUntil = now + ICE_SLOW_DURATION_MS;
+        damageBrick(state, brick, 1 + derived.ballDamageBonus, derived, true);
+        if (!pierceActive) break;
       }
 
-      if (ball.y - ball.radius <= LOGICAL_H) {
-        remaining.push(ball);
+      const targetSpeed = effectiveSpeed * (now < (ball.slowUntil ?? 0) ? ICE_SLOW_FACTOR : 1);
+      const curSpeed = Math.hypot(ball.vx, ball.vy);
+      if (curSpeed > 0) {
+        const f = targetSpeed / curSpeed;
+        ball.vx *= f;
+        ball.vy *= f;
       }
+
+      if (ball.y - ball.radius <= LOGICAL_H) remaining.push(ball);
     }
     state.balls = remaining;
   }
 
   // ── Drawing ──────────────────────────────────────────────────────────────────
 
-  const draw = useCallback((now: number) => {
+  function draw(now: number) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -487,19 +822,44 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
         ctx.lineTo(brick.x + brick.w - 4, brick.y + brick.h - 4);
         ctx.stroke();
       }
+      if (brick.ice) {
+        ctx.fillStyle = "rgba(140,220,255,0.35)";
+        ctx.fillRect(brick.x, brick.y, brick.w, brick.h);
+      }
+      if (brick.regenerating) {
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("+", brick.x + brick.w - 7, brick.y + 7);
+      }
+      if (brick.explosive) {
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("*", brick.x + 7, brick.y + 7);
+      }
     }
 
     const paddle = state.paddle;
     const isWide = now < state.widePaddleUntil;
-    ctx.fillStyle = isWide ? "#ffaa55" : "#ff6b00";
+    const color = getPaddleColor(paddleColorRef.current);
+    const isSticky = now < state.stickyUntil;
+    const isLaser = now < state.laserUntil;
+    ctx.fillStyle = isWide ? color.fillAlt : color.fill;
     ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
-    ctx.strokeStyle = "#ffcc88";
+    if (isSticky || isLaser) {
+      ctx.fillStyle = isSticky ? "rgba(51,170,51,0.5)" : "rgba(204,17,0,0.5)";
+      ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+    }
+    ctx.strokeStyle = color.highlight;
     ctx.beginPath();
     ctx.moveTo(paddle.x, paddle.y + paddle.height);
     ctx.lineTo(paddle.x, paddle.y);
     ctx.lineTo(paddle.x + paddle.width, paddle.y);
     ctx.stroke();
-    ctx.strokeStyle = "#664400";
+    ctx.strokeStyle = color.shadow;
     ctx.beginPath();
     ctx.moveTo(paddle.x + paddle.width, paddle.y);
     ctx.lineTo(paddle.x + paddle.width, paddle.y + paddle.height);
@@ -507,14 +867,40 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
     ctx.stroke();
 
     for (const ball of state.balls) {
+      ctx.fillStyle = now < (ball.slowUntil ?? 0) ? "#aaeeff" : "#ffffff";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const ball of state.stuckBalls) {
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    for (const p of state.powerUps) {
-      ctx.fillStyle = p.type === "wide" ? "#ff6b00" : "#7b3dbe";
+    ctx.fillStyle = "#ffee55";
+    for (const laser of state.lasers) {
+      ctx.fillRect(laser.x - LASER_W / 2, laser.y - LASER_H, LASER_W, LASER_H);
+    }
+
+    for (const p of state.pickups) {
+      if (p.type === "coin") {
+        ctx.fillStyle = PICKUP_COLORS.coin;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, COIN_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#664400";
+        ctx.stroke();
+        ctx.fillStyle = "#664400";
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("$", p.x, p.y + 1);
+        continue;
+      }
+      ctx.fillStyle = PICKUP_COLORS[p.type];
       ctx.fillRect(p.x - POWERUP_W / 2, p.y - POWERUP_H / 2, POWERUP_W, POWERUP_H);
       ctx.strokeStyle = "#ffffff";
       ctx.strokeRect(p.x - POWERUP_W / 2 + 0.5, p.y - POWERUP_H / 2 + 0.5, POWERUP_W - 1, POWERUP_H - 1);
@@ -522,43 +908,57 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
       ctx.font = "10px 'Press Start 2P', monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(p.type === "wide" ? "W" : "M", p.x, p.y + 1);
+      ctx.fillText(PICKUP_LABELS[p.type], p.x, p.y + 1);
     }
-  }, []);
+  }
 
   // ── Game loop ────────────────────────────────────────────────────────────────
 
-  const step = useCallback(
-    (dt: number, now: number) => {
-      const state = stateRef.current;
-      const ph = phaseRef.current;
+  function step(dt: number, now: number) {
+    const state = stateRef.current;
+    const ph = phaseRef.current;
 
-      if (ph === "playing" || ph === "start") {
-        if (keysRef.current.left) paddleTargetXRef.current -= KEYBOARD_SPEED * dt;
-        if (keysRef.current.right) paddleTargetXRef.current += KEYBOARD_SPEED * dt;
+    if (ph === "playing") {
+      const derived = derivedRef.current;
 
-        const halfW = state.paddle.width / 2;
-        paddleTargetXRef.current = clamp(paddleTargetXRef.current, halfW, LOGICAL_W - halfW);
-        paddleCenterXRef.current +=
-          (paddleTargetXRef.current - paddleCenterXRef.current) * pointerLerpRef.current;
+      if (keysRef.current.left) paddleTargetXRef.current -= (KEYBOARD_SPEED + derived.paddleKeyboardBonus) * dt;
+      if (keysRef.current.right) paddleTargetXRef.current += (KEYBOARD_SPEED + derived.paddleKeyboardBonus) * dt;
 
-        state.paddle.width = now < state.widePaddleUntil ? PADDLE_WIDE_W : PADDLE_BASE_W;
-        state.paddle.x = clamp(
-          paddleCenterXRef.current - state.paddle.width / 2,
-          0,
-          LOGICAL_W - state.paddle.width
-        );
+      const halfW = state.paddle.width / 2;
+      paddleTargetXRef.current = clamp(paddleTargetXRef.current, halfW, LOGICAL_W - halfW);
+      const lerp = pointerLerpRef.current + derived.paddleLerpBonus;
+      paddleCenterXRef.current += (paddleTargetXRef.current - paddleCenterXRef.current) * Math.min(lerp, 0.9);
 
-        if (state.awaitingLaunch) {
-          for (const ball of state.balls) {
-            ball.x = state.paddle.x + state.paddle.width / 2;
-            ball.y = state.paddle.y - ball.radius - 1;
-          }
-        } else if (ph === "playing") {
-          updateBalls(state, dt);
-          updatePowerUps(state, dt, now);
+      const baseWidth = PADDLE_BASE_W + derived.paddleWidthBonus;
+      const wideWidth = PADDLE_WIDE_W + derived.paddleWidthBonus;
+      state.paddle.width = now < state.widePaddleUntil ? wideWidth : baseWidth;
+      state.paddle.x = clamp(paddleCenterXRef.current - state.paddle.width / 2, 0, LOGICAL_W - state.paddle.width);
 
-          if (state.balls.length === 0) {
+      updateBrickMotion(state.bricks, now);
+      updateBrickRegen(state.bricks, dt * 1000);
+
+      for (const ball of state.stuckBalls) {
+        ball.x = clamp(ball.x, state.paddle.x + ball.radius, state.paddle.x + state.paddle.width - ball.radius);
+        ball.y = state.paddle.y - ball.radius;
+      }
+
+      if (state.awaitingLaunch) {
+        for (const ball of state.balls) {
+          ball.x = state.paddle.x + state.paddle.width / 2;
+          ball.y = state.paddle.y - ball.radius - 1;
+        }
+      } else {
+        updateBalls(state, dt, now, derived);
+        updatePickups(state, dt, now, derived);
+        updateLasers(state, dt, now, derived);
+
+        if (state.balls.length === 0 && state.stuckBalls.length === 0) {
+          if (state.shieldCharges > 0) {
+            state.shieldCharges -= 1;
+            state.balls = [createBall(state)];
+            state.awaitingLaunch = true;
+            setAwaitingLaunch(true);
+          } else {
             const newLives = livesRef.current - 1;
             livesRef.current = newLives;
             setLives(newLives);
@@ -569,30 +969,32 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
             } else {
               endGame();
             }
-          } else if (isLevelClear(state.bricks)) {
-            beginLevelTransition();
           }
+        } else if (isLevelClear(state.bricks)) {
+          enterShop();
         }
       }
+    }
 
-      draw(now);
-    },
-    [draw, beginLevelTransition, endGame]
-  );
+    draw(now);
+  }
+
+  const stepRef = useRef(step);
+  stepRef.current = step;
 
   useEffect(() => {
     function frame(now: number) {
       const state = stateRef.current;
       const dt = Math.min((now - state.lastFrameTime) / 1000, 1 / 30);
       state.lastFrameTime = now;
-      step(dt, now);
+      stepRef.current(dt, now);
       rafRef.current = requestAnimationFrame(frame);
     }
     rafRef.current = requestAnimationFrame(frame);
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [step]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -633,7 +1035,9 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  const livesDisplay = "♥".repeat(Math.max(lives, 0)) + "♡".repeat(Math.max(STARTING_LIVES - lives, 0));
+  const livesDisplay = "♥".repeat(Math.max(lives, 0)) + "♡".repeat(Math.max(maxLives - lives, 0));
+  const hintText =
+    stateRef.current.stuckBalls.length > 0 ? "Tap or press Space to relaunch" : "Tap or press Space to launch";
 
   return (
     <div className="bb-game">
@@ -651,6 +1055,10 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
           <span className="bb-hud__val bb-hud__lives">{livesDisplay}</span>
         </div>
         <div className="bb-hud__item">
+          <span className="bb-hud__label">COINS</span>
+          <span className="bb-hud__val bb-hud__coins">{coins}</span>
+        </div>
+        <div className="bb-hud__item">
           <span className="bb-hud__label">HI</span>
           <span className="bb-hud__val">{String(highScore).padStart(6, "0")}</span>
         </div>
@@ -664,19 +1072,56 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
           onPointerMove={handlePointerMove}
         />
 
-        {phase === "start" && (
+        {phase === "menu" && (
           <div className="bb-overlay">
-            <div className="bb-panel">
+            <div className="bb-panel bb-panel--menu">
               <h2 className="bb-panel__title">Brick Breaker</h2>
+
+              <div className="bb-menu__stats">
+                <div>Best Score: {highScore}</div>
+                <div>Best Level: {bestLevel}</div>
+                <div>Games Played: {gamesPlayed}</div>
+              </div>
+
+              <div className="bb-menu__section-title">Instructions</div>
               <p className="bb-panel__sub">
                 Drag or tap to move the paddle.
                 <br />
                 Tap / click / space to launch the ball.
                 <br />
-                Arrow keys also move the paddle.
+                Break bricks, catch coins, and visit the
+                shop after each level to buy permanent
+                upgrades. Arrow keys also move the paddle.
               </p>
-              <button className="bb-btn bb-btn--primary" onClick={() => setPhase("playing")}>
-                Tap to Start
+
+              <div className="bb-menu__section-title">Paddle Color</div>
+              <div className="bb-menu__swatches">
+                {PADDLE_COLORS.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`bb-swatch${paddleColorId === c.id ? " bb-swatch--active" : ""}`}
+                    style={{ background: c.fill, borderColor: c.highlight }}
+                    title={c.label}
+                    onClick={() => selectPaddleColor(c.id)}
+                  />
+                ))}
+              </div>
+
+              <div className="bb-menu__section-title">Difficulty</div>
+              <div className="bb-menu__difficulty">
+                {(Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => (
+                  <button
+                    key={d}
+                    className={`bb-btn bb-btn--option${difficultyId === d ? " bb-btn--option-active" : ""}`}
+                    onClick={() => selectDifficulty(d)}
+                  >
+                    {DIFFICULTY_LABELS[d]}
+                  </button>
+                ))}
+              </div>
+
+              <button className="bb-btn bb-btn--primary" onClick={resetGame}>
+                Start Run
               </button>
             </div>
           </div>
@@ -698,6 +1143,53 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
             <div className="bb-panel">
               <h2 className="bb-panel__title">Level {level}</h2>
               <p className="bb-panel__sub">Get ready!</p>
+            </div>
+          </div>
+        )}
+
+        {phase === "shop" && (
+          <div className="bb-overlay">
+            <div className="bb-panel bb-panel--menu">
+              <h2 className="bb-panel__title">Shop</h2>
+              <p className="bb-panel__sub">Coins: {coins}</p>
+
+              <div className="bb-shop__offers">
+                {shopOffers.map((offer, idx) => {
+                  const owned = upgradeCountsRef.current[offer.def.id];
+                  const canAfford = coins >= offer.cost;
+                  return (
+                    <div className="bb-shop__offer" key={offer.def.id}>
+                      <div className="bb-shop__offer-icon">{offer.def.icon}</div>
+                      <div className="bb-shop__offer-info">
+                        <div className="bb-shop__offer-name">
+                          {offer.def.name} ({owned}/{offer.def.maxStacks})
+                        </div>
+                        <div className="bb-shop__offer-desc">{offer.def.description}</div>
+                      </div>
+                      <button
+                        className="bb-btn bb-shop__buy"
+                        disabled={!canAfford}
+                        onClick={() => buyUpgrade(idx)}
+                      >
+                        Buy {offer.cost}
+                      </button>
+                    </div>
+                  );
+                })}
+                {shopOffers.length === 0 && <p className="bb-panel__sub">All upgrades maxed out!</p>}
+              </div>
+
+              <button
+                className="bb-btn"
+                disabled={coins < rerollCost(rerollsUsed, stateRef.current.difficulty.priceMult)}
+                onClick={rerollAllOffers}
+              >
+                Reroll All ({rerollCost(rerollsUsed, stateRef.current.difficulty.priceMult)})
+              </button>
+
+              <button className="bb-btn bb-btn--primary" onClick={continueFromShop}>
+                Continue
+              </button>
             </div>
           </div>
         )}
@@ -724,9 +1216,9 @@ export default function BrickBreaker({ onQuit }: BrickBreakerProps = {}) {
           </div>
         )}
 
-        {phase === "playing" && awaitingLaunch && (
+        {phase === "playing" && (awaitingLaunch || stateRef.current.stuckBalls.length > 0) && (
           <div className="bb-overlay bb-overlay--transparent">
-            <div className="bb-hint">Tap or press Space to launch</div>
+            <div className="bb-hint">{hintText}</div>
           </div>
         )}
       </div>
