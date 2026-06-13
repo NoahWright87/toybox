@@ -3,7 +3,7 @@ import {
   ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
-  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID, BB_SCORES_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -421,6 +421,10 @@ export function seedFileSystem(store: FileSystemStore): void {
   const trDir = store.createFolder(GAMES_ID, "Typing Racer");
   store.createFile(trDir.id, "Typing Racer.exe", { fileType: "exe", appId: "typing-racer" });
   store.createFile(trDir.id, "SCORES.DAT",       { fileType: "dat", content: "", id: TR_SCORES_ID });
+
+  const bbDir = store.createFolder(GAMES_ID, "Brick Breaker");
+  store.createFile(bbDir.id, "Brick Breaker.exe", { fileType: "exe", appId: "brick-breaker" });
+  store.createFile(bbDir.id, "SCORES.DAT",        { fileType: "dat", content: "", id: BB_SCORES_ID });
 
   // Stub / unimplemented games (no appId — opens "not a valid NS Doors application")
   store.createFile(GAMES_ID, "Solitaire.exe",   { fileType: "exe" });
