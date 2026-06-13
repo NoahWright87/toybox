@@ -4,7 +4,7 @@ import {
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
-  MJ_SCORES_ID, MJ_TILES_FOLDER_ID,
+  MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -436,6 +436,7 @@ export function seedFileSystem(store: FileSystemStore): void {
   const mjDir = store.createFolder(GAMES_ID, "Mahjong Solitaire");
   store.createFile(mjDir.id, "Mahjong Solitaire.exe", { fileType: "exe", appId: "mahjong-solitaire" });
   store.createFile(mjDir.id, "SCORES.DAT",            { fileType: "dat", content: "", id: MJ_SCORES_ID });
+  store.createFile(mjDir.id, "SAVE.DAT",              { fileType: "dat", content: "", id: MJ_STATE_ID });
 
   const mjTilesDir = store.createFolder(mjDir.id, "TILES", { id: MJ_TILES_FOLDER_ID });
   for (const tileId of MJ_TILE_IDS) {

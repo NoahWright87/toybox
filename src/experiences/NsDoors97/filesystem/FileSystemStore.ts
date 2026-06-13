@@ -2,7 +2,7 @@ import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
   ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
-  MJ_SCORES_ID, MJ_TILES_FOLDER_ID,
+  MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -405,6 +405,20 @@ export class FileSystemStore {
       if (mjDir?.kind === "folder") {
         this.nodes.set(MJ_SCORES_ID, {
           id: MJ_SCORES_ID, kind: "file", name: "SCORES.DAT",
+          parentId: mjDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Mahjong SAVE.DAT (in-progress game state) exists
+    if (!this.nodes.has(MJ_STATE_ID)) {
+      mjDir = mjDir ?? this.getNodeByPath("C:\\Programs\\Games\\Mahjong Solitaire");
+      if (mjDir?.kind === "folder") {
+        this.nodes.set(MJ_STATE_ID, {
+          id: MJ_STATE_ID, kind: "file", name: "SAVE.DAT",
           parentId: mjDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,

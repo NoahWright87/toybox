@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
-import { MJ_SCORES_ID } from "../NsDoors97/filesystem/types";
+import { MJ_SCORES_ID, MJ_STATE_ID } from "../NsDoors97/filesystem/types";
 import { TILE_DESIGNS_BY_ID } from "./tiles";
 import {
   generateTurtleLayout,
@@ -27,6 +27,21 @@ import "./MahjongSolitaire.css";
 type Phase = "playing" | "won";
 
 const HINT_DURATION_MS = 1500;
+const SAVE_VERSION = 1;
+
+interface SavedTile {
+  slotId: string;
+  designId: string;
+  removed: boolean;
+}
+
+interface SavedState {
+  version: number;
+  tiles: SavedTile[];
+  score: number;
+  elapsedSec: number;
+  savedAt: number;
+}
 
 function formatTime(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -34,16 +49,55 @@ function formatTime(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function loadSavedState(slots: BoardSlot[]): SavedState | null {
+  const content = fsStore.getFile(MJ_STATE_ID)?.content;
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content) as SavedState;
+    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return null;
+    if (parsed.tiles.length !== slots.length) return null;
+    const slotIds = new Set(slots.map((s) => s.id));
+    for (const tile of parsed.tiles) {
+      if (!slotIds.has(tile.slotId)) return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function buildBoardFromSave(slots: BoardSlot[], saved: SavedState): Board {
+  const bySlotId = new Map<string, SavedTile>();
+  for (const tile of saved.tiles) bySlotId.set(tile.slotId, tile);
+  return slots.map((slot) => {
+    const savedTile = bySlotId.get(slot.id);
+    return {
+      slotId: slot.id,
+      pos: slot.pos,
+      designId: savedTile?.designId ?? "",
+      removed: savedTile?.removed ?? false,
+    };
+  });
+}
+
 export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {}) {
   const slots = useState<BoardSlot[]>(() => generateTurtleLayout())[0];
   const boardSize = useMemo(() => getBoardPixelSize(slots), [slots]);
   const boardOrigin = useMemo(() => getBoardOrigin(slots), [slots]);
 
-  const [board, setBoard] = useState<Board>(() => generateSolvableBoard(slots));
+  const initialSave = useState(() => loadSavedState(slots))[0];
+
+  const [board, setBoard] = useState<Board>(() =>
+    initialSave ? buildBoardFromSave(slots, initialSave) : generateSolvableBoard(slots)
+  );
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [hintPair, setHintPair] = useState<[string, string] | null>(null);
-  const [score, setScore] = useState(0);
-  const [elapsedSec, setElapsedSec] = useState(0);
+  const [score, setScore] = useState(() => initialSave?.score ?? 0);
+  const [elapsedSec, setElapsedSec] = useState(() => {
+    if (!initialSave) return 0;
+    const idleSec = Math.max(0, Math.floor((Date.now() - initialSave.savedAt) / 1000));
+    return initialSave.elapsedSec + idleSec;
+  });
   const [phase, setPhase] = useState<Phase>("playing");
   const [message, setMessage] = useState<string | null>(null);
   const [isNewRecord, setIsNewRecord] = useState(false);
@@ -56,6 +110,37 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
   });
 
   const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Persistence ────────────────────────────────────────────────────────────
+  const persist = useCallback((nextBoard: Board, nextScore: number, nextElapsed: number) => {
+    const saved: SavedState = {
+      version: SAVE_VERSION,
+      tiles: nextBoard.map((t) => ({ slotId: t.slotId, designId: t.designId, removed: t.removed })),
+      score: nextScore,
+      elapsedSec: nextElapsed,
+      savedAt: Date.now(),
+    };
+    try {
+      fsStore.writeFile(MJ_STATE_ID, JSON.stringify(saved));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const clearSave = useCallback(() => {
+    try {
+      fsStore.writeFile(MJ_STATE_ID, "");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Persist the restored (or freshly generated) state immediately, so a
+  // rotation/refresh right after opening the game doesn't lose progress.
+  useEffect(() => {
+    persist(board, score, elapsedSec);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -79,7 +164,8 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
       clearTimeout(hintTimeoutRef.current);
       hintTimeoutRef.current = null;
     }
-    setBoard(generateSolvableBoard(slots));
+    const nextBoard = generateSolvableBoard(slots);
+    setBoard(nextBoard);
     setSelectedSlotId(null);
     setHintPair(null);
     setScore(0);
@@ -88,7 +174,8 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
     setMessage(null);
     setIsNewRecord(false);
     setFinalScore(0);
-  }, [slots]);
+    persist(nextBoard, 0, 0);
+  }, [persist, slots]);
 
   // ── Hint ───────────────────────────────────────────────────────────────────
   const showHint = useCallback(() => {
@@ -110,11 +197,15 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
   // ── Shuffle ────────────────────────────────────────────────────────────────
   const shuffle = useCallback(() => {
     if (phase !== "playing") return;
-    setBoard((prev) => shuffleBoard(prev));
+    setBoard((prev) => {
+      const nextBoard = shuffleBoard(prev);
+      persist(nextBoard, score, elapsedSec);
+      return nextBoard;
+    });
     setSelectedSlotId(null);
     setHintPair(null);
     setMessage(null);
-  }, [phase]);
+  }, [elapsedSec, persist, phase, score]);
 
   // ── Tile click ─────────────────────────────────────────────────────────────
   const handleTileClick = useCallback(
@@ -163,6 +254,9 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
             setHighScore(won);
             setIsNewRecord(true);
           }
+          clearSave();
+        } else {
+          persist(nextBoard, nextScore, elapsedSec);
         }
         return;
       }
@@ -170,7 +264,7 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
       // Different design — move selection to the new tile.
       setSelectedSlotId(tile.slotId);
     },
-    [board, elapsedSec, highScore, phase, selectedSlotId]
+    [board, clearSave, elapsedSec, highScore, persist, phase, score, selectedSlotId]
   );
 
   // ── Menus ──────────────────────────────────────────────────────────────────

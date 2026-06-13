@@ -141,6 +141,27 @@ this file on mount via `fsStore.getFile(MJ_SCORES_ID)?.content` and writes a
 new value via `fsStore.writeFile(MJ_SCORES_ID, String(score))` whenever a
 win beats the previous high score.
 
+## In-progress game state persistence
+
+The board, score, and elapsed time are persisted to
+`C:\Programs\Games\Mahjong Solitaire\SAVE.DAT` (stable FS id `MJ_STATE_ID`) as
+JSON: `{ version, tiles: [{ slotId, designId, removed }], score, elapsedSec,
+savedAt }`. The component:
+
+- Loads and validates this file on mount (version and slot ids must match the
+  current layout); on success, rebuilds the board from `tiles` and restores
+  `score`, and recomputes `elapsedSec` by adding the wall-clock time since
+  `savedAt` to the saved value. If the file is missing or invalid, a fresh
+  board is generated as usual.
+- Writes a new save after every match, after Shuffle, after New Game, and once
+  on mount (so a rotation/refresh immediately after opening still resumes
+  correctly).
+- Clears the save (`fsStore.writeFile(MJ_STATE_ID, "")`) on a win, since a
+  finished game has nothing to resume.
+
+This means rotating the device, refreshing the page, or closing and reopening
+the window resumes the same board, score, and timer.
+
 ## Asset overrides
 
 Tile faces are resolved via `getTileAssetUrl(designId, defaultSvgPath)` in
