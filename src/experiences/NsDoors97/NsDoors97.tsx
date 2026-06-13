@@ -597,11 +597,16 @@ export default function NsDoors97() {
         return;
       }
       // .png sprite files with appId "nsart" open in NS Art
-      // EGO sprites have a bundled public fallback; Goober sprites do not
+      // EGO sprites and Mahjong tile faces have a bundled public fallback; Goober sprites do not
       if (file.fileType === "png" && file.appId === "nsart") {
         const winId = `nsart:${file.id}`;
         const filePath = fsStore.getPath(file.id);
-        const isEgoSprite = filePath.toUpperCase().startsWith("C:\\EGO\\");
+        const upperPath = filePath.toUpperCase();
+        const isEgoSprite = upperPath.startsWith("C:\\EGO\\");
+        const isMahjongTile = upperPath.startsWith("C:\\PROGRAMS\\GAMES\\MAHJONG SOLITAIRE\\TILES\\");
+        const mahjongTileUrl = isMahjongTile
+          ? `/mahjong-tiles/${file.name.replace(/\.png$/i, ".svg")}`
+          : undefined;
         setOpenWindows((prev) => {
           if (prev.some((w) => w.id === winId)) {
             maxZ++;
@@ -620,6 +625,7 @@ export default function NsDoors97() {
               type: "nsart" as const,
               fileId: file.id,
               ...(isEgoSprite ? { fileUrl: `/sprites/${file.name}` } : {}),
+              ...(mahjongTileUrl ? { fileUrl: mahjongTileUrl } : {}),
             },
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
