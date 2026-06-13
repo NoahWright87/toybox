@@ -17,7 +17,6 @@ import {
   generateSolvableBoard,
   getMatchablePairs,
   isFree,
-  shuffleBoard,
   type Board,
   type BoardTile,
 } from "./board";
@@ -182,7 +181,7 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
     if (phase !== "playing") return;
     const pairs = getMatchablePairs(board);
     if (pairs.length === 0) {
-      setMessage("No moves left — try Shuffle!");
+      setMessage("No moves left — try New Game!");
       return;
     }
     const pick = pairs[Math.floor(Math.random() * pairs.length)];
@@ -193,19 +192,6 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
       hintTimeoutRef.current = null;
     }, HINT_DURATION_MS);
   }, [board, phase]);
-
-  // ── Shuffle ────────────────────────────────────────────────────────────────
-  const shuffle = useCallback(() => {
-    if (phase !== "playing") return;
-    setBoard((prev) => {
-      const nextBoard = shuffleBoard(prev);
-      persist(nextBoard, score, elapsedSec);
-      return nextBoard;
-    });
-    setSelectedSlotId(null);
-    setHintPair(null);
-    setMessage(null);
-  }, [elapsedSec, persist, phase, score]);
 
   // ── Tile click ─────────────────────────────────────────────────────────────
   const handleTileClick = useCallback(
@@ -276,12 +262,11 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
           { label: "New Game", onClick: newGame },
           { separator: true },
           { label: "Hint", onClick: showHint },
-          { label: "Shuffle", onClick: shuffle },
           ...(onQuit ? [{ separator: true as const }, { label: "Exit", onClick: onQuit }] : []),
         ],
       },
     ],
-    [newGame, onQuit, shuffle]
+    [newGame, onQuit, showHint]
   );
   useWindowMenus(menus);
 
@@ -308,9 +293,6 @@ export default function MahjongSolitaire({ onQuit }: { onQuit?: () => void } = {
           </button>
           <button type="button" className="mj__btn" onClick={showHint} disabled={phase !== "playing"}>
             Hint
-          </button>
-          <button type="button" className="mj__btn" onClick={shuffle} disabled={phase !== "playing"}>
-            Shuffle
           </button>
         </div>
       </div>

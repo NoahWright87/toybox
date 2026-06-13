@@ -112,13 +112,21 @@ export function assignSolvableIds(slots: BoardSlot[], pairDeckIds: string[]): Ma
       if (free) candidates.push(tile);
     }
 
-    if (candidates.length < 2) {
-      // Should not happen for a valid layout, but guard against infinite loop.
-      break;
+    let first: BoardTile;
+    let second: BoardTile;
+    if (candidates.length >= 2) {
+      const shuffledCandidates = shuffle(candidates);
+      [first, second] = shuffledCandidates;
+    } else {
+      // Fallback: shouldn't happen for a well-formed layout, but guarantees
+      // every slot gets a tile (never blank) even if the reverse-construction
+      // ran out of free candidates early.
+      const stillRemoved = working.filter((tile) => tile.removed);
+      if (stillRemoved.length < 2) break;
+      const shuffledRemaining = shuffle(stillRemoved);
+      [first, second] = shuffledRemaining;
     }
 
-    const shuffledCandidates = shuffle(candidates);
-    const [first, second] = shuffledCandidates;
     const designId = deck.pop();
     if (designId === undefined) break;
 
@@ -152,24 +160,4 @@ export function generateSolvableBoard(slots: BoardSlot[]): Board {
     designId: assignments.get(slot.id) ?? "",
     removed: false,
   }));
-}
-
-/**
- * Reassigns design ids on the currently-occupied tiles of `board`, keeping
- * positions/removed flags unchanged. If fewer than 2 tiles remain, returns
- * the board unchanged.
- */
-export function shuffleBoard(board: Board): Board {
-  const occupied = board.filter((tile) => !tile.removed);
-  if (occupied.length < 2) return board;
-
-  const occupiedSlots: BoardSlot[] = occupied.map((tile) => ({ id: tile.slotId, pos: tile.pos }));
-  const pairDeck = shuffle(occupied.map((tile) => tile.designId));
-  const assignments = assignSolvableIds(occupiedSlots, pairDeck);
-
-  return board.map((tile) => {
-    if (tile.removed) return tile;
-    const designId = assignments.get(tile.slotId);
-    return designId !== undefined ? { ...tile, designId } : tile;
-  });
 }

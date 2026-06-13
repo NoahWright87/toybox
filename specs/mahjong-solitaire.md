@@ -9,9 +9,8 @@
 A Taipei/Shisen-Sho-style "turtle" Mahjong Solitaire. 144 tiles, drawn from a
 traditional 36-design set, are stacked in a layered turtle-shaped layout.
 Click two free tiles with matching faces to remove them. Clear all 144 tiles
-to win. The board is always solvable from its initial deal — if no matching
-free pairs remain, Shuffle reassigns the faces on the remaining tiles without
-changing their positions.
+to win. The board is always dealt in a solvable order (see Generation &
+solvability below).
 
 ## Routes
 
@@ -30,8 +29,7 @@ Solitaire, or via `C:\Programs\Games\Mahjong Solitaire\Mahjong Solitaire.exe`).
   and positioning the board container.
 - `src/experiences/MahjongSolitaire/board.ts` — framework-free game logic:
   `isFree()`, `getFreeTiles()`, `getMatchablePairs()`,
-  `generateSolvableBoard()`, `shuffleBoard()`, and the shared
-  `assignSolvableIds()` helper.
+  `generateSolvableBoard()`, and the shared `assignSolvableIds()` helper.
 - `src/experiences/MahjongSolitaire/mahjongAssets.ts` — `getTileAssetUrl()`,
   the FS asset-override resolver for tile faces.
 - `src/experiences/MahjongSolitaire/MahjongSolitaire.tsx` + `.css` — the game
@@ -94,15 +92,15 @@ that would be free if filled in, given what's already placed), picks two at
 random, and assigns them a shared design id from a shuffled 72-pair deck
 (36 designs × 2 pairs = 144 tiles). Building backward this way guarantees at
 least one full solve order exists — the exact reverse of the construction
-order.
+order. If the reverse construction ever runs out of placeable candidates
+(shouldn't happen for this layout, but guarded against), `assignSolvableIds`
+falls back to pairing up any two remaining empty slots so every tile is
+always assigned a real design — no tile is ever left blank.
 
-Random or greedy play, however, can reach states with no matching free
-pairs even on a solvable board — this mirrors traditional Mahjong Solitaire
-and is expected. **Shuffle** is the escape hatch: it collects the
-currently-occupied slots and their design ids, then re-runs the same
-reverse-construction assignment restricted to that subset, replacing face
-assignments while leaving every tile's position and removed state unchanged.
-There is no hard-loss state — the game is always completable via Shuffle.
+Random or greedy play can still reach states with no matching free pairs
+even on a solvable board — this mirrors traditional Mahjong Solitaire and is
+expected. In that case, Hint reports there are no moves left and the player
+should start a New Game.
 
 ## Controls
 
@@ -115,9 +113,7 @@ There is no hard-loss state — the game is always completable via Shuffle.
   new tile.
 - **Hint** — highlights one currently-matchable free pair (pulsing yellow
   glow) for ~1.5 seconds. If no matchable pairs exist, shows a "No moves
-  left — try Shuffle!" message instead.
-- **Shuffle** — reassigns faces on the remaining tiles (see above) and
-  clears any selection, hint, or message.
+  left — try New Game!" message instead.
 - **New Game** — deals a fresh, solvable 144-tile board and resets score,
   timer, and phase.
 
@@ -153,9 +149,8 @@ savedAt }`. The component:
   `score`, and recomputes `elapsedSec` by adding the wall-clock time since
   `savedAt` to the saved value. If the file is missing or invalid, a fresh
   board is generated as usual.
-- Writes a new save after every match, after Shuffle, after New Game, and once
-  on mount (so a rotation/refresh immediately after opening still resumes
-  correctly).
+- Writes a new save after every match, after New Game, and once on mount (so
+  a rotation/refresh immediately after opening still resumes correctly).
 - Clears the save (`fsStore.writeFile(MJ_STATE_ID, "")`) on a win, since a
   finished game has nothing to resume.
 
@@ -183,6 +178,5 @@ and opens in NS Art for editing.
 | Item | Action |
 |---|---|
 | New Game | Deals a fresh, solvable board; resets score/timer |
-| Hint | Highlights a matchable free pair, or shows a "try Shuffle" message |
-| Shuffle | Reassigns faces on remaining tiles |
+| Hint | Highlights a matchable free pair, or shows a "no moves left" message |
 | Exit | Closes the window (only present when `onQuit` is provided) |
