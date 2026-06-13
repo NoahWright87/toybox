@@ -113,6 +113,8 @@ const GAMES_ITEMS = [
   { id: "peg-solitaire",   icon: "🔴", label: "Peg Solitaire"    },
   { id: "goober-dressup",  icon: "🐱", label: "Goober Dress-Up"  },
   { id: "mahjong-solitaire", icon: "🀄", label: "Mahjong Solitaire" },
+  { id: "jazzball",        icon: "🟧", label: "Jazzball"         },
+  { id: "brick-breaker",  icon: "🧱", label: "Brick Breaker"    },
 ] as const;
 
 const TOOLS_ITEMS = [

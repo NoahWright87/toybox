@@ -169,6 +169,13 @@ export const experiences: Experience[] = [
     path: "/checkers",
   },
   {
+    id: "jazzball",
+    title: "Jazzball",
+    description: "Wall off sections of the board to trap empty space — but don't let the bouncing balls smash your wall before it's done!",
+    category: "game",
+    path: "/jazzball",
+  },
+  {
     id: "goober-dressup",
     title: "Goober Dress-Up",
     description: "Mix and match hats, eyes, ears, and more to dress up Goober the cat. Draw your own art in NS Art to replace the placeholders!",
@@ -178,8 +185,15 @@ export const experiences: Experience[] = [
   {
     id: "mahjong-solitaire",
     title: "Mahjong Solitaire",
-    description: "Classic turtle-layout tile match. Clear all 144 tiles by matching free pairs — use Hint and Shuffle if you get stuck.",
+    description: "Classic turtle-layout tile match. Clear all 144 tiles by matching free pairs — use Hint if you get stuck.",
     category: "game",
     path: "/mahjong-solitaire",
+  },
+  {
+    id: "brick-breaker",
+    title: "Brick Breaker",
+    description: "Smash through endless procedurally-generated brick walls. Catch power-ups and chase a high score.",
+    category: "game",
+    path: "/brick-breaker",
   },
 ];

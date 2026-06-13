@@ -74,7 +74,7 @@ src/
 2. Create `src/pages/{Name}Page.tsx` (and `.css`) — wraps the component with the retro page background and `HelpOverlay`.
 3. Add a route in `src/App.tsx`.
 4. Add an entry to `src/data/experiences.ts`.
-5. Embed the experience as a window inside NS Doors 97 if appropriate.
+5. Embed the experience as a window inside NS Doors 97 if appropriate — **including the Start Menu / Taskbar entry**. See `src/experiences/NsDoors97/CLAUDE.md` for the full registration checklist. It is easy to wire up the window/registry/filesystem pieces and forget the Taskbar's `GAMES_ITEMS`/`TOOLS_ITEMS` list, leaving the app launchable only via the file browser.
 6. Create `specs/{name}.md` documenting current behavior.
 
 ## Retro aesthetic — the rules

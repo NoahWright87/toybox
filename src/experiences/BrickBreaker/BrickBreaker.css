@@ -1,0 +1,320 @@
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
+
+.bb-game {
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 480px);
+  height: min(78dvh, 680px);
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+}
+
+/* ── HUD bar ─────────────────────────────────────────────────────────────────── */
+
+.bb-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  background: #c0c0c0;
+  border-bottom: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 4px 8px;
+  gap: 6px;
+}
+
+.bb-hud__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.bb-hud__label {
+  font-size: 6px;
+  color: #444444;
+}
+
+.bb-hud__val {
+  font-size: 9px;
+  color: #cc4400;
+}
+
+.bb-hud__lives {
+  color: #cc0000;
+  letter-spacing: 1px;
+}
+
+.bb-hud__coins {
+  color: #aa7700;
+}
+
+/* ── Canvas ──────────────────────────────────────────────────────────────────── */
+
+.bb-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0c0400;
+  overflow: hidden;
+}
+
+.bb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  touch-action: none;
+  cursor: pointer;
+}
+
+/* ── Overlays ────────────────────────────────────────────────────────────────── */
+
+.bb-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.bb-overlay--transparent {
+  background: transparent;
+  pointer-events: none;
+}
+
+.bb-overlay--transparent .bb-panel {
+  pointer-events: none;
+}
+
+.bb-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 2px 2px 0 #000000;
+  padding: 16px 20px;
+  min-width: 220px;
+  max-width: 320px;
+  width: 86%;
+  text-align: center;
+}
+
+.bb-panel__title {
+  font-size: 12px;
+  color: #cc4400;
+  margin: 0 0 10px 0;
+  text-shadow: 1px 1px 0 #7a2200;
+}
+
+.bb-panel__sub {
+  font-size: 7px;
+  line-height: 1.8;
+  color: #333333;
+  margin: 0 0 12px 0;
+}
+
+/* ── Pre-game menu / shop (wide, scrollable) ────────────────────────────────── */
+
+.bb-panel--menu {
+  max-width: 400px;
+  max-height: 90%;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.bb-panel--menu .bb-panel__title {
+  text-align: center;
+}
+
+.bb-menu__stats {
+  font-size: 7px;
+  line-height: 1.8;
+  color: #333333;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.bb-menu__section-title {
+  font-size: 8px;
+  color: #5b2d8e;
+  margin: 10px 0 6px 0;
+  text-align: center;
+}
+
+.bb-menu__swatches {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.bb-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.bb-swatch--active {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.bb-menu__difficulty {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.bb-btn--option {
+  font-size: 7px;
+}
+
+.bb-btn--option-active {
+  background: #cc6600;
+  color: #ffffff;
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+/* ── Shop ────────────────────────────────────────────────────────────────────── */
+
+.bb-shop__offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.bb-shop__offer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px;
+}
+
+.bb-shop__offer-icon {
+  font-size: 16px;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.bb-shop__offer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bb-shop__offer-name {
+  font-size: 7px;
+  color: #cc4400;
+  margin-bottom: 4px;
+}
+
+.bb-shop__offer-desc {
+  font-size: 6px;
+  line-height: 1.5;
+  color: #333333;
+}
+
+.bb-shop__buy {
+  font-size: 7px;
+  flex-shrink: 0;
+}
+
+.bb-shop__buy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────── */
+
+.bb-btn {
+  font-family: "Press Start 2P", monospace;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 8px 12px;
+  box-shadow: 1px 1px 0 #000000;
+}
+
+.bb-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
+.bb-btn--primary {
+  font-size: 9px;
+  color: #000000;
+  display: block;
+  width: 100%;
+}
+
+.bb-btn--primary:hover {
+  background: #cc6600;
+  color: #ffffff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+
+/* ── Launch hint ─────────────────────────────────────────────────────────────── */
+
+.bb-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+  font-size: 7px;
+  padding: 6px 10px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  white-space: nowrap;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 420px) {
+  .bb-hud__label {
+    font-size: 5px;
+  }
+  .bb-hud__val {
+    font-size: 8px;
+  }
+  .bb-panel__title {
+    font-size: 10px;
+  }
+  .bb-panel__sub {
+    font-size: 6px;
+  }
+  .bb-hint {
+    font-size: 6px;
+  }
+  .bb-menu__stats,
+  .bb-shop__offer-name {
+    font-size: 6px;
+  }
+  .bb-shop__offer-desc,
+  .bb-btn--option,
+  .bb-shop__buy {
+    font-size: 5px;
+  }
+  .bb-menu__section-title {
+    font-size: 7px;
+  }
+}
