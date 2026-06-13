@@ -152,7 +152,11 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
   useLayoutEffect(() => {
     if (openGamesSubmenu === "word-games" && wordGamesWrapperRef.current) {
       const rect = wordGamesWrapperRef.current.getBoundingClientRect();
-      setWordGamesFlyoutPos({ left: rect.right, top: Math.max(0, rect.bottom - 150) });
+      const flyoutWidth = 150;
+      const left = rect.right + flyoutWidth > window.innerWidth
+        ? Math.max(0, rect.left - flyoutWidth)
+        : rect.right;
+      setWordGamesFlyoutPos({ left, top: Math.max(0, rect.bottom - 150) });
     } else {
       setWordGamesFlyoutPos(null);
     }
