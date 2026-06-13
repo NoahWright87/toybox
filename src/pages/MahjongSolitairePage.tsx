@@ -18,14 +18,10 @@ export default function MahjongSolitairePage() {
             </li>
             <li>
               A tile is <strong>free</strong> when nothing sits on top of it and at
-              least one of its left or right side is open
+              least one of its left or right sides is open
             </li>
             <li>
               <strong>Hint</strong> highlights a matching pair you can clear right now
-            </li>
-            <li>
-              <strong>Shuffle</strong> reassigns the faces on the remaining tiles if
-              you get stuck — the board is always solvable
             </li>
             <li>
               <strong>New Game</strong> deals a fresh, solvable layout

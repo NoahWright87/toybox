@@ -74,15 +74,16 @@ export function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
- * Assigns design ids from `pairDeckIds` (consumed 2-at-a-time, in pairs) to
- * the given `slots`, working backward: at each step, find slots that are
+ * Assigns design ids from `pairDeckIds` (each id consumed once and applied
+ * to a pair of slots) to the given `slots`, working backward: at each step,
+ * find slots that are
  * still unassigned but would be `isFree` if the only "present" tiles were
  * the already-assigned ones plus this candidate (everything else stays
  * transparent/removed). Returns a map of slotId -> designId covering every
  * slot in `slots`.
  *
- * `pairDeckIds` must have exactly `slots.length` entries, structured as
- * consecutive pairs (each id appears an even number of times overall).
+ * `pairDeckIds` must have exactly `slots.length / 2` entries — one id per
+ * pair, each consumed once and assigned to two slots.
  */
 export function assignSolvableIds(slots: BoardSlot[], pairDeckIds: string[]): Map<string, string> {
   const deck = shuffle(pairDeckIds);
@@ -94,9 +95,6 @@ export function assignSolvableIds(slots: BoardSlot[], pairDeckIds: string[]): Ma
     designId: "",
     removed: true,
   }));
-
-  const bySlotId = new Map<string, BoardTile>();
-  for (const tile of working) bySlotId.set(tile.slotId, tile);
 
   const remaining = slots.length;
   for (let step = 0; step < remaining / 2; step++) {
