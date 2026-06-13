@@ -169,6 +169,13 @@ export const experiences: Experience[] = [
     path: "/checkers",
   },
   {
+    id: "jazzball",
+    title: "Jazzball",
+    description: "Wall off sections of the board to trap empty space — but don't let the bouncing balls smash your wall before it's done!",
+    category: "game",
+    path: "/jazzball",
+  },
+  {
     id: "goober-dressup",
     title: "Goober Dress-Up",
     description: "Mix and match hats, eyes, ears, and more to dress up Goober the cat. Draw your own art in NS Art to replace the placeholders!",

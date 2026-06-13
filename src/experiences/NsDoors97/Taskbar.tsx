@@ -112,6 +112,7 @@ const GAMES_ITEMS = [
   { id: "chain-reaction",  icon: "🔗", label: "Chain Reaction"   },
   { id: "peg-solitaire",   icon: "🔴", label: "Peg Solitaire"    },
   { id: "goober-dressup",  icon: "🐱", label: "Goober Dress-Up"  },
+  { id: "jazzball",        icon: "🟧", label: "Jazzball"         },
   { id: "brick-breaker",  icon: "🧱", label: "Brick Breaker"    },
 ] as const;
 
