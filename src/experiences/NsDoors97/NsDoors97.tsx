@@ -34,6 +34,7 @@ import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import GooberDressup from "../GooberDressup/GooberDressup";
 import Checkers from "../Checkers/Checkers";
 import Jazzball from "../Jazzball/Jazzball";
+import BrickBreaker from "../BrickBreaker/BrickBreaker";
 import BombFinder, { type Difficulty as BfDifficulty } from "../BombFinder/BombFinder";
 import CardsLauncher from "../Cards/CardsLauncher";
 import War from "../Cards/War";
@@ -89,7 +90,8 @@ type AppAction =
   | "peg-solitaire"
   | "goober-dressup"
   | "checkers"
-  | "jazzball";
+  | "jazzball"
+  | "brick-breaker";
 
 interface AppDef {
   title: string;
@@ -123,6 +125,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "goober-dressup":  { title: "Goober Dress-Up",   icon: "🐱", action: "goober-dressup"  },
   "checkers":        { title: "Checkers",           icon: "⚫", action: "checkers"        },
   "jazzball":        { title: "Jazzball",            icon: "🟧", action: "jazzball"        },
+  "brick-breaker":   { title: "Brick Breaker",      icon: "🧱", action: "brick-breaker"   },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -180,7 +183,8 @@ type WindowContent =
   | { type: "peg-solitaire" }
   | { type: "goober-dressup"; fileId?: string }
   | { type: "checkers" }
-  | { type: "jazzball" };
+  | { type: "jazzball" }
+  | { type: "brick-breaker" };
 
 interface OpenWindow {
   id: string;
@@ -511,6 +515,7 @@ export default function NsDoors97() {
         case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 500; break;
         case "checkers":        content = { type: "checkers" as const };         width = 420; break;
         case "jazzball":        content = { type: "jazzball" as const };          width = 500; break;
+        case "brick-breaker":   content = { type: "brick-breaker" as const };     width = 480; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -1063,6 +1068,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "jazzball" && (
             <Jazzball onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "brick-breaker" && (
+            <BrickBreaker onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

@@ -26,6 +26,7 @@ import GooberDressupPage from "./pages/GooberDressupPage";
 import HellMapEditorPage from "./pages/HellMapEditorPage";
 import CheckersPage from "./pages/CheckersPage";
 import JazzballPage from "./pages/JazzballPage";
+import BrickBreakerPage from "./pages/BrickBreakerPage";
 
 export default function App() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/hell-map-editor" element={<HellMapEditorPage />} />
         <Route path="/checkers" element={<CheckersPage />} />
         <Route path="/jazzball" element={<JazzballPage />} />
+        <Route path="/brick-breaker" element={<BrickBreakerPage />} />
       </Routes>
     </BrowserRouter>
   );

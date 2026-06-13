@@ -1,7 +1,7 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
   ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
-  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID, JB_SCORES_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID, JB_SCORES_ID, BB_SCORES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -554,6 +554,38 @@ export class FileSystemStore {
         this.nodes.set(JB_SCORES_ID, {
           id: JB_SCORES_ID, kind: "file", name: "SCORES.DAT",
           parentId: jbDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Brick Breaker folder + SCORES.DAT exist
+    if (!this.nodes.has(BB_SCORES_ID)) {
+      let bbDir = this.getNodeByPath("C:\\Programs\\Games\\Brick Breaker");
+      if (!bbDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: "fs:games-bb", kind: "folder", name: "Brick Breaker",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:games-bb-exe", {
+            id: "fs:games-bb-exe", kind: "file", name: "Brick Breaker.exe",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "exe", content: "", mimeType: "application/octet-stream",
+            system: false, readonly: false, appId: "brick-breaker",
+          } as FSFile);
+          bbDir = folder;
+        }
+      }
+      if (bbDir?.kind === "folder") {
+        this.nodes.set(BB_SCORES_ID, {
+          id: BB_SCORES_ID, kind: "file", name: "SCORES.DAT",
+          parentId: bbDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
         } as FSFile);
