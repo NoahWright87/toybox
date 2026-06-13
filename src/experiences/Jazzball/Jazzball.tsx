@@ -12,14 +12,10 @@ const CH = 320;
 const CELL = 8;
 const COLS = CW / CELL; // 60
 const ROWS = CH / CELL; // 40
-const BALL_RADIUS = 3;
-const WALL_GROW_RATE = 40; // cells per second, per direction
 const FLASH_DURATION = 0.4;
 const TARGET_PERCENT = 75;
-const MAX_LIVES = 3;
 const INITIAL_BALLS = 2;
-const BALL_BASE_SPEED = 70; // px / second
-const BALL_SPEED_STEP = 8;
+const HEART_ICON_THRESHOLD = 6; // above this many max lives, show "❤️x N" instead of repeated icons
 
 // Cell states
 const OPEN = 0;
@@ -30,8 +26,65 @@ const GROWING = 3;
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Orientation = "horizontal" | "vertical";
-type Phase = "playing" | "levelComplete" | "gameOver";
-type BallMode = "smooth" | "diagonal";
+type Phase = "settings" | "playing" | "levelComplete" | "gameOver";
+type GamePhase = "playing" | "levelComplete" | "gameOver";
+type BallMode = "smooth" | "diagonal" | "random";
+type Difficulty = "easy" | "normal" | "hard";
+type LivesMode = "fixed3" | "ballsPlus1" | "ballsTimes2";
+
+interface DifficultyConfig {
+  label: string;
+  ballRadius: number;
+  wallGrowRate: number; // cells per second, per arm
+  livesMode: LivesMode;
+  ballMode: BallMode;
+  ballBaseSpeed: number; // px / second at level 1
+  ballSpeedStep: number; // px / second added per level
+}
+
+const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {
+  easy: {
+    label: "Easy",
+    ballRadius: 2,
+    wallGrowRate: 60,
+    livesMode: "ballsTimes2",
+    ballMode: "random",
+    ballBaseSpeed: 70,
+    ballSpeedStep: 6,
+  },
+  normal: {
+    label: "Normal",
+    ballRadius: 4,
+    wallGrowRate: 40,
+    livesMode: "ballsPlus1",
+    ballMode: "smooth",
+    ballBaseSpeed: 95,
+    ballSpeedStep: 8,
+  },
+  hard: {
+    label: "Hard",
+    ballRadius: 6,
+    wallGrowRate: 25,
+    livesMode: "fixed3",
+    ballMode: "diagonal",
+    ballBaseSpeed: 130,
+    ballSpeedStep: 12,
+  },
+};
+
+const DIFFICULTY_ORDER: Difficulty[] = ["easy", "normal", "hard"];
+
+const LIVES_MODE_LABEL: Record<LivesMode, string> = {
+  fixed3: "3 (fixed)",
+  ballsPlus1: "balls + 1",
+  ballsTimes2: "balls × 2",
+};
+
+const BALL_MODE_LABEL: Record<BallMode, string> = {
+  smooth: "Any angle",
+  diagonal: "Pure diagonal",
+  random: "Random on bounce",
+};
 
 interface Ball {
   x: number;
@@ -63,21 +116,36 @@ interface GameState {
   balls: Ball[];
   buildingWall: BuildingWall | null;
   orientation: Orientation;
-  ballMode: BallMode;
+  difficulty: Difficulty;
+  config: DifficultyConfig;
   lives: number;
+  maxLives: number;
   level: number;
   score: number;
   percentCleared: number;
   filledCount: number;
-  phase: Phase;
+  phase: GamePhase;
   flashTimer: number;
   lastFrameTime: number;
 }
 
-interface ScoresData {
+interface DifficultyScores {
   highScore: number;
   bestLevel: number;
 }
+
+interface ScoresData {
+  easy: DifficultyScores;
+  normal: DifficultyScores;
+  hard: DifficultyScores;
+  lastDifficulty?: Difficulty;
+}
+
+const DEFAULT_SCORES: ScoresData = {
+  easy: { highScore: 0, bestLevel: 1 },
+  normal: { highScore: 0, bestLevel: 1 },
+  hard: { highScore: 0, bestLevel: 1 },
+};
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -85,8 +153,23 @@ function totalArea(): number {
   return (COLS - 2) * (ROWS - 2);
 }
 
-function ballSpeedForLevel(level: number): number {
-  return BALL_BASE_SPEED + (level - 1) * BALL_SPEED_STEP;
+function ballSpeedForLevel(config: DifficultyConfig, level: number): number {
+  return config.ballBaseSpeed + (level - 1) * config.ballSpeedStep;
+}
+
+function livesForBallCount(config: DifficultyConfig, ballCount: number): number {
+  switch (config.livesMode) {
+    case "fixed3": return 3;
+    case "ballsPlus1": return ballCount + 1;
+    case "ballsTimes2": return ballCount * 2;
+  }
+}
+
+function renderLives(lives: number, maxLives: number): string {
+  if (maxLives <= HEART_ICON_THRESHOLD) {
+    return "♥".repeat(Math.max(0, lives)) + "♡".repeat(Math.max(0, maxLives - lives));
+  }
+  return `❤️x${Math.max(0, lives)}`;
 }
 
 function cellIndex(col: number, row: number): number {
@@ -105,9 +188,9 @@ function createGrid(): Uint8Array {
   return grid;
 }
 
-function spawnBalls(count: number, speed: number, mode: BallMode): Ball[] {
+function spawnBalls(count: number, speed: number, mode: BallMode, radius: number): Ball[] {
   const balls: Ball[] = [];
-  const margin = CELL + BALL_RADIUS;
+  const margin = CELL + radius;
   for (let i = 0; i < count; i++) {
     let x = 0;
     let y = 0;
@@ -116,7 +199,7 @@ function spawnBalls(count: number, speed: number, mode: BallMode): Ball[] {
       x = margin + Math.random() * (CW - 2 * margin);
       y = margin + Math.random() * (CH - 2 * margin);
       attempts++;
-    } while (attempts < 20 && balls.some((b) => Math.hypot(b.x - x, b.y - y) < BALL_RADIUS * 4));
+    } while (attempts < 20 && balls.some((b) => Math.hypot(b.x - x, b.y - y) < radius * 4));
 
     let vx: number;
     let vy: number;
@@ -133,15 +216,18 @@ function spawnBalls(count: number, speed: number, mode: BallMode): Ball[] {
   return balls;
 }
 
-function newGameState(level: number, lives: number, score: number, orientation: Orientation, ballMode: BallMode): GameState {
+function newGameState(difficulty: Difficulty, level: number, lives: number, score: number, orientation: Orientation): GameState {
+  const config = DIFFICULTIES[difficulty];
   const ballCount = INITIAL_BALLS + (level - 1);
   return {
     grid: createGrid(),
-    balls: spawnBalls(ballCount, ballSpeedForLevel(level), ballMode),
+    balls: spawnBalls(ballCount, ballSpeedForLevel(config, level), config.ballMode, config.ballRadius),
     buildingWall: null,
     orientation,
-    ballMode,
+    difficulty,
+    config,
     lives,
+    maxLives: lives,
     level,
     score,
     percentCleared: 0,
@@ -160,7 +246,7 @@ function isSolid(grid: Uint8Array, col: number, row: number): boolean {
   return v === WALL || v === FILLED;
 }
 
-function cellHitsBall(idx: number, ball: Ball): boolean {
+function cellHitsBall(idx: number, ball: Ball, radius: number): boolean {
   const col = idx % COLS;
   const row = (idx - col) / COLS;
   const cx = col * CELL;
@@ -169,7 +255,7 @@ function cellHitsBall(idx: number, ball: Ball): boolean {
   const closestY = Math.min(Math.max(ball.y, cy), cy + CELL);
   const dx = ball.x - closestX;
   const dy = ball.y - closestY;
-  return dx * dx + dy * dy < BALL_RADIUS * BALL_RADIUS;
+  return dx * dx + dy * dy < radius * radius;
 }
 
 function newArm(front: number): WallArm {
@@ -282,7 +368,7 @@ function armIsHit(state: GameState, arm: WallArm): boolean {
   if (arm.done || arm.destroyed || arm.cells.size === 0) return false;
   for (const idx of arm.cells) {
     for (const ball of state.balls) {
-      if (cellHitsBall(idx, ball)) return true;
+      if (cellHitsBall(idx, ball, state.config.ballRadius)) return true;
     }
   }
   return false;
@@ -294,8 +380,9 @@ function advanceWall(state: GameState, dt: number): void {
   const wall = state.buildingWall;
   if (!wall) return;
 
-  wall.arm1.accum += WALL_GROW_RATE * dt;
-  wall.arm2.accum += WALL_GROW_RATE * dt;
+  const rate = state.config.wallGrowRate;
+  wall.arm1.accum += rate * dt;
+  wall.arm2.accum += rate * dt;
   growArm(state, wall, wall.arm1, -1);
   growArm(state, wall, wall.arm2, 1);
 
@@ -312,24 +399,38 @@ function advanceWall(state: GameState, dt: number): void {
 }
 
 function moveBalls(state: GameState, dt: number): void {
+  const radius = state.config.ballRadius;
   for (const ball of state.balls) {
     let nx = ball.x + ball.vx * dt;
     let ny = ball.y + ball.vy * dt;
+    let bounced = false;
 
-    const edgeX = ball.vx > 0 ? nx + BALL_RADIUS : nx - BALL_RADIUS;
+    const edgeX = ball.vx > 0 ? nx + radius : nx - radius;
     const rowForX = Math.floor(ball.y / CELL);
     const colX = Math.floor(edgeX / CELL);
     if (isSolid(state.grid, colX, rowForX)) {
       ball.vx = -ball.vx;
       nx = ball.x;
+      bounced = true;
     }
 
-    const edgeY = ball.vy > 0 ? ny + BALL_RADIUS : ny - BALL_RADIUS;
+    const edgeY = ball.vy > 0 ? ny + radius : ny - radius;
     const colForY = Math.floor(nx / CELL);
     const rowY = Math.floor(edgeY / CELL);
     if (isSolid(state.grid, colForY, rowY)) {
       ball.vy = -ball.vy;
       ny = ball.y;
+      bounced = true;
+    }
+
+    // Random mode: every bounce kicks the ball off at a fresh, unpredictable
+    // angle (within +/-45 degrees of the reflected direction) instead of a
+    // clean mirror reflection.
+    if (bounced && state.config.ballMode === "random") {
+      const speed = Math.hypot(ball.vx, ball.vy);
+      const angle = Math.atan2(ball.vy, ball.vx) + (Math.random() - 0.5) * (Math.PI / 2);
+      ball.vx = Math.cos(angle) * speed;
+      ball.vy = Math.sin(angle) * speed;
     }
 
     ball.x = nx;
@@ -354,13 +455,37 @@ function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   for (const ball of state.balls) {
     ctx.fillStyle = "#ff6b00";
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, state.config.ballRadius, 0, Math.PI * 2);
     ctx.fill();
   }
 
   if (state.flashTimer > 0) {
     ctx.fillStyle = `rgba(255, 0, 0, ${(state.flashTimer / FLASH_DURATION) * 0.3})`;
     ctx.fillRect(0, 0, CW, CH);
+  }
+}
+
+// ─── Scores persistence ────────────────────────────────────────────────────────
+
+function parseScores(content: string | undefined): ScoresData {
+  if (!content) return { ...DEFAULT_SCORES };
+  try {
+    const data = JSON.parse(content) as Partial<ScoresData> & { highScore?: number; bestLevel?: number };
+    // Migrate old single-difficulty format ({highScore, bestLevel}) into "normal".
+    if (typeof data.highScore === "number" && !data.easy && !data.normal && !data.hard) {
+      return {
+        ...DEFAULT_SCORES,
+        normal: { highScore: data.highScore, bestLevel: data.bestLevel ?? 1 },
+      };
+    }
+    return {
+      easy: { ...DEFAULT_SCORES.easy, ...(data.easy ?? {}) },
+      normal: { ...DEFAULT_SCORES.normal, ...(data.normal ?? {}) },
+      hard: { ...DEFAULT_SCORES.hard, ...(data.hard ?? {}) },
+      lastDifficulty: data.lastDifficulty,
+    };
+  } catch {
+    return { ...DEFAULT_SCORES };
   }
 }
 
@@ -376,36 +501,29 @@ export default function Jazzball({ onQuit }: JazzballProps) {
   const rafRef = useRef<number>(0);
 
   const [orientation, setOrientation] = useState<Orientation>("vertical");
-  const [ballMode, setBallMode] = useState<BallMode>("smooth");
-  const [phase, setPhase] = useState<Phase>("playing");
+  const [phase, setPhase] = useState<Phase>("settings");
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
   const [level, setLevel] = useState(1);
-  const [lives, setLives] = useState(MAX_LIVES);
+  const [lives, setLives] = useState(3);
+  const [maxLives, setMaxLives] = useState(3);
   const [score, setScore] = useState(0);
   const [percentCleared, setPercentCleared] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [bestLevel, setBestLevel] = useState(1);
+  const [scores, setScores] = useState<ScoresData>(DEFAULT_SCORES);
 
-  const highScoreRef = useRef(highScore);
-  const bestLevelRef = useRef(bestLevel);
-  useEffect(() => { highScoreRef.current = highScore; }, [highScore]);
-  useEffect(() => { bestLevelRef.current = bestLevel; }, [bestLevel]);
+  const scoresRef = useRef(scores);
+  useEffect(() => { scoresRef.current = scores; }, [scores]);
 
   // Load saved scores from the filesystem on mount
   useEffect(() => {
     const content = fsStore.getFile(JB_SCORES_ID)?.content;
-    if (!content) return;
-    try {
-      const data = JSON.parse(content) as Partial<ScoresData>;
-      if (typeof data.highScore === "number") setHighScore(data.highScore);
-      if (typeof data.bestLevel === "number") setBestLevel(data.bestLevel);
-    } catch {
-      // ignore corrupt SCORES.DAT
-    }
+    const loaded = parseScores(content);
+    setScores(loaded);
+    if (loaded.lastDifficulty) setDifficulty(loaded.lastDifficulty);
   }, []);
 
-  const persistScores = useCallback((newHighScore: number, newBestLevel: number) => {
+  const persistScores = useCallback((newScores: ScoresData) => {
     try {
-      fsStore.writeFile(JB_SCORES_ID, JSON.stringify({ highScore: newHighScore, bestLevel: newBestLevel }));
+      fsStore.writeFile(JB_SCORES_ID, JSON.stringify(newScores));
     } catch {
       // ignore
     }
@@ -439,15 +557,21 @@ export default function Jazzball({ onQuit }: JazzballProps) {
 
       const phaseAfter = state.phase as Phase;
       if (phaseAfter === "gameOver") {
-        if (state.score > highScoreRef.current) { setHighScore(state.score); persistScores(state.score, bestLevelRef.current); }
+        const prev = scoresRef.current[state.difficulty];
+        if (state.score > prev.highScore) {
+          const next: ScoresData = { ...scoresRef.current, [state.difficulty]: { ...prev, highScore: state.score } };
+          setScores(next);
+          persistScores(next);
+        }
         setPhase("gameOver");
       } else if (phaseAfter === "levelComplete") {
-        const newHigh = Math.max(highScoreRef.current, state.score);
-        const newBest = Math.max(bestLevelRef.current, state.level);
-        if (newHigh !== highScoreRef.current || newBest !== bestLevelRef.current) {
-          setHighScore(newHigh);
-          setBestLevel(newBest);
-          persistScores(newHigh, newBest);
+        const prev = scoresRef.current[state.difficulty];
+        const newHigh = Math.max(prev.highScore, state.score);
+        const newBest = Math.max(prev.bestLevel, state.level);
+        if (newHigh !== prev.highScore || newBest !== prev.bestLevel) {
+          const next: ScoresData = { ...scoresRef.current, [state.difficulty]: { highScore: newHigh, bestLevel: newBest } };
+          setScores(next);
+          persistScores(next);
         }
         setPhase("levelComplete");
       }
@@ -457,33 +581,52 @@ export default function Jazzball({ onQuit }: JazzballProps) {
     rafRef.current = requestAnimationFrame(gameLoop);
   }, [persistScores]);
 
-  // Start the game on mount
+  // Run the game loop whenever a game is in progress (not on the settings screen)
   useEffect(() => {
-    gameRef.current = newGameState(1, MAX_LIVES, 0, "vertical", "smooth");
+    if (phase === "settings") return;
     rafRef.current = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [gameLoop]);
+  }, [phase, gameLoop]);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
-  const startNewGame = useCallback(() => {
-    gameRef.current = newGameState(1, MAX_LIVES, 0, orientation, ballMode);
+  const startNewGame = useCallback((diff: Difficulty) => {
+    const config = DIFFICULTIES[diff];
+    const initLives = livesForBallCount(config, INITIAL_BALLS);
+    gameRef.current = newGameState(diff, 1, initLives, 0, orientation);
+    setDifficulty(diff);
     setLevel(1);
-    setLives(MAX_LIVES);
+    setLives(initLives);
+    setMaxLives(initLives);
     setScore(0);
     setPercentCleared(0);
     setPhase("playing");
-  }, [orientation, ballMode]);
+
+    const next: ScoresData = { ...scoresRef.current, lastDifficulty: diff };
+    if (next.lastDifficulty !== scoresRef.current.lastDifficulty) {
+      setScores(next);
+      persistScores(next);
+    }
+  }, [orientation, persistScores]);
 
   const startNextLevel = useCallback(() => {
     const state = gameRef.current;
     if (!state) return;
     const nextLevel = state.level + 1;
-    gameRef.current = newGameState(nextLevel, state.lives, state.score, orientation, ballMode);
+    const ballCount = INITIAL_BALLS + (nextLevel - 1);
+    const nextLives = state.config.livesMode === "fixed3" ? state.lives : livesForBallCount(state.config, ballCount);
+    gameRef.current = newGameState(state.difficulty, nextLevel, nextLives, state.score, orientation);
     setLevel(nextLevel);
+    setLives(nextLives);
+    setMaxLives(nextLives);
     setPercentCleared(0);
     setPhase("playing");
-  }, [orientation, ballMode]);
+  }, [orientation]);
+
+  const returnToSettings = useCallback(() => {
+    gameRef.current = null;
+    setPhase("settings");
+  }, []);
 
   const toggleOrientation = useCallback(() => {
     setOrientation((prev) => {
@@ -491,20 +634,6 @@ export default function Jazzball({ onQuit }: JazzballProps) {
       if (gameRef.current) gameRef.current.orientation = next;
       return next;
     });
-  }, []);
-
-  const setBallModeAndRemap = useCallback((mode: BallMode) => {
-    setBallMode(mode);
-    const state = gameRef.current;
-    if (!state) return;
-    state.ballMode = mode;
-    if (mode === "diagonal") {
-      const speed = ballSpeedForLevel(state.level);
-      for (const ball of state.balls) {
-        ball.vx = (ball.vx >= 0 ? 1 : -1) * speed;
-        ball.vy = (ball.vy >= 0 ? 1 : -1) * speed;
-      }
-    }
   }, []);
 
   // ── Pointer / wall-building input ───────────────────────────────────────────
@@ -544,30 +673,54 @@ export default function Jazzball({ onQuit }: JazzballProps) {
     {
       label: "Game",
       items: [
-        { label: "New Game", onClick: startNewGame },
+        ...(phase !== "settings" ? [{ label: "New Game", onClick: () => startNewGame(difficulty) }] : []),
+        { label: "Change Difficulty...", onClick: returnToSettings },
         ...(onQuit ? [{ separator: true as const }, { label: "Quit", onClick: onQuit }] : []),
       ],
     },
-    {
-      label: "Options",
-      items: [
-        { label: "Smooth Movement", checked: ballMode === "smooth", onClick: () => setBallModeAndRemap("smooth") },
-        { label: "Diagonal Movement", checked: ballMode === "diagonal", onClick: () => setBallModeAndRemap("diagonal") },
-      ],
-    },
-  ], [startNewGame, onQuit, ballMode, setBallModeAndRemap]);
+  ], [phase, difficulty, startNewGame, returnToSettings, onQuit]);
   useWindowMenus(menus);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  if (phase === "settings") {
+    return (
+      <div className="jzb">
+        <div className="jzb-launcher">
+          <div className="jzb-launcher__title">Select Difficulty</div>
+          {DIFFICULTY_ORDER.map((diff) => {
+            const config = DIFFICULTIES[diff];
+            const diffScores = scores[diff];
+            return (
+              <div key={diff} className="jzb-launcher__option">
+                <div className="jzb-launcher__option-header">
+                  <span className="jzb-launcher__option-label">{config.label}</span>
+                  <span className="jzb-launcher__option-hi">HI {diffScores.highScore} &middot; LVL {diffScores.bestLevel}</span>
+                </div>
+                <div className="jzb-launcher__option-stats">
+                  <span>Ball size: {config.ballRadius * 2}px</span>
+                  <span>Wall speed: {config.wallGrowRate}/s</span>
+                  <span>Lives: {LIVES_MODE_LABEL[config.livesMode]}</span>
+                  <span>Bounce: {BALL_MODE_LABEL[config.ballMode]}</span>
+                  <span>Ball speed: {config.ballBaseSpeed}px/s</span>
+                </div>
+                <button className="jzb-launcher__btn" onClick={() => startNewGame(diff)}>
+                  Play {config.label}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="jzb">
-      <div className="jzb__hud">
-        <span className="jzb__hud-item">LEVEL {level}</span>
-        <span className="jzb__hud-item jzb__hud-lives">{"♥".repeat(lives)}{"♡".repeat(MAX_LIVES - lives)}</span>
-        <span className="jzb__hud-item">SCORE {score}</span>
-        <span className="jzb__hud-item">{Math.floor(percentCleared)}% / {TARGET_PERCENT}%</span>
-        <span className="jzb__hud-item">HI {highScore}</span>
+      <div className="jzb__hud jzb__hud--top">
+        <span className="jzb__hud-item jzb__hud-level">LVL {level}</span>
+        <span className="jzb__hud-item jzb__hud-lives">{renderLives(lives, maxLives)}</span>
+        <span className="jzb__hud-item jzb__hud-percent">{Math.floor(percentCleared)}% / {TARGET_PERCENT}%</span>
       </div>
 
       <div className="jzb__game-wrapper">
@@ -592,8 +745,9 @@ export default function Jazzball({ onQuit }: JazzballProps) {
           <div className="jzb__overlay">
             <div className="jzb__overlay-title jzb__overlay-title--dead">GAME OVER</div>
             <div className="jzb__overlay-sub">Score {score} &middot; Level {level}</div>
-            {bestLevel > 1 && <div className="jzb__overlay-sub">Best Level {bestLevel}</div>}
-            <button className="jzb__btn" onClick={startNewGame}>NEW GAME</button>
+            {scores[difficulty].bestLevel > 1 && <div className="jzb__overlay-sub">Best Level {scores[difficulty].bestLevel}</div>}
+            <button className="jzb__btn" onClick={() => startNewGame(difficulty)}>NEW GAME</button>
+            <button className="jzb__btn jzb__btn--secondary" onClick={returnToSettings}>CHANGE DIFFICULTY</button>
           </div>
         )}
       </div>
@@ -610,6 +764,11 @@ export default function Jazzball({ onQuit }: JazzballProps) {
         <span className="jzb__controls-hint">
           Click the board to build a wall &middot; right-click or tap the button to change direction
         </span>
+      </div>
+
+      <div className="jzb__hud jzb__hud--bottom">
+        <span className="jzb__hud-item">SCORE {score}</span>
+        <span className="jzb__hud-item">HI {scores[difficulty].highScore}</span>
       </div>
     </div>
   );
