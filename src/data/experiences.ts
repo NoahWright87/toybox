@@ -183,6 +183,13 @@ export const experiences: Experience[] = [
     path: "/goober-dressup",
   },
   {
+    id: "mahjong-solitaire",
+    title: "Mahjong Solitaire",
+    description: "Classic turtle-layout tile match. Clear all 144 tiles by matching free pairs — use Hint if you get stuck.",
+    category: "game",
+    path: "/mahjong-solitaire",
+  },
+  {
     id: "brick-breaker",
     title: "Brick Breaker",
     description: "Smash through endless procedurally-generated brick walls. Catch power-ups and chase a high score.",

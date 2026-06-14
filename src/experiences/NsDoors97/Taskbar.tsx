@@ -99,21 +99,25 @@ function FullscreenButton() {
 // ── Menu item data ────────────────────────────────────────────────────────────
 
 const GAMES_ITEMS = [
+  { id: "pool",           icon: "🎱", label: "8-Ball Pool"      },
+  { id: "bomb-finder",    icon: "💣", label: "Bomb Finder"      },
+  { id: "brick-breaker",  icon: "🧱", label: "Brick Breaker"    },
   { id: "cards",          icon: "🃏", label: "Cards"            },
   { id: "checkers",       icon: "⚫", label: "Checkers"         },
-  { id: "tic-tac-toe",    icon: "✖️",  label: "Tic-Tac-Toe"     },
-  { id: "pool",           icon: "🎱", label: "8-Ball Pool"      },
-  { id: "word-whirlwind", icon: "🌪️", label: "Word Whirlwind"  },
-  { id: "words",          icon: "🔤", label: "WORDS"            },
-  { id: "bomb-finder",    icon: "💣", label: "Bomb Finder"      },
   { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
-  { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
-  { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
-  { id: "chain-reaction",  icon: "🔗", label: "Chain Reaction"   },
-  { id: "peg-solitaire",   icon: "🔴", label: "Peg Solitaire"    },
   { id: "goober-dressup",  icon: "🐱", label: "Goober Dress-Up"  },
   { id: "jazzball",        icon: "🟧", label: "Jazzball"         },
-  { id: "brick-breaker",  icon: "🧱", label: "Brick Breaker"    },
+  { id: "mahjong-solitaire", icon: "🀄", label: "Mahjong Solitaire" },
+  { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
+  { id: "peg-solitaire",   icon: "🔴", label: "Peg Solitaire"    },
+  { id: "tic-tac-toe",    icon: "✖️",  label: "Tic-Tac-Toe"     },
+] as const;
+
+const WORD_GAMES_ITEMS = [
+  { id: "chain-reaction",  icon: "🔗", label: "Chain Reaction"   },
+  { id: "typing-racer",   icon: "⌨️", label: "Type 'Em Up"      },
+  { id: "word-whirlwind", icon: "🌪️", label: "Word Whirlwind"  },
+  { id: "words",          icon: "🔤", label: "WORDS"            },
 ] as const;
 
 const TOOLS_ITEMS = [
@@ -124,14 +128,18 @@ const TOOLS_ITEMS = [
 ] as const;
 
 type OpenSubmenu = "games" | "tools" | "settings" | null;
+type OpenGamesSubmenu = "word-games" | null;
 
 // ── Taskbar ───────────────────────────────────────────────────────────────────
 
 export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRestart, onOpenSettings, onOpenAbout, onExitToTos, onOpenApp }: TaskbarProps) {
   const [startOpen, setStartOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<OpenSubmenu>(null);
+  const [openGamesSubmenu, setOpenGamesSubmenu] = useState<OpenGamesSubmenu>(null);
   const startAreaRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
+  const wordGamesWrapperRef = useRef<HTMLDivElement>(null);
+  const [wordGamesFlyoutPos, setWordGamesFlyoutPos] = useState<{ left: number; top: number } | null>(null);
 
   useLayoutEffect(() => {
     if (openSubmenu !== null && submenuRef.current) {
@@ -140,6 +148,19 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
       submenuRef.current.style.maxHeight = `${Math.max(120, available)}px`;
     }
   }, [openSubmenu]);
+
+  useLayoutEffect(() => {
+    if (openGamesSubmenu === "word-games" && wordGamesWrapperRef.current) {
+      const rect = wordGamesWrapperRef.current.getBoundingClientRect();
+      const flyoutWidth = 150;
+      const left = rect.right + flyoutWidth > window.innerWidth
+        ? Math.max(0, rect.left - flyoutWidth)
+        : rect.right;
+      setWordGamesFlyoutPos({ left, top: Math.max(0, rect.bottom - 150) });
+    } else {
+      setWordGamesFlyoutPos(null);
+    }
+  }, [openGamesSubmenu]);
 
   // Close on outside click
   useEffect(() => {
@@ -157,6 +178,7 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
   const close = useCallback(() => {
     setStartOpen(false);
     setOpenSubmenu(null);
+    setOpenGamesSubmenu(null);
   }, []);
 
   const handleOpenAbout = useCallback(() => {
@@ -204,7 +226,10 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
               <div
                 className="ns-start-menu__item-wrapper"
                 onMouseEnter={() => setOpenSubmenu("games")}
-                onMouseLeave={() => setOpenSubmenu(null)}
+                onMouseLeave={() => {
+                  setOpenSubmenu(null);
+                  setOpenGamesSubmenu(null);
+                }}
               >
                 <button className="ns-start-menu__item">
                   <span className="ns-start-menu__item-icon">🎮</span>
@@ -218,11 +243,42 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                         key={item.id}
                         className="ns-start-menu__item"
                         onClick={() => handleOpenApp(item.id)}
+                        onMouseEnter={() => setOpenGamesSubmenu(null)}
                       >
                         <span className="ns-start-menu__item-icon">{item.icon}</span>
                         <span className="ns-start-menu__item-label">{item.label}</span>
                       </button>
                     ))}
+
+                    {/* Word Games */}
+                    <div
+                      className="ns-start-menu__item-wrapper"
+                      ref={wordGamesWrapperRef}
+                      onMouseEnter={() => setOpenGamesSubmenu("word-games")}
+                    >
+                      <button className="ns-start-menu__item">
+                        <span className="ns-start-menu__item-icon">🔤</span>
+                        <span className="ns-start-menu__item-label">Word Games</span>
+                        <span className="ns-start-menu__item-arrow">▶</span>
+                      </button>
+                      {openGamesSubmenu === "word-games" && wordGamesFlyoutPos && (
+                        <div
+                          className="ns-start-submenu ns-start-submenu--nested"
+                          style={{ left: wordGamesFlyoutPos.left, top: wordGamesFlyoutPos.top }}
+                        >
+                          {WORD_GAMES_ITEMS.map((item) => (
+                            <button
+                              key={item.id}
+                              className="ns-start-menu__item"
+                              onClick={() => handleOpenApp(item.id)}
+                            >
+                              <span className="ns-start-menu__item-icon">{item.icon}</span>
+                              <span className="ns-start-menu__item-label">{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

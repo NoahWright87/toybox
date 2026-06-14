@@ -25,6 +25,7 @@ import PegSolitairePage from "./pages/PegSolitairePage";
 import GooberDressupPage from "./pages/GooberDressupPage";
 import HellMapEditorPage from "./pages/HellMapEditorPage";
 import CheckersPage from "./pages/CheckersPage";
+import MahjongSolitairePage from "./pages/MahjongSolitairePage";
 import JazzballPage from "./pages/JazzballPage";
 import BrickBreakerPage from "./pages/BrickBreakerPage";
 
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/goober-dressup" element={<GooberDressupPage />} />
         <Route path="/hell-map-editor" element={<HellMapEditorPage />} />
         <Route path="/checkers" element={<CheckersPage />} />
+        <Route path="/mahjong-solitaire" element={<MahjongSolitairePage />} />
         <Route path="/jazzball" element={<JazzballPage />} />
         <Route path="/brick-breaker" element={<BrickBreakerPage />} />
       </Routes>

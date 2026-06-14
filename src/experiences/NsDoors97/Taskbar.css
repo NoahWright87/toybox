@@ -131,6 +131,10 @@
   overflow-x: hidden;
 }
 
+.ns-start-submenu--nested {
+  position: fixed;
+}
+
 .ns-start-menu__divider {
   height: 0;
   border-top: 1px solid #330000;

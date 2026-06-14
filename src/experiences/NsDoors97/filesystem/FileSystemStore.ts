@@ -1,7 +1,9 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
   ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
-  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID, JB_SCORES_ID, BB_SCORES_ID,
+  GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
+  MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
+  JB_SCORES_ID, BB_SCORES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -376,6 +378,84 @@ export class FileSystemStore {
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
         } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Mahjong Solitaire folder + SCORES.DAT exist
+    let mjDir = this.getNodeByPath("C:\\Programs\\Games\\Mahjong Solitaire");
+    if (!this.nodes.has(MJ_SCORES_ID)) {
+      if (!mjDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: "fs:games-mj", kind: "folder", name: "Mahjong Solitaire",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:games-mj-exe", {
+            id: "fs:games-mj-exe", kind: "file", name: "Mahjong Solitaire.exe",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "exe", content: "", mimeType: "application/octet-stream",
+            system: false, readonly: false, appId: "mahjong-solitaire",
+          } as FSFile);
+          mjDir = folder;
+        }
+      }
+      if (mjDir?.kind === "folder") {
+        this.nodes.set(MJ_SCORES_ID, {
+          id: MJ_SCORES_ID, kind: "file", name: "SCORES.DAT",
+          parentId: mjDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Mahjong SAVE.DAT (in-progress game state) exists
+    if (!this.nodes.has(MJ_STATE_ID)) {
+      mjDir = mjDir ?? this.getNodeByPath("C:\\Programs\\Games\\Mahjong Solitaire");
+      if (mjDir?.kind === "folder") {
+        this.nodes.set(MJ_STATE_ID, {
+          id: MJ_STATE_ID, kind: "file", name: "SAVE.DAT",
+          parentId: mjDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Mahjong TILES subfolder + tile face stubs exist
+    if (!this.nodes.has(MJ_TILES_FOLDER_ID)) {
+      mjDir = mjDir ?? this.getNodeByPath("C:\\Programs\\Games\\Mahjong Solitaire");
+      if (mjDir?.kind === "folder") {
+        this.nodes.set(MJ_TILES_FOLDER_ID, {
+          id: MJ_TILES_FOLDER_ID, kind: "folder", name: "TILES",
+          parentId: mjDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        } as FSFolder);
+
+        const MJ_TILE_IDS = [
+          "dots-1", "dots-2", "dots-3", "dots-4", "dots-5", "dots-6", "dots-7", "dots-8", "dots-9",
+          "bamboo-1", "bamboo-2", "bamboo-3", "bamboo-4", "bamboo-5", "bamboo-6", "bamboo-7", "bamboo-8", "bamboo-9",
+          "chars-1", "chars-2", "chars-3", "chars-4", "chars-5", "chars-6", "chars-7", "chars-8", "chars-9",
+          "wind-east", "wind-south", "wind-west", "wind-north",
+          "dragon-red", "dragon-green", "dragon-white",
+          "flower-1", "flower-2",
+        ];
+        for (const tileId of MJ_TILE_IDS) {
+          const id = `fs:mj-tile-${tileId}`;
+          this.nodes.set(id, {
+            id, kind: "file", name: `${tileId}.png`,
+            parentId: MJ_TILES_FOLDER_ID,
+            createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "png", content: "", mimeType: "image/png",
+            system: false, readonly: false, appId: "nsart",
+          } as FSFile);
+        }
         changed = true;
       }
     }

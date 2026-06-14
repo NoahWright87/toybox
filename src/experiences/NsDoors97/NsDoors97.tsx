@@ -32,6 +32,7 @@ import MidiEditor from "../MidiEditor/MidiEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import GooberDressup from "../GooberDressup/GooberDressup";
+import MahjongSolitaire from "../MahjongSolitaire/MahjongSolitaire";
 import Checkers from "../Checkers/Checkers";
 import Jazzball from "../Jazzball/Jazzball";
 import BrickBreaker from "../BrickBreaker/BrickBreaker";
@@ -90,6 +91,7 @@ type AppAction =
   | "peg-solitaire"
   | "goober-dressup"
   | "checkers"
+  | "mahjong-solitaire"
   | "jazzball"
   | "brick-breaker";
 
@@ -124,6 +126,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "peg-solitaire":   { title: "Peg Solitaire",     icon: "🔴", action: "peg-solitaire"   },
   "goober-dressup":  { title: "Goober Dress-Up",   icon: "🐱", action: "goober-dressup"  },
   "checkers":        { title: "Checkers",           icon: "⚫", action: "checkers"        },
+  "mahjong-solitaire": { title: "Mahjong Solitaire", icon: "🀄", action: "mahjong-solitaire" },
   "jazzball":        { title: "Jazzball",            icon: "🟧", action: "jazzball"        },
   "brick-breaker":   { title: "Brick Breaker",      icon: "🧱", action: "brick-breaker"   },
 };
@@ -183,6 +186,7 @@ type WindowContent =
   | { type: "peg-solitaire" }
   | { type: "goober-dressup"; fileId?: string }
   | { type: "checkers" }
+  | { type: "mahjong-solitaire" }
   | { type: "jazzball" }
   | { type: "brick-breaker" };
 
@@ -514,6 +518,7 @@ export default function NsDoors97() {
         case "peg-solitaire":   content = { type: "peg-solitaire" as const };   width = 580; break;
         case "goober-dressup":  content = { type: "goober-dressup" as const };  width = 500; break;
         case "checkers":        content = { type: "checkers" as const };         width = 420; break;
+        case "mahjong-solitaire": content = { type: "mahjong-solitaire" as const }; width = 660; break;
         case "jazzball":        content = { type: "jazzball" as const };          width = 500; break;
         case "brick-breaker":   content = { type: "brick-breaker" as const };     width = 480; break;
         case "experience": {
@@ -602,11 +607,16 @@ export default function NsDoors97() {
         return;
       }
       // .png sprite files with appId "nsart" open in NS Art
-      // EGO sprites have a bundled public fallback; Goober sprites do not
+      // EGO sprites and Mahjong tile faces have a bundled public fallback; Goober sprites do not
       if (file.fileType === "png" && file.appId === "nsart") {
         const winId = `nsart:${file.id}`;
         const filePath = fsStore.getPath(file.id);
-        const isEgoSprite = filePath.toUpperCase().startsWith("C:\\EGO\\");
+        const upperPath = filePath.toUpperCase();
+        const isEgoSprite = upperPath.startsWith("C:\\EGO\\");
+        const isMahjongTile = upperPath.startsWith("C:\\PROGRAMS\\GAMES\\MAHJONG SOLITAIRE\\TILES\\");
+        const mahjongTileUrl = isMahjongTile
+          ? `/mahjong-tiles/${file.name.replace(/\.png$/i, ".svg")}`
+          : undefined;
         setOpenWindows((prev) => {
           if (prev.some((w) => w.id === winId)) {
             maxZ++;
@@ -625,6 +635,7 @@ export default function NsDoors97() {
               type: "nsart" as const,
               fileId: file.id,
               ...(isEgoSprite ? { fileUrl: `/sprites/${file.name}` } : {}),
+              ...(mahjongTileUrl ? { fileUrl: mahjongTileUrl } : {}),
             },
             zIndex: maxZ,
             defaultPosition: { x: 80 + offset, y: 48 + offset },
@@ -1056,6 +1067,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "peg-solitaire" && (
             <PegSolitaire onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "mahjong-solitaire" && (
+            <MahjongSolitaire onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "goober-dressup" && (
             <GooberDressup

@@ -266,6 +266,37 @@ Add new stable IDs here when an app needs to find a specific file without traver
 3. In the component: use `fsStore.writeFile(id, content)` to save, `fsStore.getFile(id)?.content` to load. Check FS first, then any legacy storage key, then delete the legacy key (one-time migration).
 4. If the file needs to open with a specific app when double-clicked from FilesApp, set `appId` on the FSFile.
 
+### Mandatory: in-progress game state must survive reload/rotation
+
+**The web is brittle.** Mobile browsers reload pages on screen rotation, tab
+suspension reclaims memory, and users refresh by habit. Any game with an
+in-progress session (a board, a score, a timer) MUST persist that session to
+`fsStore` so it survives a reload — not just final high scores. Losing a
+half-finished game is a bad user experience and is treated as a bug.
+
+Pattern (see `MahjongSolitaire.tsx` for a full example using `MJ_STATE_ID` /
+`SAVE.DAT`):
+
+1. Add a stable `*_STATE_ID` constant (e.g. `MJ_STATE_ID = "fs:mj-state"`) and
+   create a `SAVE.DAT` file for it in both `seed.ts` and `migrate()`, alongside
+   any `SCORES.DAT`.
+2. On mount, lazily read and `JSON.parse` the save file. Validate its shape
+   (version number, expected slot/cell IDs) before trusting it — fall back to
+   a fresh game if it doesn't match. Use the parsed result to lazily initialize
+   `useState` for board/score/etc.
+3. For elapsed time, store `elapsedSec` *and* a `savedAt` timestamp; on reload,
+   add `(Date.now() - savedAt) / 1000` to the saved `elapsedSec` rather than
+   running a continuous interval-driven write.
+4. Write the save file (`fsStore.writeFile`) after each meaningful state
+   change (a move, a match, a shuffle, a new game) and once on mount so a
+   rotation immediately after opening the game doesn't lose the initial state.
+   Avoid writing on every timer tick — `fsStore.save()` serializes the entire
+   filesystem on every write, so per-second writes are wasteful.
+5. On a win/game-over, clear the save (`fsStore.writeFile(id, "")`) — a
+   finished game has nothing to resume.
+
+This applies to all new games and toys with session state, not just Mahjong.
+
 ### Key API
 
 ```typescript

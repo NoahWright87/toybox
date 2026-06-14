@@ -17,6 +17,9 @@ export const SYSTEM_INI_ID     = "fs:system-ini";
 export const GOOBER_FOLDER_ID  = "fs:goober-dressup";
 export const GOOBER_SPRITES_ID = "fs:goober-sprites";
 export const CK_SCORES_ID      = "fs:scores-ck";
+export const MJ_SCORES_ID      = "fs:scores-mj";
+export const MJ_TILES_FOLDER_ID = "fs:mj-tiles";
+export const MJ_STATE_ID        = "fs:mj-state";
 export const JB_SCORES_ID      = "fs:scores-jb";
 export const BB_SCORES_ID      = "fs:scores-bb";
 
