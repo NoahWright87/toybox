@@ -4,6 +4,7 @@ import {
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
+  JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -666,6 +667,66 @@ export class FileSystemStore {
         this.nodes.set(BB_SCORES_ID, {
           id: BB_SCORES_ID, kind: "file", name: "SCORES.DAT",
           parentId: bbDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Jigsaw Puzzle folder + SCORES.DAT/SAVE.DAT/IMAGE.DAT exist
+    if (!this.nodes.has(JP_SCORES_ID)) {
+      let jpDir = this.getNodeByPath("C:\\Programs\\Games\\Jigsaw Puzzle");
+      if (!jpDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: "fs:games-jp", kind: "folder", name: "Jigsaw Puzzle",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:games-jp-exe", {
+            id: "fs:games-jp-exe", kind: "file", name: "Jigsaw Puzzle.exe",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "exe", content: "", mimeType: "application/octet-stream",
+            system: false, readonly: false, appId: "jigsaw-puzzle",
+          } as FSFile);
+          jpDir = folder;
+        }
+      }
+      if (jpDir?.kind === "folder") {
+        this.nodes.set(JP_SCORES_ID, {
+          id: JP_SCORES_ID, kind: "file", name: "SCORES.DAT",
+          parentId: jpDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Jigsaw Puzzle SAVE.DAT (in-progress game state) exists
+    if (!this.nodes.has(JP_STATE_ID)) {
+      const jpDir = this.getNodeByPath("C:\\Programs\\Games\\Jigsaw Puzzle");
+      if (jpDir?.kind === "folder") {
+        this.nodes.set(JP_STATE_ID, {
+          id: JP_STATE_ID, kind: "file", name: "SAVE.DAT",
+          parentId: jpDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Jigsaw Puzzle IMAGE.DAT (custom uploaded puzzle photo) exists
+    if (!this.nodes.has(JP_IMAGE_ID)) {
+      const jpDir = this.getNodeByPath("C:\\Programs\\Games\\Jigsaw Puzzle");
+      if (jpDir?.kind === "folder") {
+        this.nodes.set(JP_IMAGE_ID, {
+          id: JP_IMAGE_ID, kind: "file", name: "IMAGE.DAT",
+          parentId: jpDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
         } as FSFile);
