@@ -204,8 +204,9 @@ export default function JigsawSettings({ initial, customThumbUrl, bestTimes, onS
       <div className="jigsaw-settings__rows">
         <div className="jigsaw-settings__col-headers">
           <span />
-          <span className="jigsaw-settings__col-easy">Easy</span>
-          <span className="jigsaw-settings__col-hard">Hard</span>
+          <span className="jigsaw-settings__col-e-h">
+            <span>Easy</span><span>Hard</span>
+          </span>
           <span />
         </div>
         <SettingRow

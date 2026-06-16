@@ -120,33 +120,45 @@ function buildSession(
   const inc = ROTATION_INCREMENTS[rotMode];
   const rotations = [0, 90, 180, 270];
 
+  // Scatter zone: a rectangle 3 cells wider than the board on each side,
+  // centered on the frame. Pieces land anywhere in this ring but we push
+  // any that fall inside the frame itself toward the nearest edge.
+  const scatter = cell * 3.5;
+  const scatterX0 = frameX - scatter;
+  const scatterY0 = frameY - scatter;
+  const scatterW = boardW + scatter * 2;
+  const scatterH = boardH + scatter * 2;
+
+  function scatterPos(): { x: number; y: number } {
+    const rx = scatterX0 + Math.random() * scatterW;
+    const ry = scatterY0 + Math.random() * scatterH;
+    // If piece center lands inside the frame, push it to nearest side
+    const px = Math.max(0, Math.min(workspaceWidth - layout.pieceBoxW, rx));
+    const py = Math.max(0, Math.min(workspaceHeight - layout.pieceBoxH, ry));
+    return { x: px, y: py };
+  }
+
   const pieces: PieceState[] = layout.pieces.map((p, i) => {
     const sp = saved?.pieces[i];
     let rot = 0;
     if (!sp && rotMode > 0 && inc > 0) {
-      // random initial rotation
       const steps = Math.round(360 / inc);
       rot = Math.floor(Math.random() * steps) * inc;
     } else if (sp) {
       rot = sp.rotation ?? 0;
     }
+    const pos = sp ? { x: sp.x, y: sp.y } : scatterPos();
     return {
       row: p.row,
       col: p.col,
       pathD: p.pathD,
-      x: sp?.x ?? frameX + Math.floor(Math.random() * 4) * (workspaceWidth / 4) - layout.pieceBoxW / 2,
-      y: sp?.y ?? frameY + Math.floor(Math.random() * 4) * (workspaceHeight / 4) - layout.pieceBoxH / 2,
+      x: pos.x,
+      y: pos.y,
       locked: sp?.locked ?? false,
       z: i + 1,
       groupId: sp?.groupId ?? -1,
       rotation: rotMode === 0 ? 0 : (sp ? rot : (rotMode === 1 ? rotations[Math.floor(Math.random() * 4)] : rot)),
     };
-  });
-
-  // Clamp piece positions inside workspace
-  pieces.forEach((p) => {
-    p.x = Math.max(0, Math.min(workspaceWidth - layout.pieceBoxW, p.x));
-    p.y = Math.max(0, Math.min(workspaceHeight - layout.pieceBoxH, p.y));
   });
 
   return {
