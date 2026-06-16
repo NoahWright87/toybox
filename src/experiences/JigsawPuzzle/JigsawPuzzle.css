@@ -79,6 +79,41 @@
   filter: none;
 }
 
+.jigsaw-piece--selected {
+  filter: drop-shadow(0 0 4px #ff6b00);
+}
+
+/* ── Corner preview box ─────────────────────────────────────────────────── */
+
+.jigsaw__preview-box {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 140px;
+  background: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.jigsaw__preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.9;
+}
+
+.jigsaw__preview-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  color: #888;
+  text-align: center;
+  padding: 2px 0;
+  background: #c0c0c0;
+}
+
 /* ── Win overlay ────────────────────────────────────────────────────────── */
 
 .jigsaw__overlay {
@@ -239,6 +274,126 @@
 
 .jigsaw-settings__label--gap {
   margin-top: 4px;
+}
+
+/* ── Preset buttons ───────────────────────────────────────────────────────── */
+
+.jigsaw-settings__presets {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.jigsaw-settings__preset-btn {
+  flex: 1;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 5px 4px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  cursor: pointer;
+}
+
+.jigsaw-settings__preset-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffe0cc;
+  color: #cc4400;
+}
+
+/* ── Settings rows (slider layout) ──────────────────────────────────────── */
+
+.jigsaw-settings__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.jigsaw-settings__col-headers {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  font-size: 5px;
+  color: #808080;
+  padding: 0 2px;
+}
+
+.jigsaw-settings__col-easy {
+  text-align: left;
+  padding-left: 14px;
+}
+
+.jigsaw-settings__col-hard {
+  text-align: right;
+  padding-right: 14px;
+}
+
+.jigsaw-settings__row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.jigsaw-settings__row--timed {
+  grid-template-columns: 60px auto 1fr;
+}
+
+.jigsaw-settings__row-label {
+  font-size: 6px;
+  color: #000;
+  white-space: nowrap;
+}
+
+.jigsaw-settings__slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.jigsaw-settings__slider-tick {
+  font-size: 5px;
+  color: #808080;
+  flex-shrink: 0;
+}
+
+.jigsaw-settings__slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #808080;
+  border: 1px solid #555;
+  outline: none;
+  cursor: pointer;
+}
+
+.jigsaw-settings__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 14px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+
+.jigsaw-settings__slider::-moz-range-thumb {
+  width: 12px;
+  height: 14px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+
+.jigsaw-settings__row-desc {
+  font-size: 6px;
+  color: #444;
+  white-space: nowrap;
+  min-width: 90px;
+  text-align: right;
 }
 
 .jigsaw-settings__images {
