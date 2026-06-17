@@ -18,30 +18,34 @@ import "./JigsawPuzzle.css";
 
 interface SettingRowProps {
   label: string;
-  value: Level;
-  descriptions: [string, string, string];
-  onChange: (v: Level) => void;
+  value: number;
+  max?: number;
+  descriptions: string[];
+  onChange: (v: number) => void;
 }
 
-function SettingRow({ label, value, descriptions, onChange }: SettingRowProps) {
+// Renders as 3 flat grid cells (label / slider / description) so it can be a
+// direct child of the shared `.jigsaw-settings__rows` grid — every row then
+// shares exactly the same column widths and the sliders never shift.
+function SettingRow({ label, value, max = 2, descriptions, onChange }: SettingRowProps) {
   return (
-    <div className="jigsaw-settings__row">
+    <>
       <span className="jigsaw-settings__row-label">{label}</span>
       <div className="jigsaw-settings__slider-wrap">
         <span className="jigsaw-settings__slider-tick">E</span>
         <input
           type="range"
           min={0}
-          max={2}
+          max={max}
           step={1}
           value={value}
           className="jigsaw-settings__slider"
-          onChange={(e) => onChange(Number(e.target.value) as Level)}
+          onChange={(e) => onChange(Number(e.target.value))}
         />
         <span className="jigsaw-settings__slider-tick">H</span>
       </div>
       <span className="jigsaw-settings__row-desc">{descriptions[value]}</span>
-    </div>
+    </>
   );
 }
 
@@ -72,7 +76,7 @@ const HARD_CONFIG: Omit<JigsawConfig, "imageSource" | "timed"> = {
   pieceCount: 2,
   previewMode: 2,
   cutStyle: 2,
-  rotationMode: 2,
+  rotationMode: 1,
   imageFilter: 2,
   snapSensitivity: 2,
 };
@@ -97,7 +101,7 @@ export default function JigsawSettings({ initial, customThumbUrl, bestTimes, onS
     pieceCount: initial.pieceCount ?? DEFAULT_CONFIG.pieceCount,
     previewMode: initial.previewMode ?? DEFAULT_CONFIG.previewMode,
     cutStyle: initial.cutStyle ?? DEFAULT_CONFIG.cutStyle,
-    rotationMode: initial.rotationMode ?? DEFAULT_CONFIG.rotationMode,
+    rotationMode: (Math.min(initial.rotationMode ?? DEFAULT_CONFIG.rotationMode, 1) as 0 | 1),
     imageFilter: initial.imageFilter ?? DEFAULT_CONFIG.imageFilter,
     snapSensitivity: initial.snapSensitivity ?? DEFAULT_CONFIG.snapSensitivity,
   });
@@ -200,68 +204,66 @@ export default function JigsawSettings({ initial, customThumbUrl, bestTimes, onS
         })}
       </div>
 
-      {/* Settings rows */}
+      {/* Settings rows — one shared grid so columns never shift between rows */}
       <div className="jigsaw-settings__rows">
-        <div className="jigsaw-settings__col-headers">
-          <span />
-          <span className="jigsaw-settings__col-e-h">
-            <span>Easy</span><span>Hard</span>
-          </span>
-          <span />
-        </div>
+        <span />
+        <span className="jigsaw-settings__col-e-h">
+          <span>Easy</span><span>Hard</span>
+        </span>
+        <span />
+
         <SettingRow
           label="Pieces"
           value={cfg.pieceCount}
           descriptions={["~12 pieces", "~48 pieces", "~108 pieces"]}
-          onChange={(v) => setLevel("pieceCount", v)}
+          onChange={(v) => setLevel("pieceCount", v as Level)}
         />
         <SettingRow
           label="Preview"
           value={cfg.previewMode}
           descriptions={["Ghost overlay", "Corner hint", "No preview"]}
-          onChange={(v) => setLevel("previewMode", v)}
+          onChange={(v) => setLevel("previewMode", v as Level)}
         />
         <SettingRow
           label="Cut Style"
           value={cfg.cutStyle}
           descriptions={["5 distinct shapes", "Varied sizes", "Uniform classic"]}
-          onChange={(v) => setLevel("cutStyle", v)}
+          onChange={(v) => setLevel("cutStyle", v as Level)}
         />
         <SettingRow
           label="Rotation"
           value={cfg.rotationMode}
-          descriptions={["Fixed", "90° steps", "~10° free"]}
-          onChange={(v) => setLevel("rotationMode", v)}
+          max={1}
+          descriptions={["Fixed", "90° steps"]}
+          onChange={(v) => setLevel("rotationMode", v as Level)}
         />
         <SettingRow
           label="Image"
           value={cfg.imageFilter}
           descriptions={["Full color", "Desaturated", "Grayscale"]}
-          onChange={(v) => setLevel("imageFilter", v)}
+          onChange={(v) => setLevel("imageFilter", v as Level)}
         />
         <SettingRow
           label="Snap Zone"
           value={cfg.snapSensitivity}
           descriptions={["Forgiving (36px)", "Normal (18px)", "Precise (9px)"]}
-          onChange={(v) => setLevel("snapSensitivity", v)}
+          onChange={(v) => setLevel("snapSensitivity", v as Level)}
         />
 
-        {/* Timed row */}
-        <div className="jigsaw-settings__row jigsaw-settings__row--timed">
-          <span className="jigsaw-settings__row-label">Timer</span>
-          <label className="jigsaw-settings__checkbox-wrap">
-            <input
-              type="checkbox"
-              className="jigsaw-settings__checkbox"
-              checked={timed}
-              onChange={(e) => setTimed(e.target.checked)}
-            />
-            <span>{timed ? "On" : "Off"}</span>
-          </label>
-          <span className="jigsaw-settings__row-desc">
-            {timed && best !== undefined ? `Best: ${formatTime(best)}` : ""}
-          </span>
-        </div>
+        {/* Timed row reuses the same 3 grid cells */}
+        <span className="jigsaw-settings__row-label">Timer</span>
+        <label className="jigsaw-settings__checkbox-wrap">
+          <input
+            type="checkbox"
+            className="jigsaw-settings__checkbox"
+            checked={timed}
+            onChange={(e) => setTimed(e.target.checked)}
+          />
+          <span>{timed ? "On" : "Off"}</span>
+        </label>
+        <span className="jigsaw-settings__row-desc">
+          {timed && best !== undefined ? `Best: ${formatTime(best)}` : ""}
+        </span>
       </div>
 
       <button

@@ -15,13 +15,12 @@ import {
   formatTime,
   type ImageSource,
   type JigsawConfig,
-  type Level,
 } from "./types";
 import { getImageDimensions } from "../../utils/imageResize";
 import JigsawSettings from "./JigsawSettings";
 import "./JigsawPuzzle.css";
 
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 4;
 const MINIMAP_MAX_W = 130;
@@ -157,7 +156,7 @@ function buildSession(
       locked: sp?.locked ?? false,
       z: i + 1,
       groupId: sp?.groupId ?? -1,
-      rotation: rotMode === 0 ? 0 : (sp ? rot : (rotMode === 1 ? rotations[Math.floor(Math.random() * 4)] : rot)),
+      rotation: rotMode === 0 ? 0 : (sp ? rot : rotations[Math.floor(Math.random() * 4)]),
     };
   });
 
@@ -206,10 +205,7 @@ function snapThreshold(cfg: JigsawConfig): number {
 }
 
 function rotationTolerance(cfg: JigsawConfig): number {
-  const mode = cfg.rotationMode ?? 0;
-  if (mode === 0) return 0;
-  if (mode === 1) return 20;
-  return 8;
+  return (cfg.rotationMode ?? 0) === 0 ? 0 : 20;
 }
 
 /**
@@ -651,7 +647,7 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
     if (!sess) return;
     const mode = sess.config.rotationMode ?? 0;
     if (mode === 0) return;
-    const inc = ROTATION_INCREMENTS[mode as Level];
+    const inc = ROTATION_INCREMENTS[mode];
     const piece = sess.pieces[index];
     const delta = inc * dir;
     const gid = piece.groupId;

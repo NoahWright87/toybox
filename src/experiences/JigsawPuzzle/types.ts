@@ -13,8 +13,8 @@ export const CELL_SIZE: [number, number, number] = [72, 58, 46];
 // Snap threshold (px) indexed by snapSensitivity level (0=wide, 2=precise)
 export const SNAP_THRESHOLDS: [number, number, number] = [36, 18, 9];
 
-// Rotation increment (degrees) indexed by rotationMode level
-export const ROTATION_INCREMENTS: [0, 90, 10] = [0, 90, 10];
+// Rotation increment (degrees) indexed by rotationMode (0=fixed, 1=90°)
+export const ROTATION_INCREMENTS: [number, number] = [0, 90];
 
 export type ImageSource =
   | { kind: "preset"; presetId: PuzzlePreset }
@@ -25,7 +25,7 @@ export interface JigsawConfig {
   pieceCount: Level;      // 0≈12  1≈48  2≈108
   previewMode: Level;     // 0=ghost in field  1=separate corner box  2=none
   cutStyle: Level;        // 0=varied shapes  1=varied sizes  2=uniform
-  rotationMode: Level;    // 0=fixed  1=90° increments  2=~10° free
+  rotationMode: 0 | 1;    // 0=fixed  1=90° increments
   imageFilter: Level;     // 0=color  1=partial gray  2=grayscale
   snapSensitivity: Level; // 0=wide 36px  1=normal 18px  2=precise 9px
   timed: boolean;

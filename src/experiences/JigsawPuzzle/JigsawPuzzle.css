@@ -304,35 +304,25 @@
 
 /* ── Settings rows (slider layout) ──────────────────────────────────────── */
 
+/* A single grid shared by every row (including the Easy/Hard header and the
+   Timer row) so the label/slider/description columns are sized once and
+   never shift between rows or when a slider value changes. */
 .jigsaw-settings__rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* All rows share the same three-column grid so sliders line up perfectly */
-.jigsaw-settings__col-headers,
-.jigsaw-settings__row {
   display: grid;
-  grid-template-columns: 74px 148px 96px;
+  grid-template-columns: 72px 140px 116px;
   align-items: center;
-  gap: 0;
-}
-
-.jigsaw-settings__col-headers {
-  font-size: 5px;
-  color: #808080;
+  row-gap: 7px;
+  column-gap: 0;
+  justify-content: center;
+  margin: 0 auto;
 }
 
 .jigsaw-settings__col-e-h {
   display: flex;
   justify-content: space-between;
+  font-size: 5px;
+  color: #808080;
   padding: 0 14px;
-}
-
-/* Timed row reuses same 3-column grid: label | checkbox | best-time */
-.jigsaw-settings__row--timed {
-  grid-template-columns: 74px auto 1fr;
 }
 
 .jigsaw-settings__row-label {
@@ -341,6 +331,8 @@
   white-space: nowrap;
   text-align: right;
   padding-right: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .jigsaw-settings__slider-wrap {
@@ -348,6 +340,7 @@
   align-items: center;
   gap: 4px;
   padding: 0 2px;
+  min-width: 0;
 }
 
 .jigsaw-settings__slider-tick {
@@ -398,6 +391,9 @@
   white-space: nowrap;
   text-align: left;
   padding-left: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .jigsaw-settings__images {
