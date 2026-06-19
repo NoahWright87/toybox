@@ -7,7 +7,7 @@ import { sampleRailCenterline, RAIL_HALF_INNER, RAIL_WALL_OFFSET, RAIL_WALL_THIC
 import type { RailSample } from "./railUtils";
 import "./Pinball.css";
 
-const SUBSTEPS = 3;
+const SUBSTEPS = 6;
 const DT = (1000 / 60) / SUBSTEPS;
 const BALL_R = 10;
 const SPEED_CAP = 30;
@@ -453,8 +453,25 @@ export default function Pinball({ board, onQuit }: Props) {
       if (st.phase === "playing" || st.phase === "launching") {
         for (let i = 0; i < SUBSTEPS; i++) {
           Matter.Engine.update(engine, DT);
+          capSpeed(ball); // enforce cap each substep so a single impulse can't tunnel the ball
         }
-        capSpeed(ball);
+
+        // Hard boundary recovery — catches anything that still tunnels through outer walls
+        if (ball.position.y < BALL_R) {
+          Matter.Body.setPosition(ball, { x: ball.position.x, y: BALL_R });
+          if (ball.velocity.y < 0)
+            Matter.Body.setVelocity(ball, { x: ball.velocity.x, y: Math.abs(ball.velocity.y) * 0.4 });
+        }
+        if (ball.position.x < BALL_R) {
+          Matter.Body.setPosition(ball, { x: BALL_R, y: ball.position.y });
+          if (ball.velocity.x < 0)
+            Matter.Body.setVelocity(ball, { x: Math.abs(ball.velocity.x) * 0.4, y: ball.velocity.y });
+        }
+        if (ball.position.x > W - BALL_R) {
+          Matter.Body.setPosition(ball, { x: W - BALL_R, y: ball.position.y });
+          if (ball.velocity.x > 0)
+            Matter.Body.setVelocity(ball, { x: -ball.velocity.x * 0.4, y: ball.velocity.y });
+        }
 
         // Rail magnetic centering force
         for (const rp of st.rails) {
