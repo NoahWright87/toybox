@@ -321,37 +321,52 @@ function trySnap(
 
 interface JigsawPieceViewProps {
   piece: PieceState;
-  session: Session;
+  index: number;
+  imageUrl: string;
+  cell: number;
+  bumpAmp: number;
+  boardW: number;
+  boardH: number;
+  pieceBoxW: number;
+  pieceBoxH: number;
+  seed: number;
+  filterLevel: 0 | 1 | 2;
   isSelected: boolean;
-  onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => void;
-  onWheel: (e: React.WheelEvent<SVGSVGElement>) => void;
+  isLifted: boolean;
+  onPointerDown: (e: React.PointerEvent<SVGSVGElement>, index: number) => void;
+  onWheel: (e: React.WheelEvent<SVGSVGElement>, index: number) => void;
+  registerRef: (el: SVGSVGElement | null) => void;
 }
 
+// Every prop here is either a primitive or a stable (cached) function
+// reference — see getPieceRefSetter/handlePiecePointerDown/handlePieceWheel
+// in the main component — so memo() actually skips re-rendering pieces that
+// aren't part of whatever just changed (drag, lift, select), instead of
+// re-rendering all of them on every pointer move.
 const JigsawPieceView = memo(function JigsawPieceView({
-  piece, session, isSelected, onPointerDown, onWheel,
+  piece, index, imageUrl, cell, bumpAmp, boardW, boardH, pieceBoxW, pieceBoxH, seed,
+  filterLevel, isSelected, isLifted, onPointerDown, onWheel, registerRef,
 }: JigsawPieceViewProps) {
-  const { pieceBoxW, pieceBoxH, cell, bumpAmp, boardW, boardH, imageUrl, seed } = session;
   const clipId = `jigsaw-clip-${seed}-${piece.row}-${piece.col}`;
-
-  const filterLevel = session.config.imageFilter ?? 0;
   const grayscale = filterLevel === 2 ? "grayscale(1)" : filterLevel === 1 ? "grayscale(0.5)" : "none";
 
   const handleDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
     e.stopPropagation();
-    onPointerDown(e);
-  }, [onPointerDown]);
+    onPointerDown(e, index);
+  }, [onPointerDown, index]);
 
   const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
     e.stopPropagation();
-    onWheel(e);
-  }, [onWheel]);
+    onWheel(e, index);
+  }, [onWheel, index]);
 
   const cx = pieceBoxW / 2;
   const cy = pieceBoxH / 2;
 
   return (
     <svg
-      className={`jigsaw-piece${piece.locked ? " jigsaw-piece--locked" : ""}${isSelected ? " jigsaw-piece--selected" : ""}`}
+      ref={registerRef}
+      className={`jigsaw-piece${piece.locked ? " jigsaw-piece--locked" : ""}${isSelected ? " jigsaw-piece--selected" : ""}${isLifted ? " jigsaw-piece--lifted" : ""}`}
       style={{
         left: piece.x,
         top: piece.y,
@@ -439,6 +454,10 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
   const [finalTime, setFinalTime] = useState(0);
   const [isNewRecord, setIsNewRecord] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  // Index of the piece currently being held (pointer down → up), used only
+  // to flag the lifted piece/group for the drop-shadow class — set/cleared
+  // once per gesture, not on every move.
+  const [liftedIndex, setLiftedIndex] = useState<number | null>(null);
 
   // View state
   const [zoom, setZoom] = useState(1);
@@ -476,6 +495,21 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
   const bgPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const lastPinchRef = useRef<{ dist: number; midX: number; midY: number } | null>(null);
   const zCounterRef = useRef(1000);
+
+  // DOM refs for each piece's <svg>, written to directly during a drag so we
+  // can move pieces without round-tripping through React state on every
+  // pointer move. getPieceRefSetter caches one stable callback per index so
+  // passing it as a prop doesn't defeat JigsawPieceView's memo().
+  const pieceElsRef = useRef<(SVGSVGElement | null)[]>([]);
+  const pieceRefSettersRef = useRef<((el: SVGSVGElement | null) => void)[]>([]);
+  const getPieceRefSetter = useCallback((index: number) => {
+    let fn = pieceRefSettersRef.current[index];
+    if (!fn) {
+      fn = (el: SVGSVGElement | null) => { pieceElsRef.current[index] = el; };
+      pieceRefSettersRef.current[index] = fn;
+    }
+    return fn;
+  }, []);
 
   // ── Persistence ────────────────────────────────────────────────────────────
   const persist = useCallback((sess: Session, elapsed: number) => {
@@ -568,6 +602,17 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
   const renderMinimapRef = useRef(renderMinimap);
   useEffect(() => { renderMinimapRef.current = renderMinimap; }, [renderMinimap]);
   useEffect(() => { renderMinimapRef.current(); }, [session, zoom, pan]);
+
+  // rAF-throttled redraw for use during a drag, when piece positions are
+  // mutated directly without a setSession call (see handleArenaPointerMove).
+  const minimapRafRef = useRef<number | null>(null);
+  const scheduleMinimapRedraw = useCallback(() => {
+    if (minimapRafRef.current !== null) return;
+    minimapRafRef.current = requestAnimationFrame(() => {
+      minimapRafRef.current = null;
+      renderMinimapRef.current();
+    });
+  }, []);
 
   // ── View helpers ───────────────────────────────────────────────────────────
   const applyZoom = useCallback((newZ: number, screenCx: number, screenCy: number) => {
@@ -729,7 +774,13 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
     const sess = sessionRef.current;
     if (!sess) return;
 
-    // Piece drag
+    // Piece drag — mutate piece positions in place and write the new
+    // left/top directly to each DOM node via pieceElsRef, instead of calling
+    // setSession. At 100+ pieces, doing a full setSession (and therefore a
+    // full re-render pass) on every pointermove was the main cost of
+    // dragging; this way only the dragged piece/group's DOM nodes touch the
+    // page, and a single setSession happens once on drop (see
+    // handleArenaPointerUp) to commit the final state and run snap checks.
     const drag = dragRef.current;
     if (drag && drag.pointerId === e.pointerId) {
       // Check if we've moved enough to be a drag (vs a tap)
@@ -751,17 +802,18 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
       const dx = worldX - drag.offsetX - piece.x;
       const dy = worldY - drag.offsetY - piece.y;
 
-      const pieces = sess.pieces.map((p2, i) => {
-        if (i !== drag.index && (gid === -1 || p2.groupId !== gid)) return p2;
-        return {
-          ...p2,
-          x: Math.max(0, Math.min(sess.workspaceWidth - sess.pieceBoxW, p2.x + dx)),
-          y: Math.max(0, Math.min(sess.workspaceHeight - sess.pieceBoxH, p2.y + dy)),
-        };
-      });
-      const next = { ...sess, pieces };
-      sessionRef.current = next;
-      setSession(next);
+      for (let i = 0; i < sess.pieces.length; i++) {
+        const p2 = sess.pieces[i];
+        if (i !== drag.index && (gid === -1 || p2.groupId !== gid)) continue;
+        p2.x = Math.max(0, Math.min(sess.workspaceWidth - sess.pieceBoxW, p2.x + dx));
+        p2.y = Math.max(0, Math.min(sess.workspaceHeight - sess.pieceBoxH, p2.y + dy));
+        const el = pieceElsRef.current[i];
+        if (el) {
+          el.style.left = `${p2.x}px`;
+          el.style.top = `${p2.y}px`;
+        }
+      }
+      scheduleMinimapRedraw();
       return;
     }
 
@@ -803,7 +855,7 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
       setPan(newPan);
       lastPinchRef.current = null;
     }
-  }, []);
+  }, [scheduleMinimapRedraw]);
 
   const handleArenaPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const sess = sessionRef.current;
@@ -812,6 +864,7 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
     if (drag && drag.pointerId === e.pointerId) {
       dragRef.current = null;
       (e.target as Element).releasePointerCapture(e.pointerId);
+      setLiftedIndex(null);
 
       if (!sess) return;
 
@@ -822,7 +875,9 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
         return;
       }
 
-      // Drop: try snap
+      // Drop: try snap. Piece positions were already mutated in place and
+      // written to the DOM directly during the drag (handleArenaPointerMove),
+      // so sess.pieces already reflects the final dragged position here.
       let pieces = trySnap(sess.pieces, drag.index, sess);
       const nextSession = { ...sess, pieces };
       sessionRef.current = nextSession;
@@ -893,6 +948,7 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
 
     e.currentTarget.setPointerCapture(e.pointerId);
     setSelectedIndex(index);
+    setLiftedIndex(index);
   }, []);
 
   // ── Piece scroll wheel = rotate ────────────────────────────────────────────
@@ -941,6 +997,9 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
   const previewMode = session.config.previewMode ?? 0;
   const showGhost = previewMode === 0;
   const showCornerPreview = previewMode === 1;
+  const filterLevel = session.config.imageFilter ?? 0;
+  const liftedPiece = liftedIndex !== null ? session.pieces[liftedIndex] : null;
+  const liftedGroupId = liftedPiece ? liftedPiece.groupId : null;
 
   return (
     <div className="jigsaw">
@@ -982,10 +1041,21 @@ export default function JigsawPuzzle({ onQuit }: { onQuit?: () => void } = {}) {
             <JigsawPieceView
               key={`${piece.row}-${piece.col}`}
               piece={piece}
-              session={session}
+              index={i}
+              imageUrl={session.imageUrl}
+              cell={session.cell}
+              bumpAmp={session.bumpAmp}
+              boardW={session.boardW}
+              boardH={session.boardH}
+              pieceBoxW={session.pieceBoxW}
+              pieceBoxH={session.pieceBoxH}
+              seed={session.seed}
+              filterLevel={filterLevel}
               isSelected={selectedIndex === i}
-              onPointerDown={(e) => handlePiecePointerDown(e, i)}
-              onWheel={(e) => handlePieceWheel(e, i)}
+              isLifted={liftedIndex !== null && (i === liftedIndex || (liftedGroupId !== -1 && piece.groupId === liftedGroupId))}
+              onPointerDown={handlePiecePointerDown}
+              onWheel={handlePieceWheel}
+              registerRef={getPieceRefSetter(i)}
             />
           ))}
         </div>

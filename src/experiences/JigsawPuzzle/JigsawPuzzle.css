@@ -67,7 +67,6 @@
   position: absolute;
   cursor: grab;
   touch-action: none;
-  filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.45));
 }
 
 .jigsaw-piece:active {
@@ -76,11 +75,21 @@
 
 .jigsaw-piece--locked {
   cursor: default;
-  filter: none;
+}
+
+/* Hard, unblurred shadow only while a piece is actively lifted (held), like
+   a flat sprite drop-shadow in a 90s game — resting pieces stay shadow-free
+   so painting/compositing stays cheap at high piece counts. */
+.jigsaw-piece--lifted {
+  filter: drop-shadow(3px 4px 0 rgba(0, 0, 0, 0.55));
 }
 
 .jigsaw-piece--selected {
   filter: drop-shadow(0 0 4px #ff6b00);
+}
+
+.jigsaw-piece--lifted.jigsaw-piece--selected {
+  filter: drop-shadow(3px 4px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 4px #ff6b00);
 }
 
 /* ── Corner preview box ─────────────────────────────────────────────────── */
