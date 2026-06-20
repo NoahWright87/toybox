@@ -196,4 +196,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/brick-breaker",
   },
+  {
+    id: "jigsaw-puzzle",
+    title: "Jigsaw Puzzle",
+    description: "Drag and snap interlocking pieces into place. Pick a wallpaper photo or upload your own, choose a difficulty, and race the clock.",
+    category: "game",
+    path: "/jigsaw-puzzle",
+  },
 ];

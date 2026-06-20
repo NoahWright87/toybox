@@ -28,6 +28,7 @@ import CheckersPage from "./pages/CheckersPage";
 import MahjongSolitairePage from "./pages/MahjongSolitairePage";
 import JazzballPage from "./pages/JazzballPage";
 import BrickBreakerPage from "./pages/BrickBreakerPage";
+import JigsawPuzzlePage from "./pages/JigsawPuzzlePage";
 
 export default function App() {
   return (
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/mahjong-solitaire" element={<MahjongSolitairePage />} />
         <Route path="/jazzball" element={<JazzballPage />} />
         <Route path="/brick-breaker" element={<BrickBreakerPage />} />
+        <Route path="/jigsaw-puzzle" element={<JigsawPuzzlePage />} />
       </Routes>
     </BrowserRouter>
   );

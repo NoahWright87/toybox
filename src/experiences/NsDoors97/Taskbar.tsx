@@ -107,6 +107,7 @@ const GAMES_ITEMS = [
   { id: "duck-hunt",      icon: "🎯", label: "Duck & Learn"     },
   { id: "goober-dressup",  icon: "🐱", label: "Goober Dress-Up"  },
   { id: "jazzball",        icon: "🟧", label: "Jazzball"         },
+  { id: "jigsaw-puzzle",   icon: "🧩", label: "Jigsaw Puzzle"    },
   { id: "mahjong-solitaire", icon: "🀄", label: "Mahjong Solitaire" },
   { id: "number-muncher", icon: "🔢", label: "Nom Nom Numerals" },
   { id: "peg-solitaire",   icon: "🔴", label: "Peg Solitaire"    },

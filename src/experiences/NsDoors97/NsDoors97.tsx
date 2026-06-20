@@ -33,6 +33,7 @@ import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import GooberDressup from "../GooberDressup/GooberDressup";
 import MahjongSolitaire from "../MahjongSolitaire/MahjongSolitaire";
+import JigsawPuzzle from "../JigsawPuzzle/JigsawPuzzle";
 import Checkers from "../Checkers/Checkers";
 import Jazzball from "../Jazzball/Jazzball";
 import BrickBreaker from "../BrickBreaker/BrickBreaker";
@@ -93,7 +94,8 @@ type AppAction =
   | "checkers"
   | "mahjong-solitaire"
   | "jazzball"
-  | "brick-breaker";
+  | "brick-breaker"
+  | "jigsaw-puzzle";
 
 interface AppDef {
   title: string;
@@ -129,6 +131,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "mahjong-solitaire": { title: "Mahjong Solitaire", icon: "🀄", action: "mahjong-solitaire" },
   "jazzball":        { title: "Jazzball",            icon: "🟧", action: "jazzball"        },
   "brick-breaker":   { title: "Brick Breaker",      icon: "🧱", action: "brick-breaker"   },
+  "jigsaw-puzzle":   { title: "Jigsaw Puzzle",      icon: "🧩", action: "jigsaw-puzzle"   },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -188,7 +191,8 @@ type WindowContent =
   | { type: "checkers" }
   | { type: "mahjong-solitaire" }
   | { type: "jazzball" }
-  | { type: "brick-breaker" };
+  | { type: "brick-breaker" }
+  | { type: "jigsaw-puzzle" };
 
 interface OpenWindow {
   id: string;
@@ -521,6 +525,7 @@ export default function NsDoors97() {
         case "mahjong-solitaire": content = { type: "mahjong-solitaire" as const }; width = 660; break;
         case "jazzball":        content = { type: "jazzball" as const };          width = 500; break;
         case "brick-breaker":   content = { type: "brick-breaker" as const };     width = 480; break;
+        case "jigsaw-puzzle":   content = { type: "jigsaw-puzzle" as const };     width = 700; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -1085,6 +1090,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "brick-breaker" && (
             <BrickBreaker onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "jigsaw-puzzle" && (
+            <JigsawPuzzle onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

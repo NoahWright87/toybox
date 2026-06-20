@@ -6,6 +6,7 @@ import {
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
+  JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -453,6 +454,12 @@ export function seedFileSystem(store: FileSystemStore): void {
   const bbDir = store.createFolder(GAMES_ID, "Brick Breaker");
   store.createFile(bbDir.id, "Brick Breaker.exe", { fileType: "exe", appId: "brick-breaker" });
   store.createFile(bbDir.id, "SCORES.DAT",        { fileType: "dat", content: "", id: BB_SCORES_ID });
+
+  const jpDir = store.createFolder(GAMES_ID, "Jigsaw Puzzle");
+  store.createFile(jpDir.id, "Jigsaw Puzzle.exe", { fileType: "exe", appId: "jigsaw-puzzle" });
+  store.createFile(jpDir.id, "SCORES.DAT",        { fileType: "dat", content: "", id: JP_SCORES_ID });
+  store.createFile(jpDir.id, "SAVE.DAT",          { fileType: "dat", content: "", id: JP_STATE_ID });
+  store.createFile(jpDir.id, "IMAGE.DAT",         { fileType: "dat", content: "", id: JP_IMAGE_ID });
 
   // Stub / unimplemented games (no appId — opens "not a valid NS Doors application")
   store.createFile(GAMES_ID, "Solitaire.exe",   { fileType: "exe" });

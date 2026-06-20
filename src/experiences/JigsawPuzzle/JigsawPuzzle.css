@@ -1,0 +1,538 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Jigsaw Puzzle — zoom/pan arena + minimap footer
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.jigsaw {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ── Settings wrapper (centres the settings panel) ──────────────────────── */
+
+.jigsaw__settings-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* ── Arena (the zoomable viewport) ─────────────────────────────────────── */
+
+.jigsaw__arena {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  background: #2a4d2a;
+  border-bottom: 2px solid #808080;
+  min-height: 380px;
+}
+
+/* ── Canvas (inner div that gets CSS-transformed) ───────────────────────── */
+
+.jigsaw__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+/* ── Frame (dashed outline + ghost image) ───────────────────────────────── */
+
+.jigsaw__frame {
+  position: absolute;
+  border: 2px dashed rgba(255, 255, 255, 0.35);
+  box-sizing: border-box;
+}
+
+.jigsaw__frame-ghost {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  opacity: 0.18;
+  display: block;
+  pointer-events: none;
+}
+
+/* ── Piece ──────────────────────────────────────────────────────────────── */
+
+.jigsaw-piece {
+  position: absolute;
+  cursor: grab;
+  touch-action: none;
+}
+
+.jigsaw-piece:active {
+  cursor: grabbing;
+}
+
+.jigsaw-piece--locked {
+  cursor: default;
+}
+
+/* Hard, unblurred shadow only while a piece is actively lifted (held), like
+   a flat sprite drop-shadow in a 90s game — resting pieces stay shadow-free
+   so painting/compositing stays cheap at high piece counts. */
+.jigsaw-piece--lifted {
+  filter: drop-shadow(3px 4px 0 rgba(0, 0, 0, 0.55));
+}
+
+.jigsaw-piece--selected {
+  filter: drop-shadow(0 0 4px #ff6b00);
+}
+
+.jigsaw-piece--lifted.jigsaw-piece--selected {
+  filter: drop-shadow(3px 4px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 4px #ff6b00);
+}
+
+/* ── Corner preview box ─────────────────────────────────────────────────── */
+
+.jigsaw__preview-box {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 140px;
+  background: #000;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.jigsaw__preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.9;
+}
+
+.jigsaw__preview-label {
+  font-family: "Press Start 2P", monospace;
+  font-size: 5px;
+  color: #888;
+  text-align: center;
+  padding: 2px 0;
+  background: #c0c0c0;
+}
+
+/* ── Win overlay ────────────────────────────────────────────────────────── */
+
+.jigsaw__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10000;
+}
+
+.jigsaw__overlay-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 32px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  text-align: center;
+}
+
+.jigsaw__overlay-title {
+  font-size: 12px;
+  color: #cc4400;
+  margin-bottom: 12px;
+}
+
+.jigsaw__overlay-time {
+  font-size: 9px;
+  color: #000;
+  margin-bottom: 8px;
+}
+
+.jigsaw__overlay-record {
+  font-size: 8px;
+  color: #228833;
+  margin-bottom: 8px;
+}
+
+/* ── Footer bar (minimap + stats + buttons) ─────────────────────────────── */
+
+.jigsaw__footer {
+  flex-shrink: 0;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  background: #c0c0c0;
+}
+
+.jigsaw__minimap {
+  flex-shrink: 0;
+  display: block;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+.jigsaw__footer-stats {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
+.jigsaw__footer-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.jigsaw__footer-label {
+  font-size: 5px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.jigsaw__footer-value {
+  font-size: 8px;
+  color: #cc4400;
+}
+
+.jigsaw__footer-btns {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Win95 raised button ────────────────────────────────────────────────── */
+
+.jigsaw__btn {
+  padding: 5px 8px;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jigsaw__btn:hover:not(:disabled) {
+  background: #cccccc;
+}
+
+.jigsaw__btn:active:not(:disabled) {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.jigsaw__btn--zoom {
+  padding: 5px 10px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.jigsaw__btn--big {
+  font-size: 9px;
+  padding: 10px 18px;
+  margin-top: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Settings / New Puzzle screen
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.jigsaw-settings {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.jigsaw-settings__title {
+  font-size: 10px;
+  color: #cc4400;
+  text-align: center;
+}
+
+.jigsaw-settings__label {
+  font-size: 8px;
+  color: #000;
+  display: block;
+}
+
+.jigsaw-settings__label--gap {
+  margin-top: 4px;
+}
+
+/* ── Preset buttons ───────────────────────────────────────────────────────── */
+
+.jigsaw-settings__presets {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.jigsaw-settings__preset-btn {
+  flex: 1;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  padding: 5px 4px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  cursor: pointer;
+}
+
+.jigsaw-settings__preset-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffe0cc;
+  color: #cc4400;
+}
+
+/* ── Settings rows (slider layout) ──────────────────────────────────────── */
+
+/* A single grid shared by every row (including the Easy/Hard header and the
+   Timer row) so the label/slider/description columns are sized once and
+   never shift between rows or when a slider value changes. */
+.jigsaw-settings__rows {
+  display: grid;
+  grid-template-columns: 72px 140px 116px;
+  align-items: center;
+  row-gap: 7px;
+  column-gap: 0;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.jigsaw-settings__col-e-h {
+  display: flex;
+  justify-content: space-between;
+  font-size: 5px;
+  color: #808080;
+  padding: 0 14px;
+}
+
+.jigsaw-settings__row-label {
+  font-size: 6px;
+  color: #000;
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.jigsaw-settings__slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  min-width: 0;
+}
+
+.jigsaw-settings__slider-tick {
+  font-size: 5px;
+  color: #808080;
+  flex-shrink: 0;
+}
+
+.jigsaw-settings__slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #808080;
+  border: 1px solid #555;
+  outline: none;
+  cursor: pointer;
+  /* Transparent hit-area padding so the thumb is easy to tap */
+  padding: 10px 0;
+  box-sizing: content-box;
+  background-clip: content-box;
+}
+
+.jigsaw-settings__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 26px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+
+.jigsaw-settings__slider::-moz-range-thumb {
+  width: 16px;
+  height: 26px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.jigsaw-settings__row-desc {
+  font-size: 6px;
+  color: #444;
+  white-space: nowrap;
+  text-align: left;
+  padding-left: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jigsaw-settings__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jigsaw-settings__thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 84px;
+  padding: 4px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+}
+
+.jigsaw-settings__thumb--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffe0cc;
+}
+
+.jigsaw-settings__thumb-img {
+  width: 76px;
+  height: 50px;
+  object-fit: cover;
+  image-rendering: pixelated;
+  border: 1px solid #808080;
+}
+
+.jigsaw-settings__thumb-label {
+  font-size: 6px;
+  color: #000;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.jigsaw-settings__thumb--upload {
+  justify-content: center;
+}
+
+.jigsaw-settings__upload-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.jigsaw-settings__error {
+  font-size: 7px;
+  color: #cc0000;
+}
+
+.jigsaw-settings__difficulties {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jigsaw-settings__diff-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  text-align: left;
+  padding: 6px 8px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #000;
+  cursor: pointer;
+}
+
+.jigsaw-settings__diff-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #ffe0cc;
+  color: #cc4400;
+}
+
+.jigsaw-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jigsaw-settings__checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.jigsaw-settings__checkbox {
+  accent-color: #cc4400;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.jigsaw-settings__best {
+  font-size: 7px;
+  color: #444;
+}
+
+.jigsaw-settings__start-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  background: #cc4400;
+  color: #fff;
+  border: 2px solid;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  padding: 8px 20px;
+  cursor: pointer;
+  align-self: center;
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+
+.jigsaw-settings__start-btn:hover:not(:disabled) {
+  background: #ee5500;
+}
+
+.jigsaw-settings__start-btn:active:not(:disabled) {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+
+.jigsaw-settings__start-btn:disabled {
+  background: #aaaaaa;
+  border-color: #cccccc #808080 #808080 #cccccc;
+  cursor: not-allowed;
+}
