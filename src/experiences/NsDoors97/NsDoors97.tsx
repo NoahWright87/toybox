@@ -58,9 +58,11 @@ import {
 import { useFS } from "./filesystem/FSContext";
 import { fsStore } from "./filesystem/FileSystemStore";
 import {
-  DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
+  DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID, THEME_INI_ID,
   getNodeIcon, type FSNode,
 } from "./filesystem/types";
+import { applyTheme, loadThemeSettings } from "./themeSettings";
+import DesignApp from "../Design/DesignApp";
 import "./NsDoors97.css";
 
 // ── App registry ───────────────────────────────────────────────────────────────
@@ -95,7 +97,8 @@ type AppAction =
   | "mahjong-solitaire"
   | "jazzball"
   | "brick-breaker"
-  | "jigsaw-puzzle";
+  | "jigsaw-puzzle"
+  | "design";
 
 interface AppDef {
   title: string;
@@ -132,6 +135,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "jazzball":        { title: "Jazzball",            icon: "🟧", action: "jazzball"        },
   "brick-breaker":   { title: "Brick Breaker",      icon: "🧱", action: "brick-breaker"   },
   "jigsaw-puzzle":   { title: "Jigsaw Puzzle",      icon: "🧩", action: "jigsaw-puzzle"   },
+  "design":          { title: "Design",             icon: "🎛️", action: "design"          },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -192,7 +196,8 @@ type WindowContent =
   | { type: "mahjong-solitaire" }
   | { type: "jazzball" }
   | { type: "brick-breaker" }
-  | { type: "jigsaw-puzzle" };
+  | { type: "jigsaw-puzzle" }
+  | { type: "design" };
 
 interface OpenWindow {
   id: string;
@@ -371,6 +376,14 @@ export default function NsDoors97() {
     () => loadDesktopSettings()
   );
 
+  // ── Hackable theme: apply theme.ini → :root, live ─────────────────────────
+  // store = useFS() re-renders on any FS change, so keying on the file content
+  // re-applies the palette whether it was edited in the Design app or Notebook.
+  const themeIniContent = store.getFile(THEME_INI_ID)?.content ?? "";
+  useEffect(() => {
+    applyTheme(loadThemeSettings());
+  }, [themeIniContent]);
+
   const openDisplaySettings = useCallback(() => {
     const winId = "desktop-display";
     setOpenWindows((prev) => {
@@ -526,6 +539,7 @@ export default function NsDoors97() {
         case "jazzball":        content = { type: "jazzball" as const };          width = 500; break;
         case "brick-breaker":   content = { type: "brick-breaker" as const };     width = 480; break;
         case "jigsaw-puzzle":   content = { type: "jigsaw-puzzle" as const };     width = 700; break;
+        case "design":          content = { type: "design" as const };            width = 720; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -1093,6 +1107,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "jigsaw-puzzle" && (
             <JigsawPuzzle onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "design" && (
+            <DesignApp onQuit={() => closeWindow(win.id)} />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

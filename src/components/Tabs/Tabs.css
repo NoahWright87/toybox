@@ -9,10 +9,10 @@
   flex-direction: row;
   overflow-x: auto;
   scrollbar-width: thin;
-  border-bottom: 2px solid #808080;
+  border-bottom: 2px solid var(--win95-dark);
   padding: 2px 4px 0;
   gap: 2px;
-  background: #c0c0c0;
+  background: var(--win95-gray);
   align-items: flex-end;
 }
 
@@ -21,19 +21,19 @@
 }
 
 .win95-tabs__strip::-webkit-scrollbar-track {
-  background: #c0c0c0;
+  background: var(--win95-gray);
 }
 
 .win95-tabs__strip::-webkit-scrollbar-thumb {
-  background: #808080;
+  background: var(--win95-dark);
   border: 1px solid #ffffff;
 }
 
 .win95-tabs__tab {
   flex-shrink: 0;
-  background: #c0c0c0;
+  background: var(--win95-gray);
   border: 2px solid;
-  border-color: #ffffff #808080 transparent #ffffff;
+  border-color: #ffffff var(--win95-dark) transparent #ffffff;
   color: #000;
   font-family: "Press Start 2P", monospace;
   font-size: 6px;
@@ -47,12 +47,12 @@
 }
 
 .win95-tabs__tab:hover:not(.win95-tabs__tab--active) {
-  background: #d4d0c8;
+  background: var(--win95-warm-gray);
 }
 
 .win95-tabs__tab--active {
-  background: #c0c0c0;
-  border-bottom-color: #c0c0c0;
+  background: var(--win95-gray);
+  border-bottom-color: var(--win95-gray);
   z-index: 2;
   padding-top: 5px;
 }

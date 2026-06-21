@@ -2,12 +2,13 @@ import type { FileSystemStore } from "./FileSystemStore";
 import {
   ROOT_ID, DESKTOP_ID, DUMPSTER_ID, DOCUMENTS_ID,
   PROGRAMS_ID, GAMES_ID, ACC_ID, SYSTEM_ID, DOWNLOADS_ID, EGO_ID,
-  NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
+  NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID, THEME_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
 } from "./types";
+import { THEME_INI } from "../themeTokens";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
 
@@ -501,6 +502,7 @@ export function seedFileSystem(store: FileSystemStore): void {
   store.createFile(SYSTEM_ID, "autoexec.bat", { fileType: "bat", content: AUTOEXEC,   readonly: true });
   store.createFile(SYSTEM_ID, "doors.ini",    { fileType: "ini", content: DOORS_INI });
   store.createFile(SYSTEM_ID, "system.ini",   { id: SYSTEM_INI_ID, fileType: "ini", content: SYSTEM_INI });
+  store.createFile(SYSTEM_ID, "theme.ini",    { id: THEME_INI_ID, fileType: "ini", content: THEME_INI });
 
   const driversDir = store.createFolder(SYSTEM_ID, "Drivers");
   store.createFile(driversDir.id, "mouse.drv",   { fileType: "drv" });

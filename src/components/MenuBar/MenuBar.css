@@ -1,9 +1,9 @@
 .win95-menubar {
   display: flex;
   flex-wrap: nowrap;
-  background: #d4d0c8;
+  background: var(--win95-warm-gray);
   border-bottom: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
+  border-color: var(--win95-dark) #ffffff #ffffff var(--win95-dark);
   flex-shrink: 0;
   padding: 1px 2px;
   position: relative;
@@ -41,9 +41,9 @@
   position: absolute;
   top: calc(100% + 1px);
   left: 0;
-  background: #d4d0c8;
+  background: var(--win95-warm-gray);
   border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
+  border-color: #ffffff var(--win95-dark) var(--win95-dark) #ffffff;
   min-width: 180px;
   z-index: 200;
   padding: 2px 0;
@@ -74,7 +74,7 @@
 
 .win95-menubar__option--disabled,
 .win95-menubar__option:disabled {
-  color: #808080;
+  color: var(--win95-dark);
   cursor: default;
 }
 
@@ -91,7 +91,7 @@
 
 .win95-menubar__sep {
   height: 0;
-  border-top: 1px solid #808080;
+  border-top: 1px solid var(--win95-dark);
   border-bottom: 1px solid #ffffff;
   margin: 3px 4px;
 }

@@ -14,7 +14,7 @@ The aesthetic is retro **Windows 9X era**: beveled chrome, `#c0c0c0` gray panels
 |---|---|
 | Framework | React 18 + TypeScript + Vite |
 | Routing | `react-router-dom` v6 |
-| Design system | `@noahwright/design` — provides `Layout`, `Header`, `Footer`, `Card`, `CardGrid`, `Container`, `Heading`, `Text`, `Pill`, `Link`, `Button` |
+| Design system | In-repo. CSS design tokens in `src/theme.css` (`:root` palette + `.bevel-*` utilities) and reusable chrome in `src/components/` (`Window`, `MenuBar`, `StandaloneWindow`, `Tabs`). Browse/edit it live in the **Design** app (`/design`). |
 | Font | "Press Start 2P" (Google Fonts, loaded in `index.html`) |
 | Testing | Playwright |
 | Build output | Static; deployed as built files |
@@ -25,7 +25,7 @@ The aesthetic is retro **Windows 9X era**: beveled chrome, `#c0c0c0` gray panels
 |---|---|---|
 | `/` | `NsDoors97Page` | The OS desktop — main entry point |
 | `/doors97` | `NsDoors97Page` | Alias |
-| `/toybox` | `HomePage` | Retro card grid launcher (secondary) |
+| `/design` | `DesignPage` | Design-system gallery + live theme editor (→ design.doors97.com) |
 | `/tic-tac-toe` | `TicTacToePage` | |
 | `/word-whirlwind` | `WordWhirlwindPage` | |
 | `/typing-racer` | `TypingRacerPage` | |
@@ -39,13 +39,14 @@ The aesthetic is retro **Windows 9X era**: beveled chrome, `#c0c0c0` gray panels
 ```
 src/
   App.tsx                   # BrowserRouter + route table
-  main.tsx                  # Entry; imports design system CSS
+  main.tsx                  # Entry; imports theme.css then index.css
+  theme.css                 # Design tokens (:root palette + .bevel-* utilities)
   index.css                 # Base resets
   data/
     experiences.ts          # Registry: id, title, path, category, description
   pages/
-    HomePage.tsx / .css     # Retro card grid launcher
     NsDoors97Page.tsx       # Wraps NsDoors97 experience
+    DesignPage.tsx          # Design system gallery at /design
     TicTacToePage.tsx / .css
     WordWhirlwindPage.tsx / .css
     TypingRacerPage.tsx / .css
@@ -444,6 +445,6 @@ This project is intentionally minimal on npm dependencies to reduce supply-chain
 
 - Commits reference the feature or PR (see git log for style)
 - "Press Start 2P" is already loaded globally via `index.html` — no additional import needed
-- `@noahwright/design` is a private npm package owned by Noah; don't re-implement its components
+- **Use design tokens, not hardcoded hex.** New/refactored CSS should reference `var(--orange-primary)`, `var(--win95-gray)`, etc. from `src/theme.css` and the `.bevel-*` utility classes — never copy raw hex literals. The eight palette colors are user-themeable; hardcoding them breaks live re-skinning. See `specs/design-system.md`.
 - Category values in `experiences.ts`: `"game"`, `"screensaver"`, `"toy"`, `"educational"`
 - The `HelpOverlay` component renders a `?` button in the corner; pass `title` and children (a `<ul>` of tips)

@@ -203,4 +203,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/jigsaw-puzzle",
   },
+  {
+    id: "design",
+    title: "Design",
+    description: "The NS Doors 97 design system — browse the window chrome and color tokens, and re-skin the whole OS by editing the live theme.",
+    category: "toy",
+    path: "/design",
+  },
 ];

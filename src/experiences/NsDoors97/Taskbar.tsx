@@ -122,6 +122,7 @@ const WORD_GAMES_ITEMS = [
 ] as const;
 
 const TOOLS_ITEMS = [
+  { id: "design",         icon: "🎛️", label: "Design"         },
   { id: "notebook",       icon: "📝", label: "Notebook"       },
   { id: "ns-art",         icon: "🎨", label: "NS Art"          },
   { id: "sound-recorder", icon: "🎙️", label: "Sound Recorder" },

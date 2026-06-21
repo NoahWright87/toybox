@@ -1,11 +1,12 @@
 import {
   type FSNode, type FSFile, type FSFolder, type FSShortcut, type FSFileType,
-  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
+  ROOT_ID, DUMPSTER_ID, NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID, THEME_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
 } from "./types";
+import { THEME_INI } from "../themeTokens";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
 
@@ -497,6 +498,26 @@ export class FileSystemStore {
             id: SYSTEM_INI_ID, kind: "file", name: "system.ini",
             parentId: sysDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
             fileType: "ini", content, mimeType: "text/plain",
+            system: false, readonly: false,
+          } as FSFile);
+        }
+        changed = true;
+      }
+    }
+
+    // Ensure C:\System\theme.ini exists (added for the hackable color scheme)
+    if (!this.nodes.has(THEME_INI_ID)) {
+      const sysDir = this.getNodeByPath("C:\\System");
+      if (sysDir?.kind === "folder") {
+        const existing = this.findChild(sysDir.id, "theme.ini");
+        if (existing?.kind === "file") {
+          this.nodes.delete(existing.id);
+          this.nodes.set(THEME_INI_ID, { ...existing, id: THEME_INI_ID, readonly: false });
+        } else {
+          this.nodes.set(THEME_INI_ID, {
+            id: THEME_INI_ID, kind: "file", name: "theme.ini",
+            parentId: sysDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "ini", content: THEME_INI, mimeType: "text/plain",
             system: false, readonly: false,
           } as FSFile);
         }

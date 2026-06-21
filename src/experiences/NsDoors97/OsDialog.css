@@ -27,7 +27,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  background: linear-gradient(90deg, #cc4400 0%, #ff6b00 50%, #cc4400 100%);
+  background: linear-gradient(90deg, var(--orange-primary) 0%, var(--orange-bright) 50%, var(--orange-primary) 100%);
   user-select: none;
 }
 
@@ -100,7 +100,7 @@
 
 .ns-dialog__ok {
   padding: 6px 32px;
-  background: linear-gradient(180deg, #ff7a1a 0%, #cc4400 100%);
+  background: linear-gradient(180deg, #ff7a1a 0%, var(--orange-primary) 100%);
   border: 2px solid;
   border-color: #ffcc88 #664400 #664400 #ffcc88;
   cursor: pointer;
@@ -118,5 +118,5 @@
 
 .ns-dialog__ok:active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
-  background: linear-gradient(180deg, #cc4400 0%, #ff7a1a 100%);
+  background: linear-gradient(180deg, var(--orange-primary) 0%, #ff7a1a 100%);
 }
