@@ -1,9 +1,7 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
-
-// Base design resolution; Phaser scales to fit the fullscreen container.
-export const GAME_WIDTH = 1280;
-export const GAME_HEIGHT = 720;
+import { PlayScene } from "./scenes/PlayScene";
+import { GAME_WIDTH, GAME_HEIGHT } from "./config";
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -17,9 +15,9 @@ new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   physics: {
-    // Arcade physics + object pooling is the perf plan (see specs/overview.spec.md).
+    // Arcade physics + object pooling is the perf plan (see specs).
     default: "arcade",
     arcade: { debug: false },
   },
-  scene: [BootScene],
+  scene: [BootScene, PlayScene],
 });

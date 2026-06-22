@@ -5,6 +5,7 @@ import {
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -325,6 +326,32 @@ export class FileSystemStore {
           parentId: nsArtDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "application/json",
           system: false, readonly: false, appId: "nsart",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure SHMUP folder + SHMUP.EXE exist (existing sessions)
+    if (!this.nodes.has(SHMUP_EXE_ID)) {
+      let shmupDir = this.getNodeByPath("C:\\Programs\\Games\\SHMUP");
+      if (!shmupDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: SHMUP_FOLDER_ID, kind: "folder", name: "SHMUP",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          shmupDir = folder;
+        }
+      }
+      if (shmupDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EXE_ID, {
+          id: SHMUP_EXE_ID, kind: "file", name: "SHMUP.EXE",
+          parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "exe", content: "", mimeType: "application/octet-stream",
+          system: false, readonly: false, appId: "tos-only",
         } as FSFile);
         changed = true;
       }
