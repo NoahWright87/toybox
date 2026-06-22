@@ -4,7 +4,7 @@
 
 ## Principle
 
-Exactly parallel to "copy is an asset": **all balance constants live in one typed tuning module**, separate from systems logic. Systems read values by key; nobody hard-codes a magic number. The balance pass (and Noah) tweak here without touching engines. A debug overlay (C12 #151) reads the same module so changes are observable.
+Exactly parallel to "copy is an asset": **all balance constants live in one typed tuning module**, separate from systems logic. Systems read values by key; nobody hard-codes a magic number. The balance pass (and Noah) tweak here without touching engines. The debug overlay (C12 #151) reads the same module so changes are observable.
 
 This file enumerates the levers by group. Names are illustrative; the module is the source of truth.
 
@@ -25,7 +25,8 @@ This file enumerates the levers by group. Names are illustrative; the module is 
 - Reroll cost curve; free-reroll allowance by Ratings tier.
 
 ## Offers (`items-and-brands.spec.md`)
-- Tier `baseWeight` table; Luck skew form `(1+Luck)^rank`.
+- Tier `baseWeight` table; rarity skew form `(1 + rarityLuck)^rank` where `rarityLuck = Luck + luckFromD × D`.
+- `luckFromD` (Difficulty's slight rarity boost).
 - `k_brand`, brand affinity cap (≈5×).
 - `Ratings → maxTier / minTier` mapping; offer slot count `N`.
 
@@ -36,8 +37,14 @@ This file enumerates the levers by group. Names are illustrative; the module is 
 ## Passives (`items-and-brands.spec.md`)
 - Per-item `maxStacks`.
 
-## Run structure / escalation (`run-structure.spec.md`)
-- Season count (≈5); per-Season difficulty slope; airtime-clock duration & escalation rate.
-- Node counts per Ratings tier; Luck → special-node bias.
+## Difficulty & escalation (`run-structure.spec.md`)
+- `seasonBase(season)` table; `episodeRamp`; `stageOffset` per stage type; risk-item D modifiers.
+- **Deadline cliff:** per-episode `deadline` budget; `deadlinePenalty` (accelerating over-deadline spike).
+- **Per-stat curves:** `hpCurve(D)`, `dmgCurve(D)`, `densityCurve(D)`, speed/fire-rate/bullet-count curves.
+- **Per-archetype emphasis** weights (which stats each enemy type leans into as D rises).
+- **Composition thresholds:** D values that unlock elites / formations / patterns.
+- **Reward scaling:** gold/EXP multiplier vs D.
+- Season count (≈5). Difficulty settings: starting `seasonBase` + ramp-slope presets.
 
-> The **escalation curve** (per-Season difficulty + airtime clock) is the one formula still to be designed; its constants will land here.
+## Map (`run-structure.spec.md`)
+- Node counts per Ratings tier; Luck → special-node bias; special-node negative D offset.

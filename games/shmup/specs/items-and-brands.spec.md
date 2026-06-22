@@ -18,7 +18,7 @@ Some items key off **transient state** (the second modifier layer): "+damage whi
 Items/weapons carry **brand tags**, replacing authored combos with emergent identity:
 - **Owning a brand's items weights future offers toward that brand** (sponsors back their winners).
 - Brands have **personalities = build archetypes** (*Grease Monkey Oil* → dodge/speed; a Masochist brand → Hype-on-damage). Names/personalities in the content registry; sponsor decals are the visible badge.
-- Brand affinity = **count of distinct brand items owned** (not upgrade tiers); it feeds both offer weighting (below) and the weapon-upgrade discount (`weapons.spec.md`).
+- Brand affinity = **count of distinct brand items owned** (not upgrade tiers); feeds offer weighting and the weapon-upgrade discount.
 
 ## Offer-weighting math (level-up & shop offers)
 
@@ -29,8 +29,9 @@ The whole thing is a **weighted random draw** (`P(x) = weight_x / Σ weights`). 
 maxTier = sponsorTier(Ratings)            # Epics locked until famous enough
 minTier rises mildly at high Ratings      # junk Commons drop out
 
-# Stage 2 — roll a tier; Luck skews upward (geometric)
-w_tier  = baseWeight_tier × (1 + Luck) ^ tierRank      # Common rank 0, Uncommon 1, ...
+# Stage 2 — roll a tier; rarity skews upward (geometric)
+rarityLuck = Luck + luckFromD × Difficulty            # Difficulty gives a slight Luck-like boost
+w_tier  = baseWeight_tier × (1 + rarityLuck) ^ tierRank   # Common rank 0, Uncommon 1, ...
 P(tier) = w_tier / Σ w_tier
 
 # Stage 3 — pick an item in that tier; brand affinity steers
@@ -44,7 +45,7 @@ P(item)    = w_item / Σ w_item
 | Dial | Stage | Controls |
 |---|---|---|
 | **Ratings / sponsor** | 1 | which *tier* is available (ceiling + soft floor) |
-| **Luck** | 2 | rarity skew of the tier roll |
+| **Luck (+ Difficulty)** | 2 | rarity skew of the tier roll; D adds a creeping rarity floor as you go deeper |
 | **Brand affinity** | 3 | *identity* steering within the tier |
 
-None redundant: Ratings raises the ceiling, Luck biases the roll under it, brand affinity steers identity.
+None redundant: Ratings raises the ceiling, Luck/Difficulty bias the roll under it, brand affinity steers identity.
