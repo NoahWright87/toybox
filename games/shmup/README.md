@@ -7,16 +7,18 @@ own package and is launched from the NS-TOS terminal as `SHMUP.EXE` (the way
 
 ## Design docs
 
-The full design lives in [`specs/`](./specs/) — one focused `{system}.spec.md` per
-major system. Start with [`specs/overview.spec.md`](./specs/overview.spec.md) (it
-indexes the rest and maps each spec to its GitHub issue). Numeric balance values
-live in [`specs/tuning.spec.md`](./specs/tuning.spec.md).
+The full design lives in [`specs/games/shmup/`](../../specs/games/shmup/) — mirroring
+the source tree, with `.spec.todo.md` meaning "designed, not yet implemented" (it
+becomes `.spec.md` once a system ships). One focused `{system}.spec.todo.md` per
+major system. Start with
+[`overview.spec.todo.md`](../../specs/games/shmup/overview.spec.todo.md) (it indexes
+the rest and maps each spec to its GitHub issue). Numeric balance values live in
+[`tuning.spec.todo.md`](../../specs/games/shmup/tuning.spec.todo.md).
 
 ## Layout
 
 ```
-games/shmup/
-  specs/             design specs (source of truth)
+games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.todo.md)
   index.html         Vite entry
   src/
     main.ts          Phaser game config

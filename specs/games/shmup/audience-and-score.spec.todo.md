@@ -14,7 +14,7 @@ Visible silhouettes along the bottom of the screen — the presentation backbone
 
 ## Crowd-comment pool
 
-Lines live in the content registry (`content-and-assets.spec.md`):
+Lines live in the content registry (`content-and-assets.spec.todo.md`):
 - **Strongly-typed tags** (enum / string-literal union), never raw strings.
 - A reaction carries a context; eligible lines match its tags; **more matching tags = higher pick weight**. Generic filler and hyper-specific zingers coexist; specific wins when it applies.
 - Token interpolation (`{playerName}`, `{tier}`, …).

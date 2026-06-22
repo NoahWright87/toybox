@@ -1,6 +1,6 @@
 # Shmup — Run Structure Spec (career, map, difficulty, death, persistence)
 
-> Issues: **F8 #136** (map/seasons/difficulty), **F11 #139** (death/persistence). Status: framing locked. Numbers in `tuning.spec.md`.
+> Issues: **F8 #136** (map/seasons/difficulty), **F11 #139** (death/persistence). Status: framing locked. Numbers in `tuning.spec.todo.md`.
 
 ## Career = Seasons
 
@@ -14,11 +14,11 @@
 - A **deadline marker** creeps across the overworld map (left→right) as you take nodes — like FTL's pursuing fleet.
 - If the deadline has advanced **past** the episode you attempt, that episode runs at elevated Difficulty; the further behind you are, the harder (see the D formula). 
 - **Deliberately falling behind to farm extra nodes is a valid high-risk/high-reward play** — amass resources, but face a hard road.
-- **Player Speed** slows the deadline's advance (overworld-only effect; see `combat.spec.md`), buying slack to take more nodes safely.
+- **Player Speed** slows the deadline's advance (overworld-only effect; see `combat.spec.todo.md`), buying slack to take more nodes safely.
 
 ## Difficulty (D) — the master escalation scalar
 
-A single number drives all escalation. **Most enemy stats key off D** through **per-stat curves** (HP fast, damage slow, etc.) defined in `tuning.spec.md` — one input, non-uniform response. Plus:
+A single number drives all escalation. **Most enemy stats key off D** through **per-stat curves** (HP fast, damage slow, etc.) defined in `tuning.spec.todo.md` — one input, non-uniform response. Plus:
 - **Per-archetype emphasis:** each enemy type leans into certain stats as D rises (bruiser → HP/damage, swarmer → count/speed).
 - **Composition thresholds:** higher D unlocks more elites, denser formations, nastier patterns.
 

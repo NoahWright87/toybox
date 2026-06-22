@@ -37,7 +37,7 @@ on death:  RatingsLoss = BasePenalty × (1 − stageProgress) × embarrassmentMo
 cancelled: cumulative Ratings < 0
 ```
 
-- **Gates ACCESS, not difficulty:** more node options skewed toward special nodes (`run-structure.spec.md`). Luck also biases special-node odds. Standard-node difficulty is driven by Season progress, never Ratings.
+- **Gates ACCESS, not difficulty:** more node options skewed toward special nodes (`run-structure.spec.todo.md`). Luck also biases special-node odds. Standard-node difficulty is driven by Season progress, never Ratings.
 - **Tier ladder** (content registry): Nobody → Has-Been → … → Radical 🤙 → Kevin Bacon. The tier name *is* the progress bar.
 - **Perks of high Ratings:** better shop tiers, comped rerolls, bigger crowds.
 - **Loss:** Ratings < 0 = **Cancelled** = career over, any time (even the Pilot).

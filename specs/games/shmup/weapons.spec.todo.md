@@ -1,13 +1,13 @@
 # Shmup — Weapons Spec
 
-> Issues: **F4 #132** (engine), **C1 #140** (base weapons), **C2 #141** (modifiers). Status: framing locked. All numbers live in the tuning module (`tuning.spec.md`).
+> Issues: **F4 #132** (engine), **C1 #140** (base weapons), **C2 #141** (modifiers). Status: framing locked. All numbers live in the tuning module (`tuning.spec.todo.md`).
 
 ## Effect-composition engine
 
 Weapons, attack modifiers, and items are **data** run through one generic engine — not bespoke per-item code. Adding content is a data change.
 
 A **weapon** is data:
-- a base type + base stat values + **per-weapon projectile speed** (authored, see `combat.spec.md`),
+- a base type + base stat values + **per-weapon projectile speed** (authored, see `combat.spec.todo.md`),
 - **firing arc** (forward / behind / sides — some exist to cover blind spots),
 - **target type** (ground-only / air-only / both — gates which weapons matter),
 - optional **focused-fire mode** (e.g. wide spray → concentrated stream when focusing),
@@ -43,8 +43,8 @@ brandDiscount    = min(0.40, d × ownedCount(weapon.brand))   # brand commitment
 
 No separate "milestone" mechanic — qualitative jumps (an extra projectile, etc.) emerge naturally from fractional per-level bonuses crossing an integer.
 
-Passive items do **not** upgrade — they stack (`items-and-brands.spec.md`).
+Passive items do **not** upgrade — they stack (`items-and-brands.spec.todo.md`).
 
 ## Acceptance reference
 
-A new weapon or modifier is purely a data addition; representative stacks (pierce+fork, chain+blast) are unit-tested. Reads from the `stats.spec.md` schema; all constants from `tuning.spec.md`.
+A new weapon or modifier is purely a data addition; representative stacks (pierce+fork, chain+blast) are unit-tested. Reads from the `stats.spec.todo.md` schema; all constants from `tuning.spec.todo.md`.

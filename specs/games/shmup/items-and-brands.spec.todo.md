@@ -1,17 +1,17 @@
 # Shmup — Items & Brands Spec
 
-> Issues: **F4 #132** (engine), **C3 #142** (items), **C4 #143** (graze items), **F9 #137** (offers). Status: framing locked. Numbers live in `tuning.spec.md`.
+> Issues: **F4 #132** (engine), **C3 #142** (items), **C4 #143** (graze items), **F9 #137** (offers). Status: framing locked. Numbers live in `tuning.spec.todo.md`.
 
 ## Passive items
 
-- Items are **modifier bundles** over the shared stat pool (`stats.spec.md`), composed through the effect engine.
+- Items are **modifier bundles** over the shared stat pool (`stats.spec.todo.md`), composed through the effect engine.
 - **Unlimited item slots.** Items **stack** — owning two sums their modifiers through the grammar. No upgrade mechanic.
 - Some items carry a **`maxStacks` cap** (the ones that'd break uncapped, e.g. % evasion). At cap, the offer system stops offering that item.
 - Each item declares `scalesWith` for the explicit-stat display.
 
 ## Conditional / "while grazing" items
 
-Some items key off **transient state** (the second modifier layer): "+damage while grazing", "shields recharge while grazing", etc. They subscribe to the graze/Hype event API (`hype-and-ratings.spec.md`) and apply only while the condition holds.
+Some items key off **transient state** (the second modifier layer): "+damage while grazing", "shields recharge while grazing", etc. They subscribe to the graze/Hype event API (`hype-and-ratings.spec.todo.md`) and apply only while the condition holds.
 
 ## Brand tagging (the synergy-discovery engine)
 

@@ -24,7 +24,7 @@ Every stat declares exactly one role: *flat add to X*, *% in category C of X*, o
 
 ## The 16 MAIN stats
 
-Level-ups (`economy.spec.md`) only ever offer these:
+Level-ups (`economy.spec.todo.md`) only ever offer these:
 
 > **Offense:** Damage, Attack Speed, Crit Chance, Crit Damage
 > **Defense:** Max HP, Armor, Evasion, Max Shield, HP Regen, Lifesteal
@@ -60,5 +60,5 @@ The hot loop reads the cached effective stats; recompute happens on change, neve
 
 - Base Crit Chance **1%**, base Crit Damage **50%**, base Evasion **1%**.
 - Stacking model = the hybrid grammar above (resolved).
-- Graze rings = fractions of the radius stat, separate multiplier stat, **innermost ring only** (see `hype-and-ratings.spec.md`).
-- Projectile speed is **not** a player stat — it's a per-weapon authored property (`weapons.spec.md`).
+- Graze rings = fractions of the radius stat, separate multiplier stat, **innermost ring only** (see `hype-and-ratings.spec.todo.md`).
+- Projectile speed is **not** a player stat — it's a per-weapon authored property (`weapons.spec.todo.md`).
