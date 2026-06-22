@@ -4,30 +4,29 @@
 
 ## Principle
 
-Exactly parallel to "copy is an asset": **all balance constants live in one typed tuning module**, separate from systems logic. Systems read values by key; nobody hard-codes a magic number. The balance pass (and Noah) tweak here without touching engines. The debug overlay (C12 #151) reads the same module so changes are observable.
+Parallel to "copy is an asset": **all balance constants live in one typed tuning module**, separate from systems logic. Systems read values by key; nobody hard-codes a magic number. The balance pass (and Noah) tweak here without touching engines. The debug overlay (C12 #151) reads the same module so changes are observable.
 
-This file enumerates the levers by group. Names are illustrative; the module is the source of truth.
+This file enumerates levers by group; the module is the source of truth.
 
 ## Stats / combat (`stats.spec.md`, `combat.spec.md`)
 - Base values: `critChance=0.01`, `critDamage=0.50`, `evasion=0.01`.
 - Hyperbolic constants: `armorK`, `evasionK`, `reflexBulletK`, `reflexMoveK`.
 - Reflexes caps: `bulletSlowCap≈0.80`, `moveSlowCap≈0.50`.
-- Soft caps / clamps for flat stats (hitbox floor, etc.).
+- Flat-stat clamps (hitbox floor, etc.).
 
 ## Hype & Ratings (`hype-and-ratings.spec.md`)
 - Hype: `hypeBase`, `crowdSize→HypeMax` mapping, `k_idle`, `k_level`, `baseDecay`, `M` (ScoreMult depth).
 - Graze rings: `[{frac,mult}]` table.
-- Ratings: `CrowdConversion`, `BasePenalty`, `embarrassmentMod` table, tier thresholds (Nobody…Kevin Bacon), `Cancelled = Ratings < 0`.
+- Ratings: `CrowdConversion`, `BasePenalty`, `embarrassmentMod` table, tier thresholds, `Cancelled = Ratings < 0`.
 
 ## Economy (`economy.spec.md`)
-- XP-per-level curve; level-up offer count (4); coin/tip values; Magnet catch radius mapping.
+- XP-per-level curve; level-up offer count (4); coin/tip values; Magnet catch-radius mapping.
 - Interest: base rate, Credit-Score scaling, cap (set huge).
 - Reroll cost curve; free-reroll allowance by Ratings tier.
 
 ## Offers (`items-and-brands.spec.md`)
-- Tier `baseWeight` table; rarity skew form `(1 + rarityLuck)^rank` where `rarityLuck = Luck + luckFromD × D`.
-- `luckFromD` (Difficulty's slight rarity boost).
-- `k_brand`, brand affinity cap (≈5×).
+- Tier `baseWeight` table; rarity skew `(1 + rarityLuck)^rank`, `rarityLuck = Luck + luckFromD × D`.
+- `luckFromD`; `k_brand`; brand affinity cap (≈5×).
 - `Ratings → maxTier / minTier` mapping; offer slot count `N`.
 
 ## Weapon upgrades (`weapons.spec.md`)
@@ -39,9 +38,9 @@ This file enumerates the levers by group. Names are illustrative; the module is 
 
 ## Difficulty & escalation (`run-structure.spec.md`)
 - `seasonBase(season)` table; `episodeRamp`; `stageOffset` per stage type; risk-item D modifiers.
-- **Deadline cliff:** per-episode `deadline` budget; `deadlinePenalty` (accelerating over-deadline spike).
+- **Overworld deadline:** `deadlineAdvancePerNode` (how fast the marker creeps), `playerSpeed → deadlineSlack` mapping (Player Speed slows it), `deadlinePenalty` (D per unit of `mapLag`).
 - **Per-stat curves:** `hpCurve(D)`, `dmgCurve(D)`, `densityCurve(D)`, speed/fire-rate/bullet-count curves.
-- **Per-archetype emphasis** weights (which stats each enemy type leans into as D rises).
+- **Per-archetype emphasis** weights.
 - **Composition thresholds:** D values that unlock elites / formations / patterns.
 - **Reward scaling:** gold/EXP multiplier vs D.
 - Season count (≈5). Difficulty settings: starting `seasonBase` + ramp-slope presets.
