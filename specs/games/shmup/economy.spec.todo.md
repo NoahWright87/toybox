@@ -13,7 +13,7 @@
 ## EXP & Levels
 
 - **EXP is gained directly on kill** (no collection) → progression guaranteed.
-- **Level-ups batch at the inter-level break — zero mid-level interruption.** Each offers **4 MAIN stats only** (`stats.spec.todo.md`) with reroll. Exotic stats never appear here.
+- **Level-ups batch at the inter-level break — zero mid-level interruption.** Each offers **4 MAIN stats only** (`stats.spec.md`) with reroll. Exotic stats never appear here.
 - 16 main stats, 4 shown → "hate all 4" is rare (~1–4%); reroll covers it.
 
 ## Gold (skill-gated)

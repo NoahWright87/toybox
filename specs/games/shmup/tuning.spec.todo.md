@@ -8,7 +8,7 @@ Parallel to "copy is an asset": **all balance constants live in one typed tuning
 
 This file enumerates levers by group; the module is the source of truth.
 
-## Stats / combat (`stats.spec.todo.md`, `combat.spec.todo.md`)
+## Stats / combat (`stats.spec.md`, `combat.spec.todo.md`)
 - Base values: `critChance=0.01`, `critDamage=0.50`, `evasion=0.01`.
 - Hyperbolic constants: `armorK`, `evasionK`, `reflexBulletK`, `reflexMoveK`.
 - Reflexes caps: `bulletSlowCap≈0.80`, `moveSlowCap≈0.50`.

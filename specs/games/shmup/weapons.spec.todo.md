@@ -52,4 +52,4 @@ Passive items do **not** upgrade — they stack (`items-and-brands.spec.todo.md`
 
 ## Acceptance reference
 
-A new weapon or modifier is purely a data addition; representative stacks (pierce+fork, chain+blast) are unit-tested. Reads from the `stats.spec.todo.md` schema; all constants from `tuning.spec.todo.md`.
+A new weapon or modifier is purely a data addition; representative stacks (pierce+fork, chain+blast) are unit-tested. Reads from the `stats.spec.md` schema; all constants from `tuning.spec.todo.md`.
