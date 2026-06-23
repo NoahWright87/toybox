@@ -54,3 +54,9 @@ Attack speed & projectile count scale *how often / how many*; `AvgTargetsHit` is
 - **Reflexes** — one stat slowing the *enemy world*, two clamped channels: enemy **bullets** floor ~20% speed (feeds grazing/Hype), enemy **movement** floors ~50% (keep them threatening). Each hyperbolic toward its own cap.
 - **Focus** — an action (hold), not a stat: base = slower movement for precision (Touhou-style). Weapons may add a focused-fire mode; chassis may add perks (`chassis.spec.todo.md`).
 - **Projectile speed** — per-weapon authored property, not a player stat.
+
+## Controls (input scheme)
+
+- **Mobile / touch:** **drag-to-move** (the ship follows the finger, floated above it so it stays visible) + **auto-fire**. No on-screen buttons — movement is the whole verb, which fits the grazing-centric design.
+- **Desktop:** Arrows / WASD (or mouse-drag); auto-fire.
+- **Focus** on mobile is TBD (a second touch or an on-screen toggle) — not needed for the placeholder slice.

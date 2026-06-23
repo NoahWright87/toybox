@@ -3,11 +3,18 @@ import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 
 const TEX = { ship: "t_ship", bullet: "t_bullet", enemy: "t_enemy", star: "t_star" } as const;
 
+// Drag-to-move tuning (ramped lerp: a tap nudges, a held drag travels smoothly).
+// Mirrors the "ramped lerp" convention in the repo CLAUDE.md.
+const DRAG_OFFSET_Y = 60; // float the ship above the finger so it stays visible
+const DRAG_LERP_MAX = 0.3;
+const DRAG_LERP_RAMP = 0.03;
+const FIRE_COOLDOWN_MS = 160;
+
 /**
  * Interactive placeholder slice — everything is a generated colored primitive
- * (placeholder-first art, per specs). Demonstrates the core loop works:
- * move, shoot, destroy drifting targets, score. Real stat/weapon/grazing
- * systems land in their respective foundation issues.
+ * (placeholder-first art, per specs). Demonstrates the core loop: move, shoot,
+ * destroy drifting targets, score. Controls: drag/point to move + auto-fire
+ * (mobile-friendly), or arrows/WASD on desktop.
  */
 export class PlayScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Image;
@@ -16,6 +23,8 @@ export class PlayScene extends Phaser.Scene {
   private stars!: Phaser.GameObjects.Group;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
+  private pointerTarget: { x: number; y: number } | null = null;
+  private dragLerp = 0;
   private lastFired = 0;
   private score = 0;
   private scoreText!: Phaser.GameObjects.Text;
@@ -50,10 +59,22 @@ export class PlayScene extends Phaser.Scene {
     );
 
     this.cursors = this.input.keyboard!.createCursorKeys();
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,SPACE") as Record<
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D") as Record<
       string,
       Phaser.Input.Keyboard.Key
     >;
+
+    // Pointer / touch: drag-to-move (the ship follows the finger).
+    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      this.dragLerp = 0;
+      this.pointerTarget = { x: p.x, y: p.y - DRAG_OFFSET_Y };
+    });
+    this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
+      if (p.isDown) this.pointerTarget = { x: p.x, y: p.y - DRAG_OFFSET_Y };
+    });
+    this.input.on("pointerup", () => {
+      this.pointerTarget = null;
+    });
 
     this.time.addEvent({ delay: 650, loop: true, callback: () => this.spawnEnemy() });
 
@@ -65,7 +86,7 @@ export class PlayScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 22, "Arrows / WASD to move  ·  Space to fire", {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 22, "Drag to move · auto-fire   (or Arrows / WASD)", {
         fontFamily: "monospace",
         fontSize: "13px",
         color: "#888888",
@@ -103,9 +124,12 @@ export class PlayScene extends Phaser.Scene {
     e.setVelocityY(Phaser.Math.Between(90, 190));
   }
 
+  // Placeholder: fires on a fixed cadence regardless of targets.
+  // TODO (future, see weapons spec): smart auto-fire — only fire when an enemy
+  // is within a weapon's range/arc, and lead/target the nearest valid one.
   private fire(time: number) {
     if (time < this.lastFired) return;
-    this.lastFired = time + 160;
+    this.lastFired = time + FIRE_COOLDOWN_MS;
     const b = this.bullets.create(
       this.player.x,
       this.player.y - 20,
@@ -123,12 +147,34 @@ export class PlayScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     const speed = 340;
-    this.player.setVelocity(0);
-    if (this.cursors.left.isDown || this.keys.A.isDown) this.player.setVelocityX(-speed);
-    if (this.cursors.right.isDown || this.keys.D.isDown) this.player.setVelocityX(speed);
-    if (this.cursors.up.isDown || this.keys.W.isDown) this.player.setVelocityY(-speed);
-    if (this.cursors.down.isDown || this.keys.S.isDown) this.player.setVelocityY(speed);
-    if (this.cursors.space.isDown || this.keys.SPACE.isDown) this.fire(time);
+    const left = this.cursors.left.isDown || this.keys.A.isDown;
+    const right = this.cursors.right.isDown || this.keys.D.isDown;
+    const up = this.cursors.up.isDown || this.keys.W.isDown;
+    const down = this.cursors.down.isDown || this.keys.S.isDown;
+    const kbActive = left || right || up || down;
+
+    if (kbActive) {
+      // Keyboard overrides any active drag.
+      this.pointerTarget = null;
+      this.player.setVelocity(0);
+      if (left) this.player.setVelocityX(-speed);
+      if (right) this.player.setVelocityX(speed);
+      if (up) this.player.setVelocityY(-speed);
+      if (down) this.player.setVelocityY(speed);
+    } else if (this.pointerTarget) {
+      // Drag-to-move: ramped lerp toward the finger.
+      this.player.setVelocity(0);
+      this.dragLerp = Math.min(DRAG_LERP_MAX, this.dragLerp + DRAG_LERP_RAMP);
+      this.player.x += (this.pointerTarget.x - this.player.x) * this.dragLerp;
+      this.player.y += (this.pointerTarget.y - this.player.y) * this.dragLerp;
+      this.player.x = Phaser.Math.Clamp(this.player.x, 16, GAME_WIDTH - 16);
+      this.player.y = Phaser.Math.Clamp(this.player.y, 15, GAME_HEIGHT - 15);
+    } else {
+      this.player.setVelocity(0);
+    }
+
+    // Auto-fire (bullet-heaven default — no fire button).
+    this.fire(time);
 
     const dy = delta / 1000;
     (this.stars.getChildren() as Phaser.GameObjects.Image[]).forEach((s) => {

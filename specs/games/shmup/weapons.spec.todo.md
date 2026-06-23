@@ -30,6 +30,11 @@ Modifiers attach to *whatever is firing* — synergies emerge from the math, nev
 
 They compose (pierce + fork → every shot splits and each half tunnels) and feed `AvgTargetsHit` in the DPS formula, not `HIT`.
 
+## Firing & targeting
+
+- **Auto-fire is the default** (bullet-heaven — no fire button); weapons fire on their own cadence (attack speed). This keeps the player's job to *movement/positioning*, which suits both the grazing-centric design and mobile controls.
+- **Smart targeting (planned):** a weapon should only fire when a valid target is within its **range and firing arc** (and lead/aim at the nearest valid enemy for arced/homing types) instead of spraying into empty space. Until that lands, the placeholder fires on a fixed cadence regardless of targets.
+
 ## Upgrades (gold-based, deterministic)
 
 Click an owned weapon at any shop → spend gold → next tier. **No tier cap**; exponential cost is the practical ceiling.
