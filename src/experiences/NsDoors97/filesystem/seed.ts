@@ -5,6 +5,7 @@ import {
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
 } from "./types";
@@ -377,6 +378,13 @@ export function seedFileSystem(store: FileSystemStore): void {
   const hellDir = store.createFolder(GAMES_ID, "HELL");
   store.createFile(hellDir.id, "HELL.EXE",   { fileType: "exe", appId: "tos-only" });
   store.createFile(hellDir.id, "README.TXT", { fileType: "text", content: HELL_README, readonly: true });
+
+  const shmupDir = store.createFolder(GAMES_ID, "SHMUP", { id: SHMUP_FOLDER_ID });
+  store.createFile(shmupDir.id, "SHMUP.EXE", { id: SHMUP_EXE_ID, fileType: "exe", appId: "tos-only" });
+  store.createFile(shmupDir.id, "README.TXT", {
+    fileType: "text", readonly: true,
+    content: "SHMUP - Noahsoft (placeholder build)\nLaunch from NS-TOS: type SHMUP.EXE\n",
+  });
 
   const tttDir = store.createFolder(GAMES_ID, "Tic-Tac-Toe");
   store.createFile(tttDir.id, "Tic-Tac-Toe.exe", { fileType: "exe", appId: "tictactoe" });

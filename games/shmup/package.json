@@ -1,0 +1,19 @@
+{
+  "name": "@toybox/shmup",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Noahsoft sky-mercenary shmup — a separate Phaser 3 app inside the Toy Box monorepo. Launched from NS-TOS as SHMUP.EXE.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "5.5.3",
+    "vite": "5.4.2"
+  }
+}
