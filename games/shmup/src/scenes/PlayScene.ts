@@ -7,12 +7,12 @@ import type { SpriteKey } from "../sprites";
 // Code never inlines a draw call or file path — it asks for one of these keys,
 // and the registry decides whether that currently means a colored primitive
 // or real art. Add new entities to sprites/manifest.json, not here.
-const TEX: Record<string, SpriteKey> = {
+const TEX = {
   ship: "shipPlayer",
   bullet: "bulletPlayer",
   enemy: "enemyDrone",
   star: "fxStarDust",
-};
+} satisfies Record<string, SpriteKey>;
 
 const PLAYER_SPEED = 340; // px/s — shared by keyboard and drag so both move at the same rate
 const DRAG_OFFSET_Y = 120; // float the ship well above the finger so it stays visible

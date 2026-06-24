@@ -78,12 +78,18 @@ function readFsNodes(): Map<string, FsNodeLite> | undefined {
   }
 }
 
+// Read once and cached for the life of the page. Sprite overrides are only
+// consulted at boot (preloadSprites runs once per scene start), and nobody
+// is editing the virtual FS mid-game, so re-parsing the whole payload on
+// every lookup would be pure waste.
+let cachedNodes: Map<string, FsNodeLite> | undefined | null = null;
+
 /**
  * Returns the FS file content (expected to be a data URL) for a sprite's
  * override path, or undefined if no non-empty override exists.
  */
 export function getSpriteOverrideUrl(relativePath: string): string | undefined {
-  const nodes = readFsNodes();
-  if (!nodes) return undefined;
-  return resolveFsOverride(nodes, spriteOverridePath(relativePath));
+  if (cachedNodes === null) cachedNodes = readFsNodes();
+  if (!cachedNodes) return undefined;
+  return resolveFsOverride(cachedNodes, spriteOverridePath(relativePath));
 }

@@ -26,8 +26,8 @@ games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.to
     content/         copy registry ("copy is an asset")
     tuning/          numeric levers ("tuning is an asset")
     systems/         stat/effect/economy engines land here (F3/F4/F9…)
-    sprites/         sprite registry — placeholder primitives + manifest (F5)
-    assets/sprites/  bundled sprite art + manifest.json wiring (F5)
+    sprites/         sprite registry — placeholder primitives + manifest.json (F5)
+    assets/sprites/  bundled sprite art, wired by path from sprites/manifest.json (F5)
 ```
 
 ## Dev (once F1 wires the workspace)
