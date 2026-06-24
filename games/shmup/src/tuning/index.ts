@@ -45,4 +45,29 @@ export const TUNING = {
     // seasonBase, episodeRamp, deadlineAdvancePerNode, deadlinePenalty,
     // per-stat curves, per-archetype emphasis, composition thresholds — F8
   },
+  weapons: {
+    // 6 weapon slots/chassis (bullet-heaven default + a hard performance
+    // ceiling on worst-case concurrent projectiles) — weapons.spec.todo.md.
+    maxWeaponSlots: 6,
+    // Gold-upgrade cost curve: cost(tier) = costBase * costGrowth^tier * (1 - brandDiscount).
+    upgradeCostBase: 50,
+    upgradeCostGrowth: 1.15,
+    // brandDiscount = min(brandDiscountCap, brandDiscountPerItem * ownedCount(brand)).
+    brandDiscountPerItem: 0.05,
+    brandDiscountCap: 0.4,
+    // Pierce/bounce/fork/chain/blast -> AvgTargetsHit composition (combat.spec.todo.md).
+    // Bounce decays geometrically (retainedFraction^bounceIndex); stop once a
+    // bounce's damage fraction drops below the floor, or after maxBounces as
+    // a hard safety cap (bounce is unboundedMult and could exceed 100%).
+    maxBounces: 8,
+    bounceDamageFloor: 0.05,
+    // Chain jumps have no dedicated decay stat (stats.spec.md) — each jump
+    // deals this flat fraction of HIT until the real combat pass (F6) adds one.
+    chainDamageFraction: 1,
+    // Blast radius -> extra splash targets is a density placeholder pending
+    // F6's real spatial query: avg extra targets = blastRadius * blastTargetsPerPx,
+    // each dealt blastDamageFraction of HIT.
+    blastTargetsPerPx: 0.01,
+    blastDamageFraction: 0.5,
+  },
 } as const;
