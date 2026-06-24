@@ -1,22 +1,37 @@
 /**
- * Content / copy registry — "copy is an asset" (specs/content-and-assets.spec.md).
+ * Content / copy registry — "copy is an asset" (specs/content-and-assets.spec.todo.md).
  *
- * All player-facing text lives here as data, referenced by key. Noah edits this;
- * systems never inline strings. Missing keys degrade gracefully (never throw).
+ * The intent is for every player-facing string and tagged content pool to
+ * live in this directory as data, referenced by key/tag, so nothing in
+ * `scenes/`/`systems/` ever inlines a string. New code should always go
+ * through this layer. (Note: the existing scaffold scenes — BootScene,
+ * PlayScene — still have some placeholder inline UI text left over from
+ * the early prototype slice and haven't been migrated yet.)
  *
- * This is a minimal stub for the scaffold; F2 (#130) builds the full registry,
- * typed crowd-comment tags, token interpolation, and per-domain files.
+ * Content vs. logic split:
+ * - copy.ts / ratings.ts / brands.ts / crowdComments.ts / tags.ts are pure
+ *   content — exported literals and types only, no functions. Noah edits
+ *   these; an authoring change never touches code with behavior.
+ * - accessors.ts holds every lookup/picking function.
+ * - interpolate.ts is the small shared `{token}` substitution helper.
+ *
+ * Public surface (everything below is what consumers outside content/ should import):
  */
-
-export const COPY = {
-  "game.title": "SHMUP",
-  "intro.presents": "Noahsoft presents:",
-  "intro.sticker": "Works on Doors 97!",
-} as const;
-
-export type CopyKey = keyof typeof COPY;
-
-/** Look up a line by key; returns a visible fallback rather than throwing. */
-export function copy(key: CopyKey | string): string {
-  return (COPY as Record<string, string>)[key] ?? `[missing: ${key}]`;
-}
+export { COPY } from "./copy";
+export { RATINGS_LADDER } from "./ratings";
+export type { RatingsTierId } from "./ratings";
+export { BRANDS } from "./brands";
+export type { SponsorBrand, BrandId } from "./brands";
+export { CROWD_COMMENTS } from "./crowdComments";
+export type { CrowdCommentLine } from "./crowdComments";
+export type { CrowdTag } from "./tags";
+export { interpolate } from "./interpolate";
+export {
+  copy,
+  ratingsTierName,
+  ratingsTierRank,
+  ratingsTierForScore,
+  brand,
+  pickCrowdComment,
+} from "./accessors";
+export type { CopyKey, CrowdCommentContext } from "./accessors";
