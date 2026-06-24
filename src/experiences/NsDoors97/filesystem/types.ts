@@ -27,6 +27,7 @@ export const JP_STATE_ID       = "fs:jp-state";
 export const JP_IMAGE_ID       = "fs:jp-custom-image";
 export const SHMUP_FOLDER_ID   = "fs:shmup";
 export const SHMUP_EXE_ID      = "fs:shmup-exe";
+export const SHMUP_SPRITES_ID  = "fs:shmup-sprites";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

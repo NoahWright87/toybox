@@ -1,7 +1,18 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
+import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
+import type { SpriteKey } from "../sprites";
 
-const TEX = { ship: "t_ship", bullet: "t_bullet", enemy: "t_enemy", star: "t_star" } as const;
+// Logical roles → sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
+// Code never inlines a draw call or file path — it asks for one of these keys,
+// and the registry decides whether that currently means a colored primitive
+// or real art. Add new entities to sprites/manifest.json, not here.
+const TEX: Record<string, SpriteKey> = {
+  ship: "shipPlayer",
+  bullet: "bulletPlayer",
+  enemy: "enemyDrone",
+  star: "fxStarDust",
+};
 
 const PLAYER_SPEED = 340; // px/s — shared by keyboard and drag so both move at the same rate
 const DRAG_OFFSET_Y = 120; // float the ship well above the finger so it stays visible
@@ -29,8 +40,12 @@ export class PlayScene extends Phaser.Scene {
     super("Play");
   }
 
+  preload() {
+    preloadSprites(this);
+  }
+
   create() {
-    this.makeTextures();
+    ensurePlaceholderTextures(this);
 
     this.stars = this.add.group();
     for (let i = 0; i < 70; i++) {
@@ -92,22 +107,6 @@ export class PlayScene extends Phaser.Scene {
       fontSize: "18px",
       color: "#ffffff",
     });
-  }
-
-  private makeTextures() {
-    const g = this.add.graphics();
-    g.fillStyle(0xff6b00).fillTriangle(16, 0, 0, 30, 32, 30);
-    g.generateTexture(TEX.ship, 32, 30);
-    g.clear();
-    g.fillStyle(0xffcc88).fillRect(0, 0, 4, 12);
-    g.generateTexture(TEX.bullet, 4, 12);
-    g.clear();
-    g.fillStyle(0x7b3dbe).fillRect(0, 0, 28, 28);
-    g.generateTexture(TEX.enemy, 28, 28);
-    g.clear();
-    g.fillStyle(0xffffff).fillRect(0, 0, 2, 2);
-    g.generateTexture(TEX.star, 2, 2);
-    g.destroy();
   }
 
   private spawnEnemy() {
