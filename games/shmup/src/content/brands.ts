@@ -4,8 +4,9 @@
  * archetype (Grease Monkey Oil → dodge/speed) so players can recognize a
  * brand's identity from its decal alone, before reading a single tooltip.
  *
- * Keyed by a short brand id; weapons/items reference brands by this id
- * elsewhere (not here — this file only owns the copy).
+ * Pure content — keyed by a short brand id; weapons/items reference brands
+ * by this id elsewhere (not here — this file only owns the copy). Lookup
+ * logic (the `brand()` accessor) lives in ./accessors.ts, not here.
  */
 export interface SponsorBrand {
   name: string;
@@ -27,14 +28,3 @@ export const BRANDS = {
 } as const satisfies Record<string, SponsorBrand>;
 
 export type BrandId = keyof typeof BRANDS;
-
-/** Look up a brand by id; never throws on an unknown id. */
-export function brand(id: BrandId | string): SponsorBrand {
-  return (
-    (BRANDS as Record<string, SponsorBrand>)[id] ?? {
-      name: `[missing brand: ${id}]`,
-      tagline: "",
-      personality: "",
-    }
-  );
-}
