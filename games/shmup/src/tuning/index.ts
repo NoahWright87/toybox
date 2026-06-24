@@ -11,6 +11,15 @@
  */
 
 export const TUNING = {
+  stats: {
+    // Base values for stats whose default isn't simply 0 (stats.spec.md).
+    damageBase: 1,
+    attackSpeedBase: 1,
+    maxHpBase: 100,
+    playerSpeedBase: 340,
+    magnetRadiusBase: 60,
+    expGainBase: 1,
+  },
   combat: {
     critChance: 0.01,
     critDamage: 0.5,

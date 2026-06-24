@@ -13,7 +13,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     id: "damage",
     category: "offense",
     archetype: "unboundedMult",
-    base: 1,
+    base: TUNING.stats.damageBase,
     unit: "multiplier",
     display: "Damage",
   },
@@ -21,7 +21,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     id: "attackSpeed",
     category: "offense",
     archetype: "unboundedMult",
-    base: 1,
+    base: TUNING.stats.attackSpeedBase,
     unit: "multiplier",
     display: "Attack Speed",
   },
@@ -50,7 +50,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     id: "maxHp",
     category: "defense",
     archetype: "unboundedMult",
-    base: 100,
+    base: TUNING.stats.maxHpBase,
     min: 1,
     unit: "flat",
     display: "Max HP",
@@ -66,6 +66,10 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     unit: "percent",
     display: "Armor",
   },
+  // max: 1 is a defensive clamp, not the reachable ceiling — raw/(raw+K) is
+  // strictly < 1 for any finite raw >= 0, so 100% evasion is asymptotically
+  // unreachable by the formula itself. The clamp only guards pathological
+  // inputs (e.g. a negative K from a future tuning typo).
   evasion: {
     id: "evasion",
     category: "defense",
@@ -80,7 +84,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
   maxShield: {
     id: "maxShield",
     category: "defense",
-    archetype: "unboundedMult",
+    archetype: "flat",
     base: 0,
     min: 0,
     unit: "flat",
@@ -112,7 +116,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     id: "playerSpeed",
     category: "mobility",
     archetype: "flat",
-    base: 340,
+    base: TUNING.stats.playerSpeedBase,
     min: 0,
     unit: "px",
     display: "Player Speed",
@@ -131,6 +135,14 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
   },
 
   // ── Economy ──────────────────────────────────────────────────────────────
+  // unboundedMult itself isn't exponential: within one category, bonuses add
+  // (+10% + +10% = +20%); only stacking bonuses across many different
+  // categories compounds multiplicatively. Crit chance "feels" explosive
+  // because combat (F6) interprets the raw percentage as guaranteed-crit
+  // counts above 100% — that interpretation is downstream of the stat, not
+  // a property of the archetype. Luck/Credit Score get no such downstream
+  // amplification, so their growth stays as flat as the modifiers granting
+  // them (mostly single-category item/upgrade bonuses) make it.
   luck: {
     id: "luck",
     category: "economy",
@@ -151,7 +163,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     id: "expGain",
     category: "economy",
     archetype: "unboundedMult",
-    base: 1,
+    base: TUNING.stats.expGainBase,
     unit: "multiplier",
     display: "EXP Gain",
   },
@@ -159,7 +171,7 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     id: "magnetRadius",
     category: "economy",
     archetype: "flat",
-    base: 60,
+    base: TUNING.stats.magnetRadiusBase,
     min: 0,
     unit: "px",
     display: "Magnet Radius",
