@@ -1,95 +1,112 @@
 import { describe, it, expect } from "vitest";
 import { resolveProjectileBehavior } from "./projectileBehavior";
+import type {
+  ProjectileBehaviorStats,
+  ProjectileBehaviorTuningOverrides,
+} from "./projectileBehavior";
 
-const NO_EXOTICS = { pierce: 0, bounce: 0, fork: 0, chain: 0, blastRadius: 0 };
+const NO_EXOTICS: ProjectileBehaviorStats = { pierce: 0, bounce: 0, fork: 0, chain: 0, blastRadius: 0 };
 
-describe("resolveProjectileBehavior — baseline", () => {
-  it("with no exotic stats, hits exactly one target at full damage", () => {
-    const behavior = resolveProjectileBehavior(NO_EXOTICS);
-    expect(behavior.hitFractions).toEqual([1]);
-    expect(behavior.avgTargetsHit).toBe(1);
-    expect(behavior.totalDamageFraction).toBe(1);
-  });
-});
+interface Case {
+  name: string;
+  given: { stats: ProjectileBehaviorStats; overrides?: ProjectileBehaviorTuningOverrides };
+  then: {
+    hitFractions: number[];
+    avgTargetsHit?: number;
+    totalDamageFraction?: number;
+    blastBonusTargets?: number;
+  };
+}
 
-describe("resolveProjectileBehavior — pierce", () => {
-  it("spends a full+partial budget across pierced targets (weapons.spec.todo.md worked example)", () => {
-    // pierce 2.25 -> guaranteed first hit (1) + pierce budget 2.25 spent as
-    // [1, 1, 0.25]: full damage through three targets total, a quarter to a fourth.
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, pierce: 2.25 });
-    expect(behavior.hitFractions).toEqual([1, 1, 1, 0.25]);
-    expect(behavior.avgTargetsHit).toBe(4);
-    expect(behavior.totalDamageFraction).toBeCloseTo(3.25, 10);
-  });
+const CASES: Case[] = [
+  {
+    name: "no exotic stats hits exactly one target at full damage",
+    given: { stats: NO_EXOTICS },
+    then: { hitFractions: [1], avgTargetsHit: 1, totalDamageFraction: 1 },
+  },
+  {
+    name: "pierce 2.25 spends a full+partial budget across pierced targets",
+    given: { stats: { ...NO_EXOTICS, pierce: 2.25 } },
+    then: { hitFractions: [1, 1, 1, 0.25], avgTargetsHit: 4, totalDamageFraction: 3.25 },
+  },
+  {
+    name: "an exact integer pierce budget produces no trailing partial hit",
+    given: { stats: { ...NO_EXOTICS, pierce: 2 } },
+    then: { hitFractions: [1, 1, 1] },
+  },
+  {
+    name: "zero pierce still guarantees the one hit",
+    given: { stats: { ...NO_EXOTICS, pierce: 0 } },
+    then: { hitFractions: [1] },
+  },
+  {
+    name: "bounce 0.5 decays geometrically and stops below the damage floor",
+    given: { stats: { ...NO_EXOTICS, bounce: 0.5 } },
+    then: { hitFractions: [1, 0.5, 0.25, 0.125, 0.0625] },
+  },
+  {
+    name: "zero bounce contributes no extra hits",
+    given: { stats: { ...NO_EXOTICS, bounce: 0 } },
+    then: { hitFractions: [1] },
+  },
+  {
+    name: "bounce above 100% is capped by maxBounces, not an infinite loop",
+    given: { stats: { ...NO_EXOTICS, bounce: 1.5 }, overrides: { maxBounces: 3 } },
+    then: { hitFractions: [1, 1.5, 2.25, 3.375] },
+  },
+  {
+    name: "chain adds a flat number of full-fraction jumps",
+    given: { stats: { ...NO_EXOTICS, chain: 3 } },
+    then: { hitFractions: [1, 1, 1, 1] },
+  },
+  {
+    name: "a fractional chain count floors down",
+    given: { stats: { ...NO_EXOTICS, chain: 2.9 } },
+    then: { hitFractions: [1, 1, 1] },
+  },
+  {
+    name: "pierce + fork: every shot splits and each half keeps tunneling",
+    given: { stats: { ...NO_EXOTICS, pierce: 2.25, fork: 1 } },
+    then: { hitFractions: [1, 1, 1, 0.25, 1, 1, 1, 0.25], avgTargetsHit: 8 },
+  },
+  {
+    name: "chain + blast: chain jumps each also trigger a splash bonus",
+    given: {
+      stats: { ...NO_EXOTICS, chain: 3, blastRadius: 100 },
+      overrides: { blastTargetsPerPx: 0.01, blastDamageFraction: 0.5 },
+    },
+    then: {
+      hitFractions: [1, 1, 1, 1],
+      blastBonusTargets: 4,
+      avgTargetsHit: 8,
+      totalDamageFraction: 6,
+    },
+  },
+];
 
-  it("an exact integer pierce budget produces no trailing partial hit", () => {
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, pierce: 2 });
-    expect(behavior.hitFractions).toEqual([1, 1, 1]);
-  });
-
-  it("zero pierce still guarantees the one hit", () => {
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, pierce: 0 });
-    expect(behavior.hitFractions).toEqual([1]);
-  });
-});
-
-describe("resolveProjectileBehavior — bounce", () => {
-  it("decays geometrically per bounce and stops below the damage floor", () => {
-    // bounce 0.5: 0.5, 0.25, 0.125, 0.0625, (0.03125 < default floor 0.05 -> stop)
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, bounce: 0.5 });
-    expect(behavior.hitFractions).toEqual([1, 0.5, 0.25, 0.125, 0.0625]);
-  });
-
-  it("zero bounce contributes no extra hits", () => {
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, bounce: 0 });
-    expect(behavior.hitFractions).toEqual([1]);
-  });
-
-  it("a bounce stat above 100% is capped by maxBounces, not an infinite loop", () => {
-    const behavior = resolveProjectileBehavior(
-      { ...NO_EXOTICS, bounce: 1.5 },
-      { maxBounces: 3 }
-    );
-    // every bounce fraction grows (1.5^1, 1.5^2, 1.5^3) so the floor never
-    // triggers; maxBounces is the only thing that bounds it.
-    expect(behavior.hitFractions).toHaveLength(1 + 3);
-  });
-});
-
-describe("resolveProjectileBehavior — chain", () => {
-  it("adds a flat number of full-fraction jumps", () => {
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, chain: 3 });
-    expect(behavior.hitFractions).toEqual([1, 1, 1, 1]);
-  });
-
-  it("floors a fractional chain count", () => {
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, chain: 2.9 });
-    expect(behavior.hitFractions).toEqual([1, 1, 1]);
-  });
-});
-
-describe("resolveProjectileBehavior — representative stacks", () => {
-  it("pierce + fork: every shot splits and each half keeps tunneling", () => {
-    const behavior = resolveProjectileBehavior({ ...NO_EXOTICS, pierce: 2.25, fork: 1 });
-    // single line is [1, 1, 1, 0.25] (4 hits); fork=1 -> 2 independent copies.
-    expect(behavior.hitFractions).toEqual([1, 1, 1, 0.25, 1, 1, 1, 0.25]);
-    expect(behavior.avgTargetsHit).toBe(8);
-  });
-
-  it("chain + blast: chain jumps each also trigger a splash bonus", () => {
-    const behavior = resolveProjectileBehavior(
-      { ...NO_EXOTICS, chain: 3, blastRadius: 100 },
-      { blastTargetsPerPx: 0.01, blastDamageFraction: 0.5 }
-    );
-    expect(behavior.hitFractions).toEqual([1, 1, 1, 1]);
-    // blastBonusTargets = blastRadius * blastTargetsPerPx * hitCount = 100 * 0.01 * 4
-    expect(behavior.blastBonusTargets).toBeCloseTo(4, 10);
-    expect(behavior.avgTargetsHit).toBeCloseTo(8, 10);
-    expect(behavior.totalDamageFraction).toBeCloseTo(4 + 4 * 0.5, 10);
+describe("resolveProjectileBehavior", () => {
+  it.each(CASES)("$name", ({ given, then }) => {
+    const behavior = resolveProjectileBehavior(given.stats, given.overrides);
+    expect(behavior.hitFractions).toEqual(then.hitFractions);
+    if (then.avgTargetsHit !== undefined) {
+      expect(behavior.avgTargetsHit).toBeCloseTo(then.avgTargetsHit, 10);
+    }
+    if (then.totalDamageFraction !== undefined) {
+      expect(behavior.totalDamageFraction).toBeCloseTo(then.totalDamageFraction, 10);
+    }
+    if (then.blastBonusTargets !== undefined) {
+      expect(behavior.blastBonusTargets).toBeCloseTo(then.blastBonusTargets, 10);
+    }
   });
 
   it("is pure and deterministic: identical stats produce identical behavior", () => {
-    const stats = { ...NO_EXOTICS, pierce: 1.5, bounce: 0.4, fork: 2, chain: 1, blastRadius: 30 };
+    const stats: ProjectileBehaviorStats = {
+      pierce: 1.5,
+      bounce: 0.4,
+      fork: 2,
+      chain: 1,
+      blastRadius: 30,
+    };
     const a = resolveProjectileBehavior(stats);
     const b = resolveProjectileBehavior(stats);
     expect(a).toEqual(b);

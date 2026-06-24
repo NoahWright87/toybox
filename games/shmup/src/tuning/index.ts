@@ -64,6 +64,13 @@ export const TUNING = {
     // Chain jumps have no dedicated decay stat (stats.spec.md) — each jump
     // deals this flat fraction of HIT until the real combat pass (F6) adds one.
     chainDamageFraction: 1,
+    // Pierce and chain are unbounded stats; these hard-cap the per-projectile
+    // hit-fraction array so a huge stat value can't allocate an unbounded array.
+    maxPierceHits: 100,
+    maxChainHits: 100,
+    // Fork is unbounded too — caps how many parallel copies of a single line
+    // one projectile can spawn.
+    maxForkCopies: 16,
     // Blast radius -> extra splash targets is a density placeholder pending
     // F6's real spatial query: avg extra targets = blastRadius * blastTargetsPerPx,
     // each dealt blastDamageFraction of HIT.

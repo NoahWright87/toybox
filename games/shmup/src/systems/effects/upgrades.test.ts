@@ -17,20 +17,38 @@ const PEA_SHOOTER: WeaponDef = {
   ],
 };
 
-describe("weaponModsAtTier", () => {
-  it("statValue(tier) = base + perLevel * tier per modifier", () => {
-    const mods = weaponModsAtTier(PEA_SHOOTER, 4);
-    expect(mods).toEqual([
-      { kind: "flat", stat: "damage", amount: 5 + 1 * 4 },
-      { kind: "flat", stat: "fork", amount: 0 + 0.5 * 4, source: "pea-shooter" },
-    ]);
-  });
+interface ModsAtTierCase {
+  name: string;
+  given: { tier: number };
+  then: { mods: ReturnType<typeof weaponModsAtTier> };
+}
 
-  it("tier 0 returns exactly the base modifiers", () => {
-    expect(weaponModsAtTier(PEA_SHOOTER, 0)).toEqual([
-      { kind: "flat", stat: "damage", amount: 5 },
-      { kind: "flat", stat: "fork", amount: 0, source: "pea-shooter" },
-    ]);
+const MODS_AT_TIER_CASES: ModsAtTierCase[] = [
+  {
+    name: "statValue(tier) = base + perLevel * tier per modifier",
+    given: { tier: 4 },
+    then: {
+      mods: [
+        { kind: "flat", stat: "damage", amount: 5 + 1 * 4 },
+        { kind: "flat", stat: "fork", amount: 0 + 0.5 * 4, source: "pea-shooter" },
+      ],
+    },
+  },
+  {
+    name: "tier 0 returns exactly the base modifiers",
+    given: { tier: 0 },
+    then: {
+      mods: [
+        { kind: "flat", stat: "damage", amount: 5 },
+        { kind: "flat", stat: "fork", amount: 0, source: "pea-shooter" },
+      ],
+    },
+  },
+];
+
+describe("weaponModsAtTier", () => {
+  it.each(MODS_AT_TIER_CASES)("$name", ({ given, then }) => {
+    expect(weaponModsAtTier(PEA_SHOOTER, given.tier)).toEqual(then.mods);
   });
 
   it("fractional perLevel accumulates without rounding (qualitative jumps emerge naturally)", () => {
@@ -40,31 +58,70 @@ describe("weaponModsAtTier", () => {
   });
 });
 
-describe("brandDiscount", () => {
-  it("scales with owned brand count up to the cap", () => {
-    expect(brandDiscount(0)).toBe(0);
-    expect(brandDiscount(1)).toBeCloseTo(TUNING.weapons.brandDiscountPerItem, 10);
-  });
+interface BrandDiscountCase {
+  name: string;
+  given: { ownedBrandCount: number };
+  then: { discount: number };
+}
 
-  it("never exceeds brandDiscountCap even with a huge owned count", () => {
-    expect(brandDiscount(1000)).toBe(TUNING.weapons.brandDiscountCap);
+const BRAND_DISCOUNT_CASES: BrandDiscountCase[] = [
+  {
+    name: "zero owned contributes no discount",
+    given: { ownedBrandCount: 0 },
+    then: { discount: 0 },
+  },
+  {
+    name: "scales with owned brand count",
+    given: { ownedBrandCount: 1 },
+    then: { discount: TUNING.weapons.brandDiscountPerItem },
+  },
+  {
+    name: "never exceeds the discount cap even with a huge owned count",
+    given: { ownedBrandCount: 1000 },
+    then: { discount: TUNING.weapons.brandDiscountCap },
+  },
+];
+
+describe("brandDiscount", () => {
+  it.each(BRAND_DISCOUNT_CASES)("$name", ({ given, then }) => {
+    expect(brandDiscount(given.ownedBrandCount)).toBeCloseTo(then.discount, 10);
   });
 });
 
+interface UpgradeCostCase {
+  name: string;
+  given: { tier: number; ownedBrandCount: number };
+  then: { cost: number };
+}
+
+const { upgradeCostBase, upgradeCostGrowth } = TUNING.weapons;
+
+const UPGRADE_COST_CASES: UpgradeCostCase[] = [
+  {
+    name: "cost(0) is exactly costBase with no brand discount",
+    given: { tier: 0, ownedBrandCount: 0 },
+    then: { cost: upgradeCostBase },
+  },
+  {
+    name: "cost grows exponentially with tier",
+    given: { tier: 3, ownedBrandCount: 0 },
+    then: { cost: upgradeCostBase * Math.pow(upgradeCostGrowth, 3) },
+  },
+  {
+    name: "the brand discount applies multiplicatively",
+    given: { tier: 2, ownedBrandCount: 2 },
+    then: { cost: upgradeCostBase * Math.pow(upgradeCostGrowth, 2) * (1 - brandDiscount(2)) },
+  },
+];
+
 describe("weaponUpgradeCost", () => {
-  it("cost(0) is exactly costBase with no brand discount", () => {
-    expect(weaponUpgradeCost(0, 0)).toBe(TUNING.weapons.upgradeCostBase);
+  it.each(UPGRADE_COST_CASES)("$name", ({ given, then }) => {
+    expect(weaponUpgradeCost(given.tier, given.ownedBrandCount)).toBeCloseTo(then.cost, 10);
   });
 
-  it("grows exponentially with tier", () => {
-    const { upgradeCostBase, upgradeCostGrowth } = TUNING.weapons;
-    expect(weaponUpgradeCost(3, 0)).toBeCloseTo(upgradeCostBase * Math.pow(upgradeCostGrowth, 3), 10);
-  });
-
-  it("applies the brand discount multiplicatively", () => {
+  it("a brand discount strictly lowers the cost relative to no discount", () => {
     const undiscounted = weaponUpgradeCost(2, 0);
     const discounted = weaponUpgradeCost(2, 2);
-    expect(discounted).toBeCloseTo(undiscounted * (1 - brandDiscount(2)), 10);
     expect(discounted).toBeLessThan(undiscounted);
   });
 });

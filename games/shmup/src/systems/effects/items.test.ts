@@ -2,14 +2,14 @@ import { describe, it, expect } from "vitest";
 import { itemModsForOwned } from "./items";
 import type { ItemDef, OwnedItem } from "./types";
 
-const SPEED_TONIC: ItemDef = {
+const speedTonic: ItemDef = {
   id: "speed-tonic",
   name: "Speed Tonic",
   mods: [{ kind: "flat", stat: "playerSpeed", amount: 10 }],
   scalesWith: ["playerSpeed"],
 };
 
-const LUCKY_CHARM: ItemDef = {
+const luckyCharmMax3: ItemDef = {
   id: "lucky-charm",
   name: "Lucky Charm",
   mods: [{ kind: "percent", stat: "evasion", amount: 0.05 }],
@@ -17,27 +17,44 @@ const LUCKY_CHARM: ItemDef = {
   scalesWith: ["evasion"],
 };
 
+interface Case {
+  name: string;
+  given: { item: ItemDef; ownedCount: number };
+  then: { resultAmount: number };
+}
+
+const CASES: Case[] = [
+  {
+    name: "uncapped item scales linearly with owned count",
+    given: { item: speedTonic, ownedCount: 4 },
+    then: { resultAmount: 40 },
+  },
+  {
+    name: "a single copy returns the bundle's mod unscaled",
+    given: { item: speedTonic, ownedCount: 1 },
+    then: { resultAmount: 10 },
+  },
+  {
+    name: "stacking clamps at maxStacks",
+    given: { item: luckyCharmMax3, ownedCount: 3 },
+    then: { resultAmount: 0.15 },
+  },
+  {
+    name: "owning more than maxStacks still clamps at maxStacks",
+    given: { item: luckyCharmMax3, ownedCount: 10 },
+    then: { resultAmount: 0.15 },
+  },
+  {
+    name: "zero copies contributes nothing",
+    given: { item: speedTonic, ownedCount: 0 },
+    then: { resultAmount: 0 },
+  },
+];
+
 describe("itemModsForOwned", () => {
-  it("uncapped items scale linearly with count (unlimited slots, no cap)", () => {
-    const owned: OwnedItem = { item: SPEED_TONIC, count: 4 };
-    expect(itemModsForOwned(owned)).toEqual([{ kind: "flat", stat: "playerSpeed", amount: 40 }]);
-  });
-
-  it("a single copy returns the bundle's mods unscaled", () => {
-    const owned: OwnedItem = { item: SPEED_TONIC, count: 1 };
-    expect(itemModsForOwned(owned)).toEqual(SPEED_TONIC.mods);
-  });
-
-  it("clamps stacking at maxStacks once exceeded", () => {
-    const atCap: OwnedItem = { item: LUCKY_CHARM, count: 3 };
-    const overCap: OwnedItem = { item: LUCKY_CHARM, count: 10 };
-    expect(itemModsForOwned(overCap)).toEqual(itemModsForOwned(atCap));
-    expect(itemModsForOwned(atCap)[0].amount).toBeCloseTo(0.15, 10);
-  });
-
-  it("zero copies contributes nothing", () => {
-    expect(itemModsForOwned({ item: SPEED_TONIC, count: 0 })).toEqual([
-      { kind: "flat", stat: "playerSpeed", amount: 0 },
-    ]);
+  it.each(CASES)("$name", ({ given, then }) => {
+    const owned: OwnedItem = { item: given.item, count: given.ownedCount };
+    const [mod] = itemModsForOwned(owned);
+    expect(mod.amount).toBeCloseTo(then.resultAmount, 10);
   });
 });

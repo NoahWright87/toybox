@@ -11,11 +11,14 @@ import type { WeaponDef } from "./types";
  * statValue(tier) = base + perLevel * tier, applied per scaling modifier.
  * Fractional `perLevel` accumulates in the returned `amount` — rounding for
  * display/effect is the caller's job (weapons.spec.todo.md), not this engine's.
+ * `tier` is clamped to a non-negative integer — there's no such thing as a
+ * negative or fractional upgrade tier.
  */
 export function weaponModsAtTier(weapon: WeaponDef, tier: number): StatModifier[] {
+  const safeTier = Math.max(0, Math.floor(tier));
   return weapon.mods.map(({ base, perLevel }) => ({
     ...base,
-    amount: base.amount + perLevel * tier,
+    amount: base.amount + perLevel * safeTier,
   }));
 }
 
@@ -36,6 +39,7 @@ export function brandDiscount(ownedBrandCount: number): number {
  */
 export function weaponUpgradeCost(tier: number, ownedBrandCount = 0): number {
   const { upgradeCostBase, upgradeCostGrowth } = TUNING.weapons;
+  const safeTier = Math.max(0, Math.floor(tier));
   const discount = brandDiscount(ownedBrandCount);
-  return upgradeCostBase * Math.pow(upgradeCostGrowth, tier) * (1 - discount);
+  return upgradeCostBase * Math.pow(upgradeCostGrowth, safeTier) * (1 - discount);
 }
