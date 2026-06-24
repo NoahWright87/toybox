@@ -4,7 +4,7 @@
 
 ## Passive items
 
-- Items are **modifier bundles** over the shared stat pool (`stats.spec.todo.md`), composed through the effect engine.
+- Items are **modifier bundles** over the shared stat pool (`stats.spec.md`), composed through the effect engine.
 - **Unlimited item slots.** Items **stack** — owning two sums their modifiers through the grammar. No upgrade mechanic.
 - Some items carry a **`maxStacks` cap** (the ones that'd break uncapped, e.g. % evasion). At cap, the offer system stops offering that item.
 - Each item declares `scalesWith` for the explicit-stat display.

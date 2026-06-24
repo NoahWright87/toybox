@@ -16,7 +16,7 @@ The crowd cheers because you *almost died and didn't*. Grazing and showy play fe
 
 ## Cross-cutting principles (every system obeys these)
 
-1. **One shared stat pool.** All systems compose modifiers onto the same stats via one grammar (`stats.spec.todo.md`).
+1. **One shared stat pool.** All systems compose modifiers onto the same stats via one grammar (`stats.spec.md`).
 2. **Freeform modifier stacking, not authored combos.** Synergies emerge from the math (Nova Drift / RoR2).
 3. **Data-driven core.** New content is data, not new code.
 4. **Copy is an asset.** All human-authored text lives in a content registry Noah edits (`content-and-assets.spec.todo.md`).
@@ -37,7 +37,7 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 
 | Spec | Covers | Issues |
 |---|---|---|
-| `stats.spec.todo.md` | composition grammar, archetypes, 16 main stats | F3 #131 |
+| `stats.spec.md` | composition grammar, archetypes, 16 main stats — **implemented** | F3 #131 |
 | `combat.spec.todo.md` | damage, defense pipeline, mobility | F3 #131, F6 #134 |
 | `weapons.spec.todo.md` | effect engine, attack modifiers, gold upgrades | F4 #132, C1 #140, C2 #141 |
 | `items-and-brands.spec.todo.md` | items, stacking, brand tags, offer weighting | F4 #132, F9 #137, C3 #142, C4 #143 |
