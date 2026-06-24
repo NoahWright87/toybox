@@ -5,7 +5,7 @@ import {
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
-  SHMUP_FOLDER_ID, SHMUP_EXE_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -353,6 +353,28 @@ export class FileSystemStore {
           fileType: "exe", content: "", mimeType: "application/octet-stream",
           system: false, readonly: false, appId: "tos-only",
         } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure SHMUP's sprite asset-override folders exist (existing sessions)
+    if (!this.nodes.has(SHMUP_SPRITES_ID)) {
+      const shmupDir = this.getNodeByPath("C:\\Programs\\Games\\SHMUP");
+      if (shmupDir?.kind === "folder") {
+        const spritesFolder: FSFolder = {
+          id: SHMUP_SPRITES_ID, kind: "folder", name: "Sprites",
+          parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        };
+        this.nodes.set(spritesFolder.id, spritesFolder);
+        for (const name of ["ships", "enemies", "effects", "projectiles"]) {
+          const folder: FSFolder = {
+            id: genId(), kind: "folder", name,
+            parentId: spritesFolder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+        }
         changed = true;
       }
     }

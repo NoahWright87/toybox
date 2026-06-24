@@ -1,0 +1,38 @@
+{
+  "shipPlayer": {
+    "category": "ships",
+    "path": "ships/ship_player_idle_01.png",
+    "frameWidth": 32,
+    "frameHeight": 30,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "triangle", "color": "#ff6b00" }
+  },
+  "bulletPlayer": {
+    "category": "projectiles",
+    "path": "projectiles/projectile_bullet_player_01.png",
+    "frameWidth": 4,
+    "frameHeight": 12,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#ffcc88" }
+  },
+  "enemyDrone": {
+    "category": "enemies",
+    "path": "enemies/enemy_drone_idle_01.png",
+    "frameWidth": 28,
+    "frameHeight": 28,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#7b3dbe" }
+  },
+  "fxStarDust": {
+    "category": "effects",
+    "path": "effects/fx_star_dust_01.png",
+    "frameWidth": 2,
+    "frameHeight": 2,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#ffffff" }
+  }
+}

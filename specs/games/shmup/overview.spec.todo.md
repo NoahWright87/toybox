@@ -46,5 +46,6 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 | `economy.spec.todo.md` | currencies, coins/tips, interest, shop, gold sinks | F9 #137 |
 | `run-structure.spec.todo.md` | seasons, node map, death, persistence, escalation | F8 #136, F11 #139 |
 | `audience-and-score.spec.todo.md` | studio audience, crowd comments, score & results | T10 #161, C14 #163 |
-| `content-and-assets.spec.todo.md` | copy registry, sprite registry, asset pipeline | F2 #130, F5 #133 |
+| `content-and-assets.spec.md` | sprite registry, asset pipeline — **implemented** | F5 #133 |
+| `content-and-assets.spec.todo.md` | copy registry | F2 #130 |
 | `tuning.spec.todo.md` | the single home of every numeric lever | (all) |
