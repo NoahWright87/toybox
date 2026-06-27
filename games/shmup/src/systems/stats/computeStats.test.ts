@@ -6,10 +6,10 @@ import { formatStatValue } from "./format";
 import type { StatModifier } from "./types";
 
 describe("STAT_DEFS", () => {
-  it("has exactly the 16 main stats + 6 exotic stats", () => {
+  it("has exactly the 16 main stats + 3 exotic stats", () => {
     expect(MAIN_STAT_IDS).toHaveLength(16);
-    expect(EXOTIC_STAT_IDS).toHaveLength(6);
-    expect(Object.keys(STAT_DEFS)).toHaveLength(22);
+    expect(EXOTIC_STAT_IDS).toHaveLength(3);
+    expect(Object.keys(STAT_DEFS)).toHaveLength(19);
   });
 
   it("every hyperbolic stat declares a K", () => {
@@ -145,6 +145,6 @@ describe("formatStatValue", () => {
     expect(formatStatValue(STAT_DEFS.critChance, 0.25)).toBe("25%");
     expect(formatStatValue(STAT_DEFS.damage, 1.2345)).toBe("1.23×");
     expect(formatStatValue(STAT_DEFS.magnetRadius, 64)).toBe("64px");
-    expect(formatStatValue(STAT_DEFS.fork, 2)).toBe("2");
+    expect(formatStatValue(STAT_DEFS.hpRegen, 2)).toBe("2");
   });
 });

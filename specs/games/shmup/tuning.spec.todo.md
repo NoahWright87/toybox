@@ -32,6 +32,7 @@ This file enumerates levers by group; the module is the source of truth.
 ## Weapon upgrades (`weapons.spec.todo.md`)
 - Per-weapon `perLevel` bonus tables (fractional allowed).
 - `costBase`, `costGrowth`; brand discount `d`, discount cap `0.40`.
+- Pierce decomposition: `defaultPierceDecay=0.5`, `maxPierceDecay=0.95`, tail damage floor `≈0.01`, safety caps on fork count and tail length.
 
 ## Passives (`items-and-brands.spec.todo.md`)
 - Per-item `maxStacks`.

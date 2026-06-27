@@ -35,9 +35,6 @@ export const MAIN_STAT_IDS = [
  */
 export const EXOTIC_STAT_IDS = [
   "pierce",
-  "bounce",
-  "fork",
-  "chain",
   "blastRadius",
   "homingStrength",
 ] as const;
