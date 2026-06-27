@@ -20,9 +20,9 @@ Every stat declares exactly one role: *flat add to X*, *% in category C of X*, o
 
 ## Three stat archetypes
 
-1. **Unbounded multiplicative** (`archetype: "unboundedMult"`) — damage, attack speed, max HP, gold/EXP gain, crit chance, crit damage, lifesteal, Reflexes, luck, credit score, and the pierce/bounce/homing exotics. Additive within a category, multiplies across categories. Infinite-in-spirit; balanced by exponential acquisition cost + escalation. Crit Chance is explicitly **uncapped** here (combat.spec.todo.md) — 250% is a valid effective value, not clamped to 100%.
+1. **Unbounded multiplicative** (`archetype: "unboundedMult"`) — damage, attack speed, max HP, gold/EXP gain, crit chance, crit damage, lifesteal, Reflexes, luck, credit score, and the pierce/homing exotics. Additive within a category, multiplies across categories. Infinite-in-spirit; balanced by exponential acquisition cost + escalation. Crit Chance is explicitly **uncapped** here (combat.spec.todo.md) — 250% is a valid effective value, not clamped to 100%.
 2. **Hyperbolic / soft-capped** (`archetype: "hyperbolic"`) — evasion, armor. `effective = raw / (raw + K)`, approaches a cap, never reaches it. `K` per stat is the tuning knob (`TUNING.combat.evasionK` / `armorK`). Negative raw values floor to `0` before the transform.
-3. **Additive flat, geometry-capped** (`archetype: "flat"`) — player speed, magnet radius, HP regen, max shield, and the fork/chain/blast-radius exotics. Optional `min`/`max` clamps; geometry caps (e.g. screen bounds) are enforced by the consuming scene, not asserted here unless a numeric cap is already known.
+3. **Additive flat, geometry-capped** (`archetype: "flat"`) — player speed, magnet radius, HP regen, max shield, and the blast-radius exotic. Optional `min`/`max` clamps; geometry caps (e.g. screen bounds) are enforced by the consuming scene, not asserted here unless a numeric cap is already known.
 
 Reflexes is `unboundedMult` rather than `hyperbolic`: it's a single raw stat whose value feeds **two separate** hyperbolic channels (enemy bullet speed, enemy movement speed) with their own `K` and cap, applied downstream by combat (`TUNING.combat.reflexBulletK` / `reflexMoveK` / `reflexBulletSlowCap` / `reflexMoveSlowCap`). Combat reads the raw pre-transform value via `aggregateRaw("reflexes", ...)` rather than `computeStats()`'s output.
 
@@ -35,7 +35,7 @@ Level-ups (`economy.spec.todo.md`) only ever offer these (`MAIN_STAT_IDS` in `sy
 > **Mobility:** Player Speed, Reflexes
 > **Economy:** Luck, Credit Score, EXP Gain, Magnet Radius
 
-**Exotic stats** (`EXOTIC_STAT_IDS`) — Pierce, Bounce, Fork, Chain, Blast Radius, Homing Strength — never appear in level-ups. They come only from weapons/items/shop, keeping the level pick legible and exotic builds intentional. Fork and Chain are flat counts (number of extra projectiles / chain jumps); Pierce, Bounce, and Homing Strength are unbounded percentages.
+**Exotic stats** (`EXOTIC_STAT_IDS`) — Pierce, Blast Radius, Homing Strength — never appear in level-ups. They come only from weapons/items/shop, keeping the level pick legible and exotic builds intentional. Pierce and Homing Strength are unbounded percentages; Blast Radius is a flat px value. Pierce used to be four separate stats (Pierce/Bounce/Fork/Chain) — they were behaviorally redundant, so they were consolidated into one unified Pierce stat with per-weapon `PierceDecay` driving the above-100% forking behavior (`weapons.spec.todo.md`).
 
 Hype/graze-specific stats (graze radius, graze multiplier, hitbox size) are **not** part of this table yet — `hype-and-ratings.spec.todo.md` (F7 #135) adds them using the same `StatDef` shape when that system lands.
 

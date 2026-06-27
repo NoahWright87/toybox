@@ -1,7 +1,7 @@
 /**
  * The StatDef table — THE ground truth referenced by every other system
  * (stats.spec.md, combat.spec.todo.md). 16 main stats (level-up eligible)
- * + 6 exotic stats (weapons/items/shop only). Numeric constants come from the
+ * + 3 exotic stats (weapons/items/shop only). Numeric constants come from the
  * tuning module; nothing here is a bare magic number.
  */
 import { TUNING } from "../../tuning";
@@ -186,33 +186,6 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     min: 0,
     unit: "percent",
     display: "Pierce",
-  },
-  bounce: {
-    id: "bounce",
-    category: "exotic",
-    archetype: "unboundedMult",
-    base: 0,
-    min: 0,
-    unit: "percent",
-    display: "Bounce",
-  },
-  fork: {
-    id: "fork",
-    category: "exotic",
-    archetype: "flat",
-    base: 0,
-    min: 0,
-    unit: "flat",
-    display: "Fork",
-  },
-  chain: {
-    id: "chain",
-    category: "exotic",
-    archetype: "flat",
-    base: 0,
-    min: 0,
-    unit: "flat",
-    display: "Chain",
   },
   blastRadius: {
     id: "blastRadius",

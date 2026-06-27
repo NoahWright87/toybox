@@ -10,10 +10,10 @@ const PEA_SHOOTER: WeaponDef = {
   firingArc: "forward",
   targetType: "both",
   projectileSpeed: 600,
-  scalesWith: ["damage", "fork"],
+  scalesWith: ["damage", "pierce"],
   mods: [
     { base: { kind: "flat", stat: "damage", amount: 5 }, perLevel: 1 },
-    { base: { kind: "flat", stat: "fork", amount: 0, source: "pea-shooter" }, perLevel: 0.5 },
+    { base: { kind: "flat", stat: "pierce", amount: 0, source: "pea-shooter" }, perLevel: 0.5 },
   ],
 };
 
@@ -30,7 +30,7 @@ const MODS_AT_TIER_CASES: ModsAtTierCase[] = [
     then: {
       mods: [
         { kind: "flat", stat: "damage", amount: 5 + 1 * 4 },
-        { kind: "flat", stat: "fork", amount: 0 + 0.5 * 4, source: "pea-shooter" },
+        { kind: "flat", stat: "pierce", amount: 0 + 0.5 * 4, source: "pea-shooter" },
       ],
     },
   },
@@ -40,7 +40,7 @@ const MODS_AT_TIER_CASES: ModsAtTierCase[] = [
     then: {
       mods: [
         { kind: "flat", stat: "damage", amount: 5 },
-        { kind: "flat", stat: "fork", amount: 0, source: "pea-shooter" },
+        { kind: "flat", stat: "pierce", amount: 0, source: "pea-shooter" },
       ],
     },
   },
@@ -52,7 +52,7 @@ describe("weaponModsAtTier", () => {
   });
 
   it("fractional perLevel accumulates without rounding (qualitative jumps emerge naturally)", () => {
-    // +0.5 fork/level -> "+1" every other upgrade, but the raw value stays fractional here.
+    // +0.5 pierce/level -> "+1" every other upgrade, but the raw value stays fractional here.
     const mods = weaponModsAtTier(PEA_SHOOTER, 1);
     expect(mods[1].amount).toBe(0.5);
   });

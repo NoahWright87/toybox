@@ -5,6 +5,7 @@
  * data flattened into the same `StatModifier[]` list and run through F3's
  * `computeStats()`.
  */
+import { TUNING } from "../../tuning";
 import { computeStats } from "../stats";
 import type { StatBlock, StatModifier } from "../stats";
 import { resolveProjectileBehavior } from "./projectileBehavior";
@@ -27,7 +28,13 @@ export interface LoadoutInput {
 
 export interface ResolvedLoadout {
   stats: StatBlock;
-  projectileBehavior: ProjectileBehavior;
+  /**
+   * One entry per equipped weapon, parallel to `input.weapons` — pierce and
+   * blast radius are shared/pooled stats, but `pierceDecay` is authored
+   * per-weapon (weapons.spec.todo.md), so each weapon decomposes the same
+   * pooled pierce differently.
+   */
+  projectileBehaviors: ProjectileBehavior[];
 }
 
 export function resolveLoadout(input: LoadoutInput): ResolvedLoadout {
@@ -41,7 +48,9 @@ export function resolveLoadout(input: LoadoutInput): ResolvedLoadout {
   ];
 
   const stats = computeStats(input.chassisBase, persistentMods, input.transientMods ?? []);
-  const projectileBehavior = resolveProjectileBehavior(stats);
+  const projectileBehaviors = weapons.map(({ weapon }) =>
+    resolveProjectileBehavior(stats, weapon.pierceDecay ?? TUNING.weapons.defaultPierceDecay)
+  );
 
-  return { stats, projectileBehavior };
+  return { stats, projectileBehaviors };
 }

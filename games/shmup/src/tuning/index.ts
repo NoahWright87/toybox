@@ -55,22 +55,21 @@ export const TUNING = {
     // brandDiscount = min(brandDiscountCap, brandDiscountPerItem * ownedCount(brand)).
     brandDiscountPerItem: 0.05,
     brandDiscountCap: 0.4,
-    // Pierce/bounce/fork/chain/blast -> AvgTargetsHit composition (combat.spec.todo.md).
-    // Bounce decays geometrically (retainedFraction^bounceIndex); stop once a
-    // bounce's damage fraction drops below the floor, or after maxBounces as
-    // a hard safety cap (bounce is unboundedMult and could exceed 100%).
-    maxBounces: 8,
-    bounceDamageFloor: 0.05,
-    // Chain jumps have no dedicated decay stat (stats.spec.md) — each jump
-    // deals this flat fraction of HIT until the real combat pass (F6) adds one.
-    chainDamageFraction: 1,
-    // Pierce and chain are unbounded stats; these hard-cap the per-projectile
-    // hit-fraction array so a huge stat value can't allocate an unbounded array.
-    maxPierceHits: 100,
-    maxChainHits: 100,
-    // Fork is unbounded too — caps how many parallel copies of a single line
-    // one projectile can spawn.
-    maxForkCopies: 16,
+    // Pierce -> projectile-behavior decomposition (weapons.spec.todo.md): at or
+    // below 100%, each impact multiplies remaining damage by the pierce ratio,
+    // stopping once the fraction drops below the floor; above 100%, the
+    // overflow forks into a new full-damage line carrying
+    // (pierce - 100%) * pierceDecay. pierceDecay is authored per-weapon
+    // (WeaponDef.pierceDecay) and defaults/clamps to the values below.
+    pierceTailDamageFloor: 0.01,
+    defaultPierceDecay: 0.5,
+    // Never let an authored pierceDecay reach/exceed 95% — keeps the fork
+    // chain converging quickly regardless of how high pierce is stacked.
+    maxPierceDecay: 0.95,
+    // Hard safety caps against pathological stat stacking — not meaningful
+    // gameplay limits, just backstops against unbounded array growth.
+    maxForksPerImpact: 1000,
+    maxTailHits: 100,
     // Blast radius -> extra splash targets is a density placeholder pending
     // F6's real spatial query: avg extra targets = blastRadius * blastTargetsPerPx,
     // each dealt blastDamageFraction of HIT.

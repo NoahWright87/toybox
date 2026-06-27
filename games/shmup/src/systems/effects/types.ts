@@ -43,6 +43,15 @@ export interface WeaponDef {
   targetType: TargetType;
   /** Per-weapon authored property — projectile speed is NOT a player stat (stats.spec.md). */
   projectileSpeed: number;
+  /**
+   * Per-weapon authored property (weapons.spec.todo.md): when a shot's pierce
+   * exceeds 100%, the overflow forks into a new projectile carrying
+   * `(pierce - 100%) * pierceDecay`. Defaults to `TUNING.weapons.defaultPierceDecay`
+   * when omitted; always clamped to `TUNING.weapons.maxPierceDecay` so forking
+   * can't runaway. Low values (a slug-throwing weapon) discourage forking and
+   * stay single-target; high values (chain lightning) lean into forking hard.
+   */
+  pierceDecay?: number;
   /** Stats this weapon's tooltip should display itself scaling with. */
   scalesWith: StatId[];
   mods: ScalingModifier[];
@@ -75,25 +84,31 @@ export interface OwnedItem {
 }
 
 /**
- * Per-projectile behavior produced by composing pierce/bounce/fork/chain/
- * blast (weapons.spec.todo.md) — feeds `AvgTargetsHit` in the DPS formula
- * (combat.spec.todo.md), never `HIT` itself.
+ * Per-projectile behavior produced by decomposing Pierce (weapons.spec.todo.md):
+ * at or below 100% pierce, damage decays per impact along a single line; above
+ * 100%, the overflow forks into additional full-damage lines. This is the pure
+ * damage-decay math only — real targeting, rotation, and per-enemy hit-list
+ * bookkeeping against actual entities is F6's job, not this engine's.
  */
 export interface ProjectileBehavior {
   /**
-   * Damage fraction (relative to one full-damage HIT) delivered to each
-   * discrete target, in hit order, for one fired projectile — already
-   * expanded for fork's parallel copies.
+   * Count of additional lines spawned by forking, each dealing full
+   * (undecayed) damage forever along its own path. A count only — F6 decides
+   * how many real targets each line actually hits.
    */
-  hitFractions: number[];
+  flatLineCount: number;
   /**
-   * Average extra targets caught by blast splash on top of `hitFractions`.
-   * A density-based expectation (`TUNING.weapons.blastTargetsPerPx`), not a
-   * discrete count — placeholder pending F6's real spatial query.
+   * Damage fraction (relative to one full-damage HIT) for the one remaining
+   * line's successive impacts, in order. Always starts with the guaranteed
+   * first hit (1); decays toward 0 as pierce is spent.
    */
-  blastBonusTargets: number;
-  /** combat.spec.todo.md's AvgTargetsHit for this projectile. */
-  avgTargetsHit: number;
-  /** Total damage-fraction throughput across all targets, relative to one HIT. */
-  totalDamageFraction: number;
+  tailHitFractions: number[];
+  /**
+   * Extra splash targets per impact from blast radius, on top of the line(s)
+   * above. A density-based expectation (`TUNING.weapons.blastTargetsPerPx`),
+   * not a discrete count — placeholder pending F6's real spatial query.
+   */
+  blastBonusTargetsPerHit: number;
+  /** Damage fraction (relative to one full-damage HIT) each blast-bonus target takes. */
+  blastDamageFraction: number;
 }

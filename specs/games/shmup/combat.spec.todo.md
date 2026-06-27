@@ -27,7 +27,7 @@ Crit chance is **uncapped**: 100% guaranteed; 250% = 2 guaranteed + 50% chance o
 DPS = HIT × ShotsPerSecond × ProjectileCount × AvgTargetsHit
 ```
 
-Attack speed & projectile count scale *how often / how many*; `AvgTargetsHit` is driven by pierce/fork/chain (`weapons.spec.todo.md`). Kept outside `HIT` to stop the wrong layers multiplying.
+Attack speed & projectile count scale *how often / how many*; `AvgTargetsHit` is driven by Pierce (`weapons.spec.todo.md`). Kept outside `HIT` to stop the wrong layers multiplying.
 
 ## Defense pipeline (incoming hit; no hull lives)
 
