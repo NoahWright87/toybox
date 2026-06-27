@@ -3,6 +3,7 @@ import { resolveLoadout } from "./loadout";
 import { MAX_WEAPON_SLOTS } from "./slots";
 import { STAT_DEFS } from "../stats";
 import type { LoadoutInput } from "./loadout";
+import type { StatBlock, StatId } from "../stats";
 import type { ItemDef, OwnedWeapon, WeaponDef } from "./types";
 
 const TUNNELER: WeaponDef = {
@@ -48,13 +49,24 @@ const PIERCE_ITEM: ItemDef = {
   scalesWith: ["pierce"],
 };
 
+// The all-defaults StatBlock — every case's `then.stats` is diffed against
+// this so the assertion below covers every stat, not just the ones a case
+// happens to mention. That's what catches an item/weapon bleeding into a
+// stat it shouldn't touch.
+const BASELINE: StatBlock = resolveLoadout({}).stats;
+
+function expectStatsEqual(actual: StatBlock, overrides: Partial<StatBlock>) {
+  const expected: StatBlock = { ...BASELINE, ...overrides };
+  for (const key of Object.keys(expected) as StatId[]) {
+    expect(actual[key]).toBeCloseTo(expected[key], 10);
+  }
+}
+
 interface Case {
   name: string;
   given: LoadoutInput;
   then: {
-    maxHp?: number;
-    damage?: number;
-    pierce?: number;
+    stats: Partial<StatBlock>;
     behaviorCount?: number;
     behaviorFlatLineCounts?: number[];
     firstBehaviorTail?: number[];
@@ -71,23 +83,29 @@ const CASES: Case[] = [
       weapons: [{ weapon: TUNNELER, tier: 2 }],
     },
     then: {
-      maxHp: 150,
-      // damage: base + chassis flat(1) + weapon flat(2 + perLevel*tier = 4) = base + 5
-      damage: STAT_DEFS.damage.base + 1 + (2 + 1 * 2),
-      // pierce: item flat 0.5 stacked twice (no maxStacks) + weapon flat 1.5 = 2.5
-      pierce: 2.5,
+      stats: {
+        maxHp: 150,
+        // chassis flat(1) + weapon flat(2 + perLevel(1) * tier(2) = 4) = base + 5
+        damage: STAT_DEFS.damage.base + 5,
+        // item flat 0.5 stacked twice (no maxStacks) + weapon flat 1.5 = 2.5
+        pierce: 2.5,
+      },
     },
   },
   {
     name: "a brand-new weapon needs no engine changes — pure data addition",
     given: { weapons: [{ weapon: RAILGUN, tier: 0 }] },
-    then: { pierce: 1.5, behaviorCount: 1, firstBehaviorTail: [1, 0.25, 0.0625, 0.015625] },
+    then: {
+      stats: { pierce: 1.5 },
+      behaviorCount: 1,
+      firstBehaviorTail: [1, 0.25, 0.0625, 0.015625],
+    },
   },
   {
     name: "one projectileBehavior per equipped weapon, each decomposing the same shared pierce with its own pierceDecay",
     given: { weapons: [{ weapon: TUNNELER, tier: 0 }, { weapon: FLAK_CANNON, tier: 0 }] },
     then: {
-      pierce: 1.5,
+      stats: { pierce: 1.5, damage: STAT_DEFS.damage.base + 3 },
       behaviorCount: 2,
       // TUNNELER falls back to the default 50% pierceDecay.
       firstBehaviorTail: [1, 0.25, 0.0625, 0.015625],
@@ -99,9 +117,7 @@ const CASES: Case[] = [
 describe("resolveLoadout — single resolution path", () => {
   it.each(CASES)("$name", ({ given, then }) => {
     const { stats, projectileBehaviors } = resolveLoadout(given);
-    if (then.maxHp !== undefined) expect(stats.maxHp).toBe(then.maxHp);
-    if (then.damage !== undefined) expect(stats.damage).toBeCloseTo(then.damage, 10);
-    if (then.pierce !== undefined) expect(stats.pierce).toBeCloseTo(then.pierce, 10);
+    expectStatsEqual(stats, then.stats);
     if (then.behaviorCount !== undefined) expect(projectileBehaviors.length).toBe(then.behaviorCount);
     if (then.firstBehaviorTail !== undefined) {
       expect(projectileBehaviors[0].tailHitFractions).toEqual(then.firstBehaviorTail);
