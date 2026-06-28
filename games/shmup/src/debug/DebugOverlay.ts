@@ -9,15 +9,17 @@ const STAT_ORDER: StatId[] = [...MAIN_STAT_IDS, ...EXOTIC_STAT_IDS];
 
 /**
  * Sentinel index, one past the last real stat — selects the debug-only
- * "Firing Angle" row (C12 #151 follow-up). Not a StatId: there's no
- * balance/upgrade/item source for it, it exists purely to fire the weapon
- * off-axis for inspecting homing/fork/pierce behavior, so it lives on
- * `Player.debugFiringAngleDeg` directly rather than in the StatBlock/
- * debugMods pipeline the rest of this overlay drives.
+ * "Firing Cone" row (C12 #151 follow-up). Not a StatId: there's no
+ * balance/upgrade/item source for it, it exists purely to spread the
+ * weapon's fire for inspecting homing/fork/pierce behavior off-axis, so it
+ * lives on `Player.debugFiringConeDeg` directly rather than in the
+ * StatBlock/debugMods pipeline the rest of this overlay drives. The value
+ * is the cone's full width — each shot's heading is drawn uniformly from
+ * within ±half of it around straight up, not a fixed offset.
  */
-const FIRING_ANGLE_INDEX = STAT_ORDER.length;
+const FIRING_CONE_INDEX = STAT_ORDER.length;
 const SELECTABLE_COUNT = STAT_ORDER.length + 1;
-const FIRING_ANGLE_STEP_DEG = 5;
+const FIRING_CONE_STEP_DEG = 5;
 
 /**
  * Per-stat nudge increment for the debug overlay (C12 #151's "preview a
@@ -223,8 +225,8 @@ export class DebugOverlay {
   }
 
   private adjustSelected(dir: number): void {
-    if (this.selectedIndex === FIRING_ANGLE_INDEX) {
-      this.player.debugFiringAngleDeg += dir * FIRING_ANGLE_STEP_DEG;
+    if (this.selectedIndex === FIRING_CONE_INDEX) {
+      this.player.debugFiringConeDeg = Math.max(0, this.player.debugFiringConeDeg + dir * FIRING_CONE_STEP_DEG);
       return;
     }
     const stat = STAT_ORDER[this.selectedIndex];
@@ -232,8 +234,8 @@ export class DebugOverlay {
   }
 
   private resetSelected(): void {
-    if (this.selectedIndex === FIRING_ANGLE_INDEX) {
-      this.player.debugFiringAngleDeg = 0;
+    if (this.selectedIndex === FIRING_CONE_INDEX) {
+      this.player.debugFiringConeDeg = 0;
       return;
     }
     this.player.setDebugMod(STAT_ORDER[this.selectedIndex], 0);
@@ -241,7 +243,7 @@ export class DebugOverlay {
 
   private resetAll(): void {
     this.player.clearDebugMods();
-    this.player.debugFiringAngleDeg = 0;
+    this.player.debugFiringConeDeg = 0;
   }
 
   /** Call once per frame regardless of game-over state — inspecting/nudging stats shouldn't require an active run. */
@@ -258,8 +260,8 @@ export class DebugOverlay {
 
     this.listText.setText(this.renderList());
 
-    if (this.selectedIndex === FIRING_ANGLE_INDEX) {
-      this.selectedText.setText(`Firing Angle\n${this.player.debugFiringAngleDeg.toFixed(0)}°`);
+    if (this.selectedIndex === FIRING_CONE_INDEX) {
+      this.selectedText.setText(`Firing Cone\n${this.player.debugFiringConeDeg.toFixed(0)}°`);
     } else {
       const selected = STAT_ORDER[this.selectedIndex];
       const def = STAT_DEFS[selected];
@@ -283,8 +285,8 @@ export class DebugOverlay {
       lines.push(`${cursor}${def.display.padEnd(14)} ${formatStatValue(def, stats[stat])}${modTag}`);
     });
 
-    const angleCursor = this.selectedIndex === FIRING_ANGLE_INDEX ? "> " : "  ";
-    lines.push(`${angleCursor}${"Firing Angle".padEnd(14)} ${this.player.debugFiringAngleDeg.toFixed(0)}°`);
+    const coneCursor = this.selectedIndex === FIRING_CONE_INDEX ? "> " : "  ";
+    lines.push(`${coneCursor}${"Firing Cone".padEnd(14)} ${this.player.debugFiringConeDeg.toFixed(0)}°`);
 
     return lines.join("\n");
   }

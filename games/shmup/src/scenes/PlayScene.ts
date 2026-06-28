@@ -256,7 +256,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const homingStrength = this.player.stats.homingStrength;
     const originX = this.player.x;
     const originY = this.player.y - this.player.height / 2;
-    const angleRad = Phaser.Math.DegToRad(this.player.debugFiringAngleDeg);
+    const coneDeg = this.player.debugFiringConeDeg;
+    const angleRad = Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-coneDeg / 2, coneDeg / 2));
     const vx = Math.sin(angleRad) * req.projectileSpeed;
     const vy = -Math.cos(angleRad) * req.projectileSpeed;
 
