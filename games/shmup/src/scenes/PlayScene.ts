@@ -100,10 +100,14 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.physics.add.overlap(this.playerBullets, this.enemies, (bulletObj, enemyObj) =>
       this.onPlayerBulletHitEnemy(bulletObj as PlayerBullet, enemyObj as Enemy)
     );
-    this.physics.add.overlap(this.enemyBullets, this.player, (bulletObj) =>
+    // Arcade's overlap() always normalizes a Sprite-vs-Group pair to
+    // collideCallback(sprite, groupMember) regardless of the order the two
+    // arguments are passed in, so the player (a lone Sprite, not a Group)
+    // is always the first callback argument here.
+    this.physics.add.overlap(this.enemyBullets, this.player, (_player, bulletObj) =>
       this.onEnemyBulletHitPlayer(bulletObj as EnemyBullet)
     );
-    this.physics.add.overlap(this.enemies, this.player, (enemyObj) =>
+    this.physics.add.overlap(this.enemies, this.player, (_player, enemyObj) =>
       this.onEnemyContactPlayer(enemyObj as Enemy)
     );
 
