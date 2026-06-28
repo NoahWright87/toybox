@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyDamage, tickShieldRegen } from "./applyDamage";
+import { applyDamage, applyLifesteal, tickHpRegen, tickShieldRegen } from "./applyDamage";
 import { TUNING } from "../../tuning";
 import type { Defender } from "./types";
 
@@ -77,5 +77,45 @@ describe("tickShieldRegen", () => {
     const d = defender({ shield: 95, shieldRegenDelayRemaining: 0 });
     tickShieldRegen(d, 100, 10);
     expect(d.shield).toBe(100);
+  });
+});
+
+describe("tickHpRegen", () => {
+  it("adds hpRegenPerSecond * dt to hp", () => {
+    const d = defender({ hp: 50 });
+    tickHpRegen(d, 100, 10, 1);
+    expect(d.hp).toBe(60);
+  });
+
+  it("never regens past maxHp", () => {
+    const d = defender({ hp: 95 });
+    tickHpRegen(d, 100, 10, 10);
+    expect(d.hp).toBe(100);
+  });
+
+  it("is a no-op at zero hpRegen", () => {
+    const d = defender({ hp: 50 });
+    tickHpRegen(d, 100, 0, 1);
+    expect(d.hp).toBe(50);
+  });
+});
+
+describe("applyLifesteal", () => {
+  it("heals hp by damageDealt * lifesteal", () => {
+    const d = defender({ hp: 50 });
+    applyLifesteal(d, 100, 40, 0.5);
+    expect(d.hp).toBe(70);
+  });
+
+  it("never heals past maxHp", () => {
+    const d = defender({ hp: 95 });
+    applyLifesteal(d, 100, 40, 0.5);
+    expect(d.hp).toBe(100);
+  });
+
+  it("is a no-op at zero lifesteal", () => {
+    const d = defender({ hp: 50 });
+    applyLifesteal(d, 100, 40, 0);
+    expect(d.hp).toBe(50);
   });
 });

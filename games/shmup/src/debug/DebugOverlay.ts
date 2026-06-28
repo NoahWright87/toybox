@@ -254,7 +254,8 @@ export class DebugOverlay {
       const def = STAT_DEFS[stat];
       const cursor = i === this.selectedIndex ? "> " : "  ";
       const mod = this.player.debugModAmount(stat);
-      const modTag = mod !== 0 ? ` (dbg ${mod > 0 ? "+" : ""}${mod})` : "";
+      const roundedMod = Math.round(mod * 100) / 100;
+      const modTag = roundedMod !== 0 ? ` (dbg ${roundedMod > 0 ? "+" : ""}${roundedMod})` : "";
       lines.push(`${cursor}${def.display.padEnd(14)} ${formatStatValue(def, stats[stat])}${modTag}`);
     });
 
@@ -271,9 +272,7 @@ export class DebugOverlay {
 
     const behavior = this.player.projectileBehaviors[0];
     if (behavior) {
-      const fractions = behavior.tailHitFractions.map((f) => f.toFixed(2)).join(", ");
-      lines.push(`pierce line (${behavior.tailHitFractions.length} hits): [${fractions}]`);
-      lines.push(`forked full-dmg lines: ${behavior.flatLineCount}`);
+      lines.push(`pierce tail hits: ${behavior.tailHitFractions.length}   forked lines: ${behavior.flatLineCount}`);
       lines.push(`blast: radius ${stats.blastRadius.toFixed(0)}px @ ${(behavior.blastDamageFraction * 100).toFixed(0)}%`);
     }
 

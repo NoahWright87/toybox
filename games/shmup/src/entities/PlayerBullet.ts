@@ -18,6 +18,8 @@ import type { Enemy } from "./Enemy";
  */
 export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   baseHit = 0;
+  /** Crits are resolved once per shot fired (combat.spec.todo.md) and shared by every line/fork that shot spawns — carried here purely for floating-combat-text display. */
+  numCrits = 0;
   blastRadius = 0;
   blastDamageFraction = 0;
   private fractions: number[] = [];
@@ -36,11 +38,12 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     vx: number,
     vy: number,
     baseHit: number,
+    numCrits: number,
     fractions: number[],
     blastRadius: number,
     blastDamageFraction: number
   ): void {
-    this.reset(x, y, vx, vy, baseHit, blastRadius, blastDamageFraction);
+    this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction);
     this.infinite = false;
     this.fractions = fractions;
     this.fractionIndex = 0;
@@ -52,11 +55,12 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     vx: number,
     vy: number,
     baseHit: number,
+    numCrits: number,
     hitsAllowed: number,
     blastRadius: number,
     blastDamageFraction: number
   ): void {
-    this.reset(x, y, vx, vy, baseHit, blastRadius, blastDamageFraction);
+    this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction);
     this.infinite = true;
     this.hitsRemaining = hitsAllowed;
   }
@@ -67,10 +71,12 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     vx: number,
     vy: number,
     baseHit: number,
+    numCrits: number,
     blastRadius: number,
     blastDamageFraction: number
   ): void {
     this.baseHit = baseHit;
+    this.numCrits = numCrits;
     this.blastRadius = blastRadius;
     this.blastDamageFraction = blastDamageFraction;
     this.hitSet.clear();

@@ -6,7 +6,7 @@ import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet } from "../entities";
 import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
-import { applyDamage, reflexBulletSpeedMult, resolveHit, tickShieldRegen } from "../systems/combat";
+import { applyDamage, applyLifesteal, reflexBulletSpeedMult, rollCrit, tickHpRegen, tickShieldRegen } from "../systems/combat";
 import { DebugOverlay } from "../debug/DebugOverlay";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
@@ -176,6 +176,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     }
 
     tickShieldRegen(this.player.defender, this.player.stats.maxShield, dt);
+    tickHpRegen(this.player.defender, this.player.stats.maxHp, this.player.stats.hpRegen, dt);
     this.updateHud();
 
     this.background.tilePositionY -= TUNING.visuals.bgScrollSpeed * dt;
@@ -248,21 +249,28 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
    * fraction of that single resolved hit, they never re-roll it.
    */
   private fireWeapon(req: PlayerFireRequest): void {
-    const hit = resolveHit({
-      damage: this.player.stats.damage,
-      critChance: this.player.stats.critChance,
-      critDamage: this.player.stats.critDamage,
-    });
+    const { numCrits, critFactor } = rollCrit(this.player.stats.critChance, this.player.stats.critDamage);
+    const hit = this.player.stats.damage * critFactor;
     const { flatLineCount, tailHitFractions, blastDamageFraction } = req.behavior;
     const blastRadius = this.player.stats.blastRadius;
     const originX = this.player.x;
     const originY = this.player.y - this.player.height / 2;
 
-    this.spawnPlayerLine(originX, originY, 0, -req.projectileSpeed, hit, tailHitFractions, blastRadius, blastDamageFraction);
+    this.spawnPlayerLine(
+      originX,
+      originY,
+      0,
+      -req.projectileSpeed,
+      hit,
+      numCrits,
+      tailHitFractions,
+      blastRadius,
+      blastDamageFraction
+    );
 
     const forkCount = Math.min(flatLineCount, TUNING.weapons.maxForkedBulletsPerShot);
     for (let i = 0; i < forkCount; i++) {
-      const angle = this.forkAngle(i, forkCount);
+      const angle = this.forkAngle();
       const vx = Math.sin(angle) * req.projectileSpeed;
       const vy = -Math.cos(angle) * req.projectileSpeed;
       this.spawnPlayerFork(
@@ -271,6 +279,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         vx,
         vy,
         hit,
+        numCrits,
         TUNING.weapons.maxHitsPerInfiniteBullet,
         blastRadius,
         blastDamageFraction
@@ -278,14 +287,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     }
   }
 
-  /** Fans forked lines out symmetrically around straight-up so each fork is visibly its own line. */
-  private forkAngle(i: number, count: number): number {
-    const stepDeg = 6;
+  /** Each fork gets its own random heading (weapons.spec.todo.md) so it's visibly distinct from the main line and other forks, rather than a deterministic fan that collapses to 0deg for the common 1-fork case. */
+  private forkAngle(): number {
     const maxSpreadDeg = 50;
-    const spreadDeg = Math.min(maxSpreadDeg, stepDeg * Math.max(0, count - 1));
-    const startDeg = -spreadDeg / 2;
-    const angleDeg = count <= 1 ? startDeg : startDeg + (spreadDeg * i) / (count - 1);
-    return Phaser.Math.DegToRad(angleDeg);
+    return Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-maxSpreadDeg, maxSpreadDeg));
   }
 
   private spawnPlayerLine(
@@ -294,12 +299,13 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     vx: number,
     vy: number,
     hit: number,
+    numCrits: number,
     fractions: number[],
     blastRadius: number,
     blastDamageFraction: number
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
-    bullet?.fireLine(x, y, vx, vy, hit, fractions, blastRadius, blastDamageFraction);
+    bullet?.fireLine(x, y, vx, vy, hit, numCrits, fractions, blastRadius, blastDamageFraction);
   }
 
   private spawnPlayerFork(
@@ -308,12 +314,13 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     vx: number,
     vy: number,
     hit: number,
+    numCrits: number,
     hitsAllowed: number,
     blastRadius: number,
     blastDamageFraction: number
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
-    bullet?.fireForkedLine(x, y, vx, vy, hit, hitsAllowed, blastRadius, blastDamageFraction);
+    bullet?.fireForkedLine(x, y, vx, vy, hit, numCrits, hitsAllowed, blastRadius, blastDamageFraction);
   }
 
   private onPlayerBulletHitEnemy(bullet: PlayerBullet, enemy: Enemy): void {
@@ -321,25 +328,52 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const fraction = bullet.registerHit(enemy);
     if (fraction === undefined) return;
 
-    this.damageEnemy(enemy, bullet.baseHit * fraction);
+    this.damageEnemy(enemy, bullet.baseHit * fraction, bullet.numCrits);
 
     if (bullet.blastRadius > 0) {
       const blastDamage = bullet.baseHit * bullet.blastDamageFraction;
       for (const other of this.enemies.getChildren() as Enemy[]) {
         if (other === enemy || !other.active) continue;
         const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, other.x, other.y);
-        if (dist <= bullet.blastRadius) this.damageEnemy(other, blastDamage);
+        if (dist <= bullet.blastRadius) this.damageEnemy(other, blastDamage, bullet.numCrits);
       }
     }
   }
 
-  private damageEnemy(enemy: Enemy, damage: number): void {
+  private damageEnemy(enemy: Enemy, damage: number, numCrits: number): void {
     enemy.hp -= damage;
+    applyLifesteal(this.player.defender, this.player.stats.maxHp, damage, this.player.stats.lifesteal);
+    this.spawnDamageNumber(enemy.x, enemy.y, damage, numCrits);
     if (enemy.hp <= 0) {
       enemy.recycle();
       this.score += enemy.scoreValue;
       this.scoreText.setText(copy("play.score", { score: this.score }));
     }
+  }
+
+  /** Crit styling per the user's request: bigger, gold-colored, one "!" per crit stacked on the shot (combat.spec.todo.md's numCrits, not re-rolled per pierce/fork impact). */
+  private spawnDamageNumber(x: number, y: number, damage: number, numCrits: number): void {
+    const rounded = Math.round(damage);
+    if (numCrits > 0) {
+      this.spawnFloatingText(x, y, `${rounded}${"!".repeat(numCrits)}`, "#ffcc00", 20);
+    } else {
+      this.spawnFloatingText(x, y, `${rounded}`, "#ffffff", 13);
+    }
+  }
+
+  private spawnFloatingText(x: number, y: number, text: string, color: string, fontSize: number): void {
+    const t = this.add
+      .text(x, y, text, { fontFamily: "monospace", fontSize: `${fontSize}px`, color, fontStyle: "bold" })
+      .setOrigin(0.5)
+      .setDepth(150);
+    this.tweens.add({
+      targets: t,
+      y: y - 40,
+      alpha: 0,
+      duration: 700,
+      ease: "Cubic.Out",
+      onComplete: () => t.destroy(),
+    });
   }
 
   private onEnemyBulletHitPlayer(bullet: EnemyBullet): void {
@@ -357,7 +391,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private damagePlayer(hit: number): void {
     if (this.player.invulnerable) return;
     const result = applyDamage(this.player.defender, hit, this.player.stats.armor, this.player.stats.evasion);
-    if (result.dodged) return;
+    if (result.dodged) {
+      this.spawnFloatingText(this.player.x, this.player.y - this.player.height / 2, "MISS!", "#88ccff", 16);
+      return;
+    }
     this.player.triggerIFrame();
     this.cameras.main.flash(120, 150, 0, 0);
     if (result.defeated) this.endEpisode();

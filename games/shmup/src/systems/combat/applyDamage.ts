@@ -53,3 +53,15 @@ export function tickShieldRegen(defender: Defender, maxShield: number, dt: numbe
   if (defender.shield >= maxShield) return;
   defender.shield = Math.min(maxShield, defender.shield + maxShield * TUNING.combat.shieldRegenFracPerSecond * dt);
 }
+
+/** HP Regen is the only self-regen HP has (combat.spec.todo.md: "armored core; no self-regen except the HP Regen stat") — a flat HP/s rate, no delay/gate unlike shield. Called once per frame. */
+export function tickHpRegen(defender: Defender, maxHp: number, hpRegenPerSecond: number, dt: number): void {
+  if (hpRegenPerSecond <= 0 || defender.hp >= maxHp) return;
+  defender.hp = Math.min(maxHp, defender.hp + hpRegenPerSecond * dt);
+}
+
+/** Lifesteal restores HP only (combat.spec.todo.md), as a fraction of the damage just dealt. */
+export function applyLifesteal(defender: Defender, maxHp: number, damageDealt: number, lifesteal: number): void {
+  if (lifesteal <= 0 || damageDealt <= 0) return;
+  defender.hp = Math.min(maxHp, defender.hp + damageDealt * lifesteal);
+}
