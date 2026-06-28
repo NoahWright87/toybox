@@ -34,5 +34,23 @@
     "frameCount": 1,
     "frameDuration": 100,
     "placeholder": { "shape": "rect", "color": "#ffffff" }
+  },
+  "bulletEnemy": {
+    "category": "projectiles",
+    "path": "projectiles/projectile_bullet_enemy_01.png",
+    "frameWidth": 4,
+    "frameHeight": 12,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#ff3344" }
+  },
+  "bgSpace": {
+    "category": "effects",
+    "path": "effects/fx_bg_space_01.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#160900" }
   }
 }

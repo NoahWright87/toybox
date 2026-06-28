@@ -36,6 +36,22 @@ export const TUNING = {
     reflexMoveK: 1,
     reflexBulletSlowCap: 0.8,
     reflexMoveSlowCap: 0.5,
+    // Focus (chassis.spec.todo.md): hold to move slower for precision. The
+    // default chassis (F10 #138) hasn't landed yet, so F6 ships the
+    // universal base behavior plus a hitbox shrink (genre-standard "graze
+    // box") as the vertical-slice default; a future chassis quirk may
+    // override hitboxRadiusFocus instead of relying on this global.
+    focusSpeedMult: 0.45,
+    hitboxRadiusNormal: 6,
+    hitboxRadiusFocus: 3,
+    // Shield (combat.spec.todo.md): "auto-refills after ShieldDelay s without
+    // a hit, at ShieldRegen/s." Shield regen rate isn't one of the 16 main
+    // stats, so its rate lives here as a fraction of Max Shield per second.
+    shieldRegenDelay: 3,
+    shieldRegenFracPerSecond: 0.25,
+    // Brief invulnerability after any non-dodged hit — without this, an
+    // overlapping enemy/bullet would re-deal damage every physics step.
+    playerIFrameMs: 500,
   },
   hype: {
     // hypeBase, k_idle, k_level, baseDecay, M (ScoreMult depth) — F7
@@ -75,5 +91,48 @@ export const TUNING = {
     // each dealt blastDamageFraction of HIT.
     blastTargetsPerPx: 0.01,
     blastDamageFraction: 0.5,
+    // Auto-fire cadence at attackSpeed = 1 (shots/second); actual cadence is
+    // baseFireRate * stats.attackSpeed (combat.spec.todo.md: "weapons fire
+    // on their own cadence (attack speed)").
+    baseFireRate: 2.5,
+    // F6 performance ceilings (weapons.spec.todo.md's "hard performance
+    // ceiling that bounds worst-case concurrent projectiles") — the engine's
+    // own maxForksPerImpact/maxTailHits guard the pure math; these guard the
+    // actual pooled bullets a single shot is allowed to spawn/keep piercing.
+    maxForkedBulletsPerShot: 12,
+    maxHitsPerInfiniteBullet: 50,
+  },
+  // Object-pool ceilings (F6 #134: "Arcade Physics groups with object
+  // pooling for bullets and enemies"). Sized well above any realistic
+  // worst-case concurrent count so pooling never silently drops shots in
+  // normal play, while still bounding worst-case memory/collision cost.
+  performance: {
+    maxPlayerBullets: 240,
+    maxEnemyBullets: 120,
+    maxEnemies: 40,
+  },
+  // Basic placeholder enemy (run-structure.spec.todo.md's Difficulty (D)
+  // scaling owns real enemy stat curves — F8 #136 — this is the one
+  // hand-authored "drone" needed for F6's vertical slice and for grazing
+  // (F7 #135) to have something to graze).
+  enemies: {
+    drone: {
+      maxHp: 18,
+      speed: 130,
+      fireIntervalMs: 1400,
+      bulletDamage: 6,
+      bulletSpeed: 260,
+      contactDamage: 10,
+      scoreValue: 10,
+      spawnIntervalMs: 850,
+    },
+  },
+  // Purely cosmetic — background scroll / starfield drift — but still tuning,
+  // not magic numbers inline in PlayScene.
+  visuals: {
+    bgScrollSpeed: 40,
+    starCount: 70,
+    starMinSpeed: 40,
+    starMaxSpeed: 180,
   },
 } as const;
