@@ -22,7 +22,7 @@ const TEX = {
   bg: "bgSpace",
 } satisfies Record<string, SpriteKey>;
 
-const DRAG_OFFSET_Y = 120; // float the ship well above the finger so it stays visible
+const DRAG_OFFSET_Y = 240; // float the ship well above the finger so it stays visible
 
 /**
  * The F6 #134 core gameplay loop — the integration point for F3 (stats),

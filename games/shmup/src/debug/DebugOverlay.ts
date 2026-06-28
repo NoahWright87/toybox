@@ -3,6 +3,7 @@ import { MAIN_STAT_IDS, EXOTIC_STAT_IDS, STAT_DEFS, formatStatValue } from "../s
 import type { StatId } from "../systems/stats";
 import { TUNING } from "../tuning";
 import type { Player } from "../entities/Player";
+import { ShakeDetector } from "./ShakeDetector";
 
 const STAT_ORDER: StatId[] = [...MAIN_STAT_IDS, ...EXOTIC_STAT_IDS];
 
@@ -54,7 +55,9 @@ function expectedCritFactor(critChance: number, critDamage: number): number {
  * (pierce decay / forks / blast) so a stat's effect is visible immediately
  * instead of inferred from a balance spreadsheet. The fuller overlay #151
  * calls for (graze/hype readouts, a real build simulator) is its own job
- * once those systems (F7+) exist.
+ * once those systems (F7+) exist. Toggle is backtick on a keyboard or a
+ * device shake on mobile (see ShakeDetector) — there's no keyboard to press
+ * on a phone, and the stat nudges are still desktop/keyboard-only for now.
  */
 export class DebugOverlay {
   private readonly text: Phaser.GameObjects.Text;
@@ -65,6 +68,7 @@ export class DebugOverlay {
   private readonly incKey: Phaser.Input.Keyboard.Key;
   private readonly resetOneKey: Phaser.Input.Keyboard.Key;
   private readonly resetAllKey: Phaser.Input.Keyboard.Key;
+  private readonly shake: ShakeDetector;
 
   private visible = false;
   private selectedIndex = 0;
@@ -74,6 +78,8 @@ export class DebugOverlay {
     private readonly player: Player
   ) {
     const kb = scene.input.keyboard!;
+    this.shake = new ShakeDetector(() => this.toggleVisible());
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shake.destroy());
     this.toggleKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK);
     this.prevKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET);
     this.nextKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET);
@@ -96,12 +102,14 @@ export class DebugOverlay {
       .setVisible(false);
   }
 
+  private toggleVisible(): void {
+    this.visible = !this.visible;
+    this.text.setVisible(this.visible);
+  }
+
   /** Call once per frame regardless of game-over state — inspecting/nudging stats shouldn't require an active run. */
   update(): void {
-    if (Phaser.Input.Keyboard.JustDown(this.toggleKey)) {
-      this.visible = !this.visible;
-      this.text.setVisible(this.visible);
-    }
+    if (Phaser.Input.Keyboard.JustDown(this.toggleKey)) this.toggleVisible();
     if (!this.visible) return;
 
     const len = STAT_ORDER.length;
@@ -119,7 +127,7 @@ export class DebugOverlay {
 
   private render(): string {
     const stats = this.player.stats;
-    const lines: string[] = ["-- DEBUG (` to close) --", ""];
+    const lines: string[] = ["-- DEBUG (` or shake to close) --", ""];
 
     STAT_ORDER.forEach((stat, i) => {
       const def = STAT_DEFS[stat];
