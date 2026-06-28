@@ -12,6 +12,14 @@ import type { ShmupPlayScene } from "./types";
  *   capped by `TUNING.weapons.maxHitsPerInfiniteBullet` rather than decaying
  *   (weapons.spec.todo.md's fork-overflow behavior).
  *
+ * Forks aren't spawned at the muzzle — weapons.spec.todo.md's "forked
+ * projectiles inherit the firing projectile's hit-list" only makes sense if
+ * a fork is born from an impact the line has already scored. A `fireLine`
+ * bullet carries `pendingForkCount` (the shot's whole fork allotment) and
+ * hands it to the scene via `takePendingForks()` on its first registered
+ * hit; the scene spawns that many `fireForkedLine` bullets from that impact
+ * point, each pre-seeded with the just-hit enemy so they can't re-hit it.
+ *
  * `baseHit` is the already-crit-resolved damage for this shot (crit is
  * rolled once per shot fired, never re-rolled per pierce impact/fork —
  * combat.spec.todo.md). Blast radius is a real spatial query the scene runs
@@ -29,6 +37,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   numCrits = 0;
   blastRadius = 0;
   blastDamageFraction = 0;
+  /** Speed to give any forks spawned from this line's first impact (the firing weapon's projectileSpeed). Unused on forked bullets themselves — they don't re-fork. */
+  forkProjectileSpeed = 0;
   private fractions: number[] = [];
   private fractionIndex = 0;
   private infinite = false;
@@ -38,6 +48,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   private baseHomingStrength = 0;
   private homingStrength = 0;
   private lockedTarget: Enemy | null = null;
+  /** This line's whole fork allotment, drained once (by `takePendingForks`) on the first hit it registers. Always 0 on a forked ("infinite") bullet — forks don't re-fork. */
+  private pendingForkCount = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
     super(scene, x, y, texture);
@@ -53,12 +65,16 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     fractions: number[],
     blastRadius: number,
     blastDamageFraction: number,
-    homingStrength: number
+    homingStrength: number,
+    forkCount: number,
+    forkProjectileSpeed: number
   ): void {
     this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength);
     this.infinite = false;
     this.fractions = fractions;
     this.fractionIndex = 0;
+    this.pendingForkCount = forkCount;
+    this.forkProjectileSpeed = forkProjectileSpeed;
   }
 
   fireForkedLine(
@@ -71,11 +87,13 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     hitsAllowed: number,
     blastRadius: number,
     blastDamageFraction: number,
-    homingStrength: number
+    homingStrength: number,
+    inheritedHit?: Enemy
   ): void {
     this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength);
     this.infinite = true;
     this.hitsRemaining = hitsAllowed;
+    if (inheritedHit) this.hitSet.add(inheritedHit);
   }
 
   private reset(
@@ -97,6 +115,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     this.homingStrength = homingStrength;
     this.lockedTarget = null;
     this.hitSet.clear();
+    this.pendingForkCount = 0;
+    this.forkProjectileSpeed = 0;
     this.setPosition(x, y);
     this.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
     this.setActive(true);
@@ -109,6 +129,18 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   /** True once this bullet has already damaged `enemy` — it should pass through without re-hitting it. */
   hasHit(enemy: Enemy): boolean {
     return this.hitSet.has(enemy);
+  }
+
+  /** This shot's original Homing Strength, undecayed — what a fork spawned off this line should carry, since forked "infinite" lines never decay homing (same as they never decay damage). */
+  get shotHomingStrength(): number {
+    return this.baseHomingStrength;
+  }
+
+  /** Drains and returns this line's fork allotment — non-zero only the first time it's called, since `pendingForkCount` is only ever set on a fresh `fireLine`. The scene calls this after a successful `registerHit` to spawn forks from that impact. */
+  takePendingForks(): number {
+    const n = this.pendingForkCount;
+    this.pendingForkCount = 0;
+    return n;
   }
 
   /**

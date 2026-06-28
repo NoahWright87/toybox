@@ -8,6 +8,18 @@ import { ShakeDetector } from "./ShakeDetector";
 const STAT_ORDER: StatId[] = [...MAIN_STAT_IDS, ...EXOTIC_STAT_IDS];
 
 /**
+ * Sentinel index, one past the last real stat — selects the debug-only
+ * "Firing Angle" row (C12 #151 follow-up). Not a StatId: there's no
+ * balance/upgrade/item source for it, it exists purely to fire the weapon
+ * off-axis for inspecting homing/fork/pierce behavior, so it lives on
+ * `Player.debugFiringAngleDeg` directly rather than in the StatBlock/
+ * debugMods pipeline the rest of this overlay drives.
+ */
+const FIRING_ANGLE_INDEX = STAT_ORDER.length;
+const SELECTABLE_COUNT = STAT_ORDER.length + 1;
+const FIRING_ANGLE_STEP_DEG = 5;
+
+/**
  * Per-stat nudge increment for the debug overlay (C12 #151's "preview a
  * build's effective stats without a full run"). These are inspection-tool
  * step sizes, not gameplay balance numbers — TUNING stays the home for
@@ -207,21 +219,29 @@ export class DebugOverlay {
   }
 
   private selectDelta(dir: number): void {
-    const len = STAT_ORDER.length;
-    this.selectedIndex = (this.selectedIndex + dir + len) % len;
+    this.selectedIndex = (this.selectedIndex + dir + SELECTABLE_COUNT) % SELECTABLE_COUNT;
   }
 
   private adjustSelected(dir: number): void {
+    if (this.selectedIndex === FIRING_ANGLE_INDEX) {
+      this.player.debugFiringAngleDeg += dir * FIRING_ANGLE_STEP_DEG;
+      return;
+    }
     const stat = STAT_ORDER[this.selectedIndex];
     this.player.nudgeDebugStat(stat, dir * STAT_STEP[stat]);
   }
 
   private resetSelected(): void {
+    if (this.selectedIndex === FIRING_ANGLE_INDEX) {
+      this.player.debugFiringAngleDeg = 0;
+      return;
+    }
     this.player.setDebugMod(STAT_ORDER[this.selectedIndex], 0);
   }
 
   private resetAll(): void {
     this.player.clearDebugMods();
+    this.player.debugFiringAngleDeg = 0;
   }
 
   /** Call once per frame regardless of game-over state — inspecting/nudging stats shouldn't require an active run. */
@@ -238,9 +258,13 @@ export class DebugOverlay {
 
     this.listText.setText(this.renderList());
 
-    const selected = STAT_ORDER[this.selectedIndex];
-    const def = STAT_DEFS[selected];
-    this.selectedText.setText(`${def.display}\n${formatStatValue(def, this.player.stats[selected])}`);
+    if (this.selectedIndex === FIRING_ANGLE_INDEX) {
+      this.selectedText.setText(`Firing Angle\n${this.player.debugFiringAngleDeg.toFixed(0)}°`);
+    } else {
+      const selected = STAT_ORDER[this.selectedIndex];
+      const def = STAT_DEFS[selected];
+      this.selectedText.setText(`${def.display}\n${formatStatValue(def, this.player.stats[selected])}`);
+    }
 
     this.infoText.setText(this.renderInfo());
     this.panelBg.setSize(PANEL_WIDTH, this.infoText.y + this.infoText.height + 10 - this.panelBg.y);
@@ -258,6 +282,9 @@ export class DebugOverlay {
       const modTag = roundedMod !== 0 ? ` (dbg ${roundedMod > 0 ? "+" : ""}${roundedMod})` : "";
       lines.push(`${cursor}${def.display.padEnd(14)} ${formatStatValue(def, stats[stat])}${modTag}`);
     });
+
+    const angleCursor = this.selectedIndex === FIRING_ANGLE_INDEX ? "> " : "  ";
+    lines.push(`${angleCursor}${"Firing Angle".padEnd(14)} ${this.player.debugFiringAngleDeg.toFixed(0)}°`);
 
     return lines.join("\n");
   }

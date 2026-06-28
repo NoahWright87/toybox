@@ -27,6 +27,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   defender: Defender;
   focus = false;
   iFrameRemainingMs = 0;
+  /** Debug-only (C12 #151): degrees added to the main weapon line's straight-up heading. Not a real StatId — there's no balance/upgrade source for it, it exists purely so the debug overlay can fire at an angle to inspect homing/fork/pierce behavior off-axis. */
+  debugFiringAngleDeg = 0;
   private fireCooldownMs: number[] = [];
   // Transient mods from the debug overlay (C12 #151) — a stand-in for the
   // real level-up/item mod sources that don't exist yet. Keyed by stat so

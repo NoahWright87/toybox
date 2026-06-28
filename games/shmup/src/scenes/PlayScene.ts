@@ -256,44 +256,30 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const homingStrength = this.player.stats.homingStrength;
     const originX = this.player.x;
     const originY = this.player.y - this.player.height / 2;
+    const angleRad = Phaser.Math.DegToRad(this.player.debugFiringAngleDeg);
+    const vx = Math.sin(angleRad) * req.projectileSpeed;
+    const vy = -Math.cos(angleRad) * req.projectileSpeed;
 
+    const forkCount = Math.min(flatLineCount, TUNING.weapons.maxForkedBulletsPerShot);
     this.spawnPlayerLine(
       originX,
       originY,
-      0,
-      -req.projectileSpeed,
+      vx,
+      vy,
       hit,
       numCrits,
       tailHitFractions,
       blastRadius,
       blastDamageFraction,
-      homingStrength
+      homingStrength,
+      forkCount,
+      req.projectileSpeed
     );
-
-    const forkCount = Math.min(flatLineCount, TUNING.weapons.maxForkedBulletsPerShot);
-    for (let i = 0; i < forkCount; i++) {
-      const angle = this.forkAngle();
-      const vx = Math.sin(angle) * req.projectileSpeed;
-      const vy = -Math.cos(angle) * req.projectileSpeed;
-      this.spawnPlayerFork(
-        originX,
-        originY,
-        vx,
-        vy,
-        hit,
-        numCrits,
-        TUNING.weapons.maxHitsPerInfiniteBullet,
-        blastRadius,
-        blastDamageFraction,
-        homingStrength
-      );
-    }
   }
 
-  /** Each fork gets its own random heading (weapons.spec.todo.md) so it's visibly distinct from the main line and other forks, rather than a deterministic fan that collapses to 0deg for the common 1-fork case. */
+  /** Each fork gets its own random heading (weapons.spec.todo.md) — fully random rather than a fan off the muzzle, since a fork is born from an impact point that can be anywhere on screen, not from the gun. */
   private forkAngle(): number {
-    const maxSpreadDeg = 50;
-    return Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-maxSpreadDeg, maxSpreadDeg));
+    return Phaser.Math.FloatBetween(0, Math.PI * 2);
   }
 
   private spawnPlayerLine(
@@ -306,10 +292,25 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     fractions: number[],
     blastRadius: number,
     blastDamageFraction: number,
-    homingStrength: number
+    homingStrength: number,
+    forkCount: number,
+    forkProjectileSpeed: number
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
-    bullet?.fireLine(x, y, vx, vy, hit, numCrits, fractions, blastRadius, blastDamageFraction, homingStrength);
+    bullet?.fireLine(
+      x,
+      y,
+      vx,
+      vy,
+      hit,
+      numCrits,
+      fractions,
+      blastRadius,
+      blastDamageFraction,
+      homingStrength,
+      forkCount,
+      forkProjectileSpeed
+    );
   }
 
   private spawnPlayerFork(
@@ -322,12 +323,33 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     hitsAllowed: number,
     blastRadius: number,
     blastDamageFraction: number,
-    homingStrength: number
+    homingStrength: number,
+    inheritedHit?: Enemy
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
-    bullet?.fireForkedLine(x, y, vx, vy, hit, numCrits, hitsAllowed, blastRadius, blastDamageFraction, homingStrength);
+    bullet?.fireForkedLine(
+      x,
+      y,
+      vx,
+      vy,
+      hit,
+      numCrits,
+      hitsAllowed,
+      blastRadius,
+      blastDamageFraction,
+      homingStrength,
+      inheritedHit
+    );
   }
 
+  /**
+   * Forks aren't spawned at the muzzle — weapons.spec.todo.md's "forked
+   * projectiles inherit the firing projectile's hit-list" only makes sense
+   * once the line has actually scored an impact. So the main line carries
+   * its whole fork allotment and hands it off here, on its first registered
+   * hit, spawning that many full-damage forked lines from this impact point
+   * (each pre-seeded with `enemy` so they can't immediately re-hit it).
+   */
   private onPlayerBulletHitEnemy(bullet: PlayerBullet, enemy: Enemy): void {
     if (this.gameOver || !bullet.active || !enemy.active || bullet.hasHit(enemy)) return;
     const fraction = bullet.registerHit(enemy);
@@ -342,6 +364,26 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, other.x, other.y);
         if (dist <= bullet.blastRadius) this.damageEnemy(other, blastDamage, bullet.numCrits);
       }
+    }
+
+    const forkCount = bullet.takePendingForks();
+    for (let i = 0; i < forkCount; i++) {
+      const angle = this.forkAngle();
+      const vx = Math.cos(angle) * bullet.forkProjectileSpeed;
+      const vy = Math.sin(angle) * bullet.forkProjectileSpeed;
+      this.spawnPlayerFork(
+        bullet.x,
+        bullet.y,
+        vx,
+        vy,
+        bullet.baseHit,
+        bullet.numCrits,
+        TUNING.weapons.maxHitsPerInfiniteBullet,
+        bullet.blastRadius,
+        bullet.blastDamageFraction,
+        bullet.shotHomingStrength,
+        enemy
+      );
     }
   }
 
