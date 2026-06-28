@@ -102,6 +102,28 @@ export const TUNING = {
     maxForkedBulletsPerShot: 12,
     maxHitsPerInfiniteBullet: 50,
   },
+  // Homing (F6 #134's exotic Homing Strength stat). A bullet only seeks
+  // within a circle that leads it along its current heading — center =
+  // bullet position + heading * radius, so the near edge sits at the
+  // bullet's nose and the far edge is 2x radius ahead. This guarantees a
+  // homing bullet never locks onto (and U-turns into) something it just
+  // flew past. Once locked, it keeps turning toward that target until it
+  // dies — no re-targeting mid-flight. Pierce decays Homing Strength the
+  // same way it decays damage: a pierced bullet's remaining hits use
+  // homingStrength * the same tailHitFraction applied to damage; forked
+  // "infinite" lines don't decay damage, so they don't decay homing either.
+  homing: {
+    // 100% Homing Strength scans this many seconds of travel ahead (scaled
+    // by the firing weapon's own projectile speed, so fast and slow weapons
+    // get a proportionally sane circle instead of one fixed pixel radius).
+    seekAheadSeconds: 0.35,
+    // Hard cap regardless of how high Homing Strength is stacked.
+    maxRadiusPx: 280,
+    // Turn rate once locked scales linearly with Homing Strength, capped
+    // well short of an instant snap-to-target even at extreme values.
+    turnRateDegPerSecPerStrength: 180,
+    maxTurnRateDegPerSec: 360,
+  },
   // Object-pool ceilings (F6 #134: "Arcade Physics groups with object
   // pooling for bullets and enemies"). Sized well above any realistic
   // worst-case concurrent count so pooling never silently drops shots in

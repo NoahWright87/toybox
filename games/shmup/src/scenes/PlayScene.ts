@@ -35,7 +35,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   player!: Player;
   private playerBullets!: Phaser.Physics.Arcade.Group;
   private enemyBullets!: Phaser.Physics.Arcade.Group;
-  private enemies!: Phaser.Physics.Arcade.Group;
+  enemies!: Phaser.Physics.Arcade.Group;
   private stars!: Phaser.GameObjects.Group;
   private background!: Phaser.GameObjects.TileSprite;
 
@@ -253,6 +253,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const hit = this.player.stats.damage * critFactor;
     const { flatLineCount, tailHitFractions, blastDamageFraction } = req.behavior;
     const blastRadius = this.player.stats.blastRadius;
+    const homingStrength = this.player.stats.homingStrength;
     const originX = this.player.x;
     const originY = this.player.y - this.player.height / 2;
 
@@ -265,7 +266,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       numCrits,
       tailHitFractions,
       blastRadius,
-      blastDamageFraction
+      blastDamageFraction,
+      homingStrength
     );
 
     const forkCount = Math.min(flatLineCount, TUNING.weapons.maxForkedBulletsPerShot);
@@ -282,7 +284,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         numCrits,
         TUNING.weapons.maxHitsPerInfiniteBullet,
         blastRadius,
-        blastDamageFraction
+        blastDamageFraction,
+        homingStrength
       );
     }
   }
@@ -302,10 +305,11 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     numCrits: number,
     fractions: number[],
     blastRadius: number,
-    blastDamageFraction: number
+    blastDamageFraction: number,
+    homingStrength: number
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
-    bullet?.fireLine(x, y, vx, vy, hit, numCrits, fractions, blastRadius, blastDamageFraction);
+    bullet?.fireLine(x, y, vx, vy, hit, numCrits, fractions, blastRadius, blastDamageFraction, homingStrength);
   }
 
   private spawnPlayerFork(
@@ -317,10 +321,11 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     numCrits: number,
     hitsAllowed: number,
     blastRadius: number,
-    blastDamageFraction: number
+    blastDamageFraction: number,
+    homingStrength: number
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
-    bullet?.fireForkedLine(x, y, vx, vy, hit, numCrits, hitsAllowed, blastRadius, blastDamageFraction);
+    bullet?.fireForkedLine(x, y, vx, vy, hit, numCrits, hitsAllowed, blastRadius, blastDamageFraction, homingStrength);
   }
 
   private onPlayerBulletHitEnemy(bullet: PlayerBullet, enemy: Enemy): void {
