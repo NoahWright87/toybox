@@ -7,6 +7,7 @@ import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet } from "../entities";
 import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
 import { applyDamage, reflexBulletSpeedMult, resolveHit, tickShieldRegen } from "../systems/combat";
+import { DebugOverlay } from "../debug/DebugOverlay";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
 // Code never inlines a draw call or file path — it asks for one of these keys,
@@ -49,6 +50,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private shieldBar!: Phaser.GameObjects.Graphics;
 
   private gameOver = false;
+  private debugOverlay!: DebugOverlay;
 
   constructor() {
     super("Play");
@@ -152,9 +154,12 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     this.hpBar = this.add.graphics().setDepth(100);
     this.shieldBar = this.add.graphics().setDepth(100);
+
+    this.debugOverlay = new DebugOverlay(this, this.player);
   }
 
   update(_time: number, delta: number) {
+    this.debugOverlay.update();
     if (this.gameOver) return;
 
     const dt = delta / 1000;

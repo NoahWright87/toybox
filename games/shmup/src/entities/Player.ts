@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { TUNING } from "../tuning";
 import { resolveLoadout } from "../systems/effects";
 import type { OwnedWeapon, ProjectileBehavior } from "../systems/effects";
-import type { StatBlock } from "../systems/stats";
+import type { StatBlock, StatId, StatModifier } from "../systems/stats";
 import type { Defender } from "../systems/combat";
 import { PLACEHOLDER_WEAPON } from "../content";
 
@@ -28,6 +28,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   focus = false;
   iFrameRemainingMs = 0;
   private fireCooldownMs: number[] = [];
+  // Transient mods from the debug overlay (C12 #151) — a stand-in for the
+  // real level-up/item mod sources that don't exist yet. Keyed by stat so
+  // the overlay can replace one stat's nudge without touching the others.
+  private debugMods = new Map<StatId, StatModifier>();
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
     super(scene, x, y, texture);
@@ -40,6 +44,39 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.defender = { hp: stats.maxHp, shield: stats.maxShield, shieldRegenDelayRemaining: 0 };
     this.fireCooldownMs = this.weapons.map(() => 0);
     this.applyHitboxRadius();
+  }
+
+  /** Nudges a stat by `delta` via a debug-sourced flat modifier; re-resolves the whole loadout so the change is visible immediately. */
+  nudgeDebugStat(stat: StatId, delta: number): void {
+    const current = this.debugMods.get(stat)?.amount ?? 0;
+    this.setDebugMod(stat, current + delta);
+  }
+
+  setDebugMod(stat: StatId, amount: number): void {
+    if (amount === 0) {
+      this.debugMods.delete(stat);
+    } else {
+      this.debugMods.set(stat, { kind: "flat", stat, amount, source: "debug" });
+    }
+    this.recompute();
+  }
+
+  clearDebugMods(): void {
+    this.debugMods.clear();
+    this.recompute();
+  }
+
+  debugModAmount(stat: StatId): number {
+    return this.debugMods.get(stat)?.amount ?? 0;
+  }
+
+  private recompute(): void {
+    const { stats, projectileBehaviors } = resolveLoadout({
+      weapons: this.weapons,
+      transientMods: [...this.debugMods.values()],
+    });
+    this.stats = stats;
+    this.projectileBehaviors = projectileBehaviors;
   }
 
   private applyHitboxRadius(): void {
