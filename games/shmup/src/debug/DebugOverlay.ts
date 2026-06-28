@@ -48,6 +48,24 @@ function expectedCritFactor(critChance: number, critDamage: number): number {
   return Math.pow(1 + critDamage, guaranteed) * (1 + frac * critDamage);
 }
 
+// Panel/button geometry, in game-space px. Buttons are sized well above a
+// finger's worth of canvas pixels even after the FIT-mode downscale to a
+// real phone width (see ShakeDetector's mobile-input rationale) — this is
+// the touch-equivalent of the keyboard's bracket/minus/plus/zero/backspace.
+const PANEL_WIDTH = 360;
+const PANEL_MARGIN = 16;
+const ARROW_BTN = 64;
+const ADJUST_BTN_W = 130;
+const ADJUST_BTN_H = 80;
+const RESET_BTN_W = 165;
+const RESET_BTN_H = 56;
+const ROW_GAP = 14;
+
+interface Button {
+  rect: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+}
+
 /**
  * C12 #151 ("Debug / balance instrumentation overlay") — a shell sized to
  * F6's scope: live effective stats, a way to nudge them without a real
@@ -56,11 +74,21 @@ function expectedCritFactor(critChance: number, critDamage: number): number {
  * instead of inferred from a balance spreadsheet. The fuller overlay #151
  * calls for (graze/hype readouts, a real build simulator) is its own job
  * once those systems (F7+) exist. Toggle is backtick on a keyboard or a
- * device shake on mobile (see ShakeDetector) — there's no keyboard to press
- * on a phone, and the stat nudges are still desktop/keyboard-only for now.
+ * device shake on mobile (see ShakeDetector); stat selection/adjustment is
+ * mouse/touch buttons (work with both pointer types) plus keyboard shortcuts
+ * for desktop speed — there's no keyboard on a phone to drive the old
+ * keys-only version.
  */
 export class DebugOverlay {
-  private readonly text: Phaser.GameObjects.Text;
+  private readonly panelLeft: number;
+  private readonly panelRight: number;
+
+  private readonly panelBg: Phaser.GameObjects.Rectangle;
+  private readonly listText: Phaser.GameObjects.Text;
+  private readonly selectedText: Phaser.GameObjects.Text;
+  private readonly infoText: Phaser.GameObjects.Text;
+  private readonly buttons: Button[] = [];
+
   private readonly toggleKey: Phaser.Input.Keyboard.Key;
   private readonly prevKey: Phaser.Input.Keyboard.Key;
   private readonly nextKey: Phaser.Input.Keyboard.Key;
@@ -74,12 +102,13 @@ export class DebugOverlay {
   private selectedIndex = 0;
 
   constructor(
-    scene: Phaser.Scene,
+    private readonly scene: Phaser.Scene,
     private readonly player: Player
   ) {
+    this.panelRight = scene.scale.width - PANEL_MARGIN;
+    this.panelLeft = this.panelRight - PANEL_WIDTH;
+
     const kb = scene.input.keyboard!;
-    this.shake = new ShakeDetector(() => this.toggleVisible());
-    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shake.destroy());
     this.toggleKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK);
     this.prevKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET);
     this.nextKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET);
@@ -88,12 +117,58 @@ export class DebugOverlay {
     this.resetOneKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.ZERO);
     this.resetAllKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.BACKSPACE);
 
-    this.text = scene.add
-      .text(scene.scale.width - 16, 14, "", {
+    this.shake = new ShakeDetector(() => this.toggleVisible());
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shake.destroy());
+
+    this.panelBg = scene.add
+      .rectangle(this.panelLeft, 14, PANEL_WIDTH, 10, 0x000000, 0.85)
+      .setOrigin(0, 0)
+      .setDepth(299)
+      .setVisible(false);
+
+    this.listText = scene.add
+      .text(this.panelRight, 14, "", {
         fontFamily: "monospace",
         fontSize: "12px",
         color: "#00ff88",
-        backgroundColor: "#000000cc",
+        padding: { x: 8, y: 6 },
+        lineSpacing: 2,
+      })
+      .setOrigin(1, 0)
+      .setDepth(300)
+      .setVisible(false);
+    // Line count (header + one per stat) never changes, so this height is
+    // stable — measure it once up front to lay out the controls below it.
+    this.listText.setText(this.renderList());
+    let y = 14 + this.listText.height + ROW_GAP;
+
+    this.addButton(this.panelLeft, y, ARROW_BTN, ARROW_BTN, "<", () => this.selectDelta(-1));
+    this.addButton(this.panelRight - ARROW_BTN, y, ARROW_BTN, ARROW_BTN, ">", () => this.selectDelta(1));
+    this.selectedText = scene.add
+      .text(this.panelLeft + PANEL_WIDTH / 2, y + ARROW_BTN / 2, "", {
+        fontFamily: "monospace",
+        fontSize: "14px",
+        color: "#ffffff",
+        align: "center",
+      })
+      .setOrigin(0.5)
+      .setDepth(300)
+      .setVisible(false);
+    y += ARROW_BTN + ROW_GAP;
+
+    this.addButton(this.panelLeft, y, ADJUST_BTN_W, ADJUST_BTN_H, "-", () => this.adjustSelected(-1));
+    this.addButton(this.panelRight - ADJUST_BTN_W, y, ADJUST_BTN_W, ADJUST_BTN_H, "+", () => this.adjustSelected(1));
+    y += ADJUST_BTN_H + ROW_GAP;
+
+    this.addButton(this.panelLeft, y, RESET_BTN_W, RESET_BTN_H, "RESET", () => this.resetSelected());
+    this.addButton(this.panelRight - RESET_BTN_W, y, RESET_BTN_W, RESET_BTN_H, "RESET ALL", () => this.resetAll());
+    y += RESET_BTN_H + ROW_GAP;
+
+    this.infoText = scene.add
+      .text(this.panelRight, y, "", {
+        fontFamily: "monospace",
+        fontSize: "12px",
+        color: "#00ff88",
         padding: { x: 8, y: 6 },
         lineSpacing: 2,
       })
@@ -102,9 +177,51 @@ export class DebugOverlay {
       .setVisible(false);
   }
 
+  private addButton(x: number, y: number, w: number, h: number, label: string, onTap: () => void): void {
+    const rect = this.scene.add
+      .rectangle(x, y, w, h, 0x103322, 0.95)
+      .setStrokeStyle(2, 0x00ff88)
+      .setOrigin(0, 0)
+      .setDepth(300)
+      .setVisible(false)
+      .setInteractive({ useHandCursor: true });
+    rect.on("pointerdown", onTap);
+    const text = this.scene.add
+      .text(x + w / 2, y + h / 2, label, { fontFamily: "monospace", fontSize: "22px", color: "#00ff88" })
+      .setOrigin(0.5)
+      .setDepth(301)
+      .setVisible(false);
+    this.buttons.push({ rect, label: text });
+  }
+
   private toggleVisible(): void {
     this.visible = !this.visible;
-    this.text.setVisible(this.visible);
+    this.panelBg.setVisible(this.visible);
+    this.listText.setVisible(this.visible);
+    this.selectedText.setVisible(this.visible);
+    this.infoText.setVisible(this.visible);
+    for (const b of this.buttons) {
+      b.rect.setVisible(this.visible);
+      b.label.setVisible(this.visible);
+    }
+  }
+
+  private selectDelta(dir: number): void {
+    const len = STAT_ORDER.length;
+    this.selectedIndex = (this.selectedIndex + dir + len) % len;
+  }
+
+  private adjustSelected(dir: number): void {
+    const stat = STAT_ORDER[this.selectedIndex];
+    this.player.nudgeDebugStat(stat, dir * STAT_STEP[stat]);
+  }
+
+  private resetSelected(): void {
+    this.player.setDebugMod(STAT_ORDER[this.selectedIndex], 0);
+  }
+
+  private resetAll(): void {
+    this.player.clearDebugMods();
   }
 
   /** Call once per frame regardless of game-over state — inspecting/nudging stats shouldn't require an active run. */
@@ -112,20 +229,24 @@ export class DebugOverlay {
     if (Phaser.Input.Keyboard.JustDown(this.toggleKey)) this.toggleVisible();
     if (!this.visible) return;
 
-    const len = STAT_ORDER.length;
-    if (Phaser.Input.Keyboard.JustDown(this.prevKey)) this.selectedIndex = (this.selectedIndex - 1 + len) % len;
-    if (Phaser.Input.Keyboard.JustDown(this.nextKey)) this.selectedIndex = (this.selectedIndex + 1) % len;
+    if (Phaser.Input.Keyboard.JustDown(this.prevKey)) this.selectDelta(-1);
+    if (Phaser.Input.Keyboard.JustDown(this.nextKey)) this.selectDelta(1);
+    if (Phaser.Input.Keyboard.JustDown(this.decKey)) this.adjustSelected(-1);
+    if (Phaser.Input.Keyboard.JustDown(this.incKey)) this.adjustSelected(1);
+    if (Phaser.Input.Keyboard.JustDown(this.resetOneKey)) this.resetSelected();
+    if (Phaser.Input.Keyboard.JustDown(this.resetAllKey)) this.resetAll();
+
+    this.listText.setText(this.renderList());
 
     const selected = STAT_ORDER[this.selectedIndex];
-    if (Phaser.Input.Keyboard.JustDown(this.decKey)) this.player.nudgeDebugStat(selected, -STAT_STEP[selected]);
-    if (Phaser.Input.Keyboard.JustDown(this.incKey)) this.player.nudgeDebugStat(selected, STAT_STEP[selected]);
-    if (Phaser.Input.Keyboard.JustDown(this.resetOneKey)) this.player.setDebugMod(selected, 0);
-    if (Phaser.Input.Keyboard.JustDown(this.resetAllKey)) this.player.clearDebugMods();
+    const def = STAT_DEFS[selected];
+    this.selectedText.setText(`${def.display}\n${formatStatValue(def, this.player.stats[selected])}`);
 
-    this.text.setText(this.render());
+    this.infoText.setText(this.renderInfo());
+    this.panelBg.setSize(PANEL_WIDTH, this.infoText.y + this.infoText.height + 10 - this.panelBg.y);
   }
 
-  private render(): string {
+  private renderList(): string {
     const stats = this.player.stats;
     const lines: string[] = ["-- DEBUG (` or shake to close) --", ""];
 
@@ -137,11 +258,12 @@ export class DebugOverlay {
       lines.push(`${cursor}${def.display.padEnd(14)} ${formatStatValue(def, stats[stat])}${modTag}`);
     });
 
-    lines.push("");
-    lines.push("[ ] select stat   - = adjust");
-    lines.push("0 reset stat   Backspace reset all");
-    lines.push("");
-    lines.push("-- weapon (placeholder) --");
+    return lines.join("\n");
+  }
+
+  private renderInfo(): string {
+    const stats = this.player.stats;
+    const lines: string[] = ["-- weapon (placeholder) --"];
 
     const shotsPerSec = TUNING.weapons.baseFireRate * stats.attackSpeed;
     const avgHit = stats.damage * expectedCritFactor(stats.critChance, stats.critDamage);
