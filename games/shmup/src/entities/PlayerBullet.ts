@@ -50,7 +50,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   private fractionIndex = 0;
   private infinite = false;
   private hitsRemaining = 0;
-  private readonly hitSet = new Set<Enemy>();
+  /** Tracks `Enemy.spawnId`, not the `Enemy` object itself — enemy sprites are pooled and reused across spawns, so an object-reference Set would risk a later, logically-different enemy reusing the same pooled object and being skipped as "already hit". */
+  private readonly hitSet = new Set<number>();
   /** Set once per shot; decays on finite pierce lines the same way damage decays (TUNING.homing doc comment). Forked "infinite" lines never decay it, same as they never decay damage. */
   private baseHomingStrength = 0;
   private homingStrength = 0;
@@ -108,7 +109,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     this.pendingForkCount = forkCount;
     this.forkProjectileSpeed = forkProjectileSpeed;
     this.forkConeDeg = forkConeDeg;
-    if (inheritedHit) this.hitSet.add(inheritedHit);
+    if (inheritedHit) this.hitSet.add(inheritedHit.spawnId);
   }
 
   private reset(
@@ -146,7 +147,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
 
   /** True once this bullet has already damaged `enemy` — it should pass through without re-hitting it. */
   hasHit(enemy: Enemy): boolean {
-    return this.hitSet.has(enemy);
+    return this.hitSet.has(enemy.spawnId);
   }
 
   /** This shot's original Homing Strength, undecayed — what a fork spawned off this line should carry, since forked "infinite" lines never decay homing (same as they never decay damage). */
@@ -167,8 +168,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
    * hit by this bullet. Recycles the bullet once its pierce/hits are spent.
    */
   registerHit(enemy: Enemy): number | undefined {
-    if (this.hitSet.has(enemy)) return undefined;
-    this.hitSet.add(enemy);
+    if (this.hitSet.has(enemy.spawnId)) return undefined;
+    this.hitSet.add(enemy.spawnId);
 
     if (this.infinite) {
       this.hitsRemaining -= 1;
@@ -250,7 +251,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     for (const enemy of (this.scene as ShmupPlayScene).enemies.getChildren() as Enemy[]) {
       // Can't hit it again (it's already in this bullet's hit-list, same as
       // collision exclusion), so it shouldn't be seekable either.
-      if (!enemy.active || this.hitSet.has(enemy)) continue;
+      if (!enemy.active || this.hitSet.has(enemy.spawnId)) continue;
       const dist = Phaser.Math.Distance.Between(centerX, centerY, enemy.x, enemy.y);
       if (dist <= radius && dist < bestDist) {
         best = enemy;

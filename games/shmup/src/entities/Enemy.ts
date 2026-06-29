@@ -10,8 +10,12 @@ import type { ShmupPlayScene } from "./types";
  * armor/evasion/shield — enemies don't have an F3 stat pool yet.
  */
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
+  private static nextSpawnId = 1;
+
   hp = 0;
   scoreValue = 0;
+  /** Identifies this enemy's current life, not the pooled object — bullets must track hits by this, not by object reference, since the underlying sprite is reused across spawns (Group.get() recycling). */
+  spawnId = 0;
   private fireCooldownMs = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
@@ -23,6 +27,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp = d.maxHp;
     this.scoreValue = d.scoreValue;
     this.fireCooldownMs = d.fireIntervalMs;
+    this.spawnId = Enemy.nextSpawnId++;
     this.setPosition(x, y);
     this.setActive(true);
     this.setVisible(true);

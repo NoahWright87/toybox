@@ -40,7 +40,7 @@ export const COPY = {
 
   // ---- Core gameplay loop HUD/flow (F6 #134) ----
   "play.score": "SCORE {score}",
-  "play.hint": "Drag/Arrows/WASD to move · Hold Shift or tap-hold to Focus · auto-fire",
+  "play.hint": "Drag/Arrows/WASD to move · Hold Shift to Focus · auto-fire",
   "play.episodeOver.title": "EPISODE OVER",
   "play.episodeOver.score": "Final Score: {score}",
   "play.episodeOver.restartPrompt": "PRESS ANY KEY OR TAP TO TRY AGAIN",
