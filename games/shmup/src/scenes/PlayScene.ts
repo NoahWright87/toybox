@@ -339,6 +339,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     blastRadius: number,
     blastDamageFraction: number,
     homingStrength: number,
+    forkCount: number,
+    forkProjectileSpeed: number,
+    forkConeDeg: number,
     inheritedHit?: Enemy
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
@@ -353,6 +356,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       blastRadius,
       blastDamageFraction,
       homingStrength,
+      forkCount,
+      forkProjectileSpeed,
+      forkConeDeg,
       inheritedHit
     );
   }
@@ -360,10 +366,15 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   /**
    * Forks aren't spawned at the muzzle — weapons.spec.todo.md's "forked
    * projectiles inherit the firing projectile's hit-list" only makes sense
-   * once the line has actually scored an impact. So the main line carries
-   * its whole fork allotment and hands it off here, on its first registered
-   * hit, spawning that many full-damage forked lines from this impact point
-   * (each pre-seeded with `enemy` so they can't immediately re-hit it).
+   * once the line has actually scored an impact. So a bullet (the main line
+   * or an earlier fork) carries its remaining chain-link count and hands it
+   * off here, on its first registered hit, spawning exactly ONE more forked
+   * line from this impact point (pre-seeded with `enemy` so it can't
+   * immediately re-hit it) and carrying the chain count minus one. That new
+   * fork resolves the same rule recursively on its OWN first impact
+   * (weapons.spec.todo.md), so pierce well above 200% is only visible as a
+   * multi-generation chain if every link in it keeps landing hits — a link
+   * that flies past everything ends the chain early.
    */
   private onPlayerBulletHitEnemy(bullet: PlayerBullet, enemy: Enemy): void {
     if (this.gameOver || !bullet.active || !enemy.active || bullet.hasHit(enemy)) return;
@@ -381,10 +392,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       }
     }
 
-    const bulletBody = bullet.body as Phaser.Physics.Arcade.Body;
-    const baseAngle = Math.atan2(bulletBody.velocity.y, bulletBody.velocity.x);
-    const forkCount = bullet.takePendingForks();
-    for (let i = 0; i < forkCount; i++) {
+    const remainingForks = bullet.takePendingForks();
+    if (remainingForks > 0) {
+      const bulletBody = bullet.body as Phaser.Physics.Arcade.Body;
+      const baseAngle = Math.atan2(bulletBody.velocity.y, bulletBody.velocity.x);
       const angle = this.forkAngle(baseAngle, bullet.forkConeDeg);
       const vx = Math.cos(angle) * bullet.forkProjectileSpeed;
       const vy = Math.sin(angle) * bullet.forkProjectileSpeed;
@@ -399,6 +410,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         bullet.blastRadius,
         bullet.blastDamageFraction,
         bullet.shotHomingStrength,
+        remainingForks - 1,
+        bullet.forkProjectileSpeed,
+        bullet.forkConeDeg,
         enemy
       );
     }

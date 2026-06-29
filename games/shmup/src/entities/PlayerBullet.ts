@@ -14,11 +14,16 @@ import type { ShmupPlayScene } from "./types";
  *
  * Forks aren't spawned at the muzzle — weapons.spec.todo.md's "forked
  * projectiles inherit the firing projectile's hit-list" only makes sense if
- * a fork is born from an impact the line has already scored. A `fireLine`
- * bullet carries `pendingForkCount` (the shot's whole fork allotment) and
+ * a fork is born from an impact the line has already scored. Either kind of
+ * bullet carries `pendingForkCount` (how many more chain links remain) and
  * hands it to the scene via `takePendingForks()` on its first registered
- * hit; the scene spawns that many `fireForkedLine` bullets from that impact
- * point, each pre-seeded with the just-hit enemy so they can't re-hit it.
+ * hit; the scene spawns exactly one `fireForkedLine` bullet from that impact
+ * point, pre-seeded with the just-hit enemy so it can't re-hit it, and
+ * carrying `pendingForkCount - 1` so the chain keeps recursing as long as
+ * each new fork keeps landing impacts of its own (weapons.spec.todo.md: "That
+ * forked projectile resolves the same rule recursively"). A chain link that
+ * never lands a hit ends the chain early — pierce above 100% only describes
+ * the *maximum* chain depth, not a guaranteed simultaneous spawn count.
  *
  * `baseHit` is the already-crit-resolved damage for this shot (crit is
  * rolled once per shot fired, never re-rolled per pierce impact/fork —
@@ -37,9 +42,9 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   numCrits = 0;
   blastRadius = 0;
   blastDamageFraction = 0;
-  /** Speed to give any forks spawned from this line's first impact (the firing weapon's projectileSpeed). Unused on forked bullets themselves — they don't re-fork. */
+  /** Speed to give any fork spawned from this line's first impact (the firing weapon's projectileSpeed) — carried forward to each chain link so the whole chain shares one projectile speed. */
   forkProjectileSpeed = 0;
-  /** Cone width (degrees) any forks spawned from this line's first impact should spread their heading within, centered on this bullet's heading at that impact. Unused on forked bullets themselves — they don't re-fork. */
+  /** Cone width (degrees) any fork spawned from this line's first impact should spread its heading within, centered on this bullet's heading at that impact — carried forward to each chain link. */
   forkConeDeg = 0;
   private fractions: number[] = [];
   private fractionIndex = 0;
@@ -50,7 +55,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   private baseHomingStrength = 0;
   private homingStrength = 0;
   private lockedTarget: Enemy | null = null;
-  /** This line's whole fork allotment, drained once (by `takePendingForks`) on the first hit it registers. Always 0 on a forked ("infinite") bullet — forks don't re-fork. */
+  /** How many more chain links remain after this one, drained once (by `takePendingForks`) on the first hit this bullet registers. Set on both `fireLine` and `fireForkedLine` so the fork chain can keep recursing across generations. */
   private pendingForkCount = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
@@ -92,11 +97,17 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     blastRadius: number,
     blastDamageFraction: number,
     homingStrength: number,
+    forkCount: number,
+    forkProjectileSpeed: number,
+    forkConeDeg: number,
     inheritedHit?: Enemy
   ): void {
     this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength);
     this.infinite = true;
     this.hitsRemaining = hitsAllowed;
+    this.pendingForkCount = forkCount;
+    this.forkProjectileSpeed = forkProjectileSpeed;
+    this.forkConeDeg = forkConeDeg;
     if (inheritedHit) this.hitSet.add(inheritedHit);
   }
 
