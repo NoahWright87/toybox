@@ -39,6 +39,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   blastDamageFraction = 0;
   /** Speed to give any forks spawned from this line's first impact (the firing weapon's projectileSpeed). Unused on forked bullets themselves — they don't re-fork. */
   forkProjectileSpeed = 0;
+  /** Cone width (degrees) any forks spawned from this line's first impact should spread their heading within, centered on this bullet's heading at that impact. Unused on forked bullets themselves — they don't re-fork. */
+  forkConeDeg = 0;
   private fractions: number[] = [];
   private fractionIndex = 0;
   private infinite = false;
@@ -67,7 +69,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     blastDamageFraction: number,
     homingStrength: number,
     forkCount: number,
-    forkProjectileSpeed: number
+    forkProjectileSpeed: number,
+    forkConeDeg: number
   ): void {
     this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength);
     this.infinite = false;
@@ -75,6 +78,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     this.fractionIndex = 0;
     this.pendingForkCount = forkCount;
     this.forkProjectileSpeed = forkProjectileSpeed;
+    this.forkConeDeg = forkConeDeg;
   }
 
   fireForkedLine(
@@ -117,6 +121,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     this.hitSet.clear();
     this.pendingForkCount = 0;
     this.forkProjectileSpeed = 0;
+    this.forkConeDeg = 0;
     this.setPosition(x, y);
     this.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
     this.setActive(true);
@@ -124,6 +129,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
     body.setVelocity(vx, vy);
+    body.debugBodyColor = TUNING.debug.hitboxColors.playerBullet;
+    body.debugShowVelocity = false;
   }
 
   /** True once this bullet has already damaged `enemy` — it should pass through without re-hitting it. */
@@ -230,7 +237,9 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     let best: Enemy | null = null;
     let bestDist = Infinity;
     for (const enemy of (this.scene as ShmupPlayScene).enemies.getChildren() as Enemy[]) {
-      if (!enemy.active) continue;
+      // Can't hit it again (it's already in this bullet's hit-list, same as
+      // collision exclusion), so it shouldn't be seekable either.
+      if (!enemy.active || this.hitSet.has(enemy)) continue;
       const dist = Phaser.Math.Distance.Between(centerX, centerY, enemy.x, enemy.y);
       if (dist <= radius && dist < bestDist) {
         best = enemy;

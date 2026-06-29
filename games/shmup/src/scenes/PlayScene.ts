@@ -51,6 +51,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
   private gameOver = false;
   private debugOverlay!: DebugOverlay;
+  private enemySpawnCooldownMs: number = TUNING.enemies.drone.spawnIntervalMs;
 
   constructor() {
     super("Play");
@@ -129,11 +130,13 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       this.pointerTarget = null;
     });
 
-    this.time.addEvent({
-      delay: TUNING.enemies.drone.spawnIntervalMs,
-      loop: true,
-      callback: () => this.spawnEnemy(),
-    });
+    this.enemySpawnCooldownMs = this.player.effectiveEnemySpawnIntervalMs;
+
+    // Depth 50: above every gameplay sprite (player is the highest at 10) so
+    // hitbox outlines aren't hidden beneath the sprites they outline, but
+    // below the HUD/debug-overlay text (100+).
+    this.physics.world.createDebugGraphic().setDepth(50);
+    this.physics.world.drawDebug = false;
 
     this.scoreText = this.add
       .text(16, 14, copy("play.score", { score: 0 }), {
@@ -160,6 +163,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
   update(_time: number, delta: number) {
     this.debugOverlay.update();
+    this.physics.world.drawDebug = this.player.debugShowHitboxes;
+    if (!this.physics.world.drawDebug) this.physics.world.debugGraphic?.clear();
     if (this.gameOver) return;
 
     const dt = delta / 1000;
@@ -169,6 +174,12 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     for (const req of this.player.tryFire(delta)) {
       this.fireWeapon(req);
+    }
+
+    this.enemySpawnCooldownMs -= delta;
+    if (this.enemySpawnCooldownMs <= 0) {
+      this.spawnEnemy();
+      this.enemySpawnCooldownMs += this.player.effectiveEnemySpawnIntervalMs;
     }
 
     for (const enemy of this.enemies.getChildren() as Enemy[]) {
@@ -274,13 +285,14 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       blastDamageFraction,
       homingStrength,
       forkCount,
-      req.projectileSpeed
+      req.projectileSpeed,
+      this.player.effectiveForkConeDeg
     );
   }
 
-  /** Each fork gets its own random heading (weapons.spec.todo.md) — fully random rather than a fan off the muzzle, since a fork is born from an impact point that can be anywhere on screen, not from the gun. */
-  private forkAngle(): number {
-    return Phaser.Math.FloatBetween(0, Math.PI * 2);
+  /** A fork's heading is drawn from a cone around the forking bullet's own heading at the moment of impact (not fully random) — weapons.spec.todo.md follow-up, `WeaponDef.forkConeDeg`. */
+  private forkAngle(baseAngleRad: number, coneDeg: number): number {
+    return baseAngleRad + Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-coneDeg / 2, coneDeg / 2));
   }
 
   private spawnPlayerLine(
@@ -295,7 +307,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     blastDamageFraction: number,
     homingStrength: number,
     forkCount: number,
-    forkProjectileSpeed: number
+    forkProjectileSpeed: number,
+    forkConeDeg: number
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
     bullet?.fireLine(
@@ -310,7 +323,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       blastDamageFraction,
       homingStrength,
       forkCount,
-      forkProjectileSpeed
+      forkProjectileSpeed,
+      forkConeDeg
     );
   }
 
@@ -367,9 +381,11 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       }
     }
 
+    const bulletBody = bullet.body as Phaser.Physics.Arcade.Body;
+    const baseAngle = Math.atan2(bulletBody.velocity.y, bulletBody.velocity.x);
     const forkCount = bullet.takePendingForks();
     for (let i = 0; i < forkCount; i++) {
-      const angle = this.forkAngle();
+      const angle = this.forkAngle(baseAngle, bullet.forkConeDeg);
       const vx = Math.cos(angle) * bullet.forkProjectileSpeed;
       const vy = Math.sin(angle) * bullet.forkProjectileSpeed;
       this.spawnPlayerFork(

@@ -82,6 +82,12 @@ export const TUNING = {
     // Never let an authored pierceDecay reach/exceed 95% — keeps the fork
     // chain converging quickly regardless of how high pierce is stacked.
     maxPierceDecay: 0.95,
+    // Fork heading spread (weapons.spec.todo.md follow-up): a forked line's
+    // heading is drawn from a cone around the bullet's heading at the
+    // moment it forked (not fully random), full width in degrees.
+    // Authored per-weapon (WeaponDef.forkConeDeg), defaulting to this value
+    // when omitted.
+    defaultForkConeDeg: 60,
     // Hard safety caps against pathological stat stacking — not meaningful
     // gameplay limits, just backstops against unbounded array growth.
     maxForksPerImpact: 1000,
@@ -156,5 +162,16 @@ export const TUNING = {
     starCount: 70,
     starMinSpeed: 40,
     starMaxSpeed: 180,
+  },
+  // Debug-only (C12 #151 follow-up) — not gameplay tuning, but kept here so
+  // every numeric constant still has one home. Per-entity-category outline
+  // colors for the debug overlay's hitbox toggle.
+  debug: {
+    hitboxColors: {
+      player: 0x00ffff,
+      enemy: 0xff3333,
+      playerBullet: 0x33ff33,
+      enemyBullet: 0xffaa00,
+    },
   },
 } as const;

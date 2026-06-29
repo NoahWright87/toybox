@@ -29,6 +29,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
     body.setVelocity(0, this.moveSpeed());
+    body.debugBodyColor = TUNING.debug.hitboxColors.enemy;
+    body.debugShowVelocity = false;
   }
 
   recycle(): void {

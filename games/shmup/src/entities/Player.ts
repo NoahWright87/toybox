@@ -29,6 +29,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   iFrameRemainingMs = 0;
   /** Debug-only (C12 #151): full width, in degrees, of a random cone around straight-up that each shot's heading is drawn from (0 = always straight up). Not a real StatId — there's no balance/upgrade source for it, it exists purely so the debug overlay can spread fire to inspect homing/fork/pierce behavior off-axis. */
   debugFiringConeDeg = 0;
+  /** Debug-only override (C12 #151 follow-up) for fork-cone width; null means "use the weapon's authored/default value" (see `effectiveForkConeDeg`). */
+  debugForkConeOverrideDeg: number | null = null;
+  /** Debug-only override (C12 #151 follow-up) for the enemy spawn interval (ms); null means "use TUNING.enemies.drone.spawnIntervalMs" (see `effectiveEnemySpawnIntervalMs`). */
+  debugEnemySpawnIntervalMs: number | null = null;
+  /** Debug-only (C12 #151 follow-up): renders collision hitbox outlines for player/enemies/projectiles when true. */
+  debugShowHitboxes = false;
   private fireCooldownMs: number[] = [];
   // Transient mods from the debug overlay (C12 #151) — a stand-in for the
   // real level-up/item mod sources that don't exist yet. Keyed by stat so
@@ -46,6 +52,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.defender = { hp: stats.maxHp, shield: stats.maxShield, shieldRegenDelayRemaining: 0 };
     this.fireCooldownMs = this.weapons.map(() => 0);
     this.applyHitboxRadius();
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.debugBodyColor = TUNING.debug.hitboxColors.player;
+    body.debugShowVelocity = false;
+  }
+
+  /** This player's first weapon's authored fork-cone width, or the tuning default if unset — the "real" production value before any debug override. */
+  get baseForkConeDeg(): number {
+    return this.weapons[0]?.weapon.forkConeDeg ?? TUNING.weapons.defaultForkConeDeg;
+  }
+
+  /** Effective fork-cone width: the debug override when set, else the production value above. */
+  get effectiveForkConeDeg(): number {
+    return this.debugForkConeOverrideDeg ?? this.baseForkConeDeg;
+  }
+
+  /** Effective enemy spawn interval (ms): the debug override when set, else TUNING's default. */
+  get effectiveEnemySpawnIntervalMs(): number {
+    return this.debugEnemySpawnIntervalMs ?? TUNING.enemies.drone.spawnIntervalMs;
   }
 
   /** Nudges a stat by `delta` via a debug-sourced flat modifier; re-resolves the whole loadout so the change is visible immediately. */

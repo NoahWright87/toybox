@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
+import { TUNING } from "../tuning";
 
 /** Pooled enemy bullet — fixed damage, no pierce/blast (those are player-weapon-only mechanics). */
 export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
@@ -18,6 +19,8 @@ export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
     body.setVelocity(vx, vy);
+    body.debugBodyColor = TUNING.debug.hitboxColors.enemyBullet;
+    body.debugShowVelocity = false;
   }
 
   recycle(): void {

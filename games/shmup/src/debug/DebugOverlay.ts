@@ -18,8 +18,28 @@ const STAT_ORDER: StatId[] = [...MAIN_STAT_IDS, ...EXOTIC_STAT_IDS];
  * within ±half of it around straight up, not a fixed offset.
  */
 const FIRING_CONE_INDEX = STAT_ORDER.length;
-const SELECTABLE_COUNT = STAT_ORDER.length + 1;
+/**
+ * Sentinel index for the debug-only "Fork Cone" row — overrides
+ * `Player.debugForkConeOverrideDeg` (null = defer to the weapon's authored
+ * `forkConeDeg`/`TUNING.weapons.defaultForkConeDeg`). Full width, in degrees,
+ * of the cone a forked line's heading is drawn from around the forking
+ * bullet's own heading at the moment of impact.
+ */
+const FORK_CONE_INDEX = STAT_ORDER.length + 1;
+/**
+ * Sentinel index for the debug-only "Spawn Rate" row — overrides
+ * `Player.debugEnemySpawnIntervalMs` (null = defer to
+ * `TUNING.enemies.drone.spawnIntervalMs`). Lower is faster spawning.
+ */
+const SPAWN_RATE_INDEX = STAT_ORDER.length + 2;
+/** Sentinel index for the debug-only "Hitboxes" toggle row — flips `Player.debugShowHitboxes`, which drives Arcade Physics' built-in per-body debug draw. */
+const HITBOXES_INDEX = STAT_ORDER.length + 3;
+const SELECTABLE_COUNT = STAT_ORDER.length + 4;
 const FIRING_CONE_STEP_DEG = 5;
+const FORK_CONE_STEP_DEG = 5;
+const SPAWN_RATE_STEP_MS = 50;
+// Safety floor so the +/- buttons can't drive the spawn cooldown to (or past) zero.
+const SPAWN_RATE_MIN_MS = 100;
 
 /**
  * Per-stat nudge increment for the debug overlay (C12 #151's "preview a
@@ -199,7 +219,15 @@ export class DebugOverlay {
       .setDepth(300)
       .setVisible(false)
       .setInteractive({ useHandCursor: true });
-    rect.on("pointerdown", onTap);
+    // Without this, the tap also bubbles to PlayScene's scene-level
+    // "pointerdown" handler and starts dragging the ship toward the button.
+    rect.on(
+      "pointerdown",
+      (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+        event.stopPropagation();
+        onTap();
+      }
+    );
     const text = this.scene.add
       .text(x + w / 2, y + h / 2, label, { fontFamily: "monospace", fontSize: "22px", color: "#00ff88" })
       .setOrigin(0.5)
@@ -229,6 +257,20 @@ export class DebugOverlay {
       this.player.debugFiringConeDeg = Math.max(0, this.player.debugFiringConeDeg + dir * FIRING_CONE_STEP_DEG);
       return;
     }
+    if (this.selectedIndex === FORK_CONE_INDEX) {
+      const current = this.player.effectiveForkConeDeg;
+      this.player.debugForkConeOverrideDeg = Math.max(0, current + dir * FORK_CONE_STEP_DEG);
+      return;
+    }
+    if (this.selectedIndex === SPAWN_RATE_INDEX) {
+      const current = this.player.effectiveEnemySpawnIntervalMs;
+      this.player.debugEnemySpawnIntervalMs = Math.max(SPAWN_RATE_MIN_MS, current + dir * SPAWN_RATE_STEP_MS);
+      return;
+    }
+    if (this.selectedIndex === HITBOXES_INDEX) {
+      this.player.debugShowHitboxes = !this.player.debugShowHitboxes;
+      return;
+    }
     const stat = STAT_ORDER[this.selectedIndex];
     this.player.nudgeDebugStat(stat, dir * STAT_STEP[stat]);
   }
@@ -238,12 +280,27 @@ export class DebugOverlay {
       this.player.debugFiringConeDeg = 0;
       return;
     }
+    if (this.selectedIndex === FORK_CONE_INDEX) {
+      this.player.debugForkConeOverrideDeg = null;
+      return;
+    }
+    if (this.selectedIndex === SPAWN_RATE_INDEX) {
+      this.player.debugEnemySpawnIntervalMs = null;
+      return;
+    }
+    if (this.selectedIndex === HITBOXES_INDEX) {
+      this.player.debugShowHitboxes = false;
+      return;
+    }
     this.player.setDebugMod(STAT_ORDER[this.selectedIndex], 0);
   }
 
   private resetAll(): void {
     this.player.clearDebugMods();
     this.player.debugFiringConeDeg = 0;
+    this.player.debugForkConeOverrideDeg = null;
+    this.player.debugEnemySpawnIntervalMs = null;
+    this.player.debugShowHitboxes = false;
   }
 
   /** Call once per frame regardless of game-over state — inspecting/nudging stats shouldn't require an active run. */
@@ -262,6 +319,12 @@ export class DebugOverlay {
 
     if (this.selectedIndex === FIRING_CONE_INDEX) {
       this.selectedText.setText(`Firing Cone\n${this.player.debugFiringConeDeg.toFixed(0)}°`);
+    } else if (this.selectedIndex === FORK_CONE_INDEX) {
+      this.selectedText.setText(`Fork Cone\n${this.player.effectiveForkConeDeg.toFixed(0)}°`);
+    } else if (this.selectedIndex === SPAWN_RATE_INDEX) {
+      this.selectedText.setText(`Spawn Rate\n${this.player.effectiveEnemySpawnIntervalMs.toFixed(0)}ms`);
+    } else if (this.selectedIndex === HITBOXES_INDEX) {
+      this.selectedText.setText(`Hitboxes\n${this.player.debugShowHitboxes ? "ON" : "OFF"}`);
     } else {
       const selected = STAT_ORDER[this.selectedIndex];
       const def = STAT_DEFS[selected];
@@ -287,6 +350,15 @@ export class DebugOverlay {
 
     const coneCursor = this.selectedIndex === FIRING_CONE_INDEX ? "> " : "  ";
     lines.push(`${coneCursor}${"Firing Cone".padEnd(14)} ${this.player.debugFiringConeDeg.toFixed(0)}°`);
+
+    const forkConeCursor = this.selectedIndex === FORK_CONE_INDEX ? "> " : "  ";
+    lines.push(`${forkConeCursor}${"Fork Cone".padEnd(14)} ${this.player.effectiveForkConeDeg.toFixed(0)}°`);
+
+    const spawnRateCursor = this.selectedIndex === SPAWN_RATE_INDEX ? "> " : "  ";
+    lines.push(`${spawnRateCursor}${"Spawn Rate".padEnd(14)} ${this.player.effectiveEnemySpawnIntervalMs.toFixed(0)}ms`);
+
+    const hitboxesCursor = this.selectedIndex === HITBOXES_INDEX ? "> " : "  ";
+    lines.push(`${hitboxesCursor}${"Hitboxes".padEnd(14)} ${this.player.debugShowHitboxes ? "ON" : "OFF"}`);
 
     return lines.join("\n");
   }
