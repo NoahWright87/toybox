@@ -37,4 +37,11 @@ export const COPY = {
   "weapon.placeholder.description": "Standard-issue. Gets the job done.",
   "enemy.placeholder.name": "Drone",
   "enemy.placeholder.description": "Cheap, expendable, everywhere.",
+
+  // ---- Core gameplay loop HUD/flow (F6 #134) ----
+  "play.score": "SCORE {score}",
+  "play.hint": "Drag/Arrows/WASD to move · Hold Shift to Focus · auto-fire",
+  "play.episodeOver.title": "EPISODE OVER",
+  "play.episodeOver.score": "Final Score: {score}",
+  "play.episodeOver.restartPrompt": "PRESS ANY KEY OR TAP TO TRY AGAIN",
 } as const;

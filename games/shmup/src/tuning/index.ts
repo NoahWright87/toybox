@@ -36,6 +36,22 @@ export const TUNING = {
     reflexMoveK: 1,
     reflexBulletSlowCap: 0.8,
     reflexMoveSlowCap: 0.5,
+    // Focus (chassis.spec.todo.md): hold to move slower for precision. The
+    // default chassis (F10 #138) hasn't landed yet, so F6 ships the
+    // universal base behavior plus a hitbox shrink (genre-standard "graze
+    // box") as the vertical-slice default; a future chassis quirk may
+    // override hitboxRadiusFocus instead of relying on this global.
+    focusSpeedMult: 0.45,
+    hitboxRadiusNormal: 6,
+    hitboxRadiusFocus: 3,
+    // Shield (combat.spec.todo.md): "auto-refills after ShieldDelay s without
+    // a hit, at ShieldRegen/s." Shield regen rate isn't one of the 16 main
+    // stats, so its rate lives here as a fraction of Max Shield per second.
+    shieldRegenDelay: 3,
+    shieldRegenFracPerSecond: 0.25,
+    // Brief invulnerability after any non-dodged hit — without this, an
+    // overlapping enemy/bullet would re-deal damage every physics step.
+    playerIFrameMs: 500,
   },
   hype: {
     // hypeBase, k_idle, k_level, baseDecay, M (ScoreMult depth) — F7
@@ -66,6 +82,12 @@ export const TUNING = {
     // Never let an authored pierceDecay reach/exceed 95% — keeps the fork
     // chain converging quickly regardless of how high pierce is stacked.
     maxPierceDecay: 0.95,
+    // Fork heading spread (weapons.spec.todo.md follow-up): a forked line's
+    // heading is drawn from a cone around the bullet's heading at the
+    // moment it forked (not fully random), full width in degrees.
+    // Authored per-weapon (WeaponDef.forkConeDeg), defaulting to this value
+    // when omitted.
+    defaultForkConeDeg: 60,
     // Hard safety caps against pathological stat stacking — not meaningful
     // gameplay limits, just backstops against unbounded array growth.
     maxForksPerImpact: 1000,
@@ -75,5 +97,81 @@ export const TUNING = {
     // each dealt blastDamageFraction of HIT.
     blastTargetsPerPx: 0.01,
     blastDamageFraction: 0.5,
+    // Auto-fire cadence at attackSpeed = 1 (shots/second); actual cadence is
+    // baseFireRate * stats.attackSpeed (combat.spec.todo.md: "weapons fire
+    // on their own cadence (attack speed)").
+    baseFireRate: 2.5,
+    // F6 performance ceilings (weapons.spec.todo.md's "hard performance
+    // ceiling that bounds worst-case concurrent projectiles") — the engine's
+    // own maxForksPerImpact/maxTailHits guard the pure math; these guard the
+    // actual pooled bullets a single shot is allowed to spawn/keep piercing.
+    maxForkedBulletsPerShot: 12,
+    maxHitsPerInfiniteBullet: 50,
+  },
+  // Homing (F6 #134's exotic Homing Strength stat). A bullet only seeks
+  // within a circle that leads it along its current heading — center =
+  // bullet position + heading * radius, so the near edge sits at the
+  // bullet's nose and the far edge is 2x radius ahead. This guarantees a
+  // homing bullet never locks onto (and U-turns into) something it just
+  // flew past. Once locked, it keeps turning toward that target until it
+  // dies — no re-targeting mid-flight. Pierce decays Homing Strength the
+  // same way it decays damage: a pierced bullet's remaining hits use
+  // homingStrength * the same tailHitFraction applied to damage; forked
+  // "infinite" lines don't decay damage, so they don't decay homing either.
+  homing: {
+    // 100% Homing Strength scans this many seconds of travel ahead (scaled
+    // by the firing weapon's own projectile speed, so fast and slow weapons
+    // get a proportionally sane circle instead of one fixed pixel radius).
+    seekAheadSeconds: 0.35,
+    // Hard cap regardless of how high Homing Strength is stacked.
+    maxRadiusPx: 280,
+    // Turn rate once locked scales linearly with Homing Strength, capped
+    // well short of an instant snap-to-target even at extreme values.
+    turnRateDegPerSecPerStrength: 180,
+    maxTurnRateDegPerSec: 360,
+  },
+  // Object-pool ceilings (F6 #134: "Arcade Physics groups with object
+  // pooling for bullets and enemies"). Sized well above any realistic
+  // worst-case concurrent count so pooling never silently drops shots in
+  // normal play, while still bounding worst-case memory/collision cost.
+  performance: {
+    maxPlayerBullets: 240,
+    maxEnemyBullets: 120,
+    maxEnemies: 40,
+  },
+  // Basic placeholder enemy (run-structure.spec.todo.md's Difficulty (D)
+  // scaling owns real enemy stat curves — F8 #136 — this is the one
+  // hand-authored "drone" needed for F6's vertical slice and for grazing
+  // (F7 #135) to have something to graze).
+  enemies: {
+    drone: {
+      maxHp: 18,
+      speed: 130,
+      fireIntervalMs: 1400,
+      bulletDamage: 6,
+      bulletSpeed: 260,
+      contactDamage: 10,
+      scoreValue: 10,
+      spawnIntervalMs: 850,
+    },
+  },
+  // Purely cosmetic — background scroll / starfield drift — but still tuning,
+  // not magic numbers inline in PlayScene.
+  visuals: {
+    bgScrollSpeed: 40,
+    starCount: 70,
+    starMinSpeed: 40,
+    starMaxSpeed: 180,
+  },
+  // Debug-only (C12 #151 follow-up) — not gameplay tuning, but kept here so
+  // every numeric constant still has one home. Per-entity-category outline
+  // colors for the debug overlay's hitbox toggle.
+  debug: {
+    hitboxColors: {
+      player: 0x00ffff,
+      enemy: 0xff3333,
+      playerBullet: 0x33ff33,
+      enemyBullet: 0xffaa00,
+    },
   },
 } as const;

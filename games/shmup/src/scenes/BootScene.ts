@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { copy } from "../content";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
+import { requestMotionPermission } from "../debug/ShakeDetector";
 
 /**
  * Title card — proves the skeleton renders and that copy comes from the
@@ -55,7 +56,13 @@ export class BootScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    const start = () => this.scene.start("Play");
+    // iOS gates devicemotion (shake-to-open the debug overlay) behind a
+    // permission prompt that only resolves from inside a user-gesture
+    // handler — this tap is the only one guaranteed before PlayScene exists.
+    const start = () => {
+      requestMotionPermission();
+      this.scene.start("Play");
+    };
     this.input.keyboard?.once("keydown", start);
     this.input.once("pointerdown", start);
   }

@@ -52,6 +52,15 @@ export interface WeaponDef {
    * stay single-target; high values (chain lightning) lean into forking hard.
    */
   pierceDecay?: number;
+  /**
+   * Per-weapon authored property: a forked line's heading (when Pierce
+   * overflows past 100%) is drawn from a cone of this full width, in
+   * degrees, around the forking bullet's heading at the moment of impact —
+   * not fully at random. Defaults to `TUNING.weapons.defaultForkConeDeg`
+   * when omitted. A narrow cone keeps forks reading as "this weapon, but
+   * more of it"; a wide one sprays them.
+   */
+  forkConeDeg?: number;
   /** Stats this weapon's tooltip should display itself scaling with. */
   scalesWith: StatId[];
   mods: ScalingModifier[];
