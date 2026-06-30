@@ -28,7 +28,26 @@ games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.to
     systems/         stat/effect/economy engines land here (F3/F4/F9…)
     sprites/         sprite registry — placeholder primitives + manifest.json (F5)
     assets/sprites/  bundled sprite art, wired by path from sprites/manifest.json (F5)
+    save/            SaveStore — swappable save/settings persistence (S1)
 ```
+
+## Save storage
+
+Gameplay/menu code depends only on the `SaveStore` interface exported from
+`src/save/index.ts` — never a concrete store. That one file is the
+composition root: a single `SAVE_BACKEND` constant picks which implementation
+backs `saveStore`.
+
+- **Default — `DoorsFsSaveStore`:** persists into the Doors 97 virtual
+  filesystem (same-origin read/write of the shared `ns97_fs_v1` localStorage
+  blob, mirroring `src/sprites/fsOverride.ts`'s read-only precedent). Saves
+  appear as real, hackable files under `C:\Programs\Games\SHMUP\Saves\` in
+  the Doors 97 file browser.
+- **Fallback — `LocalSaveStore`:** plain `localStorage`, namespaced under
+  `shmup:save:`, for contexts without a Doors 97 FS to write into.
+
+See [`specs/games/shmup/save.spec.md`](../../specs/games/shmup/save.spec.md)
+for the full design.
 
 ## Dev (once F1 wires the workspace)
 

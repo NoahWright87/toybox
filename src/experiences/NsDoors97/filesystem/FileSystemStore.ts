@@ -5,7 +5,7 @@ import {
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
-  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -375,6 +375,19 @@ export class FileSystemStore {
           };
           this.nodes.set(folder.id, folder);
         }
+        changed = true;
+      }
+    }
+
+    // Ensure SHMUP's Saves folder exists (existing sessions) — DoorsFsSaveStore's target
+    if (!this.nodes.has(SHMUP_SAVES_ID)) {
+      const shmupDir = this.getNodeByPath("C:\\Programs\\Games\\SHMUP");
+      if (shmupDir?.kind === "folder") {
+        this.nodes.set(SHMUP_SAVES_ID, {
+          id: SHMUP_SAVES_ID, kind: "folder", name: "Saves",
+          parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        } as FSFolder);
         changed = true;
       }
     }
