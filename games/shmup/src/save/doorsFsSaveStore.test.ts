@@ -15,6 +15,7 @@ interface FsNodeLite {
   name: string;
   parentId: string | null;
   content?: string;
+  system?: boolean;
 }
 
 function nodes(...entries: FsNodeLite[]): Map<string, FsNodeLite> {
@@ -33,6 +34,11 @@ describe("ensureSavesFolder", () => {
     const savesId = ensureSavesFolder(tree);
     expect(savesId).toBe("fs:shmup-saves");
     expect(tree.get("fs:root")?.kind).toBe("folder");
+    // Must match seed.ts's root node exactly (name "C:\\", system: true) so a
+    // later Doors load doesn't find a malformed, unprotected root left behind
+    // by SHMUP bootstrapping the FS blob first.
+    expect(tree.get("fs:root")?.name).toBe("C:\\");
+    expect(tree.get("fs:root")?.system).toBe(true);
     expect(tree.get("fs:programs")?.parentId).toBe("fs:root");
     expect(tree.get("fs:games")?.parentId).toBe("fs:programs");
     expect(tree.get("fs:shmup")?.parentId).toBe("fs:games");

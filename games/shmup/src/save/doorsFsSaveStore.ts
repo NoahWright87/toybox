@@ -85,17 +85,20 @@ export function findChild(
 
 /** Idempotent: creates any missing link in the ROOT > Programs > Games > SHMUP > Saves chain, using Doors' own stable ids, without touching nodes that already exist. */
 export function ensureSavesFolder(nodes: Map<string, FsNodeLite>): string {
-  const ensureFolder = (id: string, name: string, parentId: string | null) => {
+  const ensureFolder = (id: string, name: string, parentId: string | null, system: boolean) => {
     const existing = nodes.get(id);
     if (existing?.kind === "folder") return;
     const now = Date.now();
-    nodes.set(id, { id, kind: "folder", name, parentId, createdAt: now, modifiedAt: now, system: false });
+    nodes.set(id, { id, kind: "folder", name, parentId, createdAt: now, modifiedAt: now, system });
   };
-  ensureFolder(ROOT_ID, "C:", null);
-  ensureFolder(PROGRAMS_ID, "Programs", ROOT_ID);
-  ensureFolder(GAMES_ID, "Games", PROGRAMS_ID);
-  ensureFolder(SHMUP_FOLDER_ID, "SHMUP", GAMES_ID);
-  ensureFolder(SHMUP_SAVES_ID, "Saves", SHMUP_FOLDER_ID);
+  // Name/system flags here must match seed.ts exactly — if SHMUP bootstraps
+  // the FS blob first (no Doors load yet on this origin), a later Doors load
+  // finds these nodes already present and skips re-seeding them as-is.
+  ensureFolder(ROOT_ID, "C:\\", null, true);
+  ensureFolder(PROGRAMS_ID, "Programs", ROOT_ID, false);
+  ensureFolder(GAMES_ID, "Games", PROGRAMS_ID, false);
+  ensureFolder(SHMUP_FOLDER_ID, "SHMUP", GAMES_ID, false);
+  ensureFolder(SHMUP_SAVES_ID, "Saves", SHMUP_FOLDER_ID, false);
   return SHMUP_SAVES_ID;
 }
 

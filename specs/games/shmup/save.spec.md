@@ -85,7 +85,6 @@ and write/remove swallow quota-exceeded errors — mirrors
 
 ## Related
 
-- [`overview.spec.todo.md`](./overview.spec.todo.md)
 - [`content-and-assets.spec.md`](./content-and-assets.spec.md) — the
   `fsOverride.ts` read-only precedent this design extends to read-write
 - `src/experiences/NsDoors97/filesystem/` — `seed.ts`, `FileSystemStore.ts`
