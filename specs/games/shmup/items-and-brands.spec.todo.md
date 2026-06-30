@@ -11,7 +11,7 @@
 
 ## Conditional / "while grazing" items
 
-Some items key off **transient state** (the second modifier layer): "+damage while grazing", "shields recharge while grazing", etc. They subscribe to the graze/Hype event API (`hype-and-ratings.spec.todo.md`) and apply only while the condition holds.
+Some items key off **transient state** (the second modifier layer): "+damage while grazing", "shields recharge while grazing", etc. They subscribe to the graze/Hype event API (`hype-and-ratings.spec.md`) and apply only while the condition holds.
 
 ## Brand tagging (the synergy-discovery engine)
 

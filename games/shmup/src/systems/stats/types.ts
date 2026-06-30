@@ -37,6 +37,8 @@ export const EXOTIC_STAT_IDS = [
   "pierce",
   "blastRadius",
   "homingStrength",
+  "grazeRadius",
+  "grazeMultiplier",
 ] as const;
 
 export type MainStatId = (typeof MAIN_STAT_IDS)[number];

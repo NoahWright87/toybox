@@ -1,11 +1,11 @@
 /**
- * Ratings tier ladder (specs/hype-and-ratings.spec.todo.md) — the 90s fame
+ * Ratings tier ladder (specs/hype-and-ratings.spec.md) — the 90s fame
  * progression Ratings converts into. "The tier name IS the progress bar."
  *
  * Pure content: id, display name, and `threshold` — the cumulative Ratings
  * score needed to reach that tier, which is what gives the ladder its
  * inherent ordering (not file position). Thresholds here are placeholders;
- * hype-and-ratings.spec.todo.md calls out the real constants as TBD for the
+ * hype-and-ratings.spec.md calls out the real constants as TBD for the
  * balance pass. Lookup/accessor logic lives in ./accessors.ts, not here.
  */
 export const RATINGS_LADDER = [

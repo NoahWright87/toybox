@@ -67,6 +67,8 @@ const STAT_STEP: Record<StatId, number> = {
   pierce: 0.25,
   blastRadius: 20,
   homingStrength: 0.25,
+  grazeRadius: 10,
+  grazeMultiplier: 0.25,
 };
 
 /**
@@ -98,6 +100,17 @@ const ROW_GAP = 14;
 interface Button {
   rect: Phaser.GameObjects.Rectangle;
   label: Phaser.GameObjects.Text;
+}
+
+/** Snapshot read by renderInfo() every frame (hype-and-ratings.spec.md, F7 #135) — matches this overlay's existing poll-`player.stats`-directly idiom rather than subscribing to hypeEvents. */
+export interface HypeDebugInfo {
+  hype: number;
+  hypeMax: number;
+  scoreMult: number;
+  grazeStreak: number;
+  grazeTotalMult: number;
+  ratings: number;
+  ratingsTier: string;
 }
 
 /**
@@ -137,7 +150,8 @@ export class DebugOverlay {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly player: Player
+    private readonly player: Player,
+    private readonly getHypeInfo: () => HypeDebugInfo
   ) {
     this.panelRight = scene.scale.width - PANEL_MARGIN;
     this.panelLeft = this.panelRight - PANEL_WIDTH;
@@ -376,6 +390,13 @@ export class DebugOverlay {
       lines.push(`pierce tail hits: ${behavior.tailHitFractions.length}   forked lines: ${behavior.flatLineCount}`);
       lines.push(`blast: radius ${stats.blastRadius.toFixed(0)}px @ ${(behavior.blastDamageFraction * 100).toFixed(0)}%`);
     }
+
+    const hype = this.getHypeInfo();
+    lines.push("");
+    lines.push("-- hype / ratings (F7 #135) --");
+    lines.push(`hype: ${hype.hype.toFixed(0)}/${hype.hypeMax.toFixed(0)}  scoreMult: x${hype.scoreMult.toFixed(2)}`);
+    lines.push(`graze streak: ${hype.grazeStreak}  ring payout: x${hype.grazeTotalMult.toFixed(0)}`);
+    lines.push(`ratings: ${hype.ratings.toFixed(1)} (${hype.ratingsTier})`);
 
     return lines.join("\n");
   }
