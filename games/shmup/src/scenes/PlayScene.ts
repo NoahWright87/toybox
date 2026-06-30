@@ -614,14 +614,18 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   // A drop below 0 cumulative Ratings is Cancelled — the run's Ratings
   // resets to 0 rather than going negative.
   private endEpisode(): void {
-    const stageProgress = this.elapsedEpisodeSec / TUNING.ratings.episodeClearDurationSec;
+    const stageProgress =
+      TUNING.ratings.episodeClearDurationSec > 0
+        ? this.elapsedEpisodeSec / TUNING.ratings.episodeClearDurationSec
+        : 1;
     const loss = ratingsLossOnDeath(stageProgress);
     const result = applyRatingsDelta(this.ratings, -loss);
+    const appliedDelta = (result.cancelled ? 0 : result.ratings) - this.ratings;
     this.ratings = result.cancelled ? 0 : result.ratings;
     saveRatings(this.ratings);
     this.hypeEvents.emit("ratingsChanged", {
       ratings: this.ratings,
-      delta: -loss,
+      delta: appliedDelta,
       tier: ratingsTierForScore(this.ratings),
       cancelled: result.cancelled,
     });

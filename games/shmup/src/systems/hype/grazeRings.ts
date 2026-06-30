@@ -7,8 +7,9 @@ import type { GrazeRingDef } from "./types";
 
 /**
  * Returns the highest-payout ring containing `distance`, or undefined if
- * outside every ring (not grazing). Rings are sorted ascending by `frac` so
- * the innermost (smallest radius, highest mult) match wins first.
+ * outside every ring (not grazing). Scans for the smallest-`frac` (innermost)
+ * containing ring rather than sorting, since this runs once per bullet per
+ * frame and ring order in the input array doesn't matter.
  */
 export function grazeRingAt(
   distance: number,
@@ -16,11 +17,13 @@ export function grazeRingAt(
   rings: readonly GrazeRingDef[],
 ): GrazeRingDef | undefined {
   if (grazeRadius <= 0 || distance < 0) return undefined;
-  const sorted = [...rings].sort((a, b) => a.frac - b.frac);
-  for (const ring of sorted) {
-    if (distance <= grazeRadius * ring.frac) return ring;
+  let best: GrazeRingDef | undefined;
+  for (const ring of rings) {
+    if (distance <= grazeRadius * ring.frac && (!best || ring.frac < best.frac)) {
+      best = ring;
+    }
   }
-  return undefined;
+  return best;
 }
 
 /** Hype-gain rate (per second) for grazing at `ring`, scaled by the grazeMultiplier stat. */
