@@ -24,13 +24,14 @@
 
 ## Special nodes need real mechanics
 
-- **Shop**: currently a flavor-only stop (`TUNING.map.shopRatingsBonus = 0`)
-  — needs the gold-sink economy (`economy.spec.todo.md`, F9 #137) before it
-  can sell anything.
+- **Shop**: now launches the dedicated-node `ShopScene` (`economy.spec.md`,
+  F9 #137) after its (still flat, still 0) Ratings bonus resolves — real
+  gold-sink shopping, no longer flavor-only.
 - **Event**: currently a flat Ratings nudge — could branch into real
   choices/outcomes once there's content to hang them on.
 - **Treasure**: currently a flat Ratings nudge — should hand out real
-  items/gold once F4/F9 exist.
+  items/gold directly (rather than requiring a shop stop) now that F9's
+  gold/item plumbing exists.
 
 ## Difficulty — composition depth
 
@@ -46,6 +47,7 @@
 
 ## Build persistence beyond the stub
 
-- `CareerState.weapons` persists across episodes but there's no way to grow
-  it yet (no shop, no level-up offers, no gold) — C1 #140 (base weapon
-  roster) and F9 (economy) unblock this.
+- `CareerState.weapons`/`items`/`statPicks`/`gold` now grow via the shop and
+  level-up breaks (F9 #137, `economy.spec.md`) — what's left is content
+  depth, not plumbing: C1 #140 (base weapon roster) and C3 #142/C4 #143
+  (item catalog) grow what there is to buy.

@@ -1,10 +1,10 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
-import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById } from "../content";
+import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById, itemById } from "../content";
 import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
-import { Player, Enemy, EnemyBullet, PlayerBullet } from "../entities";
+import { Player, Enemy, EnemyBullet, PlayerBullet, Coin } from "../entities";
 import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
 import { applyDamage, applyLifesteal, reflexBulletSpeedMult, rollCrit, tickHpRegen, tickShieldRegen } from "../systems/combat";
 import {
@@ -19,8 +19,10 @@ import {
   ratingsLossOnDeath,
 } from "../systems/hype";
 import type { HypeState, GrazeRingDef } from "../systems/hype";
-import { rollSpawnArchetype, scaledEnemyStats } from "../systems/difficulty";
+import { rollSpawnArchetype, scaledEnemyStats, rewardCurve } from "../systems/difficulty";
 import type { EnemyArchetypeId } from "../systems/difficulty";
+import { coinValue, rollsTip, statPickMods } from "../systems/economy";
+import type { OwnedItem } from "../systems/effects";
 import { DebugOverlay } from "../debug/DebugOverlay";
 import { getDebugOverrides } from "../debug/debugSettings";
 import { SCENE_KEYS } from "./sceneData";
@@ -36,6 +38,7 @@ const TEX = {
   bulletEnemy: "bulletEnemy",
   star: "fxStarDust",
   bg: "bgSpace",
+  coin: "fxCoin",
 } satisfies Record<string, SpriteKey>;
 
 /** Per-archetype enemy texture — composition thresholds (run-structure.spec.todo.md) pick the archetype, this just resolves its look. */
@@ -71,6 +74,15 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private scoreText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
   private shieldBar!: Phaser.GameObjects.Graphics;
+
+  // Gold & EXP (economy.spec.todo.md, F9 #137): gold is physical (coins must
+  // be caught, Magnet Radius widens the catch); EXP is gained automatically
+  // on kill. Both are only banked into CareerState by ResolveScene at the
+  // end-of-level break — PlayScene never touches persisted career state.
+  private coins!: Phaser.Physics.Arcade.Group;
+  private goldCollected = 0;
+  private goldText!: Phaser.GameObjects.Text;
+  private expGained = 0;
 
   // Grazing / Hype / Ratings (hype-and-ratings.spec.md, F7 #135).
   private hypeEvents = new ShmupEventBus();
@@ -124,6 +136,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.gameOver = false;
     this.boss = null;
     this.score = 0;
+    this.goldCollected = 0;
+    this.expGained = 0;
 
     // PlayScene's instance survives scene.restart() (only init/create rerun,
     // not the constructor), so every piece of run state needs an explicit
@@ -167,9 +181,30 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       maxSize: TUNING.performance.maxEnemies,
       runChildUpdate: true,
     });
+    this.coins = this.physics.add.group({
+      classType: Coin,
+      maxSize: TUNING.performance.maxCoins,
+      runChildUpdate: true,
+    });
 
     const weapons = this.episode.weapons.map((w) => ({ weapon: weaponById(w.weaponId), tier: w.tier }));
-    this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, TEX.ship, weapons, getDebugOverrides());
+    const ownedItems: OwnedItem[] = this.episode.items
+      .map((ref) => {
+        const item = itemById(ref.itemId);
+        return item ? { item, count: ref.count } : undefined;
+      })
+      .filter((owned): owned is OwnedItem => owned !== undefined);
+    const persistentStatMods = statPickMods(this.episode.statPicks);
+    this.player = new Player(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT - 90,
+      TEX.ship,
+      weapons,
+      getDebugOverrides(),
+      ownedItems,
+      persistentStatMods
+    );
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
 
@@ -217,6 +252,22 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         fontFamily: "monospace",
         fontSize: "18px",
         color: "#ffffff",
+      })
+      .setDepth(100);
+
+    this.goldText = this.add
+      .text(16, 34, copy("play.gold", { gold: 0 }), {
+        fontFamily: "monospace",
+        fontSize: "11px",
+        color: "#ffcc00",
+      })
+      .setDepth(100);
+
+    this.add
+      .text(90, 34, copy("play.level", { level: this.episode.level }), {
+        fontFamily: "monospace",
+        fontSize: "11px",
+        color: "#aa88ff",
       })
       .setDepth(100);
 
@@ -302,6 +353,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.updateMovement(dt);
     this.player.tickIFrame(delta);
     this.updateGrazeAndHype(dt);
+    this.updateCoins(dt);
 
     for (const req of this.player.tryFire(delta)) {
       this.fireWeapon(req);
@@ -616,12 +668,79 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.spawnDamageNumber(enemy.x, enemy.y, damage, numCrits);
     if (enemy.hp <= 0) {
       const wasBoss = enemy.archetype === "boss";
+      const x = enemy.x;
+      const y = enemy.y;
       enemy.recycle();
       this.gainScore(enemy.scoreValue);
+      this.gainExp(enemy.scoreValue);
+      this.spawnCoinDrop(x, y);
       // Boss defeated is the bossFinale node's clear condition — standard/elite
       // nodes clear on the survival timer instead (see update()).
       if (wasBoss && !this.gameOver) this.clearEpisode();
     }
+  }
+
+  /** EXP is gained automatically on kill, no collection (economy.spec.todo.md's hard rule) — batched into level-up picks only at the end-of-level break by ResolveScene/LevelUpScene, never mid-play. */
+  private gainExp(baseAmount: number): void {
+    this.expGained += baseAmount * TUNING.economy.expPerScoreValue * this.player.stats.expGain;
+  }
+
+  /** Gold is physical (economy.spec.todo.md): every kill explodes into a coin the player must catch, plus a chance at a bonus "tip" coin once Hype is high enough. */
+  private spawnCoinDrop(x: number, y: number): void {
+    const baseValue = TUNING.economy.coinValueBase * rewardCurve(this.episode.D);
+    this.spawnCoin(x, y, baseValue);
+
+    const hypeFrac = this.hypeMaxValue > 0 ? this.hypeState.hype / this.hypeMaxValue : 0;
+    if (rollsTip(hypeFrac)) {
+      const offsetX = Phaser.Math.Between(-40, 40);
+      const offsetY = Phaser.Math.Between(-40, 40);
+      this.spawnCoin(x + offsetX, y + offsetY, baseValue * TUNING.economy.tipsValueMult);
+    }
+  }
+
+  private spawnCoin(x: number, y: number, value: number): void {
+    const coin = this.coins.get(x, y, TEX.coin) as Coin | null;
+    coin?.spawn(x, y, value);
+  }
+
+  /**
+   * Coins pop up and outward on spawn, arced by gravity, and bounce off the
+   * side walls (`Coin.spawn()`) — a coin can be caught mid-arc, which is
+   * what makes this a skill/positioning act rather than a guaranteed
+   * pickup. Once within Magnet Radius it locks on and flies straight to the
+   * player instead (`Coin.startHoming()` hands off from Arcade's gravity/
+   * bounce to this direct-position homing, once, on the lock-on frame). A
+   * coin that never gets caught either despawns on its own
+   * (`Coin.preUpdate`'s lifespan) or falls off the bottom of the screen.
+   */
+  private updateCoins(dt: number): void {
+    const magnetRadius = this.player.stats.magnetRadius;
+    for (const coin of this.coins.getChildren() as Coin[]) {
+      if (!coin.active) continue;
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, coin.x, coin.y);
+      if (dist <= TUNING.economy.coinCollectRadius) {
+        this.collectCoin(coin);
+        continue;
+      }
+      if (!coin.magnetized && dist <= magnetRadius) {
+        coin.magnetized = true;
+        coin.startHoming();
+      }
+      if (coin.magnetized) {
+        const step = TUNING.economy.coinMagnetSpeed * dt;
+        const denom = Math.max(1, dist);
+        coin.x += ((this.player.x - coin.x) / denom) * step;
+        coin.y += ((this.player.y - coin.y) / denom) * step;
+      }
+    }
+  }
+
+  private collectCoin(coin: Coin): void {
+    const banked = coinValue(coin.value, this.player.stats.creditScore);
+    this.goldCollected += banked;
+    this.goldText.setText(copy("play.gold", { gold: Math.round(this.goldCollected) }));
+    this.spawnFloatingText(coin.x, coin.y, `+${Math.round(banked)}g`, "#ffcc00", 14);
+    coin.recycle();
   }
 
   /**
@@ -718,6 +837,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       score: Math.round(this.score),
       ratingsBefore: this.episode.ratings,
       ratingsDelta: -loss,
+      goldCollected: Math.round(this.goldCollected),
+      expGained: Math.round(this.expGained),
     } satisfies ResolveLaunchData);
   }
 
@@ -738,6 +859,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       score: Math.round(this.score),
       ratingsBefore: this.episode.ratings,
       ratingsDelta: gain,
+      goldCollected: Math.round(this.goldCollected),
+      expGained: Math.round(this.expGained),
     } satisfies ResolveLaunchData);
   }
 

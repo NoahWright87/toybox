@@ -53,8 +53,8 @@ One input, non-uniform response: `hpCurve(D)` ramps fast (linear + quadratic
 term), `dmgCurve(D)` ramps slow (sqrt), `speedCurve`/`fireRateCurve` are
 linear, `densityCurve(D)` shrinks spawn interval toward a floor
 (`densityCurveMaxReduction`), `rewardCurve(D)` grows `scoreValue` payouts,
-and `rarityLuck(luck, D) = luck + luckFromD*D` is exposed for the future
-offer system (F9 #137) to consume.
+and `rarityLuck(luck, D) = luck + luckFromD*D` is exposed for (and consumed
+by) the F9 #137 offer system (`economy.spec.md`, `systems/economy/offers.ts`).
 
 ### Per-archetype emphasis + composition thresholds (`systems/difficulty/archetypes.ts`)
 
@@ -128,8 +128,9 @@ is a deterministic (mulberry32-seeded) DAG generator:
    compute D and launch `PlayScene` with `{ nodeId, nodeType, season, D,
    ratings, weapons, isSeriesFinale }`. `shop`/`event`/`treasure` skip Play
    entirely and launch `ResolveScene` directly with `outcome: "special"` and
-   a flat Ratings bonus (`TUNING.map.<type>RatingsBonus` — shop's is 0 until
-   a gold-sink economy exists, F9 #137).
+   a flat Ratings bonus (`TUNING.map.<type>RatingsBonus` — shop's is 0;
+   `ResolveScene` instead routes a shop node on to the dedicated-node
+   `ShopScene`, `economy.spec.md`, F9 #137).
 2. **Play** (F6's loop): runs the existing survive-a-timer clear condition
    for `standard`/`elite`; a `bossFinale` node spawns one boss
    (`PlayScene.spawnBoss()`) instead of the regular spawner, and clears when

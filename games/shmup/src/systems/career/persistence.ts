@@ -53,6 +53,12 @@ export function isValidCareerState(value: unknown): value is CareerState {
     Array.isArray(v.visitedNodeIds) &&
     typeof v.deadlinePosition === "number" &&
     Array.isArray(v.weapons) &&
+    Array.isArray(v.items) &&
+    typeof v.gold === "number" &&
+    typeof v.level === "number" &&
+    typeof v.exp === "number" &&
+    typeof v.statPicks === "object" &&
+    v.statPicks !== null &&
     (v.phase === "career" || v.phase === "syndication") &&
     typeof v.syndicationEpisodeIndex === "number" &&
     !!map &&

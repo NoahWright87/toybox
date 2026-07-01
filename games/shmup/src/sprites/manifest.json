@@ -70,5 +70,14 @@
     "frameCount": 1,
     "frameDuration": 100,
     "placeholder": { "shape": "rect", "color": "#160900" }
+  },
+  "fxCoin": {
+    "category": "effects",
+    "path": "effects/fx_coin_01.png",
+    "frameWidth": 12,
+    "frameHeight": 12,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "circle", "color": "#ffcc00" }
   }
 }

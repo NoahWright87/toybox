@@ -126,8 +126,8 @@ export const TUNING = {
     densityCurveMaxReduction: 0.6,
     // rewardCurve(D): scoreValue multiplier — harder enemies pay out more.
     rewardCurvePerD: 0.03,
-    // rarityLuck = Luck + luckFromD * D (items-and-brands.spec.todo.md); wired
-    // here for the future offer system (F9 #137) to consume.
+    // rarityLuck = Luck + luckFromD * D (items-and-brands.spec.todo.md);
+    // consumed by the F9 #137 offer system (systems/economy/offers.ts).
     luckFromD: 0.02,
     // Composition thresholds: elites are locked out below this D, then their
     // spawn chance ramps linearly from eliteChanceAtUnlock to eliteChanceMax
@@ -169,11 +169,118 @@ export const TUNING = {
     deadlineAdvancePerNode: 1.0,
     deadlineMinAdvance: 0.35,
     deadlineSlackPerSpeed: 0.0016,
-    // Flat Ratings awarded by instantly-resolved special nodes (shop is a
-    // pure flavor stop until the gold-sink economy exists, F9 #137).
+    // Flat Ratings awarded by instantly-resolved special nodes. Shop's own
+    // reward is the ShopScene visit itself (economy.spec.md, F9 #137), not
+    // a Ratings bump, so this stays 0.
     shopRatingsBonus: 0,
     eventRatingsBonus: 8,
     treasureRatingsBonus: 15,
+  },
+  // Economy (economy.spec.todo.md, F9 #137): EXP/level curve, gold/interest,
+  // coin/tip payouts, level-up stat-pick sizing, reroll costs. All
+  // placeholders for the balance pass — shape is what F9 locks in.
+  economy: {
+    // expToNextLevel(level) = expCurveBase * expCurveGrowth^(level-1).
+    expCurveBase: 20,
+    expCurveGrowth: 1.28,
+    // EXP awarded per kill = enemy.scoreValue * expPerScoreValue * the
+    // player's expGain stat — EXP is gained directly on kill, no collection.
+    expPerScoreValue: 1,
+    // 4 MAIN stats shown per level-up pick (economy.spec.todo.md's hard rule).
+    levelUpOfferCount: 4,
+    // Flat StatModifier amount granted per level-up pick, per stat. All main
+    // stats use "flat" kind regardless of archetype/unit — several main
+    // stats have a base of 0 (armor, luck, creditScore, lifesteal, reflexes),
+    // where a "percent" modifier would multiply zero and grant nothing.
+    mainStatPickAmount: {
+      damage: 0.15,
+      attackSpeed: 0.12,
+      critChance: 0.04,
+      critDamage: 0.08,
+      maxHp: 12,
+      armor: 8,
+      evasion: 0.06,
+      maxShield: 8,
+      hpRegen: 0.6,
+      lifesteal: 0.03,
+      playerSpeed: 14,
+      reflexes: 0.08,
+      luck: 0.06,
+      creditScore: 0.06,
+      expGain: 0.1,
+      magnetRadius: 10,
+    },
+    // Gold is physical (economy.spec.todo.md): enemies explode into coins
+    // that must be caught. Base coin value per kill, scaled the same way
+    // score is (systems/difficulty's rewardCurve(D) — harder = richer).
+    coinValueBase: 4,
+    // Coins "pop" on spawn (Twin Bee bell-style, not an inert drop): always
+    // some upward velocity (px/s, magnitude randomized in this range) plus
+    // random horizontal velocity, equally likely left or right (magnitude up
+    // to coinPopSpeedXMax). coinGravity (px/s^2) then arcs them back down —
+    // this is what makes catching one a timing/positioning skill instead of
+    // a guaranteed pickup.
+    coinPopSpeedYMin: 200,
+    coinPopSpeedYMax: 340,
+    coinPopSpeedXMax: 150,
+    coinGravity: 550,
+    // In-flight coins accelerate toward the player once within Magnet
+    // Radius, at this speed (px/s), and are caught within this radius (px).
+    // Being in flight from the pop doesn't block the magnet lock — a coin
+    // can be caught mid-arc.
+    coinMagnetSpeed: 420,
+    coinCollectRadius: 14,
+    // Uncollected coins despawn this many seconds after spawning — wealth is
+    // skill-gated, not just a floor loot pile waiting to be swept up later.
+    coinLifespanSec: 6,
+    // "At high Hype the crowd tips" — once Hype/HypeMax crosses this
+    // fraction, a kill has a chance to also throw a bonus coin onto the
+    // field (its own random offset near the kill), worth tipsValueMult x a
+    // normal coin.
+    tipsHypeThreshold: 0.6,
+    tipsChance: 0.35,
+    tipsValueMult: 1.5,
+    // Interest: unspent (banked) gold earns interest at every shop break,
+    // scaled by Credit Score — which also boosts fresh gold gain (see
+    // creditScoreGoldGainScale). Cap is set absurdly high (effectively off)
+    // per spec — tunable later.
+    interestBaseRate: 0.1,
+    interestCreditScoreScale: 1,
+    goldCap: 1_000_000_000,
+    creditScoreGoldGainScale: 0.5,
+    // Reroll cost curve (shared by level-up picks and shop visits): cost
+    // grows per reroll already spent within the current visit. Hype is
+    // never spent as currency.
+    rerollCostBase: 8,
+    rerollCostGrowth: 1.6,
+    // High Ratings tier comps a few free rerolls per visit (fame perk) —
+    // indexed by Ratings tier rank (0 = Nobody .. 7 = Kevin Bacon).
+    freeRerollsByRatingsRank: [0, 0, 0, 1, 1, 2, 2, 3],
+    // Shop stock size: a small baseline shop at every inter-level break vs.
+    // bigger dedicated map shop nodes (economy.spec.todo.md's "two cadences").
+    shopBaselineSlots: 3,
+    shopNodeSlots: 5,
+    // Buy price per item tier (index = tierRank, common..epic). A new
+    // weapon's first copy instead reuses the weapon-upgrade cost curve at
+    // tier 0 (weapons.spec.todo.md) — buying in IS upgrading from nothing.
+    itemPriceByTier: [30, 70, 150, 320],
+  },
+  // Offer weighting (items-and-brands.spec.todo.md, F9 #137): three
+  // orthogonal RNG dials bend a weighted random draw — Ratings/sponsor sets
+  // the tier ceiling+floor, Luck (+Difficulty) skews the tier roll under it,
+  // brand affinity steers which item within that tier gets picked.
+  offers: {
+    // Stage 2: w_tier = baseWeight_tier * (1 + rarityLuck)^tierRank.
+    // Index = tierRank (Common 0, Uncommon 1, Rare 2, Epic 3).
+    tierBaseWeight: [100, 45, 18, 6],
+    // Stage 1: Ratings rank (0..7, RATINGS_LADDER's index) -> tier
+    // ceiling/floor. Epics locked until famous enough; junk Commons drop out
+    // at high Ratings.
+    maxTierRankByRatingsRank: [0, 1, 1, 2, 2, 3, 3, 3],
+    minTierRankByRatingsRank: [0, 0, 0, 0, 1, 1, 1, 2],
+    // Stage 3: affinity_i = min(brandAffinityCap, 1 + kBrand * ownedCount(brand_i)).
+    kBrand: 0.35,
+    brandAffinityCap: 5,
   },
   weapons: {
     // 6 weapon slots/chassis (bullet-heaven default + a hard performance
@@ -252,6 +359,7 @@ export const TUNING = {
     maxPlayerBullets: 240,
     maxEnemyBullets: 120,
     maxEnemies: 40,
+    maxCoins: 80,
   },
   // Basic placeholder enemy (run-structure.spec.todo.md's Difficulty (D)
   // scaling owns real enemy stat curves — F8 #136 — this is the one

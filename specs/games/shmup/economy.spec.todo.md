@@ -1,41 +1,41 @@
-# Shmup — Economy Spec
+# Shmup — Economy Spec (remaining work)
 
-> Issue: **F9 #137**. Status: framing locked; all numbers in `tuning.spec.todo.md`.
+> Issue: **F9 #137** — implemented, see `economy.spec.md`. This file now
+> only tracks what's left.
 
-## Three currencies, three time-horizons
+## Balance pass
 
-| Resource | Horizon | Nature |
-|---|---|---|
-| **EXP → Levels** | permanent | earned automatically; the build skeleton |
-| **Gold → Shop** | permanent, bankable | earns interest; deliberate power |
-| **Hype → Ratings** | ephemeral → career | performance; see `hype-and-ratings.spec.md` |
+All numbers in `TUNING.economy`/`TUNING.offers` (curve growth rates, coin
+values, reroll costs, tier weights, mainStatPickAmount per stat) are
+placeholders pending the real balance pass — shape is locked, values aren't.
 
-## EXP & Levels
+## Content growth
 
-- **EXP is gained directly on kill** (no collection) → progression guaranteed.
-- **Level-ups batch at the inter-level break — zero mid-level interruption.** Each offers **4 MAIN stats only** (`stats.spec.md`) with reroll. Exotic stats never appear here.
-- 16 main stats, 4 shown → "hate all 4" is rare (~1–4%); reroll covers it.
+- The weapon roster (`content/weapons.ts`) is a minimal 3-weapon starter set
+  — C1 #140 owns growing it into the real base-weapon roster.
+- The item catalog (`content/items.ts`) is a 15-item starter set spanning
+  both brands + unbranded, across all four tiers — C3 #142/C4 #143 own
+  growing it (including the "while grazing" conditional items
+  `items-and-brands.spec.todo.md` describes, which need the transient-mod
+  layer wired up, not just the persistent one `statPickMods()`/item mods use).
 
-## Gold (skill-gated)
+## Shop UI polish
 
-- Gold is **physical**: enemies explode into **coins you must catch** (**Magnet Radius** widens the catch). At high Hype the crowd **tips** — extra coins thrown onto the field.
-- Loop: skill → Hype → tips → more gold, but more chaos to collect → demands more skill.
+- `ShopScene`'s "YOUR WEAPONS" + "STOCK" sections are a fixed vertical list,
+  sized to just clear the footer at the current maximum (6 weapons + a
+  5-slot node shop) — no scrolling. Growing `MAX_WEAPON_SLOTS`,
+  `shopNodeSlots`, or the row content (e.g. showing full stat previews
+  instead of just the pick amount) will need real scrolling.
+- Weapon "buy" offers always add a brand-new slot instance rather than
+  offering to upgrade an already-owned copy in place — intentional per spec
+  ("you may buy the same weapon into two slots for redundancy"), but a
+  future pass could let the shop suggest upgrading an existing slot instead
+  when a rolled weapon is already owned.
 
-## Shop
+## Risk items / D tie-in
 
-- Freeform Bullet-Heaven stock: **weapons** (fill 6 slots) + **passive items**. No generators / front-rear split.
-- **Two cadences (both):** baseline shop every inter-level break + dedicated **shop nodes** on the map with bigger/rarer/unique stock.
-- Offers use the weighting math in `items-and-brands.spec.todo.md` (Luck × Ratings × brand affinity).
-
-## Gold sinks (all compete with saving for interest)
-
-1. **Buy** rolled weapons/items.
-2. **Upgrade** owned weapons (deterministic, click-to-upgrade):
-   `cost(tier) = costBase × costGrowth^tier × (1 − brandDiscount)`, `brandDiscount = min(0.40, d × brandCount)`.
-3. **Reroll** offers — **increasing gold** per reroll; high **Ratings** comps a few free rerolls. Hype is never spent.
-
-## Interest (greed tension)
-
-- Unspent gold earns interest each inter-level shop, scaled by **Credit Score** (which also boosts gold gain).
-- Cap field exists but is set **absurdly high (effectively off)** for now — tunable in `tuning.spec.todo.md`.
-- Tension: hoarding to compound = lingering & safe = escalation climbs + Hype decays. Greed has teeth.
+- `generateShopStock`'s offer context always passes `D: 0` for shop
+  visits (Difficulty isn't meaningful outside an episode) — `rarityLuck`
+  there is Luck-only. A future risk-item mechanic
+  (`run-structure.spec.todo.md`'s `itemModifiers` in the D formula) could
+  reintroduce a D term once such items exist.

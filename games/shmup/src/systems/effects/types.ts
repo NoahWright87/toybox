@@ -6,6 +6,7 @@
  * parallel stat definitions.
  */
 import type { BrandId } from "../../content/brands";
+import type { RarityId } from "../economy/rarity";
 import type { StatId, StatModifier } from "../stats";
 
 /** Where a weapon fires relative to the ship (weapons.spec.todo.md). */
@@ -39,6 +40,13 @@ export interface WeaponDef {
   id: string;
   name: string;
   brand?: BrandId;
+  /**
+   * Rarity tier (items-and-brands.spec.todo.md's offer-weighting Stage 1/2:
+   * Ratings gates the ceiling, Luck skews the roll within it). Optional and
+   * defaults to "common" wherever it's read (`systems/economy/shop.ts`) so
+   * existing/test fixtures that predate F9 don't need updating.
+   */
+  tier?: RarityId;
   firingArc: FiringArc;
   targetType: TargetType;
   /** Per-weapon authored property — projectile speed is NOT a player stat (stats.spec.md). */
@@ -75,6 +83,8 @@ export interface ItemDef {
   id: string;
   name: string;
   brand?: BrandId;
+  /** Rarity tier — see `WeaponDef.tier`; same "defaults to common" contract. */
+  tier?: RarityId;
   mods: StatModifier[];
   maxStacks?: number;
   scalesWith: StatId[];
