@@ -18,3 +18,18 @@ export const PLACEHOLDER_WEAPON: WeaponDef = {
   scalesWith: ["damage", "attackSpeed", "pierce"],
   mods: [{ base: { kind: "flat", stat: "damage", amount: 4, source: "placeholder" }, perLevel: 1 }],
 };
+
+const WEAPON_REGISTRY: Record<string, WeaponDef> = {
+  [PLACEHOLDER_WEAPON.id]: PLACEHOLDER_WEAPON,
+};
+
+/**
+ * Looks up a WeaponDef by id — the level of indirection CareerState's
+ * persisted `{ weaponId, tier }[]` build (run-structure.spec.todo.md's
+ * "build persists") needs so a save never embeds a full WeaponDef snapshot
+ * that could drift from this registry. Unknown ids fall back to the
+ * placeholder rather than crashing; C1 #140 grows this registry.
+ */
+export function weaponById(id: string): WeaponDef {
+  return WEAPON_REGISTRY[id] ?? PLACEHOLDER_WEAPON;
+}

@@ -26,6 +26,24 @@
     "frameDuration": 100,
     "placeholder": { "shape": "rect", "color": "#7b3dbe" }
   },
+  "enemyElite": {
+    "category": "enemies",
+    "path": "enemies/enemy_elite_idle_01.png",
+    "frameWidth": 40,
+    "frameHeight": 40,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#ff3344" }
+  },
+  "enemyBoss": {
+    "category": "enemies",
+    "path": "enemies/enemy_boss_idle_01.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "triangle", "color": "#ffcc00" }
+  },
   "fxStarDust": {
     "category": "effects",
     "path": "effects/fx_star_dust_01.png",

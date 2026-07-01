@@ -5,6 +5,7 @@ import type { OwnedWeapon, ProjectileBehavior } from "../systems/effects";
 import type { StatBlock, StatId, StatModifier } from "../systems/stats";
 import type { Defender } from "../systems/combat";
 import { PLACEHOLDER_WEAPON } from "../content";
+import type { DebugOverrides } from "../debug/debugSettings";
 
 /** One weapon ready to fire this frame, with everything its shot needs already resolved. */
 export interface PlayerFireRequest {
@@ -13,16 +14,13 @@ export interface PlayerFireRequest {
   behavior: ProjectileBehavior;
 }
 
-/**
- * Single starting weapon for F6's vertical slice (C1 #140 owns the real
- * base-weapon roster). `Player.weapons` is an array so a future roster is
- * purely a data addition, per weapons.spec.todo.md's acceptance reference.
- */
+/** Fallback for standalone/debug use (e.g. tests) when no CareerState build is available. */
 const STARTING_WEAPONS: OwnedWeapon[] = [{ weapon: PLACEHOLDER_WEAPON, tier: 0 }];
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock;
-  weapons: OwnedWeapon[] = STARTING_WEAPONS;
+  /** The persisted career build (run-structure.spec.todo.md: "Build persists"), rehydrated by PlayScene from CareerState.weapons. */
+  weapons: OwnedWeapon[];
   projectileBehaviors: ProjectileBehavior[] = [];
   defender: Defender;
   focus = false;
@@ -33,6 +31,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   debugForkConeOverrideDeg: number | null = null;
   /** Debug-only override (C12 #151 follow-up) for the enemy spawn interval (ms); null means "use TUNING.enemies.drone.spawnIntervalMs" (see `effectiveEnemySpawnIntervalMs`). */
   debugEnemySpawnIntervalMs: number | null = null;
+  /** Debug-only override for the standard/elite survival-timer clear condition (sec); null means "use TUNING.ratings.episodeClearDurationSec" (see `effectiveEpisodeClearDurationSec`). Doesn't affect bossFinale nodes, which clear on boss defeat regardless. */
+  debugEpisodeClearDurationSec: number | null = null;
   /** Debug-only (C12 #151 follow-up): renders collision hitbox outlines for player/enemies/projectiles when true. */
   debugShowHitboxes = false;
   private fireCooldownMs: number[] = [];
@@ -41,12 +41,34 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // the overlay can replace one stat's nudge without touching the others.
   private debugMods = new Map<StatId, StatModifier>();
 
-  constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    texture: string,
+    weapons: OwnedWeapon[] = STARTING_WEAPONS,
+    debugOverrides?: DebugOverrides
+  ) {
     super(scene, x, y, texture);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    const { stats, projectileBehaviors } = resolveLoadout({ weapons: this.weapons });
+    this.weapons = weapons;
+    if (debugOverrides) {
+      for (const [stat, amount] of Object.entries(debugOverrides.statMods) as [StatId, number][]) {
+        if (amount) this.debugMods.set(stat, { kind: "flat", stat, amount, source: "debug" });
+      }
+      this.debugFiringConeDeg = debugOverrides.firingConeDeg;
+      this.debugForkConeOverrideDeg = debugOverrides.forkConeOverrideDeg;
+      this.debugEnemySpawnIntervalMs = debugOverrides.enemySpawnIntervalMs;
+      this.debugEpisodeClearDurationSec = debugOverrides.episodeClearDurationSec;
+      this.debugShowHitboxes = debugOverrides.showHitboxes;
+    }
+
+    const { stats, projectileBehaviors } = resolveLoadout({
+      weapons: this.weapons,
+      transientMods: [...this.debugMods.values()],
+    });
     this.stats = stats;
     this.projectileBehaviors = projectileBehaviors;
     this.defender = { hp: stats.maxHp, shield: stats.maxShield, shieldRegenDelayRemaining: 0 };
@@ -70,6 +92,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** Effective enemy spawn interval (ms): the debug override when set, else TUNING's default. */
   get effectiveEnemySpawnIntervalMs(): number {
     return this.debugEnemySpawnIntervalMs ?? TUNING.enemies.drone.spawnIntervalMs;
+  }
+
+  /** Effective standard/elite survival-timer length (sec): the debug override when set, else TUNING's default. */
+  get effectiveEpisodeClearDurationSec(): number {
+    return this.debugEpisodeClearDurationSec ?? TUNING.ratings.episodeClearDurationSec;
   }
 
   /** Nudges a stat by `delta` via a debug-sourced flat modifier; re-resolves the whole loadout so the change is visible immediately. */

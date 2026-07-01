@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
-import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER } from "../content";
+import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById } from "../content";
 import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet } from "../entities";
@@ -17,16 +17,14 @@ import {
   scoreMult,
   ratingsGainOnClear,
   ratingsLossOnDeath,
-  applyRatingsDelta,
-  loadRatings,
-  saveRatings,
 } from "../systems/hype";
 import type { HypeState, GrazeRingDef } from "../systems/hype";
+import { rollSpawnArchetype, scaledEnemyStats } from "../systems/difficulty";
+import type { EnemyArchetypeId } from "../systems/difficulty";
 import { DebugOverlay } from "../debug/DebugOverlay";
-
-// Placeholder until a real player-profile/name system exists (F11) — only
-// used to fill the {playerName} token in the Cancelled flavor line.
-const PLACEHOLDER_PLAYER_NAME = "Pilot";
+import { getDebugOverrides } from "../debug/debugSettings";
+import { SCENE_KEYS } from "./sceneData";
+import type { EpisodeLaunchData, ResolveLaunchData } from "./sceneData";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
 // Code never inlines a draw call or file path — it asks for one of these keys,
@@ -36,10 +34,16 @@ const TEX = {
   ship: "shipPlayer",
   bulletPlayer: "bulletPlayer",
   bulletEnemy: "bulletEnemy",
-  enemy: "enemyDrone",
   star: "fxStarDust",
   bg: "bgSpace",
 } satisfies Record<string, SpriteKey>;
+
+/** Per-archetype enemy texture — composition thresholds (run-structure.spec.todo.md) pick the archetype, this just resolves its look. */
+const ENEMY_TEX: Record<EnemyArchetypeId, SpriteKey> = {
+  drone: "enemyDrone",
+  elite: "enemyElite",
+  boss: "enemyBoss",
+};
 
 const DRAG_OFFSET_Y = 132; // float the ship well above the finger so it stays visible
 
@@ -77,11 +81,15 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private crowdSize = TUNING.hype.crowdSizeDefault;
   private grazeStreak = 0;
   private grazeTotalMult = 0;
+  // Display-only cumulative Ratings entering this episode (HUD tier readout)
+  // — Ratings never changes mid-episode (Model 1); the real delta is
+  // computed on clear/death and applied by ResolveScene against the
+  // persisted career, not here.
   private ratings = 0;
-  // Placeholder "episode cleared" stand-in (run-structure.spec.todo.md /
-  // F8 #136 owns the real stage-end condition) -- surviving this many
-  // seconds makes the on-clear Ratings cash-in path reachable in F6's
-  // endless-wave vertical slice.
+  // Standard/elite nodes clear on a survival timer (F6's vertical-slice
+  // stage-end condition; run-structure.spec.todo.md's real per-stage content
+  // is a future content pass). Boss nodes clear on defeating the boss instead
+  // — see isBossNode.
   private elapsedEpisodeSec = 0;
   private hypeBar!: Phaser.GameObjects.Graphics;
   private ratingsBar!: Phaser.GameObjects.Graphics;
@@ -90,10 +98,21 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
   private gameOver = false;
   private debugOverlay!: DebugOverlay;
-  private enemySpawnCooldownMs: number = TUNING.enemies.drone.spawnIntervalMs;
+  private enemySpawnCooldownMs = 0;
+
+  // The node/Difficulty/build this episode was launched with (Map -> Play,
+  // sceneData.ts) — set in init(), read-only for the rest of the episode.
+  private episode!: EpisodeLaunchData;
+  private isBossNode = false;
+  private boss: Enemy | null = null;
 
   constructor() {
     super("Play");
+  }
+
+  init(data: EpisodeLaunchData) {
+    this.episode = data;
+    this.isBossNode = data.nodeType === "bossFinale";
   }
 
   preload() {
@@ -103,6 +122,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   create() {
     ensurePlaceholderTextures(this);
     this.gameOver = false;
+    this.boss = null;
     this.score = 0;
 
     // PlayScene's instance survives scene.restart() (only init/create rerun,
@@ -116,7 +136,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.crowdSize = TUNING.hype.crowdSizeDefault;
     this.hypeMaxValue = hypeMax(this.crowdSize);
     this.currentScoreMult = 1;
-    this.ratings = loadRatings();
+    this.ratings = this.episode.ratings;
 
     this.background = this.add
       .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
@@ -148,7 +168,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       runChildUpdate: true,
     });
 
-    this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, TEX.ship);
+    const weapons = this.episode.weapons.map((w) => ({ weapon: weaponById(w.weaponId), tier: w.tier }));
+    this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, TEX.ship, weapons, getDebugOverrides());
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
 
@@ -183,6 +204,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     });
 
     this.enemySpawnCooldownMs = this.player.effectiveEnemySpawnIntervalMs;
+    if (this.isBossNode) this.spawnBoss();
 
     // Depth 50: above every gameplay sprite (player is the highest at 10) so
     // hitbox outlines aren't hidden beneath the sprites they outline, but
@@ -233,15 +255,30 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       .setOrigin(1, 0)
       .setDepth(100);
 
-    this.debugOverlay = new DebugOverlay(this, this.player, () => ({
-      hype: this.hypeState.hype,
-      hypeMax: this.hypeMaxValue,
-      scoreMult: this.currentScoreMult,
-      grazeStreak: this.grazeStreak,
-      grazeTotalMult: this.grazeTotalMult,
-      ratings: this.ratings,
-      ratingsTier: ratingsTierName(ratingsTierForScore(this.ratings)),
-    }));
+    this.debugOverlay = new DebugOverlay(
+      this,
+      this.player,
+      () => ({
+        hype: this.hypeState.hype,
+        hypeMax: this.hypeMaxValue,
+        scoreMult: this.currentScoreMult,
+        grazeStreak: this.grazeStreak,
+        grazeTotalMult: this.grazeTotalMult,
+        ratings: this.ratings,
+        ratingsTier: ratingsTierName(ratingsTierForScore(this.ratings)),
+      }),
+      () => this.debugAdvanceStage()
+    );
+  }
+
+  /** Debug-only (C12 #151 follow-up): instantly resolves the current episode as a clear, regardless of node type — a boss node kills the boss outright (through the normal win path) rather than skipping it, so Ratings/score still come out right. */
+  private debugAdvanceStage(): void {
+    if (this.gameOver) return;
+    if (this.isBossNode && this.boss?.active) {
+      this.damageEnemy(this.boss, this.boss.hp, 0);
+      return;
+    }
+    this.clearEpisode();
   }
 
   update(_time: number, delta: number) {
@@ -249,6 +286,16 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.physics.world.drawDebug = this.player.debugShowHitboxes;
     if (!this.physics.world.drawDebug) this.physics.world.debugGraphic?.clear();
     if (this.gameOver) return;
+
+    // Pausing gameplay while the debug menu is open (not just hiding it
+    // behind the panel) is what makes a full-screen panel usable — physics
+    // stepping (and therefore movement/collisions) freezes, but this scene's
+    // own update() keeps running so the overlay's toggle/shortcuts still work.
+    if (this.debugOverlay.isOpen) {
+      this.physics.pause();
+      return;
+    }
+    this.physics.resume();
 
     const dt = delta / 1000;
 
@@ -260,10 +307,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       this.fireWeapon(req);
     }
 
-    this.enemySpawnCooldownMs -= delta;
-    if (this.enemySpawnCooldownMs <= 0) {
-      this.spawnEnemy();
-      this.enemySpawnCooldownMs += this.player.effectiveEnemySpawnIntervalMs;
+    if (!this.isBossNode) {
+      this.enemySpawnCooldownMs -= delta;
+      if (this.enemySpawnCooldownMs <= 0) this.spawnEnemy();
     }
 
     for (const enemy of this.enemies.getChildren() as Enemy[]) {
@@ -283,9 +329,11 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       }
     }
 
-    this.elapsedEpisodeSec += dt;
-    if (this.elapsedEpisodeSec >= TUNING.ratings.episodeClearDurationSec) {
-      this.clearEpisode();
+    if (!this.isBossNode) {
+      this.elapsedEpisodeSec += dt;
+      if (this.elapsedEpisodeSec >= this.player.effectiveEpisodeClearDurationSec) {
+        this.clearEpisode();
+      }
     }
   }
 
@@ -363,20 +411,39 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     }
   }
 
+  /**
+   * Composition thresholds (run-structure.spec.todo.md): an "elite" node
+   * forces an elite-heavy fight, a "standard" node rolls the archetype per
+   * spawn against the current D (elites locked out below eliteUnlockD).
+   */
   private spawnEnemy(): void {
     if (this.gameOver) return;
+    const archetype: EnemyArchetypeId = this.episode.nodeType === "elite" ? "elite" : rollSpawnArchetype(this.episode.D);
+    const stats = scaledEnemyStats(archetype, TUNING.enemies[archetype], this.episode.D);
     const x = Phaser.Math.Between(24, GAME_WIDTH - 24);
     const y = -20;
-    const enemy = this.enemies.get(x, y, TEX.enemy) as Enemy | null;
-    enemy?.spawn(x, y);
+    const enemy = this.enemies.get(x, y, ENEMY_TEX[archetype]) as Enemy | null;
+    enemy?.spawn(x, y, archetype, stats);
+    this.enemySpawnCooldownMs = this.player.debugEnemySpawnIntervalMs ?? stats.spawnIntervalMs;
+  }
+
+  /** Single Season/Series Finale boss (run-structure.spec.todo.md) — spawned once, no regular spawner alongside it. */
+  private spawnBoss(): void {
+    const stats = scaledEnemyStats("boss", TUNING.enemies.boss, this.episode.D);
+    const x = GAME_WIDTH / 2;
+    const y = 170;
+    const enemy = this.enemies.get(x, y, ENEMY_TEX.boss) as Enemy | null;
+    if (!enemy) return;
+    enemy.spawn(x, y, "boss", stats);
+    this.boss = enemy;
   }
 
   private fireEnemyBullet(enemy: Enemy): void {
     const x = enemy.x;
     const y = enemy.y + enemy.height / 2;
-    const speed = TUNING.enemies.drone.bulletSpeed * reflexBulletSpeedMult(this.player.stats.reflexes);
+    const speed = enemy.bulletSpeed * reflexBulletSpeedMult(this.player.stats.reflexes);
     const bullet = this.enemyBullets.get(x, y, TEX.bulletEnemy) as EnemyBullet | null;
-    bullet?.fire(x, y, 0, speed, TUNING.enemies.drone.bulletDamage);
+    bullet?.fire(x, y, 0, speed, enemy.bulletDamage);
   }
 
   /**
@@ -548,8 +615,12 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     applyLifesteal(this.player.defender, this.player.stats.maxHp, damage, this.player.stats.lifesteal);
     this.spawnDamageNumber(enemy.x, enemy.y, damage, numCrits);
     if (enemy.hp <= 0) {
+      const wasBoss = enemy.archetype === "boss";
       enemy.recycle();
       this.gainScore(enemy.scoreValue);
+      // Boss defeated is the bossFinale node's clear condition — standard/elite
+      // nodes clear on the survival timer instead (see update()).
+      if (wasBoss && !this.gameOver) this.clearEpisode();
     }
   }
 
@@ -600,8 +671,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
   private onEnemyContactPlayer(enemy: Enemy): void {
     if (this.gameOver || !enemy.active) return;
-    enemy.recycle();
-    this.damagePlayer(TUNING.enemies.drone.contactDamage);
+    const contactDamage = enemy.contactDamage;
+    if (enemy.archetype !== "boss") enemy.recycle(); // a boss keeps patrolling through contact, it isn't a one-touch kill
+    this.damagePlayer(contactDamage);
   }
 
   private damagePlayer(hit: number): void {
@@ -616,102 +688,57 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     if (result.defeated) this.endEpisode();
   }
 
-  // No-hull-lives model (combat.spec.todo.md / run-structure.spec.todo.md): one
-  // death ends the episode. The map/run-structure system (F8/F11) doesn't
-  // exist yet, so F6's vertical slice simplifies "returned to the map" to an
-  // immediate restart.
+  // No-hull-lives model (combat.spec.todo.md / run-structure.spec.todo.md):
+  // one death ends the episode. PlayScene never touches persisted Ratings or
+  // career state itself (root CLAUDE.md's reload-mid-episode rule) — it just
+  // computes the Ratings delta and hands off to ResolveScene, which applies
+  // it to the loaded career and returns to the map.
   //
-  // Ratings cash-in on death (hype-and-ratings.spec.md, F7 #135):
-  // stageProgress stands in as elapsedEpisodeSec/episodeClearDurationSec
-  // until F8's real stage-end condition exists, so dying immediately loses
-  // the full base penalty and dying right at the clear line loses ~nothing.
-  // A drop below 0 cumulative Ratings is Cancelled — the run's Ratings
-  // resets to 0 rather than going negative.
+  // stageProgress on a boss node is how much of the boss's HP got chewed
+  // through (a real measure of how close the fight was); on a standard/elite
+  // node it's elapsedEpisodeSec/episodeClearDurationSec, so dying immediately
+  // loses the full base penalty and dying right at the clear line loses
+  // ~nothing either way.
   private endEpisode(): void {
-    const stageProgress =
-      TUNING.ratings.episodeClearDurationSec > 0
-        ? this.elapsedEpisodeSec / TUNING.ratings.episodeClearDurationSec
+    this.gameOver = true;
+    const stageProgress = this.isBossNode
+      ? this.boss
+        ? 1 - Math.max(0, this.boss.hp) / this.boss.maxHp
+        : 0
+      : this.player.effectiveEpisodeClearDurationSec > 0
+        ? this.elapsedEpisodeSec / this.player.effectiveEpisodeClearDurationSec
         : 1;
     const loss = ratingsLossOnDeath(stageProgress);
-    const result = applyRatingsDelta(this.ratings, -loss);
-    const appliedDelta = (result.cancelled ? 0 : result.ratings) - this.ratings;
-    this.ratings = result.cancelled ? 0 : result.ratings;
-    saveRatings(this.ratings);
-    this.hypeEvents.emit("ratingsChanged", {
-      ratings: this.ratings,
-      delta: appliedDelta,
-      tier: ratingsTierForScore(this.ratings),
-      cancelled: result.cancelled,
-    });
-
-    if (result.cancelled) {
-      this.showEndScreen([
-        copy("cancelled.title"),
-        "",
-        copy("cancelled.flavor", { playerName: PLACEHOLDER_PLAYER_NAME }),
-        "",
-        copy("play.episodeOver.score", { score: Math.round(this.score) }),
-        "",
-        copy("play.episodeOver.restartPrompt"),
-      ]);
-      return;
-    }
-
-    this.showEndScreen([
-      copy("play.episodeOver.title"),
-      "",
-      copy("play.episodeOver.score", { score: Math.round(this.score) }),
-      copy("play.episodeOver.ratingsLoss", { ratings: Math.round(loss) }),
-      "",
-      copy("play.episodeOver.restartPrompt"),
-    ]);
+    this.scene.start(SCENE_KEYS.resolve, {
+      outcome: "death",
+      nodeId: this.episode.nodeId,
+      nodeType: this.episode.nodeType,
+      season: this.episode.season,
+      isSeriesFinale: this.episode.isSeriesFinale,
+      score: Math.round(this.score),
+      ratingsBefore: this.episode.ratings,
+      ratingsDelta: -loss,
+    } satisfies ResolveLaunchData);
   }
 
   /**
    * Basic end-of-episode cash-in of Hype into Ratings (hype-and-ratings.spec.md,
-   * F7 #135) — the full episode->map transition is F8 #136's job, not this
-   * issue's; this just proves the conversion path exists by restarting the
-   * same vertical-slice episode once `episodeClearDurationSec` is survived.
+   * F7 #135's Model 1) — the resulting delta hands off to ResolveScene, which
+   * applies it to the persisted career and returns to the map.
    */
   private clearEpisode(): void {
-    const gain = ratingsGainOnClear(this.score);
-    const result = applyRatingsDelta(this.ratings, gain);
-    this.ratings = result.ratings;
-    saveRatings(this.ratings);
-    this.hypeEvents.emit("ratingsChanged", {
-      ratings: this.ratings,
-      delta: gain,
-      tier: ratingsTierForScore(this.ratings),
-      cancelled: result.cancelled,
-    });
-
-    this.showEndScreen([
-      copy("play.episodeClear.title"),
-      "",
-      copy("play.episodeClear.score", { score: Math.round(this.score) }),
-      copy("play.episodeClear.ratingsGain", { ratings: Math.round(gain) }),
-      "",
-      copy("play.continuePrompt"),
-    ]);
-  }
-
-  private showEndScreen(lines: string[]): void {
     this.gameOver = true;
-    this.physics.pause();
-
-    this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, lines.join("\n"), {
-        fontFamily: "monospace",
-        fontSize: "20px",
-        color: "#ff6b00",
-        align: "center",
-      })
-      .setOrigin(0.5)
-      .setDepth(200);
-
-    const restart = () => this.scene.restart();
-    this.input.keyboard?.once("keydown", restart);
-    this.input.once("pointerdown", restart);
+    const gain = ratingsGainOnClear(this.score);
+    this.scene.start(SCENE_KEYS.resolve, {
+      outcome: "clear",
+      nodeId: this.episode.nodeId,
+      nodeType: this.episode.nodeType,
+      season: this.episode.season,
+      isSeriesFinale: this.episode.isSeriesFinale,
+      score: Math.round(this.score),
+      ratingsBefore: this.episode.ratings,
+      ratingsDelta: gain,
+    } satisfies ResolveLaunchData);
   }
 
   private updateHud(): void {
@@ -751,11 +778,17 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     // Tier name: top-right label above the Hype bar.
     this.tierNameText.setText(ratingsTierName(ratingsTierForScore(this.ratings)));
 
-    // Timer: countdown from episodeClearDurationSec in MM:SS.
-    const remaining = Math.max(0, TUNING.ratings.episodeClearDurationSec - this.elapsedEpisodeSec);
-    const mins = Math.floor(remaining / 60);
-    const secs = Math.floor(remaining % 60);
-    this.timerText.setText(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
+    // Timer: countdown from episodeClearDurationSec in MM:SS — replaced by a
+    // boss HP readout on a bossFinale node, which clears on defeat instead.
+    if (this.isBossNode) {
+      const hpFrac2 = this.boss ? Phaser.Math.Clamp(this.boss.hp / this.boss.maxHp, 0, 1) : 0;
+      this.timerText.setText(`BOSS ${Math.round(hpFrac2 * 100)}%`);
+    } else {
+      const remaining = Math.max(0, this.player.effectiveEpisodeClearDurationSec - this.elapsedEpisodeSec);
+      const mins = Math.floor(remaining / 60);
+      const secs = Math.floor(remaining % 60);
+      this.timerText.setText(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
+    }
   }
 
   /** Progress fraction [0,1] from current tier threshold to the next one; 1 at max tier. */

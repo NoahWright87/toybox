@@ -1,58 +1,51 @@
-# Shmup — Run Structure Spec (career, map, difficulty, death, persistence)
+# Shmup — Run Structure Spec (remaining work)
 
-> Issues: **F8 #136** (map/seasons/difficulty), **F11 #139** (death/persistence). Status: framing locked. Numbers in `tuning.spec.todo.md`.
+> Issues: **F8 #136** (map/seasons/difficulty — implemented, see
+> `run-structure.spec.md`), **F11 #139** (death/persistence polish). This
+> file now only tracks what's left.
 
-## Career = Seasons
+## F11 — death/audience polish
 
-- A **career** = ~5 **Seasons** (tunable). Each Season is a node map (FTL/StS style) capped by a **Season Finale boss**. The last Season ends in the **Series Finale (final boss)**.
-- Beat the Series Finale → record **Finale score** → optionally continue into **Syndication** (endless). Cancelled there → record **Syndication score**.
-- **Season always advances** — even if you lose the Finale boss. Losing just costs Ratings and forfeits boss gold/items.
+- Richer Cancelled/results screen: real audience reaction copy
+  (`content/crowdComments.ts`'s `pickCrowdComment`) tagged to the death
+  moment, not just the flat `cancelled.flavor` line.
+- A real player-profile/name system — `ResolveScene`/copy currently hardcode
+  `"Pilot"` for the `{playerName}` token.
+- Score/results history — `finaleScore`/`syndicationScore` are shown once at
+  the moment they're recorded but not kept anywhere after the career resets;
+  a hall-of-fame / high-score list is `audience-and-score.spec.todo.md`'s job
+  (T10 #161, C14 #163).
 
-## The overworld deadline (FTL-style)
+## Map — radar item and fog
 
-**Stages auto-scroll, so there is no in-episode timer.** The time pressure is **between episodes**:
-- A **deadline marker** creeps across the overworld map (left→right) as you take nodes — like FTL's pursuing fleet.
-- If the deadline has advanced **past** the episode you attempt, that episode runs at elevated Difficulty; the further behind you are, the harder (see the D formula). 
-- **Deliberately falling behind to farm extra nodes is a valid high-risk/high-reward play** — amass resources, but face a hard road.
-- **Player Speed** slows the deadline's advance (overworld-only effect; see `combat.spec.todo.md`), buying slack to take more nodes safely.
+- A **radar item** should reveal `"partial"`/`"hidden"` nodes further out
+  (`systems/map/visibility.ts`'s `nodeVisibility` BFS depth cap) — not
+  wired up; items-and-brands.spec.todo.md (F9 #137) owns the item itself.
 
-## Difficulty (D) — the master escalation scalar
+## Special nodes need real mechanics
 
-A single number drives all escalation. **Most enemy stats key off D** through **per-stat curves** (HP fast, damage slow, etc.) defined in `tuning.spec.todo.md` — one input, non-uniform response. Plus:
-- **Per-archetype emphasis:** each enemy type leans into certain stats as D rises (bruiser → HP/damage, swarmer → count/speed).
-- **Composition thresholds:** higher D unlocks more elites, denser formations, nastier patterns.
+- **Shop**: currently a flavor-only stop (`TUNING.map.shopRatingsBonus = 0`)
+  — needs the gold-sink economy (`economy.spec.todo.md`, F9 #137) before it
+  can sell anything.
+- **Event**: currently a flat Ratings nudge — could branch into real
+  choices/outcomes once there's content to hang them on.
+- **Treasure**: currently a flat Ratings nudge — should hand out real
+  items/gold once F4/F9 exist.
 
-D also **scales rewards** (gold/EXP — harder = richer) and gives a **Luck-like rarity boost** to offers (`rarityLuck = Luck + luckFromD × D`). D stays **independent of Ratings** (which gates *access*). Special nodes may carry a **negative D offset** (safer).
+## Difficulty — composition depth
 
-### Escalation formula
+- Only two enemy archetypes exist (`drone`, `elite`) plus a single boss
+  config — "denser formations, nastier patterns" beyond spawn-interval
+  density (`densityCurve`) is unexplored: multi-enemy formations, elite
+  attack patterns distinct from drone's, additional archetypes leaning into
+  speed/count (the swarmer's actual "more of them" lean, today only
+  expressed via spawn density, not e.g. simultaneous multi-spawns).
+- `itemModifiers` in the D formula is plumbed through
+  (`DifficultyContext.itemModifiers`) but nothing ever sets it — risk items
+  are items-and-brands.spec.todo.md's job.
 
-```
-D = seasonBase(season)              # persistent: each Season starts harder
-  + episodeRamp × episodeIndex      # persistent: climbs through a Season
-  + stageOffset + itemModifiers     # bonus-hard stages / risk items add flat D
-  + deadlinePenalty × mapLag        # mapLag = how far the overworld deadline has passed you
-```
+## Build persistence beyond the stub
 
-- `mapLag` is a **between-episodes / overworld** quantity (0 while you're ahead of the deadline). It is computed when you enter an episode — **not** an in-episode clock.
-- **Difficulty settings** change `seasonBase` start + ramp slopes (one place). Optional visible **"Threat Level"** readout.
-
-## Node map
-
-- Choose among nearby nodes; full info on adjacent, partial further out (radar item reveals more).
-- **Ratings unlocks MORE node options**, skewed toward **special nodes** (shop/treasure/challenge/bonus). **Luck biases special-node odds.** Neither changes D.
-- Node types: standard combat, elite, shop, event, treasure, Season Finale boss.
-
-## Death (no hull lives)
-
-- **One death = the episode ends.** Returned to the map.
-- `RatingsLoss = BasePenalty × (1 − stageProgress) × embarrassmentMod`; the episode's would-be RatingsGain doesn't bank; boss rewards forfeited. Early/embarrassing deaths hurt most.
-- **Build persists** — weapons, items, levels, gold.
-
-## Career loss
-
-- **Cancelled = cumulative Ratings < 0**, any time (start at Nobody ≈ 0). Ends the career → results screen. No meta-progression between careers.
-
-## Persistence (CLAUDE.md reload rule)
-
-- Career state — build, gold, Ratings, Season, map position, deadline position — saved to the virtual FS at the **map level**. Reload mid-episode resumes the **pre-episode map state**.
-- Pattern: stable `*_STATE_ID` + `SAVE.DAT` in both `seed.ts` and `migrate()`; validate shape/version; write at boundaries, not per frame. Finalize on Cancelled and Series Finale.
+- `CareerState.weapons` persists across episodes but there's no way to grow
+  it yet (no shop, no level-up offers, no gold) — C1 #140 (base weapon
+  roster) and F9 (economy) unblock this.
