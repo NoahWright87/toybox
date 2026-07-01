@@ -245,6 +245,9 @@ export class MapScene extends Phaser.Scene {
         D,
         ratings: career.ratings,
         weapons: career.weapons,
+        items: career.items,
+        statPicks: career.statPicks,
+        level: career.level,
         isSeriesFinale: false,
       };
       this.scene.start(SCENE_KEYS.play, data);
@@ -413,6 +416,9 @@ export class MapScene extends Phaser.Scene {
         D,
         ratings: career.ratings,
         weapons: career.weapons,
+        items: career.items,
+        statPicks: career.statPicks,
+        level: career.level,
         isSeriesFinale,
       };
       this.scene.start(SCENE_KEYS.play, data);
@@ -435,6 +441,8 @@ export class MapScene extends Phaser.Scene {
       score: 0,
       ratingsBefore: career.ratings,
       ratingsDelta: bonus,
+      goldCollected: 0,
+      expGained: 0,
     };
     this.scene.start(SCENE_KEYS.resolve, data);
   }

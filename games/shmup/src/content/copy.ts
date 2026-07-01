@@ -35,8 +35,29 @@ export const COPY = {
   // that assign real ids; these two are placeholders proving the shape.
   "weapon.placeholder.name": "Stock Blaster",
   "weapon.placeholder.description": "Standard-issue. Gets the job done.",
+  "weapon.twin-blaster.name": "Twin Blaster",
+  "weapon.twin-blaster.description": "Two barrels, double the rate of fire.",
+  "weapon.grease-gun.name": "Grease Gun",
+  "weapon.grease-gun.description": "Sponsored slug-thrower. Punches through ground targets.",
   "enemy.placeholder.name": "Drone",
   "enemy.placeholder.description": "Cheap, expendable, everywhere.",
+
+  // ---- Passive items (items-and-brands.spec.todo.md, F9 #137) ----
+  "item.lucky-rabbits-foot.name": "Lucky Rabbit's Foot",
+  "item.piggy-bank.name": "Piggy Bank",
+  "item.adrenal-gland.name": "Adrenal Gland",
+  "item.slick-treads.name": "Slick Treads",
+  "item.nitro-boost.name": "Nitro Boost",
+  "item.bruise-cream.name": "Bruise Cream",
+  "item.pain-tolerance.name": "Pain Tolerance",
+  "item.steel-plating.name": "Steel Plating",
+  "item.magnet-coil.name": "Magnet Coil",
+  "item.greased-bearings.name": "Greased Bearings",
+  "item.adrenaline-rush.name": "Adrenaline Rush",
+  "item.four-leaf-clover.name": "Four-Leaf Clover",
+  "item.full-synthetic.name": "Full Synthetic",
+  "item.glutton-for-punishment.name": "Glutton for Punishment",
+  "item.golden-ticket.name": "Golden Ticket",
 
   // ---- Core gameplay loop HUD/flow (F6 #134) ----
   "play.score": "SCORE {score}",
@@ -57,6 +78,8 @@ export const COPY = {
   "resolve.ratingsLine": "RATINGS {ratings} · {tier}",
   "resolve.finaleScore": "Finale Score: {score}",
   "resolve.syndicationScore": "Syndication Score: {score}",
+  "resolve.goldCollected": "+{gold}g collected",
+  "resolve.levelUp": "LEVEL UP x{count}",
   "cancelled.restartPrompt": "PRESS ANY KEY OR TAP TO START A NEW CAREER",
 
   // ---- Season node-map (run-structure.spec.todo.md, F8 #136) ----
@@ -79,4 +102,30 @@ export const COPY = {
   "map.newCareer.confirm": "TAP AGAIN TO CONFIRM",
   "map.desynced.title": "MAP ERROR",
   "map.desynced.flavor": "No reachable episodes from here. Start a new career to keep playing.",
+
+  // ---- Level-up (economy.spec.todo.md, F9 #137): end-of-level break only, batched, never mid-play ----
+  "levelup.title": "LEVEL UP!",
+  "levelup.pickPrompt": "Pick {current} of {total}",
+
+  // ---- Reroll (economy.spec.todo.md, F9 #137): shared copy — level-up picks and shop visits both spend the same escalating-cost reroll. ----
+  "reroll.cost": "REROLL ({cost}g)",
+  "reroll.free": "REROLL (FREE)",
+  "reroll.cantAfford": "Not enough gold to reroll",
+
+  // ---- Shop (economy.spec.todo.md, F9 #137): baseline break shop + dedicated map shop nodes ----
+  "shop.title.baseline": "PIT STOP",
+  "shop.title.node": "THE GARAGE",
+  "shop.gold": "GOLD {gold}",
+  "shop.interestEarned": "+{gold}g interest",
+  "shop.buy": "BUY ({cost}g)",
+  "shop.upgrade": "UPGRADE ({cost}g)",
+  "shop.slotsFull": "SLOTS FULL",
+  "shop.atCap": "MAXED",
+  "shop.cantAfford": "CAN'T AFFORD",
+  "shop.leave": "LEAVE SHOP",
+  "shop.empty": "Nothing left in stock.",
+
+  // ---- Economy HUD (economy.spec.todo.md, F9 #137) ----
+  "play.level": "LV {level}",
+  "play.gold": "{gold}g",
 } as const;

@@ -26,6 +26,15 @@ describe("createNewCareer", () => {
     const career = createNewCareer(0, 1);
     expect(career.weapons).toEqual([{ weaponId: "placeholder", tier: 0 }]);
   });
+
+  it("starts with no gold/items and level 1 with zero exp/stat picks (economy.spec.todo.md, F9 #137)", () => {
+    const career = createNewCareer(0, 1);
+    expect(career.gold).toBe(0);
+    expect(career.items).toEqual([]);
+    expect(career.level).toBe(1);
+    expect(career.exp).toBe(0);
+    expect(career.statPicks).toEqual({});
+  });
 });
 
 describe("advanceToNextSeason", () => {
@@ -47,5 +56,22 @@ describe("advanceToNextSeason", () => {
     const advanced = advanceToNextSeason(career, 2);
     expect(advanced.ratings).toBe(300);
     expect(advanced.weapons).toEqual(career.weapons);
+  });
+
+  it("carries gold/items/level/exp/statPicks forward too — only the map/deadline reset each Season", () => {
+    const career = {
+      ...createNewCareer(300, 1),
+      gold: 500,
+      items: [{ itemId: "lucky-rabbits-foot", count: 2 }],
+      level: 4,
+      exp: 12,
+      statPicks: { damage: 2 },
+    };
+    const advanced = advanceToNextSeason(career, 2);
+    expect(advanced.gold).toBe(500);
+    expect(advanced.items).toEqual(career.items);
+    expect(advanced.level).toBe(4);
+    expect(advanced.exp).toBe(12);
+    expect(advanced.statPicks).toEqual({ damage: 2 });
   });
 });

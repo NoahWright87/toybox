@@ -3,6 +3,8 @@ import { BootScene } from "./scenes/BootScene";
 import { MapScene } from "./scenes/MapScene";
 import { PlayScene } from "./scenes/PlayScene";
 import { ResolveScene } from "./scenes/ResolveScene";
+import { LevelUpScene } from "./scenes/LevelUpScene";
+import { ShopScene } from "./scenes/ShopScene";
 import { GAME_WIDTH, GAME_HEIGHT } from "./config";
 
 new Phaser.Game({
@@ -21,5 +23,5 @@ new Phaser.Game({
     default: "arcade",
     arcade: { debug: false },
   },
-  scene: [BootScene, MapScene, PlayScene, ResolveScene],
+  scene: [BootScene, MapScene, PlayScene, ResolveScene, LevelUpScene, ShopScene],
 });

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { TUNING } from "../tuning";
 import { resolveLoadout } from "../systems/effects";
-import type { OwnedWeapon, ProjectileBehavior } from "../systems/effects";
+import type { OwnedItem, OwnedWeapon, ProjectileBehavior } from "../systems/effects";
 import type { StatBlock, StatId, StatModifier } from "../systems/stats";
 import type { Defender } from "../systems/combat";
 import { PLACEHOLDER_WEAPON } from "../content";
@@ -21,6 +21,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock;
   /** The persisted career build (run-structure.spec.todo.md: "Build persists"), rehydrated by PlayScene from CareerState.weapons. */
   weapons: OwnedWeapon[];
+  /** Owned passive items (economy.spec.todo.md, F9 #137), rehydrated from CareerState.items — stack through the F4 engine same as any item. */
+  private items: OwnedItem[];
+  /** Level-up stat picks (economy.spec.todo.md's hard rule), flattened from CareerState.statPicks — persistent, not transient, since they never toggle. */
+  private persistentStatMods: StatModifier[];
   projectileBehaviors: ProjectileBehavior[] = [];
   defender: Defender;
   focus = false;
@@ -47,13 +51,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     y: number,
     texture: string,
     weapons: OwnedWeapon[] = STARTING_WEAPONS,
-    debugOverrides?: DebugOverrides
+    debugOverrides?: DebugOverrides,
+    items: OwnedItem[] = [],
+    persistentStatMods: StatModifier[] = []
   ) {
     super(scene, x, y, texture);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
     this.weapons = weapons;
+    this.items = items;
+    this.persistentStatMods = persistentStatMods;
     if (debugOverrides) {
       for (const [stat, amount] of Object.entries(debugOverrides.statMods) as [StatId, number][]) {
         if (amount) this.debugMods.set(stat, { kind: "flat", stat, amount, source: "debug" });
@@ -67,6 +75,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     const { stats, projectileBehaviors } = resolveLoadout({
       weapons: this.weapons,
+      items: this.items,
+      chassisMods: this.persistentStatMods,
       transientMods: [...this.debugMods.values()],
     });
     this.stats = stats;
@@ -126,6 +136,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private recompute(): void {
     const { stats, projectileBehaviors } = resolveLoadout({
       weapons: this.weapons,
+      items: this.items,
+      chassisMods: this.persistentStatMods,
       transientMods: [...this.debugMods.values()],
     });
     this.stats = stats;

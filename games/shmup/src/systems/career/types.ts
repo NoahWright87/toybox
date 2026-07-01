@@ -7,6 +7,7 @@
  * Resolve write it, so a reload mid-episode naturally resumes at the map.
  */
 import type { SeasonMap } from "../map";
+import type { MainStatId } from "../stats";
 
 export const CAREER_STATE_VERSION = 1;
 
@@ -14,6 +15,12 @@ export const CAREER_STATE_VERSION = 1;
 export interface OwnedWeaponRef {
   weaponId: string;
   tier: number;
+}
+
+/** An owned passive item by id + stack count (economy.spec.todo.md, F9 #137) — mirrors OwnedWeaponRef's id-indirection so a save never embeds a full ItemDef snapshot. */
+export interface OwnedItemRef {
+  itemId: string;
+  count: number;
 }
 
 /** "career" = normal Season/Finale progression; "syndication" = post-Series-Finale endless mode. */
@@ -30,6 +37,16 @@ export interface CareerState {
   visitedNodeIds: string[];
   deadlinePosition: number;
   weapons: OwnedWeaponRef[];
+  /** Owned passive items (economy.spec.todo.md, F9 #137) — persists across episodes exactly like `weapons`. */
+  items: OwnedItemRef[];
+  /** Banked, bankable gold (economy.spec.todo.md) — physical coins caught in-episode, plus interest earned at every shop break. */
+  gold: number;
+  /** Permanent, automatic (EXP -> Levels, economy.spec.todo.md) — 1-based; the build skeleton. */
+  level: number;
+  /** Progress toward `expToNextLevel(level)` — always < that threshold (rollovers are batched into `level` immediately). */
+  exp: number;
+  /** How many times each MAIN stat has been picked at a level-up break — the source of truth for `statPickMods()`'s persistent modifiers. */
+  statPicks: Partial<Record<MainStatId, number>>;
   phase: CareerPhase;
   /** Endless episode counter once in Syndication — feeds computeDifficulty's episodeIndex the same way visitedNodeIds.length does during a normal Season. */
   syndicationEpisodeIndex: number;
