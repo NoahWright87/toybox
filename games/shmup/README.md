@@ -22,7 +22,7 @@ games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.to
   index.html         Vite entry
   src/
     main.ts          Phaser game config
-    scenes/          BootScene (placeholder) — game scenes land here
+    scenes/          BootScene, MapScene (Season node-map), PlayScene (F6 loop), ResolveScene (episode->map cash-in)
     content/         copy registry ("copy is an asset")
     tuning/          numeric levers ("tuning is an asset")
     systems/         stat/effect/economy engines land here (F3/F4/F9…)

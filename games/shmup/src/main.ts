@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
+import { MapScene } from "./scenes/MapScene";
 import { PlayScene } from "./scenes/PlayScene";
+import { ResolveScene } from "./scenes/ResolveScene";
 import { GAME_WIDTH, GAME_HEIGHT } from "./config";
 
 new Phaser.Game({
@@ -19,5 +21,5 @@ new Phaser.Game({
     default: "arcade",
     arcade: { debug: false },
   },
-  scene: [BootScene, PlayScene],
+  scene: [BootScene, MapScene, PlayScene, ResolveScene],
 });

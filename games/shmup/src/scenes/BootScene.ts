@@ -2,11 +2,12 @@ import Phaser from "phaser";
 import { copy } from "../content";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { requestMotionPermission } from "../debug/ShakeDetector";
+import { SCENE_KEYS } from "./sceneData";
 
 /**
  * Title card — proves the skeleton renders and that copy comes from the
  * content registry (specs/content-and-assets), not inline strings.
- * Press any key / tap to drop into the interactive placeholder PlayScene.
+ * Press any key / tap to drop into the Season map (run-structure.spec.todo.md, F8 #136).
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -61,7 +62,7 @@ export class BootScene extends Phaser.Scene {
     // handler — this tap is the only one guaranteed before PlayScene exists.
     const start = () => {
       requestMotionPermission();
-      this.scene.start("Play");
+      this.scene.start(SCENE_KEYS.map);
     };
     this.input.keyboard?.once("keydown", start);
     this.input.once("pointerdown", start);

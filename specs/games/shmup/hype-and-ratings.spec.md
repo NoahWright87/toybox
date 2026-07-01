@@ -3,8 +3,11 @@
 > Issue: **F7 #135**. Status: implemented (Model 1). Code lives in
 > `games/shmup/src/systems/hype/`, integrated into
 > `games/shmup/src/scenes/PlayScene.ts`. The episode->map transition (real
-> stage-end condition, node graph) is **F8 #136**'s job — this slice stands
-> in with a fixed survival timer so the on-clear cash-in path is reachable.
+> node graph, Ratings gating, career persistence) is now implemented by
+> **F8 #136** — see `run-structure.spec.md`. The survival-timer stage-end
+> condition for standard/elite nodes described below is still F6's original
+> vertical-slice mechanic (a `bossFinale` node clears on boss defeat instead,
+> per `run-structure.spec.md`).
 
 ## Grazing
 
@@ -81,9 +84,13 @@ this is what keeps Ratings' conversion from double-counting Hype (see below).
 ## Ratings — persistent career tier
 
 Earned by converting the episode's (Hype-inflated) Score at episode end.
-Persists across restarts via `localStorage` (`systems/hype/persistence.ts`,
-key `shmup_ratings_v1` — distinct from NS Doors 97's own filesystem storage,
-since the standalone Shmup page can't import the live `fsStore` singleton).
+`PlayScene` only ever computes the Ratings *delta* — it never persists
+Ratings itself. `ResolveScene` is the sole place a Ratings change is applied
+and saved, as part of the full `CareerState` (`systems/career/persistence.ts`,
+key `"career"`, via the `SaveStore` port — see `save.spec.md` and
+`run-structure.spec.md`). The old standalone `shmup_ratings_v1` localStorage
+key this section originally described is gone; `systems/career/persistence.ts`
+reads it once as a migration into a fresh career's starting Ratings.
 
 ```
 # Model 1 -- Hype is rewarded ONCE, via ScoreMult. Do NOT apply a second Hype multiplier.
@@ -99,28 +106,23 @@ Implemented in `systems/hype/ratings.ts` (`ratingsGainOnClear`,
 
 - `crowdConversion = 0.02`, `deathBasePenalty = 40`,
   `deathEmbarrassmentMod = 1`.
-- `episodeClearDurationSec = 90` — F6's vertical slice has no real
-  stage/boss structure yet (F8 #136 owns the node map/season system), so
-  surviving this many seconds stands in for "episode cleared," and doubles
-  as the denominator for `stageProgress` on an early death
-  (`elapsedEpisodeSec / episodeClearDurationSec`, clamped into `[0, 1]` by
-  `ratingsLossOnDeath`).
+- `episodeClearDurationSec = 90` — the survival-timer clear condition for
+  `standard`/`elite` nodes; a `bossFinale` node clears on boss defeat
+  instead (`run-structure.spec.md`). Also the denominator for `stageProgress`
+  on an early death (`elapsedEpisodeSec / episodeClearDurationSec`, clamped
+  into `[0, 1]` by `ratingsLossOnDeath`) — except on a `bossFinale` node,
+  where `stageProgress` is how much of the boss's HP got depleted instead.
 
 `applyRatingsDelta(current, delta)` returns the new value plus a `cancelled`
-flag (`ratings < 0`). On death (`PlayScene.endEpisode()`), a cancelled result
-resets `this.ratings` to `0` (both in memory and persisted) and shows the
-`cancelled.title`/`cancelled.flavor` screen instead of the normal "Episode
-Over" screen; a non-cancelled result persists the reduced Ratings and shows
-the loss inline (`play.episodeOver.ratingsLoss`). On clear
-(`PlayScene.clearEpisode()`), the gain is persisted and shown
-(`play.episodeClear.ratingsGain`), then the same episode restarts — this is
-explicitly the **basic** cash-in proving the conversion path; the full
-episode->map transition (node graph, season/series progression) is F8
-#136's job.
+flag (`ratings < 0`). `PlayScene` only computes the delta (`ratingsGainOnClear`
+on clear, `-ratingsLossOnDeath(...)` on death) and hands off to
+`ResolveScene` (`run-structure.spec.md`'s episode flow) — `ResolveScene` is
+the one place `applyRatingsDelta` actually runs and the result gets saved
+into `CareerState`, cancelled or not.
 
 - **Gates ACCESS, not difficulty:** more node options skewed toward special
-  nodes (`run-structure.spec.todo.md`) — not yet wired up, since the node
-  map doesn't exist yet (F8 #136).
+  nodes (`run-structure.spec.md`) — wired up via `systems/map/generateMap.ts`'s
+  `ratingsRank` input; D itself never reads Ratings.
 - **Tier ladder** (`content/ratings.ts`'s `RATINGS_LADDER`, looked up via
   `ratingsTierForScore`/`ratingsTierName` in `content/accessors.ts`): Nobody
   -> Has-Been -> Cult Following -> Local Legend -> Up-and-Comer -> Household
@@ -142,10 +144,10 @@ Hype is rewarded exactly once, continuously, via `ScoreMult` in
   stats (F3 #131) that grazing reads
 - [`combat.spec.todo.md`](combat.spec.todo.md) — `EnemyBullet.spawnId`,
   pooled-entity identity pattern shared with grazing's `GrazeTracker`
-- [`run-structure.spec.todo.md`](run-structure.spec.todo.md) — F8 #136's
-  real episode->map transition, stage-end condition, and Ratings-gated node
-  access (this spec's `episodeClearDurationSec` placeholder and basic
-  cash-in are superseded there)
+- [`run-structure.spec.md`](run-structure.spec.md) — F8 #136's real
+  episode->map transition, boss stage-end condition, and Ratings-gated node
+  access (this spec's `episodeClearDurationSec` and cash-in flow are
+  integrated, not superseded, there)
 - [`tuning.spec.todo.md`](tuning.spec.todo.md) — owns every numeric constant
   referenced here (`TUNING.graze`, `TUNING.hype`, `TUNING.ratings`)
 - [`overview.spec.todo.md`](overview.spec.todo.md) — spec map

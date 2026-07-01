@@ -22,7 +22,7 @@ export { RATINGS_LADDER } from "./ratings";
 export type { RatingsTierId } from "./ratings";
 export { BRANDS } from "./brands";
 export type { SponsorBrand, BrandId } from "./brands";
-export { PLACEHOLDER_WEAPON } from "./weapons";
+export { PLACEHOLDER_WEAPON, weaponById } from "./weapons";
 export { CROWD_COMMENTS } from "./crowdComments";
 export type { CrowdCommentLine } from "./crowdComments";
 export type { CrowdTag } from "./tags";

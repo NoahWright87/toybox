@@ -52,4 +52,26 @@ export const COPY = {
   "play.episodeClear.ratingsGain": "+{ratings} Ratings",
   "play.episodeOver.ratingsLoss": "-{ratings} Ratings",
   "play.continuePrompt": "PRESS ANY KEY OR TAP TO CONTINUE",
+
+  // ---- Resolve screen / episode -> map flow (run-structure.spec.todo.md, F8 #136) ----
+  "resolve.ratingsLine": "RATINGS {ratings} · {tier}",
+  "resolve.finaleScore": "Finale Score: {score}",
+  "resolve.syndicationScore": "Syndication Score: {score}",
+  "cancelled.restartPrompt": "PRESS ANY KEY OR TAP TO START A NEW CAREER",
+
+  // ---- Season node-map (run-structure.spec.todo.md, F8 #136) ----
+  "map.title": "SEASON {season}",
+  "map.hint": "Tap a node to fly the episode",
+  "map.deadlineWarning": "THE DEADLINE IS CLOSING IN",
+  "map.syndication.title": "SYNDICATION",
+  "map.syndication.episode": "Episode {episode}",
+  "map.syndication.hint": "Tap to fly the next episode",
+  "map.node.standard": "CONTRACT",
+  "map.node.elite": "ELITE",
+  "map.node.shop": "PIT STOP",
+  "map.node.event": "EVENT",
+  "map.node.treasure": "CRAFT SERVICES",
+  "map.node.bossFinale": "SEASON FINALE",
+  "map.node.seriesFinale": "SERIES FINALE",
+  "map.node.fogged": "?",
 } as const;

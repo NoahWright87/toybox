@@ -13,16 +13,13 @@ export interface PlayerFireRequest {
   behavior: ProjectileBehavior;
 }
 
-/**
- * Single starting weapon for F6's vertical slice (C1 #140 owns the real
- * base-weapon roster). `Player.weapons` is an array so a future roster is
- * purely a data addition, per weapons.spec.todo.md's acceptance reference.
- */
+/** Fallback for standalone/debug use (e.g. tests) when no CareerState build is available. */
 const STARTING_WEAPONS: OwnedWeapon[] = [{ weapon: PLACEHOLDER_WEAPON, tier: 0 }];
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock;
-  weapons: OwnedWeapon[] = STARTING_WEAPONS;
+  /** The persisted career build (run-structure.spec.todo.md: "Build persists"), rehydrated by PlayScene from CareerState.weapons. */
+  weapons: OwnedWeapon[];
   projectileBehaviors: ProjectileBehavior[] = [];
   defender: Defender;
   focus = false;
@@ -41,11 +38,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // the overlay can replace one stat's nudge without touching the others.
   private debugMods = new Map<StatId, StatModifier>();
 
-  constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
+  constructor(scene: Phaser.Scene, x: number, y: number, texture: string, weapons: OwnedWeapon[] = STARTING_WEAPONS) {
     super(scene, x, y, texture);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
+    this.weapons = weapons;
     const { stats, projectileBehaviors } = resolveLoadout({ weapons: this.weapons });
     this.stats = stats;
     this.projectileBehaviors = projectileBehaviors;

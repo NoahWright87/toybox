@@ -100,10 +100,80 @@ export const TUNING = {
     // early death. F8 replaces this with the real stage-end condition.
     episodeClearDurationSec: 90,
   },
+  // Difficulty (D) — the master escalation scalar (run-structure.spec.todo.md,
+  // F8 #136). One number; per-stat curves give it a non-uniform response
+  // (HP ramps fast, damage ramps slow) instead of scaling every stat evenly.
   difficulty: {
     seasonCount: 5,
-    // seasonBase, episodeRamp, deadlineAdvancePerNode, deadlinePenalty,
-    // per-stat curves, per-archetype emphasis, composition thresholds — F8
+    // D at episodeIndex=0/mapLag=0 for each season (index 0 = Season 1).
+    // Escalation formula (run-structure.spec.todo.md):
+    //   D = seasonBase(season) + episodeRamp*episodeIndex + stageOffset
+    //     + itemModifiers + deadlinePenalty*mapLag
+    seasonBase: [0, 8, 16, 26, 38],
+    episodeRamp: 1.4,
+    // D added per unit of mapLag (how far behind the overworld deadline you are).
+    deadlinePenalty: 2.2,
+    // hpCurve(D): fast ramp — quadratic term dominates at high D.
+    hpCurveLinearPerD: 0.09,
+    hpCurveQuadPerD: 0.0025,
+    // dmgCurve(D): slow ramp — sqrt so it trails HP badly at high D.
+    dmgCurvePerSqrtD: 0.11,
+    speedCurvePerD: 0.01,
+    fireRateCurvePerD: 0.018,
+    // densityCurve(D): fractional reduction to spawn interval, capped so
+    // spawns never go below densityCurveMaxReduction of the base interval.
+    densityCurvePerD: 0.02,
+    densityCurveMaxReduction: 0.6,
+    // rewardCurve(D): scoreValue multiplier — harder enemies pay out more.
+    rewardCurvePerD: 0.03,
+    // rarityLuck = Luck + luckFromD * D (items-and-brands.spec.todo.md); wired
+    // here for the future offer system (F9 #137) to consume.
+    luckFromD: 0.02,
+    // Composition thresholds: elites are locked out below this D, then their
+    // spawn chance ramps linearly from eliteChanceAtUnlock to eliteChanceMax
+    // between eliteUnlockD and eliteChanceMaxD.
+    eliteUnlockD: 6,
+    eliteChanceAtUnlock: 0.15,
+    eliteChanceMaxD: 40,
+    eliteChanceMax: 0.6,
+    // Boss HP gets an extra flat multiplier on top of hpCurve(D) — a Season
+    // Finale is meant to be a real wall, not just another spawn.
+    bossHpMult: 3,
+  },
+  // Season node-map (run-structure.spec.todo.md, F8 #136). Ratings gates node
+  // COUNT and the special-node skew here — never Difficulty (kept in the
+  // `difficulty` block above, which never reads Ratings).
+  map: {
+    columnsPerSeason: 6,
+    nodesPerColumnMin: 2,
+    nodesPerColumnMax: 4,
+    // Chance a generated node is a special type (shop/event/treasure) at
+    // Ratings rank 0 (Nobody), plus a per-rank increase — special nodes stay
+    // rare early and get much more common as Ratings climbs. Elite is its
+    // own roll on top, not part of the special pool.
+    specialNodeBaseChance: 0.16,
+    specialNodeChancePerRatingsRank: 0.045,
+    specialNodeChanceMax: 0.55,
+    eliteNodeChance: 0.14,
+    // Chance to add one extra node to a column per Ratings rank (more options).
+    extraNodeChancePerRatingsRank: 0.09,
+    // Safer special nodes (run-structure.spec.md: "special nodes may carry a
+    // negative D offset") — flat stageOffset added into the D formula.
+    shopDifficultyOffset: 0,
+    eventDifficultyOffset: -1,
+    treasureDifficultyOffset: -2,
+    eliteDifficultyOffset: 3,
+    // Overworld deadline (FTL-style pursuing fleet). Advances this many
+    // "columns" per node taken, reduced by the player's Player Speed stat
+    // (overworld-only slack), floored so it always creeps forward some.
+    deadlineAdvancePerNode: 1.0,
+    deadlineMinAdvance: 0.35,
+    deadlineSlackPerSpeed: 0.0016,
+    // Flat Ratings awarded by instantly-resolved special nodes (shop is a
+    // pure flavor stop until the gold-sink economy exists, F9 #137).
+    shopRatingsBonus: 0,
+    eventRatingsBonus: 8,
+    treasureRatingsBonus: 15,
   },
   weapons: {
     // 6 weapon slots/chassis (bullet-heaven default + a hard performance
@@ -187,6 +257,9 @@ export const TUNING = {
   // scaling owns real enemy stat curves — F8 #136 — this is the one
   // hand-authored "drone" needed for F6's vertical slice and for grazing
   // (F7 #135) to have something to graze).
+  // Base (D=0, un-scaled) stats per enemy archetype (run-structure.spec.todo.md's
+  // per-archetype emphasis: systems/difficulty applies curves + emphasis
+  // weights on top of these bases — never edit an archetype's D response here).
   enemies: {
     drone: {
       maxHp: 18,
@@ -197,6 +270,30 @@ export const TUNING = {
       contactDamage: 10,
       scoreValue: 10,
       spawnIntervalMs: 850,
+    },
+    // Bruiser archetype (composition thresholds, run-structure.spec.todo.md):
+    // locked out below TUNING.difficulty.eliteUnlockD, then rolled in at a
+    // rising chance. Leans HP/damage, trades away speed/fire-rate.
+    elite: {
+      maxHp: 60,
+      speed: 100,
+      fireIntervalMs: 1100,
+      bulletDamage: 10,
+      bulletSpeed: 280,
+      contactDamage: 16,
+      scoreValue: 40,
+      spawnIntervalMs: 2600,
+    },
+    // Single Season/Series Finale boss (run-structure.spec.todo.md).
+    boss: {
+      maxHp: 900,
+      speed: 40,
+      fireIntervalMs: 650,
+      bulletDamage: 14,
+      bulletSpeed: 300,
+      contactDamage: 24,
+      scoreValue: 500,
+      spawnIntervalMs: 0,
     },
   },
   // Purely cosmetic — background scroll / starfield drift — but still tuning,
