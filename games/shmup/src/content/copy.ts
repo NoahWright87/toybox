@@ -74,4 +74,9 @@ export const COPY = {
   "map.node.bossFinale": "SEASON FINALE",
   "map.node.seriesFinale": "SERIES FINALE",
   "map.node.fogged": "?",
+  "map.node.here": "HERE",
+  "map.newCareer": "NEW CAREER",
+  "map.newCareer.confirm": "TAP AGAIN TO CONFIRM",
+  "map.desynced.title": "MAP ERROR",
+  "map.desynced.flavor": "No reachable episodes from here. Start a new career to keep playing.",
 } as const;

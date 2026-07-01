@@ -72,6 +72,26 @@ describe("isValidCareerState", () => {
     expect(isValidCareerState(createNewCareer(0, 1))).toBe(true);
   });
 
+  it("rejects a career-phase save whose currentNodeId doesn't exist in its own seasonMap", () => {
+    const career = createNewCareer(0, 1);
+    const broken = { ...career, currentNodeId: "not-a-real-node-id" };
+    expect(isValidCareerState(broken)).toBe(false);
+  });
+
+  it("rejects a career-phase save whose current position has no reachable next node", () => {
+    const career = createNewCareer(0, 1);
+    // Corrupt the map so the current node (season start) resolves to nothing.
+    const brokenMap = { ...career.seasonMap, startNodeIds: [] };
+    const broken = { ...career, seasonMap: brokenMap };
+    expect(isValidCareerState(broken)).toBe(false);
+  });
+
+  it("does not apply the reachability check to a Syndication-phase save (no seasonMap traversal there)", () => {
+    const career = createNewCareer(0, 1);
+    const syndication = { ...career, phase: "syndication" as const, currentNodeId: "not-a-real-node-id" };
+    expect(isValidCareerState(syndication)).toBe(true);
+  });
+
   it("rejects garbage", () => {
     expect(isValidCareerState(null)).toBe(false);
     expect(isValidCareerState({})).toBe(false);

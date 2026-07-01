@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
 import { copy, ratingsTierForScore, ratingsTierName } from "../content";
-import { loadCareer } from "../systems/career";
+import { createNewCareer, loadCareer, saveCareer } from "../systems/career";
 import type { CareerState } from "../systems/career";
 import { availableNodeIds, mapLagFor, nodeVisibility } from "../systems/map";
 import type { MapNode, NodeType, NodeVisibility, SeasonMap } from "../systems/map";
@@ -61,9 +61,20 @@ export class MapScene extends Phaser.Scene {
   private renderSeasonMap(career: CareerState): void {
     const map = career.seasonMap;
     const available = new Set(availableNodeIds(map, career.currentNodeId));
+
+    // isValidCareerState() already guards against this on load, but render a
+    // recoverable error instead of a wall of fog with nothing tappable if it
+    // ever happens anyway (e.g. a save written by a future/older build).
+    if (available.size === 0) {
+      this.renderDesynced();
+      return;
+    }
+
     const visibility = nodeVisibility(map, career.currentNodeId, career.visitedNodeIds);
     const visited = new Set(career.visitedNodeIds);
     const positions = this.layoutPositions(map);
+
+    this.drawNewCareerControl(GAME_WIDTH - 12, 12, false);
 
     this.add
       .text(GAME_WIDTH / 2, 20, copy("map.title", { season: career.season }), {
@@ -103,7 +114,68 @@ export class MapScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
   }
 
+  /** A "career"-phase map that resolved to zero available nodes — recoverable only by starting over. */
+  private renderDesynced(): void {
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.42, copy("map.desynced.title"), {
+        fontFamily: "monospace",
+        fontSize: "28px",
+        color: "#ff3344",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.48, copy("map.desynced.flavor"), {
+        fontFamily: "monospace",
+        fontSize: "13px",
+        color: "#cccccc",
+        align: "center",
+        wordWrap: { width: GAME_WIDTH - 120 },
+      })
+      .setOrigin(0.5);
+
+    this.drawNewCareerControl(GAME_WIDTH / 2, GAME_HEIGHT * 0.6, true);
+  }
+
+  /**
+   * Tap-to-arm, tap-again-to-confirm reset (run-structure.spec.md's
+   * Cancelled flow reuses the same createNewCareer() path) — the only way
+   * out of a map with no reachable episodes, and generally available so a
+   * player is never stuck waiting on us to fix a corrupt save.
+   */
+  private drawNewCareerControl(x: number, y: number, prominent: boolean): void {
+    const idleColor = prominent ? "#ff6b00" : "#884444";
+    const armedColor = "#ff3344";
+    const idleLabel = copy("map.newCareer");
+    const armedLabel = copy("map.newCareer.confirm");
+
+    const label = this.add
+      .text(x, y, idleLabel, {
+        fontFamily: "monospace",
+        fontSize: prominent ? "16px" : "10px",
+        color: idleColor,
+        align: "center",
+        wordWrap: prominent ? { width: 240 } : undefined,
+      })
+      .setOrigin(prominent ? 0.5 : 1, prominent ? 0.5 : 0)
+      .setInteractive({ useHandCursor: true });
+
+    let armTimer: Phaser.Time.TimerEvent | null = null;
+    label.on("pointerdown", () => {
+      if (label.text === idleLabel) {
+        label.setText(armedLabel).setColor(armedColor);
+        armTimer = this.time.delayedCall(3000, () => label.setText(idleLabel).setColor(idleColor));
+        return;
+      }
+      armTimer?.remove();
+      saveCareer(createNewCareer());
+      this.scene.start(SCENE_KEYS.map);
+    });
+  }
+
   private renderSyndication(career: CareerState): void {
+    this.drawNewCareerControl(GAME_WIDTH - 12, 12, false);
+
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, copy("map.syndication.title"), {
         fontFamily: "monospace",
@@ -308,8 +380,15 @@ export class MapScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
-    if (opts.isVisited) {
-      this.add.text(pos.x + size / 2 - 4, pos.y - size / 2 + 2, "OK", { fontFamily: "monospace", fontSize: "7px", color: "#88ff88" }).setOrigin(1, 0);
+    if (opts.isCurrent) {
+      this.add
+        .text(pos.x, pos.y + size / 2 + 10, copy("map.node.here"), {
+          fontFamily: "monospace",
+          fontSize: "9px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0);
     }
 
     if (!opts.isAvailable) return;

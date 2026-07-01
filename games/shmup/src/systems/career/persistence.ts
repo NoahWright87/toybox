@@ -5,6 +5,7 @@
  * precedent as SCORES.DAT elsewhere (root CLAUDE.md).
  */
 import { saveStore } from "../../save";
+import { availableNodeIds } from "../map";
 import { createNewCareer } from "./careerState";
 import { CAREER_STATE_VERSION } from "./types";
 import type { CareerState } from "./types";
@@ -32,12 +33,19 @@ function legacyStartingRatings(): number {
   }
 }
 
-/** Validates shape/version before trusting a save (root CLAUDE.md's reload rule) — a corrupt or stale-shape save falls back to a fresh career rather than crashing. */
+/**
+ * Validates shape/version before trusting a save (root CLAUDE.md's reload
+ * rule) — a corrupt or stale-shape save falls back to a fresh career rather
+ * than crashing or, worse, stranding the player on a map with nothing
+ * tappable. Beyond the field-shape check, a "career"-phase save must resolve
+ * to at least one reachable node: `currentNodeId` (if set) has to exist in
+ * its own `seasonMap`, and `availableNodeIds` from it can't be empty.
+ */
 export function isValidCareerState(value: unknown): value is CareerState {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
   const map = v.seasonMap as Record<string, unknown> | undefined;
-  return (
+  const shapeOk =
     v.version === CAREER_STATE_VERSION &&
     typeof v.ratings === "number" &&
     typeof v.season === "number" &&
@@ -49,8 +57,19 @@ export function isValidCareerState(value: unknown): value is CareerState {
     typeof v.syndicationEpisodeIndex === "number" &&
     !!map &&
     typeof map.bossNodeId === "string" &&
-    typeof map.nodes === "object"
-  );
+    typeof map.nodes === "object";
+  if (!shapeOk) return false;
+
+  if (v.phase === "career") {
+    try {
+      const state = v as unknown as CareerState;
+      if (state.currentNodeId !== null && !state.seasonMap.nodes[state.currentNodeId]) return false;
+      if (availableNodeIds(state.seasonMap, state.currentNodeId).length === 0) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function loadCareer(): CareerState {
