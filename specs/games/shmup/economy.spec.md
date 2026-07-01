@@ -45,9 +45,20 @@ them off, same discipline as its Ratings delta).
 
 `PlayScene.damageEnemy()` spawns a pooled `Coin` (`entities/Coin.ts`) at every
 kill, worth `TUNING.economy.coinValueBase * rewardCurve(D)` (the same
-"harder = richer" curve difficulty already exposed). `PlayScene.updateCoins()`
-runs every frame: a coin within the player's **Magnet Radius** stat flies
-toward them (`TUNING.economy.coinMagnetSpeed`); within
+"harder = richer" curve difficulty already exposed). A coin isn't an inert
+drop — it **pops** (Twin Bee bell-style): `Coin.spawn()` gives it always-up
+velocity plus random horizontal velocity (equally likely left/right,
+`coinPopSpeedYMin/Max`/`coinPopSpeedXMax`), then `coinGravity` arcs it back
+down via Arcade Physics. It bounces off the left/right world bounds
+(`setCollideWorldBounds` + `setBounce(1, 0)`, the same pattern the boss
+enemy already uses for its patrol) so it's never lost off the sides, but
+`checkCollision.down = false` lets it sail past the bottom edge to be lost
+for good — this arc-and-bounce is what makes catching a coin a positioning/
+timing skill rather than a guaranteed pickup, per the design intent.
+`PlayScene.updateCoins()` runs every frame: a coin within the player's
+**Magnet Radius** stat locks on (`Coin.startHoming()` hands off from the
+pop/gravity/bounce arc to direct-position homing at `coinMagnetSpeed`,
+mid-arc if the player gets there first) and flies straight at them; within
 `coinCollectRadius` it's caught, banked via `coinValue(base, creditScore)`
 (`systems/economy/gold.ts` — Credit Score boosts fresh gold gain); otherwise
 it despawns after `coinLifespanSec` unclaimed. "At high Hype the crowd tips"

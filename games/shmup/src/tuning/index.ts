@@ -214,8 +214,20 @@ export const TUNING = {
     // that must be caught. Base coin value per kill, scaled the same way
     // score is (systems/difficulty's rewardCurve(D) — harder = richer).
     coinValueBase: 4,
+    // Coins "pop" on spawn (Twin Bee bell-style, not an inert drop): always
+    // some upward velocity (px/s, magnitude randomized in this range) plus
+    // random horizontal velocity, equally likely left or right (magnitude up
+    // to coinPopSpeedXMax). coinGravity (px/s^2) then arcs them back down —
+    // this is what makes catching one a timing/positioning skill instead of
+    // a guaranteed pickup.
+    coinPopSpeedYMin: 200,
+    coinPopSpeedYMax: 340,
+    coinPopSpeedXMax: 150,
+    coinGravity: 850,
     // In-flight coins accelerate toward the player once within Magnet
     // Radius, at this speed (px/s), and are caught within this radius (px).
+    // Being in flight from the pop doesn't block the magnet lock — a coin
+    // can be caught mid-arc.
     coinMagnetSpeed: 420,
     coinCollectRadius: 14,
     // Uncollected coins despawn this many seconds after spawning — wealth is

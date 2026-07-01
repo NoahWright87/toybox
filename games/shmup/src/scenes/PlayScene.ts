@@ -704,9 +704,14 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   }
 
   /**
-   * Coins fly toward the player once within Magnet Radius and are caught at
-   * close range (economy.spec.todo.md) — a coin that never gets close enough
-   * despawns on its own (`Coin.preUpdate`'s lifespan), so dawdling loses it.
+   * Coins pop up and outward on spawn, arced by gravity, and bounce off the
+   * side walls (`Coin.spawn()`) — a coin can be caught mid-arc, which is
+   * what makes this a skill/positioning act rather than a guaranteed
+   * pickup. Once within Magnet Radius it locks on and flies straight to the
+   * player instead (`Coin.startHoming()` hands off from Arcade's gravity/
+   * bounce to this direct-position homing, once, on the lock-on frame). A
+   * coin that never gets caught either despawns on its own
+   * (`Coin.preUpdate`'s lifespan) or falls off the bottom of the screen.
    */
   private updateCoins(dt: number): void {
     const magnetRadius = this.player.stats.magnetRadius;
@@ -717,7 +722,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         this.collectCoin(coin);
         continue;
       }
-      if (dist <= magnetRadius) coin.magnetized = true;
+      if (!coin.magnetized && dist <= magnetRadius) {
+        coin.magnetized = true;
+        coin.startHoming();
+      }
       if (coin.magnetized) {
         const step = TUNING.economy.coinMagnetSpeed * dt;
         const denom = Math.max(1, dist);
