@@ -6,7 +6,16 @@
     <title>Noahsoft — SHMUP</title>
     <style>
       html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-      #game { width: 100vw; height: 100vh; }
+      /*
+       * Mobile browsers report 100vh as the viewport height with the
+       * address bar fully retracted, which is taller than what's actually
+       * visible while the bar is showing. Combined with `overflow: hidden`
+       * above, that clipped the bottom of tall screens (e.g. MapScene's
+       * Season node-map, F8 #136) with no way to scroll to it. 100dvh
+       * tracks the real, currently-visible viewport; the plain 100vh line
+       * stays first as a fallback for browsers that don't support dvh.
+       */
+      #game { width: 100vw; height: 100vh; height: 100dvh; }
     </style>
   </head>
   <body>
