@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
-import { copy, ratingsTierForScore, ratingsTierName } from "../content";
+import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER } from "../content";
 import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet } from "../entities";
@@ -84,7 +84,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   // endless-wave vertical slice.
   private elapsedEpisodeSec = 0;
   private hypeBar!: Phaser.GameObjects.Graphics;
-  private ratingsText!: Phaser.GameObjects.Text;
+  private ratingsBar!: Phaser.GameObjects.Graphics;
+  private timerText!: Phaser.GameObjects.Text;
+  private tierNameText!: Phaser.GameObjects.Text;
 
   private gameOver = false;
   private debugOverlay!: DebugOverlay;
@@ -208,11 +210,23 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.hpBar = this.add.graphics().setDepth(100);
     this.shieldBar = this.add.graphics().setDepth(100);
     this.hypeBar = this.add.graphics().setDepth(100);
+    this.ratingsBar = this.add.graphics().setDepth(100);
 
-    this.ratingsText = this.add
+    // Timer: top-center, monospace to mimic a digital clock readout.
+    this.timerText = this.add
+      .text(GAME_WIDTH / 2, 14, "01:30", {
+        fontFamily: "monospace",
+        fontSize: "18px",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(100);
+
+    // Tier name: top-right, same font/size as score but yellow.
+    this.tierNameText = this.add
       .text(GAME_WIDTH - 16, 14, "", {
         fontFamily: "monospace",
-        fontSize: "14px",
+        fontSize: "18px",
         color: "#ffcc00",
         align: "right",
       })
@@ -701,35 +715,58 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   }
 
   private updateHud(): void {
-    const x = 16;
     const width = 200;
     const height = 10;
+    const leftX = 16;
+    const rightX = GAME_WIDTH - 16;
     const hpY = 44;
     const shieldY = 60;
-    const hypeY = 76;
 
+    // Left side: HP bar (left-to-right).
     this.hpBar.clear();
-    this.hpBar.fillStyle(0x404040).fillRect(x, hpY, width, height);
+    this.hpBar.fillStyle(0x404040).fillRect(leftX, hpY, width, height);
     const hpFrac = Phaser.Math.Clamp(this.player.defender.hp / this.player.stats.maxHp, 0, 1);
-    this.hpBar.fillStyle(0xff6b00).fillRect(x, hpY, width * hpFrac, height);
+    this.hpBar.fillStyle(0xff6b00).fillRect(leftX, hpY, width * hpFrac, height);
 
+    // Left side: Shield bar (left-to-right).
     this.shieldBar.clear();
     if (this.player.stats.maxShield > 0) {
-      this.shieldBar.fillStyle(0x404040).fillRect(x, shieldY, width, height);
+      this.shieldBar.fillStyle(0x404040).fillRect(leftX, shieldY, width, height);
       const shieldFrac = Phaser.Math.Clamp(this.player.defender.shield / this.player.stats.maxShield, 0, 1);
-      this.shieldBar.fillStyle(0x5599ff).fillRect(x, shieldY, width * shieldFrac, height);
+      this.shieldBar.fillStyle(0x5599ff).fillRect(leftX, shieldY, width * shieldFrac, height);
     }
 
+    // Right side: Hype bar (right-to-left, mirroring HP bar row).
     this.hypeBar.clear();
-    this.hypeBar.fillStyle(0x404040).fillRect(x, hypeY, width, height);
+    this.hypeBar.fillStyle(0x404040).fillRect(rightX - width, hpY, width, height);
     const hypeFrac = this.hypeMaxValue > 0 ? Phaser.Math.Clamp(this.hypeState.hype / this.hypeMaxValue, 0, 1) : 0;
-    this.hypeBar.fillStyle(0xffcc00).fillRect(x, hypeY, width * hypeFrac, height);
+    this.hypeBar.fillStyle(0xffcc00).fillRect(rightX - width * hypeFrac, hpY, width * hypeFrac, height);
 
-    this.ratingsText.setText(
-      copy("play.ratings", {
-        ratings: Math.round(this.ratings),
-        tier: ratingsTierName(ratingsTierForScore(this.ratings)),
-      })
-    );
+    // Right side: Ratings progress-to-next-tier bar (right-to-left, mirroring Shield bar row).
+    this.ratingsBar.clear();
+    this.ratingsBar.fillStyle(0x404040).fillRect(rightX - width, shieldY, width, height);
+    const ratingsFrac = this.ratingsProgressFrac();
+    this.ratingsBar.fillStyle(0xaa44ff).fillRect(rightX - width * ratingsFrac, shieldY, width * ratingsFrac, height);
+
+    // Tier name: top-right label above the Hype bar.
+    this.tierNameText.setText(ratingsTierName(ratingsTierForScore(this.ratings)));
+
+    // Timer: countdown from episodeClearDurationSec in MM:SS.
+    const remaining = Math.max(0, TUNING.ratings.episodeClearDurationSec - this.elapsedEpisodeSec);
+    const mins = Math.floor(remaining / 60);
+    const secs = Math.floor(remaining % 60);
+    this.timerText.setText(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
+  }
+
+  /** Progress fraction [0,1] from current tier threshold to the next one; 1 at max tier. */
+  private ratingsProgressFrac(): number {
+    const ladder = [...RATINGS_LADDER];
+    const currentId = ratingsTierForScore(this.ratings);
+    const idx = ladder.findIndex((t) => t.id === currentId);
+    if (idx < 0 || idx >= ladder.length - 1) return 1;
+    const current = ladder[idx];
+    const next = ladder[idx + 1];
+    const range = next.threshold - current.threshold;
+    return range > 0 ? Phaser.Math.Clamp((this.ratings - current.threshold) / range, 0, 1) : 1;
   }
 }
