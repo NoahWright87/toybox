@@ -22,6 +22,7 @@ import type { HypeState, GrazeRingDef } from "../systems/hype";
 import { rollSpawnArchetype, scaledEnemyStats } from "../systems/difficulty";
 import type { EnemyArchetypeId } from "../systems/difficulty";
 import { DebugOverlay } from "../debug/DebugOverlay";
+import { getDebugOverrides } from "../debug/debugSettings";
 import { SCENE_KEYS } from "./sceneData";
 import type { EpisodeLaunchData, ResolveLaunchData } from "./sceneData";
 
@@ -168,7 +169,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     });
 
     const weapons = this.episode.weapons.map((w) => ({ weapon: weaponById(w.weaponId), tier: w.tier }));
-    this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, TEX.ship, weapons);
+    this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, TEX.ship, weapons, getDebugOverrides());
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
 
@@ -254,15 +255,30 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       .setOrigin(1, 0)
       .setDepth(100);
 
-    this.debugOverlay = new DebugOverlay(this, this.player, () => ({
-      hype: this.hypeState.hype,
-      hypeMax: this.hypeMaxValue,
-      scoreMult: this.currentScoreMult,
-      grazeStreak: this.grazeStreak,
-      grazeTotalMult: this.grazeTotalMult,
-      ratings: this.ratings,
-      ratingsTier: ratingsTierName(ratingsTierForScore(this.ratings)),
-    }));
+    this.debugOverlay = new DebugOverlay(
+      this,
+      this.player,
+      () => ({
+        hype: this.hypeState.hype,
+        hypeMax: this.hypeMaxValue,
+        scoreMult: this.currentScoreMult,
+        grazeStreak: this.grazeStreak,
+        grazeTotalMult: this.grazeTotalMult,
+        ratings: this.ratings,
+        ratingsTier: ratingsTierName(ratingsTierForScore(this.ratings)),
+      }),
+      () => this.debugAdvanceStage()
+    );
+  }
+
+  /** Debug-only (C12 #151 follow-up): instantly resolves the current episode as a clear, regardless of node type — a boss node kills the boss outright (through the normal win path) rather than skipping it, so Ratings/score still come out right. */
+  private debugAdvanceStage(): void {
+    if (this.gameOver) return;
+    if (this.isBossNode && this.boss?.active) {
+      this.damageEnemy(this.boss, this.boss.hp, 0);
+      return;
+    }
+    this.clearEpisode();
   }
 
   update(_time: number, delta: number) {
@@ -270,6 +286,16 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.physics.world.drawDebug = this.player.debugShowHitboxes;
     if (!this.physics.world.drawDebug) this.physics.world.debugGraphic?.clear();
     if (this.gameOver) return;
+
+    // Pausing gameplay while the debug menu is open (not just hiding it
+    // behind the panel) is what makes a full-screen panel usable — physics
+    // stepping (and therefore movement/collisions) freezes, but this scene's
+    // own update() keeps running so the overlay's toggle/shortcuts still work.
+    if (this.debugOverlay.isOpen) {
+      this.physics.pause();
+      return;
+    }
+    this.physics.resume();
 
     const dt = delta / 1000;
 
@@ -305,7 +331,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     if (!this.isBossNode) {
       this.elapsedEpisodeSec += dt;
-      if (this.elapsedEpisodeSec >= TUNING.ratings.episodeClearDurationSec) {
+      if (this.elapsedEpisodeSec >= this.player.effectiveEpisodeClearDurationSec) {
         this.clearEpisode();
       }
     }
@@ -679,8 +705,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       ? this.boss
         ? 1 - Math.max(0, this.boss.hp) / this.boss.maxHp
         : 0
-      : TUNING.ratings.episodeClearDurationSec > 0
-        ? this.elapsedEpisodeSec / TUNING.ratings.episodeClearDurationSec
+      : this.player.effectiveEpisodeClearDurationSec > 0
+        ? this.elapsedEpisodeSec / this.player.effectiveEpisodeClearDurationSec
         : 1;
     const loss = ratingsLossOnDeath(stageProgress);
     this.scene.start(SCENE_KEYS.resolve, {
@@ -758,7 +784,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       const hpFrac2 = this.boss ? Phaser.Math.Clamp(this.boss.hp / this.boss.maxHp, 0, 1) : 0;
       this.timerText.setText(`BOSS ${Math.round(hpFrac2 * 100)}%`);
     } else {
-      const remaining = Math.max(0, TUNING.ratings.episodeClearDurationSec - this.elapsedEpisodeSec);
+      const remaining = Math.max(0, this.player.effectiveEpisodeClearDurationSec - this.elapsedEpisodeSec);
       const mins = Math.floor(remaining / 60);
       const secs = Math.floor(remaining % 60);
       this.timerText.setText(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
