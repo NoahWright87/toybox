@@ -49,12 +49,17 @@ kill, worth `TUNING.economy.coinValueBase * rewardCurve(D)` (the same
 drop — it **pops** (Twin Bee bell-style): `Coin.spawn()` gives it always-up
 velocity plus random horizontal velocity (equally likely left/right,
 `coinPopSpeedYMin/Max`/`coinPopSpeedXMax`), then `coinGravity` arcs it back
-down via Arcade Physics. It bounces off the left/right world bounds
-(`setCollideWorldBounds` + `setBounce(1, 0)`, the same pattern the boss
-enemy already uses for its patrol) so it's never lost off the sides, but
-`checkCollision.down = false` lets it sail past the bottom edge to be lost
-for good — this arc-and-bounce is what makes catching a coin a positioning/
-timing skill rather than a guaranteed pickup, per the design intent.
+down via Arcade Physics gravity. `Coin.bounceOffSideWalls()` (a manual check
+in `preUpdate`, not Arcade's `setCollideWorldBounds` — that flag is
+all-or-nothing across every edge and gated by a World-level setting shared
+with the player's own on-screen containment, so it can't be limited to just
+two sides for one body) reflects it off the left/right edges of the play
+area so it's never lost off the sides, while the top and bottom are left
+completely unconstrained: it's free to sail above the top of the play area
+on the way up, and falling off the bottom (`preUpdate`'s existing
+`y > GAME_HEIGHT + 32` check) is a real, permanent loss — this arc-and-bounce
+is what makes catching a coin a positioning/timing skill rather than a
+guaranteed pickup, per the design intent.
 `PlayScene.updateCoins()` runs every frame: a coin within the player's
 **Magnet Radius** stat locks on (`Coin.startHoming()` hands off from the
 pop/gravity/bounce arc to direct-position homing at `coinMagnetSpeed`,

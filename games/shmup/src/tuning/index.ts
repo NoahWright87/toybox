@@ -223,7 +223,7 @@ export const TUNING = {
     coinPopSpeedYMin: 200,
     coinPopSpeedYMax: 340,
     coinPopSpeedXMax: 150,
-    coinGravity: 850,
+    coinGravity: 550,
     // In-flight coins accelerate toward the player once within Magnet
     // Radius, at this speed (px/s), and are caught within this radius (px).
     // Being in flight from the pop doesn't block the magnet lock — a coin

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GAME_HEIGHT } from "../config";
+import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
 
 /**
@@ -13,11 +13,16 @@ import { TUNING } from "../tuning";
  * rather than sitting inert at the kill point. This is what makes catching
  * one a skill/positioning act, not a guaranteed pickup: a coin that pops far
  * from the player, or falls before Magnet Radius reaches it, is lost.
- * Bouncing off the left/right world bounds (`Enemy.ts`'s boss uses the same
- * `setCollideWorldBounds` + `setBounce(1, 0)` pattern) keeps a coin from
- * being unfairly lost off the sides; falling off the bottom is NOT
- * bounced — `checkCollision.down = false` lets it sail past the bottom edge
- * so `preUpdate`'s off-screen check can recycle it, same as it always has.
+ *
+ * Left/right bounce is done manually in `preUpdate` rather than via Arcade's
+ * `setCollideWorldBounds` — that flag is all-or-nothing across every edge,
+ * and `Body.checkWorldBounds()` (Phaser's own source) gates it by
+ * `world.checkCollision`, a setting shared by every body in the scene (the
+ * player's keyboard movement relies on the World's top/bottom bounds to
+ * stay on-screen), not a per-body `body.checkCollision` flag — so there's no
+ * way to ask Arcade for "block left/right, but let this one body alone pass
+ * through top/bottom." A coin needs exactly that: free to sail above the
+ * top of the play area on the way up, and lost for good off the bottom.
  */
 export class Coin extends Phaser.Physics.Arcade.Sprite {
   value = 0;
@@ -41,10 +46,6 @@ export class Coin extends Phaser.Physics.Arcade.Sprite {
     body.enable = true;
     body.setAllowGravity(true);
     body.setGravityY(TUNING.economy.coinGravity);
-    body.setCollideWorldBounds(true);
-    body.setBounce(1, 0); // reflect off left/right walls; no vertical bounce
-    body.checkCollision.up = false; // free to pop above the top edge
-    body.checkCollision.down = false; // falling off the bottom is a loss, not a bounce
 
     const { coinPopSpeedYMin, coinPopSpeedYMax, coinPopSpeedXMax } = TUNING.economy;
     const vy = -Phaser.Math.FloatBetween(coinPopSpeedYMin, coinPopSpeedYMax); // always up (negative y)
@@ -67,10 +68,37 @@ export class Coin extends Phaser.Physics.Arcade.Sprite {
     body.enable = false;
   }
 
-  /** Ages the coin out after `coinLifespanSec` unclaimed — wealth is skill-gated, not a floor loot pile waiting to be swept up later. */
+  /**
+   * Manual left/right bounce (see the class doc for why this isn't Arcade's
+   * `setCollideWorldBounds`) — reflect `vx` and clamp position the instant
+   * the coin's edge reaches either side. Skipped once magnetized: homing
+   * drives position directly and never touches `body.velocity`, so this
+   * would never trigger anyway, but the guard makes the hand-off explicit.
+   */
+  private bounceOffSideWalls(): void {
+    if (this.magnetized) return;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    const halfWidth = this.width / 2;
+    if (this.x <= halfWidth && body.velocity.x < 0) {
+      this.x = halfWidth;
+      body.setVelocityX(-body.velocity.x);
+    } else if (this.x >= GAME_WIDTH - halfWidth && body.velocity.x > 0) {
+      this.x = GAME_WIDTH - halfWidth;
+      body.setVelocityX(-body.velocity.x);
+    }
+  }
+
+  /**
+   * Ages the coin out after `coinLifespanSec` unclaimed, or once it's fallen
+   * off the bottom of the play area — wealth is skill-gated, not a floor
+   * loot pile waiting to be swept up later. Popping above the top of the
+   * play area is fine and expected (Twin Bee-style); there's no matching
+   * top-edge despawn, gravity always eventually brings it back down.
+   */
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active) return;
+    this.bounceOffSideWalls();
     this.ageSec += delta / 1000;
     if (this.ageSec >= TUNING.economy.coinLifespanSec || this.y > GAME_HEIGHT + 32) {
       this.recycle();
