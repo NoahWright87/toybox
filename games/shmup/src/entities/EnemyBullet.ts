@@ -4,7 +4,11 @@ import { TUNING } from "../tuning";
 
 /** Pooled enemy bullet — fixed damage, no pierce/blast (those are player-weapon-only mechanics). */
 export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
+  private static nextSpawnId = 1;
+
   damage = 0;
+  /** Identifies this bullet's current life, not the pooled object — grazing (F7 #135) must track relationships by this, not by object reference, since the underlying sprite is reused across fires (Group.get() recycling). */
+  spawnId = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
     super(scene, x, y, texture);
@@ -12,6 +16,7 @@ export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
 
   fire(x: number, y: number, vx: number, vy: number, damage: number): void {
     this.damage = damage;
+    this.spawnId = EnemyBullet.nextSpawnId++;
     this.setPosition(x, y);
     this.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
     this.setActive(true);

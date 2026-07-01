@@ -1,13 +1,32 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
-import { copy } from "../content";
+import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER } from "../content";
 import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet } from "../entities";
 import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
 import { applyDamage, applyLifesteal, reflexBulletSpeedMult, rollCrit, tickHpRegen, tickShieldRegen } from "../systems/combat";
+import {
+  GrazeTracker,
+  ShmupEventBus,
+  grazeRingAt,
+  hypeMax,
+  gainHype,
+  decayHype,
+  scoreMult,
+  ratingsGainOnClear,
+  ratingsLossOnDeath,
+  applyRatingsDelta,
+  loadRatings,
+  saveRatings,
+} from "../systems/hype";
+import type { HypeState, GrazeRingDef } from "../systems/hype";
 import { DebugOverlay } from "../debug/DebugOverlay";
+
+// Placeholder until a real player-profile/name system exists (F11) — only
+// used to fill the {playerName} token in the Cancelled flavor line.
+const PLACEHOLDER_PLAYER_NAME = "Pilot";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
 // Code never inlines a draw call or file path — it asks for one of these keys,
@@ -49,6 +68,26 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private hpBar!: Phaser.GameObjects.Graphics;
   private shieldBar!: Phaser.GameObjects.Graphics;
 
+  // Grazing / Hype / Ratings (hype-and-ratings.spec.md, F7 #135).
+  private hypeEvents = new ShmupEventBus();
+  private grazeTracker = new GrazeTracker();
+  private hypeState: HypeState = { hype: 0, idleTimeSec: 0 };
+  private hypeMaxValue = 0;
+  private currentScoreMult = 1;
+  private crowdSize = TUNING.hype.crowdSizeDefault;
+  private grazeStreak = 0;
+  private grazeTotalMult = 0;
+  private ratings = 0;
+  // Placeholder "episode cleared" stand-in (run-structure.spec.todo.md /
+  // F8 #136 owns the real stage-end condition) -- surviving this many
+  // seconds makes the on-clear Ratings cash-in path reachable in F6's
+  // endless-wave vertical slice.
+  private elapsedEpisodeSec = 0;
+  private hypeBar!: Phaser.GameObjects.Graphics;
+  private ratingsBar!: Phaser.GameObjects.Graphics;
+  private timerText!: Phaser.GameObjects.Text;
+  private tierNameText!: Phaser.GameObjects.Text;
+
   private gameOver = false;
   private debugOverlay!: DebugOverlay;
   private enemySpawnCooldownMs: number = TUNING.enemies.drone.spawnIntervalMs;
@@ -65,6 +104,19 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     ensurePlaceholderTextures(this);
     this.gameOver = false;
     this.score = 0;
+
+    // PlayScene's instance survives scene.restart() (only init/create rerun,
+    // not the constructor), so every piece of run state needs an explicit
+    // reset here -- same reason `this.score = 0` above already exists.
+    this.hypeState = { hype: 0, idleTimeSec: 0 };
+    this.elapsedEpisodeSec = 0;
+    this.grazeTracker.reset();
+    this.grazeStreak = 0;
+    this.grazeTotalMult = 0;
+    this.crowdSize = TUNING.hype.crowdSizeDefault;
+    this.hypeMaxValue = hypeMax(this.crowdSize);
+    this.currentScoreMult = 1;
+    this.ratings = loadRatings();
 
     this.background = this.add
       .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
@@ -157,8 +209,39 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     this.hpBar = this.add.graphics().setDepth(100);
     this.shieldBar = this.add.graphics().setDepth(100);
+    this.hypeBar = this.add.graphics().setDepth(100);
+    this.ratingsBar = this.add.graphics().setDepth(100);
 
-    this.debugOverlay = new DebugOverlay(this, this.player);
+    // Timer: top-center, monospace to mimic a digital clock readout.
+    this.timerText = this.add
+      .text(GAME_WIDTH / 2, 14, "01:30", {
+        fontFamily: "monospace",
+        fontSize: "18px",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(100);
+
+    // Tier name: top-right, same font/size as score but yellow.
+    this.tierNameText = this.add
+      .text(GAME_WIDTH - 16, 14, "", {
+        fontFamily: "monospace",
+        fontSize: "18px",
+        color: "#ffcc00",
+        align: "right",
+      })
+      .setOrigin(1, 0)
+      .setDepth(100);
+
+    this.debugOverlay = new DebugOverlay(this, this.player, () => ({
+      hype: this.hypeState.hype,
+      hypeMax: this.hypeMaxValue,
+      scoreMult: this.currentScoreMult,
+      grazeStreak: this.grazeStreak,
+      grazeTotalMult: this.grazeTotalMult,
+      ratings: this.ratings,
+      ratingsTier: ratingsTierName(ratingsTierForScore(this.ratings)),
+    }));
   }
 
   update(_time: number, delta: number) {
@@ -171,6 +254,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     this.updateMovement(dt);
     this.player.tickIFrame(delta);
+    this.updateGrazeAndHype(dt);
 
     for (const req of this.player.tryFire(delta)) {
       this.fireWeapon(req);
@@ -198,6 +282,47 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         star.x = Phaser.Math.Between(0, GAME_WIDTH);
       }
     }
+
+    this.elapsedEpisodeSec += dt;
+    if (this.elapsedEpisodeSec >= TUNING.ratings.episodeClearDurationSec) {
+      this.clearEpisode();
+    }
+  }
+
+  /**
+   * Graze detection (concentric rings around grazeRadius, innermost-only
+   * payout) feeds the Hype meter directly: gain while actively grazing,
+   * super-linear decay otherwise (Model 1 formulas, hype-and-ratings.spec.md).
+   */
+  private updateGrazeAndHype(dt: number): void {
+    const grazeMap = new Map<number, GrazeRingDef>();
+    for (const bullet of this.enemyBullets.getChildren() as EnemyBullet[]) {
+      if (!bullet.active) continue;
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, bullet.x, bullet.y);
+      const ring = grazeRingAt(dist, this.player.stats.grazeRadius, TUNING.graze.rings);
+      if (ring) grazeMap.set(bullet.spawnId, ring);
+    }
+
+    const grazeResult = this.grazeTracker.update(grazeMap);
+    for (const event of grazeResult.events) {
+      this.hypeEvents.emit(event.type === "start" ? "grazeStart" : "grazeEnd", event);
+    }
+    this.grazeStreak = grazeResult.streak;
+    this.grazeTotalMult = grazeResult.totalMult;
+
+    this.hypeMaxValue = hypeMax(this.crowdSize);
+    if (grazeResult.totalMult > 0) {
+      const gainRate = TUNING.hype.grazeGainPerSecond * grazeResult.totalMult * this.player.stats.grazeMultiplier;
+      this.hypeState = gainHype(this.hypeState, gainRate * dt, this.hypeMaxValue);
+    } else {
+      this.hypeState = decayHype(this.hypeState, dt, this.hypeMaxValue);
+    }
+    this.currentScoreMult = scoreMult(this.hypeState.hype, this.hypeMaxValue);
+    this.hypeEvents.emit("hypeChanged", {
+      hype: this.hypeState.hype,
+      hypeMax: this.hypeMaxValue,
+      scoreMult: this.currentScoreMult,
+    });
   }
 
   private updateMovement(dt: number): void {
@@ -424,9 +549,22 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.spawnDamageNumber(enemy.x, enemy.y, damage, numCrits);
     if (enemy.hp <= 0) {
       enemy.recycle();
-      this.score += enemy.scoreValue;
-      this.scoreText.setText(copy("play.score", { score: this.score }));
+      this.gainScore(enemy.scoreValue);
     }
+  }
+
+  /**
+   * Hype is rewarded exactly once, here, via ScoreMult on the score gain
+   * itself (hype-and-ratings.spec.md's Model 1: "Hype rewarded exactly
+   * once via ScoreMult, no double-multiplying") — Ratings later converts off
+   * of this already-inflated `this.score`, so ratings.ts must never apply
+   * ScoreMult a second time.
+   */
+  private gainScore(baseAmount: number, source = "kill"): void {
+    const amount = baseAmount * this.currentScoreMult;
+    this.score += amount;
+    this.scoreText.setText(copy("play.score", { score: Math.round(this.score) }));
+    this.hypeEvents.emit("scoreEvent", { source, baseAmount, scoreMult: this.currentScoreMult, amount });
   }
 
   /** Crit styling per the user's request: bigger, gold-colored, one "!" per crit stacked on the shot (combat.spec.todo.md's numCrits, not re-rolled per pierce/fork impact). */
@@ -482,17 +620,85 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   // death ends the episode. The map/run-structure system (F8/F11) doesn't
   // exist yet, so F6's vertical slice simplifies "returned to the map" to an
   // immediate restart.
+  //
+  // Ratings cash-in on death (hype-and-ratings.spec.md, F7 #135):
+  // stageProgress stands in as elapsedEpisodeSec/episodeClearDurationSec
+  // until F8's real stage-end condition exists, so dying immediately loses
+  // the full base penalty and dying right at the clear line loses ~nothing.
+  // A drop below 0 cumulative Ratings is Cancelled — the run's Ratings
+  // resets to 0 rather than going negative.
   private endEpisode(): void {
+    const stageProgress =
+      TUNING.ratings.episodeClearDurationSec > 0
+        ? this.elapsedEpisodeSec / TUNING.ratings.episodeClearDurationSec
+        : 1;
+    const loss = ratingsLossOnDeath(stageProgress);
+    const result = applyRatingsDelta(this.ratings, -loss);
+    const appliedDelta = (result.cancelled ? 0 : result.ratings) - this.ratings;
+    this.ratings = result.cancelled ? 0 : result.ratings;
+    saveRatings(this.ratings);
+    this.hypeEvents.emit("ratingsChanged", {
+      ratings: this.ratings,
+      delta: appliedDelta,
+      tier: ratingsTierForScore(this.ratings),
+      cancelled: result.cancelled,
+    });
+
+    if (result.cancelled) {
+      this.showEndScreen([
+        copy("cancelled.title"),
+        "",
+        copy("cancelled.flavor", { playerName: PLACEHOLDER_PLAYER_NAME }),
+        "",
+        copy("play.episodeOver.score", { score: Math.round(this.score) }),
+        "",
+        copy("play.episodeOver.restartPrompt"),
+      ]);
+      return;
+    }
+
+    this.showEndScreen([
+      copy("play.episodeOver.title"),
+      "",
+      copy("play.episodeOver.score", { score: Math.round(this.score) }),
+      copy("play.episodeOver.ratingsLoss", { ratings: Math.round(loss) }),
+      "",
+      copy("play.episodeOver.restartPrompt"),
+    ]);
+  }
+
+  /**
+   * Basic end-of-episode cash-in of Hype into Ratings (hype-and-ratings.spec.md,
+   * F7 #135) — the full episode->map transition is F8 #136's job, not this
+   * issue's; this just proves the conversion path exists by restarting the
+   * same vertical-slice episode once `episodeClearDurationSec` is survived.
+   */
+  private clearEpisode(): void {
+    const gain = ratingsGainOnClear(this.score);
+    const result = applyRatingsDelta(this.ratings, gain);
+    this.ratings = result.ratings;
+    saveRatings(this.ratings);
+    this.hypeEvents.emit("ratingsChanged", {
+      ratings: this.ratings,
+      delta: gain,
+      tier: ratingsTierForScore(this.ratings),
+      cancelled: result.cancelled,
+    });
+
+    this.showEndScreen([
+      copy("play.episodeClear.title"),
+      "",
+      copy("play.episodeClear.score", { score: Math.round(this.score) }),
+      copy("play.episodeClear.ratingsGain", { ratings: Math.round(gain) }),
+      "",
+      copy("play.continuePrompt"),
+    ]);
+  }
+
+  private showEndScreen(lines: string[]): void {
     this.gameOver = true;
     this.physics.pause();
 
-    const lines = [
-      copy("play.episodeOver.title"),
-      "",
-      copy("play.episodeOver.score", { score: this.score }),
-      "",
-      copy("play.episodeOver.restartPrompt"),
-    ];
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, lines.join("\n"), {
         fontFamily: "monospace",
@@ -509,22 +715,58 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   }
 
   private updateHud(): void {
-    const x = 16;
     const width = 200;
     const height = 10;
+    const leftX = 16;
+    const rightX = GAME_WIDTH - 16;
     const hpY = 44;
     const shieldY = 60;
 
+    // Left side: HP bar (left-to-right).
     this.hpBar.clear();
-    this.hpBar.fillStyle(0x404040).fillRect(x, hpY, width, height);
+    this.hpBar.fillStyle(0x404040).fillRect(leftX, hpY, width, height);
     const hpFrac = Phaser.Math.Clamp(this.player.defender.hp / this.player.stats.maxHp, 0, 1);
-    this.hpBar.fillStyle(0xff6b00).fillRect(x, hpY, width * hpFrac, height);
+    this.hpBar.fillStyle(0xff6b00).fillRect(leftX, hpY, width * hpFrac, height);
 
+    // Left side: Shield bar (left-to-right).
     this.shieldBar.clear();
     if (this.player.stats.maxShield > 0) {
-      this.shieldBar.fillStyle(0x404040).fillRect(x, shieldY, width, height);
+      this.shieldBar.fillStyle(0x404040).fillRect(leftX, shieldY, width, height);
       const shieldFrac = Phaser.Math.Clamp(this.player.defender.shield / this.player.stats.maxShield, 0, 1);
-      this.shieldBar.fillStyle(0x5599ff).fillRect(x, shieldY, width * shieldFrac, height);
+      this.shieldBar.fillStyle(0x5599ff).fillRect(leftX, shieldY, width * shieldFrac, height);
     }
+
+    // Right side: Hype bar (right-to-left, mirroring HP bar row).
+    this.hypeBar.clear();
+    this.hypeBar.fillStyle(0x404040).fillRect(rightX - width, hpY, width, height);
+    const hypeFrac = this.hypeMaxValue > 0 ? Phaser.Math.Clamp(this.hypeState.hype / this.hypeMaxValue, 0, 1) : 0;
+    this.hypeBar.fillStyle(0xffcc00).fillRect(rightX - width * hypeFrac, hpY, width * hypeFrac, height);
+
+    // Right side: Ratings progress-to-next-tier bar (right-to-left, mirroring Shield bar row).
+    this.ratingsBar.clear();
+    this.ratingsBar.fillStyle(0x404040).fillRect(rightX - width, shieldY, width, height);
+    const ratingsFrac = this.ratingsProgressFrac();
+    this.ratingsBar.fillStyle(0xaa44ff).fillRect(rightX - width * ratingsFrac, shieldY, width * ratingsFrac, height);
+
+    // Tier name: top-right label above the Hype bar.
+    this.tierNameText.setText(ratingsTierName(ratingsTierForScore(this.ratings)));
+
+    // Timer: countdown from episodeClearDurationSec in MM:SS.
+    const remaining = Math.max(0, TUNING.ratings.episodeClearDurationSec - this.elapsedEpisodeSec);
+    const mins = Math.floor(remaining / 60);
+    const secs = Math.floor(remaining % 60);
+    this.timerText.setText(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
+  }
+
+  /** Progress fraction [0,1] from current tier threshold to the next one; 1 at max tier. */
+  private ratingsProgressFrac(): number {
+    const ladder = [...RATINGS_LADDER];
+    const currentId = ratingsTierForScore(this.ratings);
+    const idx = ladder.findIndex((t) => t.id === currentId);
+    if (idx < 0 || idx >= ladder.length - 1) return 1;
+    const current = ladder[idx];
+    const next = ladder[idx + 1];
+    const range = next.threshold - current.threshold;
+    return range > 0 ? Phaser.Math.Clamp((this.ratings - current.threshold) / range, 0, 1) : 1;
   }
 }

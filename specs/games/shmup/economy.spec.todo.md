@@ -8,7 +8,7 @@
 |---|---|---|
 | **EXP → Levels** | permanent | earned automatically; the build skeleton |
 | **Gold → Shop** | permanent, bankable | earns interest; deliberate power |
-| **Hype → Ratings** | ephemeral → career | performance; see `hype-and-ratings.spec.todo.md` |
+| **Hype → Ratings** | ephemeral → career | performance; see `hype-and-ratings.spec.md` |
 
 ## EXP & Levels
 

@@ -44,4 +44,12 @@ export const COPY = {
   "play.episodeOver.title": "EPISODE OVER",
   "play.episodeOver.score": "Final Score: {score}",
   "play.episodeOver.restartPrompt": "PRESS ANY KEY OR TAP TO TRY AGAIN",
+
+  // ---- Hype / Ratings HUD/flow (hype-and-ratings.spec.md, F7 #135) ----
+  "play.ratings": "RATINGS {ratings} · {tier}",
+  "play.episodeClear.title": "EPISODE CLEAR",
+  "play.episodeClear.score": "Final Score: {score}",
+  "play.episodeClear.ratingsGain": "+{ratings} Ratings",
+  "play.episodeOver.ratingsLoss": "-{ratings} Ratings",
+  "play.continuePrompt": "PRESS ANY KEY OR TAP TO CONTINUE",
 } as const;

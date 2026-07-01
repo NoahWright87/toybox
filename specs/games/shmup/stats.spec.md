@@ -37,7 +37,7 @@ Level-ups (`economy.spec.todo.md`) only ever offer these (`MAIN_STAT_IDS` in `sy
 
 **Exotic stats** (`EXOTIC_STAT_IDS`) — Pierce, Blast Radius, Homing Strength — never appear in level-ups. They come only from weapons/items/shop, keeping the level pick legible and exotic builds intentional. Pierce and Homing Strength are unbounded percentages; Blast Radius is a flat px value. Pierce used to be four separate stats (Pierce/Bounce/Fork/Chain) — they were behaviorally redundant, so they were consolidated into one unified Pierce stat with per-weapon `PierceDecay` driving the above-100% forking behavior (`weapons.spec.todo.md`).
 
-Hype/graze-specific stats (graze radius, graze multiplier, hitbox size) are **not** part of this table yet — `hype-and-ratings.spec.todo.md` (F7 #135) adds them using the same `StatDef` shape when that system lands.
+Hype/graze-specific stats — `grazeRadius`, `grazeMultiplier` — are exotics too, added to `EXOTIC_STAT_IDS` by `hype-and-ratings.spec.md` (F7 #135), using the same `StatDef` shape as the rest of this table. Hitbox size is not a stat; it's a fixed normal/Focus radius pair (`TUNING.combat.hitboxRadiusNormal`/`hitboxRadiusFocus`, F6 #134).
 
 ## StatDef shape
 
@@ -70,7 +70,7 @@ Both layers are plain `StatModifier[]` (`{ kind: "flat", stat, amount }` or `{ k
 
 - Base Crit Chance **1%**, base Crit Damage **50%**, base Evasion **1%** (`TUNING.combat`).
 - Stacking model = the hybrid grammar above (resolved).
-- Graze rings = fractions of the radius stat, separate multiplier stat, **innermost ring only** (see `hype-and-ratings.spec.todo.md`) — not yet implemented; tracked there.
+- Graze rings = fractions of the radius stat, separate multiplier stat, **innermost ring only** — implemented, see `hype-and-ratings.spec.md`.
 - Projectile speed is **not** a player stat — it's a per-weapon authored property (`weapons.spec.todo.md`).
 
 ## Related
@@ -78,5 +78,5 @@ Both layers are plain `StatModifier[]` (`{ kind: "flat", stat, amount }` or `{ k
 - [`combat.spec.todo.md`](combat.spec.todo.md) — consumes these stats for the damage/defense/mobility pipeline (F6 #134)
 - [`tuning.spec.todo.md`](tuning.spec.todo.md) — owns every numeric constant referenced here
 - [`weapons.spec.todo.md`](weapons.spec.todo.md) — `scalesWith: StatId[]` on weapon/item defs (F4 #132)
-- [`hype-and-ratings.spec.todo.md`](hype-and-ratings.spec.todo.md) — future graze-specific stats (F7 #135)
+- [`hype-and-ratings.spec.md`](hype-and-ratings.spec.md) — graze-specific exotic stats (F7 #135)
 - [`overview.spec.todo.md`](overview.spec.todo.md) — spec map

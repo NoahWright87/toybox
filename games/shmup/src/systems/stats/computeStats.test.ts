@@ -6,10 +6,10 @@ import { formatStatValue } from "./format";
 import type { StatModifier } from "./types";
 
 describe("STAT_DEFS", () => {
-  it("has exactly the 16 main stats + 3 exotic stats", () => {
+  it("has exactly the 16 main stats + 5 exotic stats", () => {
     expect(MAIN_STAT_IDS).toHaveLength(16);
-    expect(EXOTIC_STAT_IDS).toHaveLength(3);
-    expect(Object.keys(STAT_DEFS)).toHaveLength(19);
+    expect(EXOTIC_STAT_IDS).toHaveLength(5);
+    expect(Object.keys(STAT_DEFS)).toHaveLength(21);
   });
 
   it("every hyperbolic stat declares a K", () => {

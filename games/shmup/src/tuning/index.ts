@@ -53,8 +53,52 @@ export const TUNING = {
     // overlapping enemy/bullet would re-deal damage every physics step.
     playerIFrameMs: 500,
   },
+  // Grazing (hype-and-ratings.spec.md, F7 #135): concentric rings as
+  // fractions of the grazeRadius stat. Innermost ring only applies (no
+  // stacking) — point-blank grazing is the deliberate high-skill act.
+  // Ordering here doesn't matter to the math (grazeRingAt sorts by frac),
+  // but is written outermost-first to match the spec's authored shape.
+  graze: {
+    rings: [
+      { frac: 1.0, mult: 1 },
+      { frac: 0.55, mult: 2 },
+      { frac: 0.25, mult: 4 },
+    ],
+    grazeRadiusBase: 70,
+    // unboundedMult base of 1 == "no bonus" (same convention as damage):
+    // payout = ring.mult * grazeMultiplier stat.
+    grazeMultiplierBase: 1,
+  },
+  // Hype (hype-and-ratings.spec.md, Model 1 — F7 #135). HypeMax scales with
+  // crowd size; crowdSizeDefault is a stand-in until the audience service
+  // (T10 #161) supplies a real crowd-size number.
   hype: {
-    // hypeBase, k_idle, k_level, baseDecay, M (ScoreMult depth) — F7
+    base: 100,
+    crowdSizeDefault: 1,
+    kIdle: 0.6,
+    kLevel: 0.8,
+    baseDecay: 6,
+    // M in `ScoreMult = 1 + (Hype/HypeMax)*M` — up to x3 at full Hype.
+    scoreMultDepth: 2,
+    // Hype/s while grazing at ring mult 1 and grazeMultiplier 1 — scaled by
+    // both at the point of use (PlayScene). Grazing is the only Hype source
+    // this slice wires up; kill/trick/elite sources are future item-driven
+    // additions per the spec's "Hype-source items reshape the meter" note.
+    grazeGainPerSecond: 18,
+  },
+  // Ratings (hype-and-ratings.spec.md Model 1, F7 #135). Hype is rewarded
+  // exactly once via ScoreMult; Ratings derives from the resulting
+  // Hype-inflated Score — never apply a second Hype multiplier here.
+  ratings: {
+    crowdConversion: 0.02,
+    deathBasePenalty: 40,
+    deathEmbarrassmentMod: 1,
+    // F6's vertical slice has no real stage/boss structure yet (F8 #136
+    // owns the node map/season system) — surviving this many seconds
+    // stands in for "episode cleared" so the on-clear cash-in path is
+    // reachable, and doubles as the denominator for stageProgress on an
+    // early death. F8 replaces this with the real stage-end condition.
+    episodeClearDurationSec: 90,
   },
   difficulty: {
     seasonCount: 5,

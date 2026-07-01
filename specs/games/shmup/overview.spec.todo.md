@@ -42,7 +42,7 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 | `weapons.spec.todo.md` | effect engine, attack modifiers, gold upgrades | F4 #132, C1 #140, C2 #141 |
 | `items-and-brands.spec.todo.md` | items, stacking, brand tags, offer weighting | F4 #132, F9 #137, C3 #142, C4 #143 |
 | `chassis.spec.todo.md` | chassis framework, focus, polarity example | F10 #138, C7 #146, C8 #147 |
-| `hype-and-ratings.spec.todo.md` | grazing, Hype + Ratings formulas (Model 1) | F7 #135 |
+| `hype-and-ratings.spec.md` | grazing, Hype + Ratings formulas (Model 1) — **implemented** | F7 #135 |
 | `economy.spec.todo.md` | currencies, coins/tips, interest, shop, gold sinks | F9 #137 |
 | `run-structure.spec.todo.md` | seasons, node map, death, persistence, escalation | F8 #136, F11 #139 |
 | `audience-and-score.spec.todo.md` | studio audience, crowd comments, score & results | T10 #161, C14 #163 |

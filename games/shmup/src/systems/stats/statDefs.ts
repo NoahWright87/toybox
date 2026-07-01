@@ -205,4 +205,25 @@ export const STAT_DEFS: Record<StatId, StatDef> = {
     unit: "percent",
     display: "Homing Strength",
   },
+  // Graze radius/multiplier (hype-and-ratings.spec.md, F7 #135): the
+  // concentric-ring graze rings are fractions of this radius; grazeMultiplier
+  // is a separate stat applied to graze payout, not a ring property itself.
+  grazeRadius: {
+    id: "grazeRadius",
+    category: "exotic",
+    archetype: "flat",
+    base: TUNING.graze.grazeRadiusBase,
+    min: 0,
+    unit: "px",
+    display: "Graze Radius",
+  },
+  grazeMultiplier: {
+    id: "grazeMultiplier",
+    category: "exotic",
+    archetype: "unboundedMult",
+    base: TUNING.graze.grazeMultiplierBase,
+    min: 0,
+    unit: "multiplier",
+    display: "Graze Multiplier",
+  },
 };

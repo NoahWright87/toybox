@@ -14,7 +14,7 @@ This file enumerates levers by group; the module is the source of truth.
 - Reflexes caps: `bulletSlowCap≈0.80`, `moveSlowCap≈0.50`.
 - Flat-stat clamps (hitbox floor, etc.).
 
-## Hype & Ratings (`hype-and-ratings.spec.todo.md`)
+## Hype & Ratings (`hype-and-ratings.spec.md`)
 - Hype: `hypeBase`, `crowdSize→HypeMax` mapping, `k_idle`, `k_level`, `baseDecay`, `M` (ScoreMult depth).
 - Graze rings: `[{frac,mult}]` table.
 - Ratings: `CrowdConversion`, `BasePenalty`, `embarrassmentMod` table, tier thresholds, `Cancelled = Ratings < 0`.

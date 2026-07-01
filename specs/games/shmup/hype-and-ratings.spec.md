@@ -1,0 +1,151 @@
+# Shmup — Hype & Ratings Spec
+
+> Issue: **F7 #135**. Status: implemented (Model 1). Code lives in
+> `games/shmup/src/systems/hype/`, integrated into
+> `games/shmup/src/scenes/PlayScene.ts`. The episode->map transition (real
+> stage-end condition, node graph) is **F8 #136**'s job — this slice stands
+> in with a fixed survival timer so the on-clear cash-in path is reachable.
+
+## Grazing
+
+Detection runs every frame in `PlayScene.updateGrazeAndHype()`: for each
+active `EnemyBullet`, the distance to the player is compared against
+concentric rings, fractions of the player's `grazeRadius` stat
+(`TUNING.graze.rings`, `grazeRingAt()` in `systems/hype/grazeRings.ts`):
+
+```
+rings = [{frac:1.0, mult:1}, {frac:0.55, mult:2}, {frac:0.25, mult:4}]
+```
+
+- A bullet grazes ring `r` when `distance <= grazeRadius × r.frac`. Rings are
+  evaluated smallest-`frac`-first so a bullet inside multiple rings only ever
+  pays out its **innermost** match — no stacking. Point-blank grazing is the
+  deliberate high-skill, high-reward act.
+- `grazeMultiplier` is a separate stat (`EXOTIC_STAT_IDS`) applied on top of
+  the matched ring's `mult` at the point of use.
+- Identity across frames is tracked by `EnemyBullet.spawnId` (a static
+  incrementing counter, not object reference), since Arcade Physics pools and
+  recycles bullet sprites. `GrazeTracker` (`systems/hype/grazeTracker.ts`)
+  diffs this frame's graze map against last frame's to emit `start`/`end`
+  events with a live streak count, and re-grazing a recycled `spawnId` after
+  an `end` is treated as a brand-new `start`.
+- The graze event API is documented in `systems/hype/types.ts`'s
+  `ShmupEventMap` (`grazeStart`, `grazeEnd`, plus `hypeChanged`,
+  `ratingsChanged`, `scoreEvent`) and delivered over `ShmupEventBus`
+  (`systems/hype/eventBus.ts`). PlayScene is currently both the sole emitter
+  and the sole subscriber (HUD + debug overlay); items (F4), the audience
+  service (T10 #161), and Score (C14 #163) subscribe once they exist.
+
+## Hype — in-episode performance meter
+
+Starts at 0 each episode (`PlayScene.create()` resets `hypeState` on every
+`scene.restart()`, since Phaser doesn't rerun the constructor). Rendered as a
+gold bar in the HUD beneath HP/Shield.
+
+```
+HypeMax = base × crowdSize × itemMods
+gain:    Hype += eventValue × hypeGainMods       # clamp to HypeMax; idleTime -> 0
+decay:   d = baseDecay × (1 + k_idle·idleTime) × (1 + k_level·Hype/HypeMax)
+         Hype = max(0, Hype - d·dt)              # super-linear: idle = rapid crash, top is slippery
+reward:  ScoreMult = 1 + (Hype/HypeMax)·M
+```
+
+Implemented in `systems/hype/hype.ts` (`hypeMax`, `gainHype`, `decayHype`,
+`scoreMult`), constants in `TUNING.hype`:
+
+- `base = 100`, `crowdSizeDefault = 1` (stand-in until the audience service,
+  T10 #161, supplies a real crowd size), `kIdle = 0.6`, `kLevel = 0.8`,
+  `baseDecay = 6`, `scoreMultDepth = 2` (M — up to ×3 score at full Hype).
+- `grazeGainPerSecond = 18` — Hype/s while grazing at ring `mult` 1 and
+  `grazeMultiplier` 1, scaled by both at the point of use. **Grazing is the
+  only Hype source this slice wires up** — kill/trick/elite sources (and
+  Hype-reshaping items like Masochist) are future item-driven additions, not
+  implemented here.
+- `gainHype`/`decayHype` both guard `hypeMaxValue <= 0` to avoid a
+  divide-by-zero; `scoreMult` does the same, returning `1`.
+
+`PlayScene.updateGrazeAndHype()` recomputes `hypeMaxValue` every frame,
+applies `gainHype` while `grazeResult.totalMult > 0` (continuous per-second
+accrual: `grazeGainPerSecond × totalMult × grazeMultiplier stat × dt` as the
+`eventValue`), otherwise applies `decayHype`, then derives `currentScoreMult`
+from the resulting Hype and emits `hypeChanged`.
+
+## Score — ScoreMult applied exactly once
+
+`PlayScene.gainScore(baseAmount, source)` is the single place score is added:
+`amount = baseAmount × currentScoreMult`. Every kill (`damageEnemy()`) routes
+through it, and it emits `scoreEvent` (`{ source, baseAmount, scoreMult,
+amount }`) on the event bus. **No other code path adds to `this.score`** —
+this is what keeps Ratings' conversion from double-counting Hype (see below).
+
+## Ratings — persistent career tier
+
+Earned by converting the episode's (Hype-inflated) Score at episode end.
+Persists across restarts via `localStorage` (`systems/hype/persistence.ts`,
+key `shmup_ratings_v1` — distinct from NS Doors 97's own filesystem storage,
+since the standalone Shmup page can't import the live `fsStore` singleton).
+
+```
+# Model 1 -- Hype is rewarded ONCE, via ScoreMult. Do NOT apply a second Hype multiplier.
+on clear:  RatingsGain = EpisodeScore × CrowdConversion × ratingsMods
+           # EpisodeScore is already Hype-inflated, so "average Hype" is baked in via the integral
+on death:  RatingsLoss = BasePenalty × (1 - stageProgress) × embarrassmentMod
+           # + forfeit the episode's would-be RatingsGain (nothing banks)
+cancelled: cumulative Ratings < 0
+```
+
+Implemented in `systems/hype/ratings.ts` (`ratingsGainOnClear`,
+`ratingsLossOnDeath`, `applyRatingsDelta`), constants in `TUNING.ratings`:
+
+- `crowdConversion = 0.02`, `deathBasePenalty = 40`,
+  `deathEmbarrassmentMod = 1`.
+- `episodeClearDurationSec = 90` — F6's vertical slice has no real
+  stage/boss structure yet (F8 #136 owns the node map/season system), so
+  surviving this many seconds stands in for "episode cleared," and doubles
+  as the denominator for `stageProgress` on an early death
+  (`elapsedEpisodeSec / episodeClearDurationSec`, clamped into `[0, 1]` by
+  `ratingsLossOnDeath`).
+
+`applyRatingsDelta(current, delta)` returns the new value plus a `cancelled`
+flag (`ratings < 0`). On death (`PlayScene.endEpisode()`), a cancelled result
+resets `this.ratings` to `0` (both in memory and persisted) and shows the
+`cancelled.title`/`cancelled.flavor` screen instead of the normal "Episode
+Over" screen; a non-cancelled result persists the reduced Ratings and shows
+the loss inline (`play.episodeOver.ratingsLoss`). On clear
+(`PlayScene.clearEpisode()`), the gain is persisted and shown
+(`play.episodeClear.ratingsGain`), then the same episode restarts — this is
+explicitly the **basic** cash-in proving the conversion path; the full
+episode->map transition (node graph, season/series progression) is F8
+#136's job.
+
+- **Gates ACCESS, not difficulty:** more node options skewed toward special
+  nodes (`run-structure.spec.todo.md`) — not yet wired up, since the node
+  map doesn't exist yet (F8 #136).
+- **Tier ladder** (`content/ratings.ts`'s `RATINGS_LADDER`, looked up via
+  `ratingsTierForScore`/`ratingsTierName` in `content/accessors.ts`): Nobody
+  -> Has-Been -> Cult Following -> Local Legend -> Up-and-Comer -> Household
+  Name -> Radical -> Kevin Bacon, at thresholds 0/100/500/1500/4000/10000/
+  25000/60000. Displayed live in the HUD (`play.ratings` copy key,
+  top-right) and in the debug overlay.
+
+## Why Model 1
+
+Current Hype multiplies score live; accumulating that Hype-inflated score
+across the episode *is* a time-average of your Hype, weighted by activity.
+So a separate average/peak-Hype settlement multiplier would double-count.
+Hype is rewarded exactly once, continuously, via `ScoreMult` in
+`gainScore()` — `ratingsGainOnClear`/`ratingsLossOnDeath` never re-apply it.
+
+## Related
+
+- [`stats.spec.md`](stats.spec.md) — `grazeRadius`/`grazeMultiplier` exotic
+  stats (F3 #131) that grazing reads
+- [`combat.spec.todo.md`](combat.spec.todo.md) — `EnemyBullet.spawnId`,
+  pooled-entity identity pattern shared with grazing's `GrazeTracker`
+- [`run-structure.spec.todo.md`](run-structure.spec.todo.md) — F8 #136's
+  real episode->map transition, stage-end condition, and Ratings-gated node
+  access (this spec's `episodeClearDurationSec` placeholder and basic
+  cash-in are superseded there)
+- [`tuning.spec.todo.md`](tuning.spec.todo.md) — owns every numeric constant
+  referenced here (`TUNING.graze`, `TUNING.hype`, `TUNING.ratings`)
+- [`overview.spec.todo.md`](overview.spec.todo.md) — spec map

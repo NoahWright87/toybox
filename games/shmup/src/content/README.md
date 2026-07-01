@@ -77,7 +77,7 @@ adjust a threshold, or insert a new tier directly; `ratingsTierName()`,
 `ratingsTierRank()`, and `ratingsTierForScore()` (in `accessors.ts`) all
 read from this array, so there's nothing else to keep in sync. Thresholds
 here are placeholders — the real balance numbers are TBD per
-`hype-and-ratings.spec.todo.md`.
+`hype-and-ratings.spec.md`.
 
 ## Editing sponsor brands (`brands.ts`)
 
