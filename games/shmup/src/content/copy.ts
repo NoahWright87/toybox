@@ -108,8 +108,8 @@ export const COPY = {
   "levelup.pickPrompt": "Pick {current} of {total}",
 
   // ---- Reroll (economy.spec.todo.md, F9 #137): shared copy — level-up picks and shop visits both spend the same escalating-cost reroll. ----
-  "reroll.cost": "REROLL ({cost}g)",
-  "reroll.free": "REROLL (FREE)",
+  "reroll.cost": "🎲 REROLL ({cost}g)",
+  "reroll.free": "🎲 REROLL (FREE)",
   "reroll.cantAfford": "Not enough gold to reroll",
 
   // ---- Shop (economy.spec.todo.md, F9 #137): baseline break shop + dedicated map shop nodes ----
@@ -122,8 +122,9 @@ export const COPY = {
   "shop.slotsFull": "SLOTS FULL",
   "shop.atCap": "MAXED",
   "shop.cantAfford": "CAN'T AFFORD",
-  "shop.leave": "LEAVE SHOP",
+  "shop.leave": "🚪 DONE",
   "shop.empty": "Nothing left in stock.",
+  "shop.emptySlot": "EMPTY",
 
   // ---- Economy HUD (economy.spec.todo.md, F9 #137) ----
   "play.level": "LV {level}",

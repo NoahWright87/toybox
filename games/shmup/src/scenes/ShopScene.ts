@@ -13,14 +13,19 @@ import {
   statPickMods,
 } from "../systems/economy";
 import type { ShopStockEntry } from "../systems/economy";
-import { MAX_WEAPON_SLOTS, resolveLoadout, weaponUpgradeCost } from "../systems/effects";
+import { MAX_WEAPON_SLOTS, resolveLoadout, weaponModsAtTier, weaponUpgradeCost } from "../systems/effects";
 import type { OwnedItem, OwnedWeapon } from "../systems/effects";
+import { STAT_DEFS, formatModifierAmount } from "../systems/stats";
+import type { StatModifier } from "../systems/stats";
 import { SCENE_KEYS } from "./sceneData";
 import type { ShopLaunchData } from "./sceneData";
 
-// Sized so the worst case (6 owned weapons + a 5-slot dedicated shop node)
-// still clears the footer (reroll/leave) without overlapping it.
-const ROW_HEIGHT = 64;
+// Sized so the worst case (6 weapon slots + a 5-slot dedicated shop node)
+// still clears the footer without overlapping it.
+const ROW_HEIGHT = 80;
+const HEADER_BUTTON_WIDTH = 160;
+const HEADER_BUTTON_HEIGHT = 56;
+const HEADER_Y = 60;
 
 /**
  * Shop (economy.spec.todo.md, F9 #137): the "baseline" variant is the small
@@ -41,7 +46,7 @@ export class ShopScene extends Phaser.Scene {
   private stock: ShopStockEntry[] = [];
   private rowObjects: Phaser.GameObjects.GameObject[] = [];
   private goldText!: Phaser.GameObjects.Text;
-  private rerollText!: Phaser.GameObjects.Text;
+  private rerollButtonText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
 
   constructor() {
@@ -65,20 +70,51 @@ export class ShopScene extends Phaser.Scene {
     this.stock = this.rollStock();
 
     this.add
-      .text(GAME_WIDTH / 2, 60, copy(this.launch.variant === "node" ? "shop.title.node" : "shop.title.baseline"), {
+      .text(GAME_WIDTH / 2, HEADER_Y, copy(this.launch.variant === "node" ? "shop.title.node" : "shop.title.baseline"), {
         fontFamily: "monospace",
         fontSize: "26px",
         color: "#ffcc00",
       })
       .setOrigin(0.5);
 
+    // Reroll — top-left, opposite Done — larger than a normal row button
+    // since it's a whole-visit action, not a per-item one.
+    const rerollButton = this.add
+      .rectangle(HEADER_BUTTON_WIDTH / 2 + 16, HEADER_Y, HEADER_BUTTON_WIDTH, HEADER_BUTTON_HEIGHT, 0x2a1000)
+      .setStrokeStyle(3, 0x7b3dbe)
+      .setInteractive({ useHandCursor: true });
+    this.rerollButtonText = this.add
+      .text(HEADER_BUTTON_WIDTH / 2 + 16, HEADER_Y, "", {
+        fontFamily: "monospace",
+        fontSize: "12px",
+        color: "#c299ff",
+        align: "center",
+        wordWrap: { width: HEADER_BUTTON_WIDTH - 16 },
+      })
+      .setOrigin(0.5);
+    rerollButton.on("pointerdown", () => this.reroll());
+
+    // Done — top-right, opposite Reroll — green, always available.
+    const doneButton = this.add
+      .rectangle(GAME_WIDTH - HEADER_BUTTON_WIDTH / 2 - 16, HEADER_Y, HEADER_BUTTON_WIDTH, HEADER_BUTTON_HEIGHT, 0x1a5c2e)
+      .setStrokeStyle(3, 0x66ff99)
+      .setInteractive({ useHandCursor: true });
+    this.add
+      .text(GAME_WIDTH - HEADER_BUTTON_WIDTH / 2 - 16, HEADER_Y, copy("shop.leave"), {
+        fontFamily: "monospace",
+        fontSize: "13px",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5);
+    doneButton.on("pointerdown", () => this.scene.start(SCENE_KEYS.map));
+
     this.goldText = this.add
-      .text(GAME_WIDTH / 2, 100, "", { fontFamily: "monospace", fontSize: "16px", color: "#ffcc88" })
+      .text(GAME_WIDTH / 2, 104, "", { fontFamily: "monospace", fontSize: "16px", color: "#ffcc88" })
       .setOrigin(0.5);
 
     if (this.interestGained > 0) {
       this.add
-        .text(GAME_WIDTH / 2, 122, copy("shop.interestEarned", { gold: Math.round(this.interestGained) }), {
+        .text(GAME_WIDTH / 2, 126, copy("shop.interestEarned", { gold: Math.round(this.interestGained) }), {
           fontFamily: "monospace",
           fontSize: "11px",
           color: "#88ff88",
@@ -87,27 +123,8 @@ export class ShopScene extends Phaser.Scene {
     }
 
     this.statusText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 96, "", { fontFamily: "monospace", fontSize: "12px", color: "#ff6666" })
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 24, "", { fontFamily: "monospace", fontSize: "12px", color: "#ff6666" })
       .setOrigin(0.5);
-
-    this.rerollText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 140, "", { fontFamily: "monospace", fontSize: "13px", color: "#7b3dbe" })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    this.rerollText.on("pointerdown", () => this.reroll());
-
-    const leave = this.add
-      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 50, 220, 50, 0xff6b00)
-      .setStrokeStyle(3, 0xffcc88)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 50, copy("shop.leave"), {
-        fontFamily: "monospace",
-        fontSize: "13px",
-        color: "#ffffff",
-      })
-      .setOrigin(0.5);
-    leave.on("pointerdown", () => this.scene.start(SCENE_KEYS.map));
 
     this.renderRows();
   }
@@ -179,22 +196,47 @@ export class ShopScene extends Phaser.Scene {
     this.refreshHeader();
   }
 
+  /** Every stat modifier a weapon/item bundle grants, rendered as a human-readable line ("+15% Damage, +8 Armor") so a buy/upgrade decision doesn't require guessing. */
+  private modsDescription(mods: readonly StatModifier[]): string {
+    if (mods.length === 0) return "";
+    return mods
+      .map((mod) => {
+        const sign = mod.amount >= 0 ? "+" : "";
+        return `${sign}${formatModifierAmount(mod)} ${STAT_DEFS[mod.stat].display}`;
+      })
+      .join(", ");
+  }
+
+  /** All 6 chassis weapon slots always render (economy.spec.md) — an unfilled slot shows as an empty outline rather than just not appearing, so the player can see how much build room is left. */
   private renderWeaponsSection(startY: number): number {
     let y = startY;
     this.rowObjects.push(this.sectionLabel(y, "YOUR WEAPONS"));
     y += 26;
 
-    this.career.weapons.forEach((ref, index) => {
-      const weapon = weaponById(ref.weaponId);
-      const brandCount = weapon.brand ? (ownedBrandCounts(this.ownedWeapons(this.career), this.ownedItems(this.career))[weapon.brand] ?? 0) : 0;
-      const cost = weaponUpgradeCost(ref.tier, brandCount);
-      this.rowObjects.push(
-        ...this.row(y, `${weapon.name}  (Tier ${ref.tier})`, weapon.brand, copy("shop.upgrade", { cost: Math.round(cost) }), () =>
-          this.upgradeWeapon(index, cost)
-        )
-      );
+    for (let index = 0; index < MAX_WEAPON_SLOTS; index++) {
+      const ref = this.career.weapons[index];
+      if (ref) {
+        const weapon = weaponById(ref.weaponId);
+        const brandCount = weapon.brand
+          ? (ownedBrandCounts(this.ownedWeapons(this.career), this.ownedItems(this.career))[weapon.brand] ?? 0)
+          : 0;
+        const cost = weaponUpgradeCost(ref.tier, brandCount);
+        const description = this.modsDescription(weaponModsAtTier(weapon, ref.tier));
+        this.rowObjects.push(
+          ...this.row(
+            y,
+            `${weapon.name}  (Tier ${ref.tier})`,
+            description,
+            weapon.brand,
+            copy("shop.upgrade", { cost: Math.round(cost) }),
+            () => this.upgradeWeapon(index, cost)
+          )
+        );
+      } else {
+        this.rowObjects.push(...this.emptySlotRow(y));
+      }
       y += ROW_HEIGHT;
-    });
+    }
 
     return y + 16;
   }
@@ -216,6 +258,12 @@ export class ShopScene extends Phaser.Scene {
       const name = entry.kind === "weapon" ? entry.weapon?.name : entry.item?.name;
       const brand = entry.kind === "weapon" ? entry.weapon?.brand : entry.item?.brand;
       const tier = entry.kind === "weapon" ? entry.weapon?.tier : entry.item?.tier;
+      const description =
+        entry.kind === "weapon" && entry.weapon
+          ? this.modsDescription(weaponModsAtTier(entry.weapon, 0))
+          : entry.kind === "item" && entry.item
+            ? this.modsDescription(entry.item.mods)
+            : "";
       const cost = this.priceFor(entry);
       const weaponSlotsFull = entry.kind === "weapon" && this.career.weapons.length >= MAX_WEAPON_SLOTS;
       const itemAtCap =
@@ -230,7 +278,15 @@ export class ShopScene extends Phaser.Scene {
           : copy("shop.buy", { cost: Math.round(cost) });
 
       this.rowObjects.push(
-        ...this.row(y, `${name ?? "?"}  [${(tier ?? "common").toUpperCase()}]`, brand, label, () => this.buy(entry, cost), disabled)
+        ...this.row(
+          y,
+          `${name ?? "?"}  [${(tier ?? "common").toUpperCase()}]`,
+          description,
+          brand,
+          label,
+          () => this.buy(entry, cost),
+          disabled
+        )
       );
       y += ROW_HEIGHT;
     }
@@ -243,10 +299,26 @@ export class ShopScene extends Phaser.Scene {
       .setOrigin(0.5);
   }
 
-  /** One shop row: name/tier + brand tagline (if any) on the left, an action button on the right. Returns the created objects so the caller can track them for cleanup. */
+  /** An unfilled weapon slot — an outline box with no button, so it reads as "room here" rather than an item that failed to load. */
+  private emptySlotRow(y: number): Phaser.GameObjects.GameObject[] {
+    const box = this.add
+      .rectangle(GAME_WIDTH / 2, y + ROW_HEIGHT / 2 - 10, GAME_WIDTH - 48, ROW_HEIGHT - 12, 0x000000, 0)
+      .setStrokeStyle(2, 0x664400);
+    const label = this.add
+      .text(GAME_WIDTH / 2, y + ROW_HEIGHT / 2 - 10, copy("shop.emptySlot"), {
+        fontFamily: "monospace",
+        fontSize: "12px",
+        color: "#664400",
+      })
+      .setOrigin(0.5);
+    return [box, label];
+  }
+
+  /** One shop row: name/tier, effect description, and brand tagline (if any) on the left, an action button on the right. Returns the created objects so the caller can track them for cleanup. */
   private row(
     y: number,
     title: string,
+    description: string,
     brand: string | undefined,
     actionLabel: string,
     onAction: () => void,
@@ -261,8 +333,18 @@ export class ShopScene extends Phaser.Scene {
     const titleText = this.add.text(40, y, title, { fontFamily: "monospace", fontSize: "13px", color: "#ffffff" });
     objs.push(titleText);
 
+    if (description) {
+      const descriptionText = this.add.text(40, y + 19, description, {
+        fontFamily: "monospace",
+        fontSize: "10px",
+        color: "#88ffaa",
+        wordWrap: { width: GAME_WIDTH - 220 },
+      });
+      objs.push(descriptionText);
+    }
+
     if (brand) {
-      const brandText = this.add.text(40, y + 20, brand.toUpperCase(), {
+      const brandText = this.add.text(40, y + (description ? 40 : 20), brand.toUpperCase(), {
         fontFamily: "monospace",
         fontSize: "9px",
         color: "#aa88ff",
@@ -271,10 +353,10 @@ export class ShopScene extends Phaser.Scene {
     }
 
     const button = this.add
-      .rectangle(GAME_WIDTH - 90, y + 22, 130, 36, disabled ? 0x333333 : 0xcc4400)
+      .rectangle(GAME_WIDTH - 90, y + ROW_HEIGHT / 2 - 8, 130, 36, disabled ? 0x333333 : 0xcc4400)
       .setStrokeStyle(2, disabled ? 0x555555 : 0xffcc88);
     const buttonLabel = this.add
-      .text(GAME_WIDTH - 90, y + 22, actionLabel, {
+      .text(GAME_WIDTH - 90, y + ROW_HEIGHT / 2 - 8, actionLabel, {
         fontFamily: "monospace",
         fontSize: "9px",
         color: disabled ? "#888888" : "#ffffff",
@@ -295,7 +377,7 @@ export class ShopScene extends Phaser.Scene {
   private refreshHeader(): void {
     this.goldText.setText(copy("shop.gold", { gold: Math.round(this.career.gold) }));
     const cost = nextRerollCost(this.rerollsUsedThisVisit, this.ratingsRank);
-    this.rerollText.setText(cost <= 0 ? copy("reroll.free") : copy("reroll.cost", { cost: Math.round(cost) }));
+    this.rerollButtonText.setText(cost <= 0 ? copy("reroll.free") : copy("reroll.cost", { cost: Math.round(cost) }));
   }
 
   private canAfford(cost: number): boolean {

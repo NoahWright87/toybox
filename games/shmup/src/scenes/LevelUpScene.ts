@@ -1,12 +1,11 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
-import { TUNING } from "../tuning";
 import { copy, ratingsTierForScore, ratingsTierRank } from "../content";
 import { loadCareer, saveCareer } from "../systems/career";
 import type { CareerState } from "../systems/career";
-import { STAT_DEFS, formatStatValue } from "../systems/stats";
+import { STAT_DEFS, formatModifierAmount } from "../systems/stats";
 import type { MainStatId } from "../systems/stats";
-import { nextRerollCost, rollLevelUpOffers } from "../systems/economy";
+import { mainStatPickModifier, nextRerollCost, rollLevelUpOffers } from "../systems/economy";
 import { SCENE_KEYS } from "./sceneData";
 import type { LevelUpLaunchData, ShopLaunchData } from "./sceneData";
 
@@ -82,7 +81,7 @@ export class LevelUpScene extends Phaser.Scene {
     const gap = 130;
     this.offers.forEach((stat, i) => {
       const def = STAT_DEFS[stat];
-      const amount = TUNING.economy.mainStatPickAmount[stat];
+      const amount = formatModifierAmount(mainStatPickModifier(stat));
       const y = startY + i * gap;
 
       const box = this.add
@@ -97,7 +96,7 @@ export class LevelUpScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       const amountLabel = this.add
-        .text(GAME_WIDTH / 2, y + 16, `+${formatStatValue(def, amount)}`, {
+        .text(GAME_WIDTH / 2, y + 16, `+${amount}`, {
           fontFamily: "monospace",
           fontSize: "14px",
           color: "#ffcc88",
