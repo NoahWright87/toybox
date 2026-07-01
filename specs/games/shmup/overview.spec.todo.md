@@ -48,4 +48,5 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 | `audience-and-score.spec.todo.md` | studio audience, crowd comments, score & results | T10 #161, C14 #163 |
 | `content-and-assets.spec.md` | sprite registry, asset pipeline — **implemented** | F5 #133 |
 | `content-and-assets.spec.todo.md` | copy registry | F2 #130 |
+| `save.spec.md` | swappable SaveStore, Doors-FS-backed default — **implemented** | S1 #171 |
 | `tuning.spec.todo.md` | the single home of every numeric lever | (all) |

@@ -5,7 +5,7 @@ import {
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
-  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
 } from "./types";
@@ -392,6 +392,8 @@ export function seedFileSystem(store: FileSystemStore): void {
   store.createFolder(shmupSpritesDir.id, "enemies");
   store.createFolder(shmupSpritesDir.id, "effects");
   store.createFolder(shmupSpritesDir.id, "projectiles");
+  // SaveStore's Doors-FS adapter writes save/settings files here (S1 #171).
+  store.createFolder(shmupDir.id, "Saves", { id: SHMUP_SAVES_ID });
 
   const tttDir = store.createFolder(GAMES_ID, "Tic-Tac-Toe");
   store.createFile(tttDir.id, "Tic-Tac-Toe.exe", { fileType: "exe", appId: "tictactoe" });
