@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 import { TUNING } from "../tuning";
-import { resolveLoadout } from "../systems/effects";
+import { resolveLoadout, weaponFocusModsAtTier } from "../systems/effects";
 import type { OwnedItem, OwnedWeapon, ProjectileBehavior } from "../systems/effects";
 import type { StatBlock, StatId, StatModifier } from "../systems/stats";
 import type { Defender } from "../systems/combat";
-import { PLACEHOLDER_WEAPON } from "../content";
+import type { ChassisDef } from "../systems/chassis";
+import { DEFAULT_CHASSIS, PLACEHOLDER_WEAPON } from "../content";
 import type { DebugOverrides } from "../debug/debugSettings";
 
 /** One weapon ready to fire this frame, with everything its shot needs already resolved. */
@@ -19,6 +20,8 @@ const STARTING_WEAPONS: OwnedWeapon[] = [{ weapon: PLACEHOLDER_WEAPON, tier: 0 }
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock;
+  /** The equipped chassis (chassis.spec.md, F10 #138) — supplies stat weightings/quirks, weapon-slot cap, hitbox size, and Focus behavior, all applied via `resolveLoadout()`. Defaults to DEFAULT_CHASSIS until chassis selection (Epic 2) exists. */
+  readonly chassis: ChassisDef;
   /** The persisted career build (run-structure.spec.todo.md: "Build persists"), rehydrated by PlayScene from CareerState.weapons. */
   weapons: OwnedWeapon[];
   /** Owned passive items (economy.spec.todo.md, F9 #137), rehydrated from CareerState.items — stack through the F4 engine same as any item. */
@@ -53,12 +56,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     weapons: OwnedWeapon[] = STARTING_WEAPONS,
     debugOverrides?: DebugOverrides,
     items: OwnedItem[] = [],
-    persistentStatMods: StatModifier[] = []
+    persistentStatMods: StatModifier[] = [],
+    chassis: ChassisDef = DEFAULT_CHASSIS
   ) {
     super(scene, x, y, texture);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
+    this.chassis = chassis;
     this.weapons = weapons;
     this.items = items;
     this.persistentStatMods = persistentStatMods;
@@ -73,12 +78,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.debugShowHitboxes = debugOverrides.showHitboxes;
     }
 
-    const { stats, projectileBehaviors } = resolveLoadout({
-      weapons: this.weapons,
-      items: this.items,
-      chassisMods: this.persistentStatMods,
-      transientMods: [...this.debugMods.values()],
-    });
+    const { stats, projectileBehaviors } = this.resolveEffectiveLoadout();
     this.stats = stats;
     this.projectileBehaviors = projectileBehaviors;
     this.defender = { hp: stats.maxHp, shield: stats.maxShield, shieldRegenDelayRemaining: 0 };
@@ -133,19 +133,37 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.debugMods.get(stat)?.amount ?? 0;
   }
 
-  private recompute(): void {
-    const { stats, projectileBehaviors } = resolveLoadout({
+  /**
+   * The single resolution call (chassis.spec.md): chassis stat weightings +
+   * quirks, level-up picks, items, weapon tiers, debug mods, and — only
+   * while Focus is held — each equipped weapon's optional focused-fire mods
+   * (transient, per stats.spec.md's "toggled by condition flips" convention).
+   */
+  private resolveEffectiveLoadout() {
+    const focusMods: StatModifier[] = this.focus
+      ? this.weapons.flatMap(({ weapon, tier }) => weaponFocusModsAtTier(weapon, tier))
+      : [];
+    return resolveLoadout({
       weapons: this.weapons,
       items: this.items,
-      chassisMods: this.persistentStatMods,
-      transientMods: [...this.debugMods.values()],
+      chassisBase: this.chassis.statBase,
+      chassisMods: this.chassis.mods,
+      statPickMods: this.persistentStatMods,
+      maxWeaponSlots: this.chassis.maxWeaponSlots,
+      transientMods: [...this.debugMods.values(), ...focusMods],
     });
+  }
+
+  private recompute(): void {
+    const { stats, projectileBehaviors } = this.resolveEffectiveLoadout();
     this.stats = stats;
     this.projectileBehaviors = projectileBehaviors;
   }
 
   private applyHitboxRadius(): void {
-    const r = this.focus ? TUNING.combat.hitboxRadiusFocus : TUNING.combat.hitboxRadiusNormal;
+    const r = this.focus
+      ? (this.chassis.focus.hitboxRadiusFocus ?? this.chassis.hitboxRadiusNormal)
+      : this.chassis.hitboxRadiusNormal;
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCircle(r, this.width / 2 - r, this.height / 2 - r);
   }
@@ -154,11 +172,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.focus === focus) return;
     this.focus = focus;
     this.applyHitboxRadius();
+    this.recompute();
   }
 
-  /** Movement speed for this frame, in px/s — Focus is movement-slow-only per chassis.spec.todo.md. */
+  /** Movement speed for this frame, in px/s — Focus's slowdown is the chassis's universal base action (chassis.spec.md's `ChassisFocusDef.speedMult`). */
   currentSpeed(): number {
-    return this.stats.playerSpeed * (this.focus ? TUNING.combat.focusSpeedMult : 1);
+    return this.stats.playerSpeed * (this.focus ? this.chassis.focus.speedMult : 1);
   }
 
   get invulnerable(): boolean {

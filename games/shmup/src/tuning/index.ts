@@ -36,11 +36,12 @@ export const TUNING = {
     reflexMoveK: 1,
     reflexBulletSlowCap: 0.8,
     reflexMoveSlowCap: 0.5,
-    // Focus (chassis.spec.todo.md): hold to move slower for precision. The
-    // default chassis (F10 #138) hasn't landed yet, so F6 ships the
-    // universal base behavior plus a hitbox shrink (genre-standard "graze
-    // box") as the vertical-slice default; a future chassis quirk may
-    // override hitboxRadiusFocus instead of relying on this global.
+    // Focus (chassis.spec.md, F10 #138): hold to move slower for precision —
+    // the universal base action every chassis has (`ChassisFocusDef.speedMult`).
+    // hitboxRadiusFocus below is DEFAULT_CHASSIS's own perk
+    // (`ChassisFocusDef.hitboxRadiusFocus`, content/chassis.ts), not a rule
+    // the framework imposes — a future chassis may omit it or use a
+    // different value entirely.
     focusSpeedMult: 0.45,
     hitboxRadiusNormal: 6,
     hitboxRadiusFocus: 3,

@@ -42,6 +42,10 @@ export const COPY = {
   "enemy.placeholder.name": "Drone",
   "enemy.placeholder.description": "Cheap, expendable, everywhere.",
 
+  // ---- Chassis (chassis.spec.md, F10 #138) ----
+  "chassis.default.name": "Roadrunner Mk. I",
+  "chassis.default.description": "No frills, no gimmicks. A balanced stock frame.",
+
   // ---- Passive items (items-and-brands.spec.todo.md, F9 #137) ----
   "item.lucky-rabbits-foot.name": "Lucky Rabbit's Foot",
   "item.piggy-bank.name": "Piggy Bank",
