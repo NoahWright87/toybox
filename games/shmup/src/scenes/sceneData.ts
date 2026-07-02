@@ -10,12 +10,15 @@ import type { MainStatId } from "../systems/stats";
 
 export const SCENE_KEYS = {
   boot: "Boot",
+  mainMenu: "MainMenu",
   map: "Map",
   play: "Play",
   resolve: "Resolve",
   levelUp: "LevelUp",
   shop: "Shop",
   chassisSelect: "ChassisSelect",
+  settings: "Settings",
+  hallOfFame: "HallOfFame",
 } as const;
 
 /** Map -> Play: everything PlayScene needs to run one episode, resolved ahead of time by the map (Difficulty, build) so PlayScene has zero career/map knowledge of its own. */

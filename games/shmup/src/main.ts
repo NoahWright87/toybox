@@ -1,11 +1,14 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
+import { MainMenuScene } from "./scenes/MainMenuScene";
 import { MapScene } from "./scenes/MapScene";
 import { PlayScene } from "./scenes/PlayScene";
 import { ResolveScene } from "./scenes/ResolveScene";
 import { LevelUpScene } from "./scenes/LevelUpScene";
 import { ShopScene } from "./scenes/ShopScene";
 import { ChassisSelectScene } from "./scenes/ChassisSelectScene";
+import { SettingsScene } from "./scenes/SettingsScene";
+import { HallOfFameScene } from "./scenes/HallOfFameScene";
 import { GAME_WIDTH, GAME_HEIGHT } from "./config";
 
 new Phaser.Game({
@@ -24,5 +27,16 @@ new Phaser.Game({
     default: "arcade",
     arcade: { debug: false },
   },
-  scene: [BootScene, MapScene, PlayScene, ResolveScene, LevelUpScene, ShopScene, ChassisSelectScene],
+  scene: [
+    BootScene,
+    MainMenuScene,
+    MapScene,
+    PlayScene,
+    ResolveScene,
+    LevelUpScene,
+    ShopScene,
+    ChassisSelectScene,
+    SettingsScene,
+    HallOfFameScene,
+  ],
 });
