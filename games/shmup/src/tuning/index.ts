@@ -54,6 +54,29 @@ export const TUNING = {
     // overlapping enemy/bullet would re-deal damage every physics step.
     playerIFrameMs: 500,
   },
+  // Chassis content (chassis.spec.md, F10 #138 framework / C7 #146 content).
+  // Only Ikaruga-style polarity chassis read this block today — every other
+  // chassis has no `ChassisDef.polarity`, so these numbers are inert unless
+  // a polarity chassis is equipped.
+  chassis: {
+    ikaruga: {
+      // "Gates which enemies take full damage from your shots" — a shot
+      // fired at the wrong polarity bounces off harmlessly; the matching
+      // polarity deals full damage.
+      damageMultiplierSame: 0,
+      damageMultiplierOpposite: 1,
+      // Hype gained per same-polarity bullet absorbed, before scaling by the
+      // shared grazeMultiplier stat (repurposed as this chassis's
+      // absorb-meter gain rate, chassis.spec.md).
+      absorbHypeBase: 6,
+    },
+    // Shared tint applied to the player ship, enemies, and bullets when a
+    // polarity chassis is equipped — only Ikaruga-style chassis read this.
+    polarityColors: {
+      red: 0xff4444,
+      blue: 0x4488ff,
+    },
+  },
   // Grazing (hype-and-ratings.spec.md, F7 #135): concentric rings as
   // fractions of the grazeRadius stat. Innermost ring only applies (no
   // stacking) — point-blank grazing is the deliberate high-skill act.

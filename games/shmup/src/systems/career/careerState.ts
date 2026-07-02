@@ -8,6 +8,8 @@ import { CAREER_STATE_VERSION } from "./types";
 import type { CareerState, OwnedWeaponRef } from "./types";
 
 const STARTING_WEAPONS: OwnedWeaponRef[] = [{ weaponId: "placeholder", tier: 0 }];
+/** Matches content/chassis.ts's DEFAULT_CHASSIS.id by convention, same as STARTING_WEAPONS above — this module never imports content/. */
+const STARTING_CHASSIS_ID = "default";
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -27,6 +29,7 @@ export function createNewCareer(startingRatings = 0, seed: number = randomSeed()
     currentNodeId: null,
     visitedNodeIds: [],
     deadlinePosition: 0,
+    chassisId: STARTING_CHASSIS_ID,
     weapons: STARTING_WEAPONS,
     items: [],
     gold: 0,

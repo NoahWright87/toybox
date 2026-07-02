@@ -6,6 +6,33 @@
  */
 import type { StatBlock, StatModifier } from "../stats";
 
+/** Two-state polarity (chassis.spec.md's Ikaruga flagship example) — a chassis-declared hook, not a new stat archetype. */
+export type Polarity = "red" | "blue";
+
+/**
+ * Optional polarity-switch mechanic. Present only on a chassis that uses it
+ * (e.g. the Ikaruga-style flagship) — `ChassisDef.polarity` is undefined for
+ * every other chassis, and every polarity-aware code path treats "no config"
+ * as "this chassis doesn't do polarity," so DEFAULT_CHASSIS (and any future
+ * non-polarity chassis) is completely unaffected.
+ */
+export interface ChassisPolarityDef {
+  /** Polarity the chassis starts a fresh episode in. */
+  initial: Polarity;
+  /** Damage multiplier for a player shot fired at a target of the SAME current polarity — "gates which enemies take full damage" (chassis.spec.md). */
+  damageMultiplierSame: number;
+  /** Damage multiplier for a player shot fired at a target of the OPPOSITE polarity. */
+  damageMultiplierOpposite: number;
+  /**
+   * Hype gained per same-polarity enemy bullet absorbed (destroyed instead of
+   * damaging the player), before scaling by the shared `grazeMultiplier`
+   * stat — "same-color absorption feeds the same underlying graze-multiplier
+   * stat, repurposed as absorb-meter gain rate" (chassis.spec.md). Not a new
+   * meter; it's the existing Hype gain path with a different trigger.
+   */
+  absorbHypeBase: number;
+}
+
 export interface ChassisFocusDef {
   /**
    * Universal Focus action (chassis.spec.md): every chassis slows movement
@@ -45,4 +72,6 @@ export interface ChassisDef {
    * `resolveLoadout()` path as weapon/item mods, never a bespoke subsystem.
    */
   mods: StatModifier[];
+  /** Optional polarity-switch mechanic — see `ChassisPolarityDef`. Omitted entirely by chassis that don't use it. */
+  polarity?: ChassisPolarityDef;
 }

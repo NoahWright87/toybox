@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_CHASSIS, chassisById } from "./chassis";
+import { DEFAULT_CHASSIS, IKARUGA_CHASSIS, ALL_CHASSIS, chassisById } from "./chassis";
 import { resolveLoadout } from "../systems/effects";
 import { TUNING } from "../tuning";
 
@@ -8,8 +8,45 @@ describe("chassisById", () => {
     expect(chassisById("default")).toBe(DEFAULT_CHASSIS);
   });
 
+  it("resolves the Ikaruga chassis by id", () => {
+    expect(chassisById("ikaruga")).toBe(IKARUGA_CHASSIS);
+  });
+
   it("falls back to the default chassis for an unknown id, same convention as weaponById", () => {
     expect(chassisById("not-a-real-chassis")).toBe(DEFAULT_CHASSIS);
+  });
+
+  it("registers every chassis in ALL_CHASSIS", () => {
+    expect(ALL_CHASSIS).toEqual(expect.arrayContaining([DEFAULT_CHASSIS, IKARUGA_CHASSIS]));
+  });
+});
+
+describe("IKARUGA_CHASSIS — the polarity flagship (chassis.spec.md's Epic 2 validation)", () => {
+  it("has no static stat quirks — its identity is entirely the polarity hook", () => {
+    expect(IKARUGA_CHASSIS.mods).toEqual([]);
+    expect(IKARUGA_CHASSIS.statBase).toBeUndefined();
+  });
+
+  it("has no Focus hitbox-shrink perk (that's DEFAULT_CHASSIS's own quirk, not a rule)", () => {
+    expect(IKARUGA_CHASSIS.focus.hitboxRadiusFocus).toBeUndefined();
+  });
+
+  it("carries a polarity config sourced from TUNING.chassis.ikaruga", () => {
+    expect(IKARUGA_CHASSIS.polarity).toEqual({
+      initial: "red",
+      damageMultiplierSame: TUNING.chassis.ikaruga.damageMultiplierSame,
+      damageMultiplierOpposite: TUNING.chassis.ikaruga.damageMultiplierOpposite,
+      absorbHypeBase: TUNING.chassis.ikaruga.absorbHypeBase,
+    });
+  });
+
+  it("still slots into resolveLoadout with zero engine changes, same as DEFAULT_CHASSIS", () => {
+    const { stats } = resolveLoadout({
+      chassisBase: IKARUGA_CHASSIS.statBase,
+      chassisMods: IKARUGA_CHASSIS.mods,
+      maxWeaponSlots: IKARUGA_CHASSIS.maxWeaponSlots,
+    });
+    expect(stats).toEqual(resolveLoadout({}).stats);
   });
 });
 

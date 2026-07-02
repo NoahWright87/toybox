@@ -27,6 +27,11 @@ describe("createNewCareer", () => {
     expect(career.weapons).toEqual([{ weaponId: "placeholder", tier: 0 }]);
   });
 
+  it("starts equipped with the default chassis (chassis.spec.md)", () => {
+    const career = createNewCareer(0, 1);
+    expect(career.chassisId).toBe("default");
+  });
+
   it("starts with no gold/items and level 1 with zero exp/stat picks (economy.spec.todo.md, F9 #137)", () => {
     const career = createNewCareer(0, 1);
     expect(career.gold).toBe(0);

@@ -1,12 +1,21 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
-import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById, itemById } from "../content";
+import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById, itemById, chassisById } from "../content";
 import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet, Coin } from "../entities";
 import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
-import { applyDamage, applyLifesteal, reflexBulletSpeedMult, rollCrit, tickHpRegen, tickShieldRegen } from "../systems/combat";
+import {
+  absorbsBullet,
+  applyDamage,
+  applyLifesteal,
+  polarityDamageMultiplier,
+  reflexBulletSpeedMult,
+  rollCrit,
+  tickHpRegen,
+  tickShieldRegen,
+} from "../systems/combat";
 import {
   GrazeTracker,
   ShmupEventBus,
@@ -21,6 +30,7 @@ import {
 import type { HypeState, GrazeRingDef } from "../systems/hype";
 import { rollSpawnArchetype, scaledEnemyStats, rewardCurve } from "../systems/difficulty";
 import type { EnemyArchetypeId } from "../systems/difficulty";
+import type { Polarity } from "../systems/chassis";
 import { coinValue, rollsTip, statPickMods } from "../systems/economy";
 import type { OwnedItem } from "../systems/effects";
 import { DebugOverlay } from "../debug/DebugOverlay";
@@ -68,6 +78,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private focusKey!: Phaser.Input.Keyboard.Key;
+  private polarityKey!: Phaser.Input.Keyboard.Key;
   private pointerTarget: { x: number; y: number } | null = null;
 
   private score = 0;
@@ -203,7 +214,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       weapons,
       getDebugOverrides(),
       ownedItems,
-      persistentStatMods
+      persistentStatMods,
+      chassisById(this.episode.chassisId)
     );
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
@@ -225,6 +237,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.keys = this.input.keyboard!.addKeys("W,A,S,D") as Record<string, Phaser.Input.Keyboard.Key>;
     this.focusKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    // Polarity switch (chassis.spec.md's Ikaruga flagship example) — harmless
+    // to bind even on a chassis without `polarity`, since `togglePolarity()`
+    // no-ops without one. Mobile polarity switching is TBD, same as Focus.
+    this.polarityKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X);
 
     // Pointer / touch: drag-to-move (the ship follows the finger, floated above it).
     // Mobile Focus is TBD (combat.spec.todo.md) — not wired to the pointer here.
@@ -349,6 +365,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.physics.resume();
 
     const dt = delta / 1000;
+
+    if (Phaser.Input.Keyboard.JustDown(this.polarityKey)) this.player.togglePolarity();
 
     this.updateMovement(dt);
     this.player.tickIFrame(delta);
@@ -495,7 +513,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const y = enemy.y + enemy.height / 2;
     const speed = enemy.bulletSpeed * reflexBulletSpeedMult(this.player.stats.reflexes);
     const bullet = this.enemyBullets.get(x, y, TEX.bulletEnemy) as EnemyBullet | null;
-    bullet?.fire(x, y, 0, speed, enemy.bulletDamage);
+    bullet?.fire(x, y, 0, speed, enemy.bulletDamage, enemy.polarity);
   }
 
   /**
@@ -515,6 +533,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const angleRad = Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-coneDeg / 2, coneDeg / 2));
     const vx = Math.sin(angleRad) * req.projectileSpeed;
     const vy = -Math.cos(angleRad) * req.projectileSpeed;
+    // Baked in once per shot, same as crit (combat.spec.todo.md) — a switch
+    // mid-flight never retroactively changes an already-fired shot. Null on
+    // a chassis without `polarity`, which always resolves to no gating.
+    const shotPolarity = this.player.chassis.polarity ? this.player.polarity : null;
 
     const forkCount = Math.min(flatLineCount, TUNING.weapons.maxForkedBulletsPerShot);
     this.spawnPlayerLine(
@@ -530,7 +552,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       homingStrength,
       forkCount,
       req.projectileSpeed,
-      this.player.effectiveForkConeDeg
+      this.player.effectiveForkConeDeg,
+      shotPolarity
     );
   }
 
@@ -552,7 +575,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     homingStrength: number,
     forkCount: number,
     forkProjectileSpeed: number,
-    forkConeDeg: number
+    forkConeDeg: number,
+    shotPolarity: Polarity | null
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
     bullet?.fireLine(
@@ -568,7 +592,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       homingStrength,
       forkCount,
       forkProjectileSpeed,
-      forkConeDeg
+      forkConeDeg,
+      shotPolarity
     );
   }
 
@@ -586,7 +611,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     forkCount: number,
     forkProjectileSpeed: number,
     forkConeDeg: number,
-    inheritedHit?: Enemy
+    inheritedHit: Enemy | undefined,
+    shotPolarity: Polarity | null
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
     bullet?.fireForkedLine(
@@ -603,7 +629,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       forkCount,
       forkProjectileSpeed,
       forkConeDeg,
-      inheritedHit
+      inheritedHit,
+      shotPolarity
     );
   }
 
@@ -625,14 +652,21 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const fraction = bullet.registerHit(enemy);
     if (fraction === undefined) return;
 
-    this.damageEnemy(enemy, bullet.baseHit * fraction, bullet.numCrits);
+    // "Current polarity gates which enemies take full damage from your
+    // shots" (chassis.spec.md's Ikaruga flagship example) — a no-op
+    // multiplier of 1 on any chassis without `polarity`.
+    const mult = polarityDamageMultiplier(this.player.chassis.polarity, bullet.shotPolarity, enemy.polarity);
+    this.damageEnemy(enemy, bullet.baseHit * fraction * mult, bullet.numCrits);
 
     if (bullet.blastRadius > 0) {
       const blastDamage = bullet.baseHit * bullet.blastDamageFraction;
       for (const other of this.enemies.getChildren() as Enemy[]) {
         if (other === enemy || !other.active) continue;
         const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, other.x, other.y);
-        if (dist <= bullet.blastRadius) this.damageEnemy(other, blastDamage, bullet.numCrits);
+        if (dist <= bullet.blastRadius) {
+          const blastMult = polarityDamageMultiplier(this.player.chassis.polarity, bullet.shotPolarity, other.polarity);
+          this.damageEnemy(other, blastDamage * blastMult, bullet.numCrits);
+        }
       }
     }
 
@@ -657,7 +691,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         remainingForks - 1,
         bullet.forkProjectileSpeed,
         bullet.forkConeDeg,
-        enemy
+        enemy,
+        bullet.shotPolarity
       );
     }
   }
@@ -785,7 +820,28 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private onEnemyBulletHitPlayer(bullet: EnemyBullet): void {
     if (this.gameOver || !bullet.active) return;
     bullet.recycle();
+    if (absorbsBullet(this.player.chassis.polarity, this.player.polarity, bullet.polarity)) {
+      this.absorbBullet();
+      return;
+    }
     this.damagePlayer(bullet.damage);
+  }
+
+  /**
+   * Same-color absorption feeds the same underlying graze-multiplier stat,
+   * repurposed as this chassis's absorb-meter gain rate (chassis.spec.md's
+   * Ikaruga flagship example) — an instantaneous Hype pulse through the
+   * exact `gainHype()` path grazing already uses, not a new meter.
+   */
+  private absorbBullet(): void {
+    const polarityDef = this.player.chassis.polarity;
+    if (!polarityDef) return;
+    this.hypeState = gainHype(this.hypeState, polarityDef.absorbHypeBase, this.hypeMaxValue, this.player.stats.grazeMultiplier);
+    this.hypeEvents.emit("hypeChanged", {
+      hype: this.hypeState.hype,
+      hypeMax: this.hypeMaxValue,
+      scoreMult: this.currentScoreMult,
+    });
   }
 
   private onEnemyContactPlayer(enemy: Enemy): void {

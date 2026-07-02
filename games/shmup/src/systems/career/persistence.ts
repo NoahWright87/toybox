@@ -52,6 +52,7 @@ export function isValidCareerState(value: unknown): value is CareerState {
     (v.currentNodeId === null || typeof v.currentNodeId === "string") &&
     Array.isArray(v.visitedNodeIds) &&
     typeof v.deadlinePosition === "number" &&
+    typeof v.chassisId === "string" &&
     Array.isArray(v.weapons) &&
     Array.isArray(v.items) &&
     typeof v.gold === "number" &&

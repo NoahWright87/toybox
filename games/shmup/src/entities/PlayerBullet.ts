@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
+import type { Polarity } from "../systems/chassis";
 import type { Enemy } from "./Enemy";
 import type { ShmupPlayScene } from "./types";
 
@@ -40,6 +41,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   baseHit = 0;
   /** Crits are resolved once per shot fired (combat.spec.todo.md) and shared by every line/fork that shot spawns — carried here purely for floating-combat-text display. */
   numCrits = 0;
+  /** The firing player's polarity at the moment this shot was fired (chassis.spec.md's Ikaruga flagship example), baked in like crit so a mid-flight polarity switch doesn't retroactively change an already-fired shot. Null when the equipped chassis has no polarity mechanic — always resolves to no damage gating (`polarityDamageMultiplier`). */
+  shotPolarity: Polarity | null = null;
   blastRadius = 0;
   blastDamageFraction = 0;
   /** Speed to give any fork spawned from this line's first impact (the firing weapon's projectileSpeed) — carried forward to each chain link so the whole chain shares one projectile speed. */
@@ -76,9 +79,10 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     homingStrength: number,
     forkCount: number,
     forkProjectileSpeed: number,
-    forkConeDeg: number
+    forkConeDeg: number,
+    shotPolarity: Polarity | null = null
   ): void {
-    this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength);
+    this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength, shotPolarity);
     this.infinite = false;
     this.fractions = fractions;
     this.fractionIndex = 0;
@@ -101,9 +105,10 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     forkCount: number,
     forkProjectileSpeed: number,
     forkConeDeg: number,
-    inheritedHit?: Enemy
+    inheritedHit?: Enemy,
+    shotPolarity: Polarity | null = null
   ): void {
-    this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength);
+    this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength, shotPolarity);
     this.infinite = true;
     this.hitsRemaining = hitsAllowed;
     this.pendingForkCount = forkCount;
@@ -121,10 +126,12 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     numCrits: number,
     blastRadius: number,
     blastDamageFraction: number,
-    homingStrength: number
+    homingStrength: number,
+    shotPolarity: Polarity | null
   ): void {
     this.baseHit = baseHit;
     this.numCrits = numCrits;
+    this.shotPolarity = shotPolarity;
     this.blastRadius = blastRadius;
     this.blastDamageFraction = blastDamageFraction;
     this.baseHomingStrength = homingStrength;
@@ -143,6 +150,9 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     body.setVelocity(vx, vy);
     body.debugBodyColor = TUNING.debug.hitboxColors.playerBullet;
     body.debugShowVelocity = false;
+    const chassis = (this.scene as ShmupPlayScene).player?.chassis;
+    if (chassis?.polarity && shotPolarity) this.setTintFill(TUNING.chassis.polarityColors[shotPolarity]);
+    else this.clearTint();
   }
 
   /** True once this bullet has already damaged `enemy` — it should pass through without re-hitting it. */

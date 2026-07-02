@@ -36,6 +36,8 @@ export interface CareerState {
   currentNodeId: string | null;
   visitedNodeIds: string[];
   deadlinePosition: number;
+  /** Equipped chassis id (chassis.spec.md, F10 #138 / C7 #146) — same id-indirection convention as `OwnedWeaponRef`/`OwnedItemRef` so a save never embeds a full ChassisDef snapshot. Resolved via `chassisById()`. */
+  chassisId: string;
   weapons: OwnedWeaponRef[];
   /** Owned passive items (economy.spec.todo.md, F9 #137) — persists across episodes exactly like `weapons`. */
   items: OwnedItemRef[];

@@ -15,6 +15,7 @@ export const SCENE_KEYS = {
   resolve: "Resolve",
   levelUp: "LevelUp",
   shop: "Shop",
+  chassisSelect: "ChassisSelect",
 } as const;
 
 /** Map -> Play: everything PlayScene needs to run one episode, resolved ahead of time by the map (Difficulty, build) so PlayScene has zero career/map knowledge of its own. */
@@ -26,6 +27,8 @@ export interface EpisodeLaunchData {
   D: number;
   /** Cumulative Ratings entering the episode — display-only (HUD tier readout); Ratings never changes mid-episode (Model 1). */
   ratings: number;
+  /** Equipped chassis id (chassis.spec.md, F10 #138 / C7 #146) — resolved via `chassisById()`, same id-indirection as `weapons`/`items`. */
+  chassisId: string;
   weapons: OwnedWeaponRef[];
   items: OwnedItemRef[];
   /** Level-up stat picks so far this career (economy.spec.todo.md) — folded into the resolved build the same way `weapons`/`items` are. */

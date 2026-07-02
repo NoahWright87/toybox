@@ -4,7 +4,7 @@ import { resolveLoadout, weaponFocusModsAtTier } from "../systems/effects";
 import type { OwnedItem, OwnedWeapon, ProjectileBehavior } from "../systems/effects";
 import type { StatBlock, StatId, StatModifier } from "../systems/stats";
 import type { Defender } from "../systems/combat";
-import type { ChassisDef } from "../systems/chassis";
+import type { ChassisDef, Polarity } from "../systems/chassis";
 import { DEFAULT_CHASSIS, PLACEHOLDER_WEAPON } from "../content";
 import type { DebugOverrides } from "../debug/debugSettings";
 
@@ -31,6 +31,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   projectileBehaviors: ProjectileBehavior[] = [];
   defender: Defender;
   focus = false;
+  /** Current polarity (chassis.spec.md's Ikaruga flagship example) — only meaningful when `chassis.polarity` is defined; harmlessly inert data otherwise. Initialized to the chassis's declared starting polarity, or "red" as a neutral default for chassis without the mechanic. */
+  polarity: Polarity;
   iFrameRemainingMs = 0;
   /** Debug-only (C12 #151): full width, in degrees, of a random cone around straight-up that each shot's heading is drawn from (0 = always straight up). Not a real StatId — there's no balance/upgrade source for it, it exists purely so the debug overlay can spread fire to inspect homing/fork/pierce behavior off-axis. */
   debugFiringConeDeg = 0;
@@ -64,6 +66,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     this.chassis = chassis;
+    this.polarity = chassis.polarity?.initial ?? "red";
     this.weapons = weapons;
     this.items = items;
     this.persistentStatMods = persistentStatMods;
@@ -84,6 +87,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.defender = { hp: stats.maxHp, shield: stats.maxShield, shieldRegenDelayRemaining: 0 };
     this.fireCooldownMs = this.weapons.map(() => 0);
     this.applyHitboxRadius();
+    this.applyPolarityTint();
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.debugBodyColor = TUNING.debug.hitboxColors.player;
     body.debugShowVelocity = false;
@@ -173,6 +177,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.focus = focus;
     this.applyHitboxRadius();
     this.recompute();
+  }
+
+  /** Flips red/blue (chassis.spec.md's Ikaruga flagship example) — a no-op tint-wise on a chassis without `polarity`, since `applyPolarityTint()` clears any tint when the config is absent. */
+  togglePolarity(): void {
+    if (!this.chassis.polarity) return;
+    this.polarity = this.polarity === "red" ? "blue" : "red";
+    this.applyPolarityTint();
+  }
+
+  private applyPolarityTint(): void {
+    if (!this.chassis.polarity) {
+      this.clearTint();
+      return;
+    }
+    this.setTintFill(TUNING.chassis.polarityColors[this.polarity]);
   }
 
   /** Movement speed for this frame, in px/s — Focus's slowdown is the chassis's universal base action (chassis.spec.md's `ChassisFocusDef.speedMult`). */

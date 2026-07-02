@@ -3,6 +3,7 @@ import { TUNING } from "../tuning";
 import { GAME_HEIGHT } from "../config";
 import { reflexMoveSpeedMult } from "../systems/combat";
 import type { EnemyArchetypeId, ScaledEnemyStats } from "../systems/difficulty";
+import type { Polarity } from "../systems/chassis";
 import type { ShmupPlayScene } from "./types";
 
 /**
@@ -22,6 +23,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   contactDamage = 0;
   bulletDamage = 0;
   bulletSpeed = 0;
+  /** Assigned every spawn regardless of the equipped chassis (chassis.spec.md's Ikaruga flagship example) — inert unless the player's chassis actually declares a `polarity` mechanic, in which case it gates damage from player shots. */
+  polarity: Polarity = "red";
   private moveSpeedValue = 0;
   /** Identifies this enemy's current life, not the pooled object — bullets must track hits by this, not by object reference, since the underlying sprite is reused across spawns (Group.get() recycling). */
   spawnId = 0;
@@ -44,6 +47,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.fireIntervalMs = stats.fireIntervalMs;
     this.fireCooldownMs = stats.fireIntervalMs;
     this.spawnId = Enemy.nextSpawnId++;
+    this.polarity = Math.random() < 0.5 ? "red" : "blue";
+    this.applyPolarityTint();
     this.setPosition(x, y);
     this.setActive(true);
     this.setVisible(true);
@@ -83,6 +88,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private moveSpeed(): number {
     const reflexes = (this.scene as ShmupPlayScene).player?.stats.reflexes ?? 0;
     return this.moveSpeedValue * reflexMoveSpeedMult(reflexes);
+  }
+
+  /** Only visually tints by polarity when the equipped chassis actually uses it — a polarity-agnostic chassis (e.g. DEFAULT_CHASSIS) never shows a meaningless red/blue split. */
+  private applyPolarityTint(): void {
+    const chassis = (this.scene as ShmupPlayScene).player?.chassis;
+    if (!chassis?.polarity) {
+      this.clearTint();
+      return;
+    }
+    this.setTintFill(TUNING.chassis.polarityColors[this.polarity]);
   }
 
   preUpdate(time: number, delta: number): void {

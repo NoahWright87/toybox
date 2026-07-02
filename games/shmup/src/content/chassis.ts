@@ -27,8 +27,35 @@ export const DEFAULT_CHASSIS: ChassisDef = {
   mods: [],
 };
 
+/**
+ * The Ikaruga-style polarity-switch flagship (chassis.spec.md's Epic 2
+ * validation, C7 #146): no static stat quirks and no Focus hitbox-shrink
+ * perk — its entire identity is the `polarity` hook, resolved by
+ * `systems/combat/polarity.ts`'s pure functions against
+ * `Player.polarity`/`Enemy.polarity`/bullet polarity. Same 6 slots and
+ * hitbox as the default frame; the tradeoff is all offense/defense, not
+ * chassis geometry.
+ */
+export const IKARUGA_CHASSIS: ChassisDef = {
+  id: "ikaruga",
+  name: copy("chassis.ikaruga.name"),
+  maxWeaponSlots: TUNING.weapons.maxWeaponSlots,
+  hitboxRadiusNormal: TUNING.combat.hitboxRadiusNormal,
+  focus: {
+    speedMult: TUNING.combat.focusSpeedMult,
+  },
+  mods: [],
+  polarity: {
+    initial: "red",
+    damageMultiplierSame: TUNING.chassis.ikaruga.damageMultiplierSame,
+    damageMultiplierOpposite: TUNING.chassis.ikaruga.damageMultiplierOpposite,
+    absorbHypeBase: TUNING.chassis.ikaruga.absorbHypeBase,
+  },
+};
+
 const CHASSIS_REGISTRY: Record<string, ChassisDef> = {
   [DEFAULT_CHASSIS.id]: DEFAULT_CHASSIS,
+  [IKARUGA_CHASSIS.id]: IKARUGA_CHASSIS,
 };
 
 /** Every chassis in the registry. */
