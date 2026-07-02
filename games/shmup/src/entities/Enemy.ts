@@ -49,7 +49,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, texture);
   }
 
-  spawn(x: number, y: number, archetype: EnemyArchetypeId, stats: ScaledEnemyStats): void {
+  /**
+   * `texture` is applied explicitly here rather than relied on via
+   * `Group.get(x, y, key)`'s key argument — Phaser's own docs: "Unless a new
+   * member is created, `key` ... [is] ignored," so a recycled pooled sprite
+   * (the common case once the pool is warm) would otherwise keep whatever
+   * texture its *previous* occupant had, desyncing the visible sprite from
+   * the actual archetype (e.g. a recycled elite slot spawning a swarmer
+   * would still render as elite's red square).
+   */
+  spawn(x: number, y: number, archetype: EnemyArchetypeId, stats: ScaledEnemyStats, texture: string): void {
+    this.setTexture(texture);
     this.archetype = archetype;
     this.hp = stats.maxHp;
     this.maxHp = stats.maxHp;

@@ -105,6 +105,6 @@
     "frameHeight": 48,
     "frameCount": 1,
     "frameDuration": 100,
-    "placeholder": { "shape": "rect", "color": "#8b6f47" }
+    "placeholder": { "shape": "rect", "color": "#999999", "outline": "#1a1a1a" }
   }
 }

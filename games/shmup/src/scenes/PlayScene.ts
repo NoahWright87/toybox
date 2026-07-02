@@ -518,7 +518,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const x = Phaser.Math.Between(24, GAME_WIDTH - 24);
     const y = -20;
     const enemy = this.enemies.get(x, y, ENEMY_TEX[archetype]) as Enemy | null;
-    enemy?.spawn(x, y, archetype, stats);
+    enemy?.spawn(x, y, archetype, stats, ENEMY_TEX[archetype]);
     this.enemySpawnCooldownMs = this.player.debugEnemySpawnIntervalMs ?? stats.spawnIntervalMs;
   }
 
@@ -529,7 +529,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const y = 170;
     const enemy = this.enemies.get(x, y, ENEMY_TEX.boss) as Enemy | null;
     if (!enemy) return;
-    enemy.spawn(x, y, "boss", stats);
+    enemy.spawn(x, y, "boss", stats, ENEMY_TEX.boss);
     this.boss = enemy;
   }
 
