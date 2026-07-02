@@ -26,3 +26,4 @@ export {
   ensurePlaceholderTextures,
 } from "./registry";
 export { SHMUP_SPRITES_FS_DIR, spriteOverridePath } from "./fsOverride";
+export { bakeGroundTexture } from "./groundBackground";

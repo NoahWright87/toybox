@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
 import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById, itemById, chassisById } from "../content";
-import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
+import { bakeGroundTexture, preloadSprites, ensurePlaceholderTextures, spriteDef } from "../sprites";
 import type { SpriteKey } from "../sprites";
 import { Player, Enemy, EnemyBullet, PlayerBullet, Coin } from "../entities";
 import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
@@ -28,7 +28,7 @@ import {
   ratingsLossOnDeath,
 } from "../systems/hype";
 import type { HypeState, GrazeRingDef } from "../systems/hype";
-import { rollSpawnArchetype, scaledEnemyStats, rewardCurve } from "../systems/difficulty";
+import { rollSpawnArchetypeForDomain, scaledEnemyStats, rewardCurve } from "../systems/difficulty";
 import type { EnemyArchetypeId } from "../systems/difficulty";
 import type { Polarity } from "../systems/chassis";
 import { coinValue, rollsTip, statPickMods } from "../systems/economy";
@@ -56,9 +56,13 @@ const ENEMY_TEX: Record<EnemyArchetypeId, SpriteKey> = {
   drone: "enemyDrone",
   elite: "enemyElite",
   boss: "enemyBoss",
+  swarmer: "enemySwarmer",
+  turret: "enemyTurret",
 };
 
 const DRAG_OFFSET_Y = 132; // float the ship well above the finger so it stays visible
+/** Baked-mosaic texture key for a ground episode's tiled background (C5 #144) — rebuilt fresh in create() every episode, see bakeGroundTexture(). */
+const GROUND_BG_KEY = "bgGroundBaked";
 
 /**
  * The F6 #134 core gameplay loop — the integration point for F3 (stats),
@@ -128,6 +132,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private episode!: EpisodeLaunchData;
   private isBossNode = false;
   private boss: Enemy | null = null;
+  /** Rolled once per non-boss episode (C5 #144) — a tiled dirt ground instead of the starfield, purely cosmetic today. See TUNING.visuals.groundLevelChance. */
+  private isGroundLevel = false;
 
   constructor() {
     super("Play");
@@ -149,6 +155,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.score = 0;
     this.goldCollected = 0;
     this.expGained = 0;
+    // Ground levels (C5 #144): boss nodes always keep the starfield (the
+    // finale reads as a space dogfight); every other node rolls fresh.
+    this.isGroundLevel = !this.isBossNode && Math.random() < TUNING.visuals.groundLevelChance;
 
     // PlayScene's instance survives scene.restart() (only init/create rerun,
     // not the constructor), so every piece of run state needs an explicit
@@ -163,18 +172,29 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.currentScoreMult = 1;
     this.ratings = this.episode.ratings;
 
-    this.background = this.add
-      .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
-      .setDepth(-20);
+    if (this.isGroundLevel) {
+      const groundDef = spriteDef("bgGround");
+      bakeGroundTexture(this, GROUND_BG_KEY, groundDef.frameWidth, TUNING.visuals.groundBackgroundGridSize);
+      this.background = this.add
+        .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, GROUND_BG_KEY)
+        .setDepth(-20);
+    } else {
+      this.background = this.add
+        .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
+        .setDepth(-20);
+    }
 
     this.stars = this.add.group();
-    for (let i = 0; i < TUNING.visuals.starCount; i++) {
-      const s = this.add
-        .image(Phaser.Math.Between(0, GAME_WIDTH), Phaser.Math.Between(0, GAME_HEIGHT), TEX.star)
-        .setAlpha(Phaser.Math.FloatBetween(0.2, 1))
-        .setDepth(-10);
-      s.setData("speed", Phaser.Math.Between(TUNING.visuals.starMinSpeed, TUNING.visuals.starMaxSpeed));
-      this.stars.add(s);
+    // No stars over a tiled dirt ground — starfield is a space-episode-only touch.
+    if (!this.isGroundLevel) {
+      for (let i = 0; i < TUNING.visuals.starCount; i++) {
+        const s = this.add
+          .image(Phaser.Math.Between(0, GAME_WIDTH), Phaser.Math.Between(0, GAME_HEIGHT), TEX.star)
+          .setAlpha(Phaser.Math.FloatBetween(0.2, 1))
+          .setDepth(-10);
+        s.setData("speed", Phaser.Math.Between(TUNING.visuals.starMinSpeed, TUNING.visuals.starMaxSpeed));
+        this.stars.add(s);
+      }
     }
 
     this.playerBullets = this.physics.add.group({
@@ -484,11 +504,16 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   /**
    * Composition thresholds (run-structure.spec.todo.md): an "elite" node
    * forces an elite-heavy fight, a "standard" node rolls the archetype per
-   * spawn against the current D (elites locked out below eliteUnlockD).
+   * spawn against the current D (elites locked out below eliteUnlockD). The
+   * roll is domain-aware (C5 #144): ground levels lean toward the turret,
+   * space levels toward the swarmer, once each archetype's own D threshold
+   * unlocks it.
    */
   private spawnEnemy(): void {
     if (this.gameOver) return;
-    const archetype: EnemyArchetypeId = this.episode.nodeType === "elite" ? "elite" : rollSpawnArchetype(this.episode.D);
+    const domain = this.isGroundLevel ? "ground" : "air";
+    const archetype: EnemyArchetypeId =
+      this.episode.nodeType === "elite" ? "elite" : rollSpawnArchetypeForDomain(this.episode.D, domain);
     const stats = scaledEnemyStats(archetype, TUNING.enemies[archetype], this.episode.D);
     const x = Phaser.Math.Between(24, GAME_WIDTH - 24);
     const y = -20;
@@ -508,12 +533,38 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.boss = enemy;
   }
 
+  /**
+   * Generic fire-pattern interpreter (combat.spec.todo.md, C5 #144): reads
+   * `enemy.firePattern`, never special-cases an archetype ID. "aimed" is the
+   * elite/turret "nastier pattern" the difficulty todo spec calls for;
+   * "spread" is the swarmer/boss's multi-bullet fan; "straight" is the
+   * original drone behavior.
+   */
   private fireEnemyBullet(enemy: Enemy): void {
     const x = enemy.x;
     const y = enemy.y + enemy.height / 2;
     const speed = enemy.bulletSpeed * reflexBulletSpeedMult(this.player.stats.reflexes);
+    const pattern = enemy.firePattern;
+    if (pattern.kind === "aimed") {
+      const angle = Phaser.Math.Angle.Between(x, y, this.player.x, this.player.y);
+      this.spawnEnemyBullet(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, enemy);
+      return;
+    }
+    if (pattern.kind === "spread") {
+      const spreadRad = Phaser.Math.DegToRad(pattern.spreadDeg);
+      for (let i = 0; i < pattern.count; i++) {
+        const t = pattern.count === 1 ? 0 : i / (pattern.count - 1) - 0.5;
+        const angle = Math.PI / 2 + t * spreadRad; // fanned around straight down
+        this.spawnEnemyBullet(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, enemy);
+      }
+      return;
+    }
+    this.spawnEnemyBullet(x, y, 0, speed, enemy);
+  }
+
+  private spawnEnemyBullet(x: number, y: number, vx: number, vy: number, enemy: Enemy): void {
     const bullet = this.enemyBullets.get(x, y, TEX.bulletEnemy) as EnemyBullet | null;
-    bullet?.fire(x, y, 0, speed, enemy.bulletDamage, enemy.polarity);
+    bullet?.fire(x, y, vx, vy, enemy.bulletDamage, enemy.polarity);
   }
 
   /**

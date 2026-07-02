@@ -79,5 +79,32 @@
     "frameCount": 1,
     "frameDuration": 100,
     "placeholder": { "shape": "circle", "color": "#ffcc00" }
+  },
+  "bgGround": {
+    "category": "effects",
+    "path": "effects/fx_bg_ground_01.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "frameCount": 16,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#8a6d4a" }
+  },
+  "enemySwarmer": {
+    "category": "enemies",
+    "path": "enemies/enemy_swarmer_idle_01.png",
+    "frameWidth": 22,
+    "frameHeight": 22,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "circle", "color": "#33cc88" }
+  },
+  "enemyTurret": {
+    "category": "enemies",
+    "path": "enemies/enemy_turret_idle_01.png",
+    "frameWidth": 48,
+    "frameHeight": 48,
+    "frameCount": 1,
+    "frameDuration": 100,
+    "placeholder": { "shape": "rect", "color": "#8b6f47" }
   }
 }

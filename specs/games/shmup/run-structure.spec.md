@@ -58,23 +58,46 @@ by) the F9 #137 offer system (`economy.spec.md`, `systems/economy/offers.ts`).
 
 ### Per-archetype emphasis + composition thresholds (`systems/difficulty/archetypes.ts`)
 
-Two enemy archetypes exist today, each with its own emphasis weights against
-the shared curves (`ARCHETYPE_EMPHASIS`):
+Five enemy archetypes exist today (C5 #144's batch 1), each with its own
+emphasis weights against the shared curves (`ARCHETYPE_EMPHASIS`):
 
-| Archetype | Lean | Notes |
-|---|---|---|
-| `drone` | baseline (1/1/1/1) | The swarmer — its lean is spawn density, not per-enemy stats |
-| `elite` | HP 1.6, damage 1.3, speed 0.6, fire-rate 0.5 | The bruiser |
-| `boss` | HP 1.1 + a flat `bossHpMult` (3x), damage 1.15 | Season/Series Finale only |
+| Archetype | Domain | Lean | Movement / fire pattern | Notes |
+|---|---|---|---|---|
+| `drone` | air | baseline (1/1/1/1) | linear descent / straight-down shots | Density is its lean, expressed at the spawner (`densityCurve`), not per-enemy stats |
+| `swarmer` | air | HP 0.5, damage 0.8, speed 1.6, fire-rate 1.3 | sine weave descent / 2-way spread | The "more of them, harder to pin down" lean expressed as motion, not just a stat |
+| `elite` | air | HP 1.6, damage 1.3, speed 0.6, fire-rate 0.5 | linear descent / aimed shots | The bruiser — aimed fire reads as the "nastier pattern" this table used to call for |
+| `turret` | ground | HP 1.5, damage 1.2, speed 0.2, fire-rate 1.4 | hover (descend, hold, resume) / aimed shots | The batch's ground archetype — establishes the ground/air split C1 #140's weapon targeting reads |
+| `boss` | air | HP 1.1 + a flat `bossHpMult` (3x), damage 1.15 | patrol (holds lane, bounces) / 3-way spread | Season/Series Finale only |
 
-`eliteUnlocked(D)`/`eliteChance(D)` gate composition: elites are impossible
-below `eliteUnlockD`, then their per-spawn odds ramp linearly to
-`eliteChanceMax` by `eliteChanceMaxD`. An **elite node** forces every spawn
-to roll `elite` regardless of D (`PlayScene.spawnEnemy()`); a **standard**
-node rolls per spawn via `rollSpawnArchetype(D)`. `scaledEnemyStats()`
-combines a base config (`TUNING.enemies.<archetype>`) with the curves and
-this table to produce the numbers `Enemy.spawn()` actually uses — Enemy
-itself has no D/curve math.
+`domain` (`ground`/`air`) is a pure data tag `Enemy` carries — C1 #140 owns
+actually gating player weapons by it (`WeaponDef.targetType`). `movement`/
+`firePattern` are typed data (`MovementConfig`/`FirePatternConfig`,
+`systems/difficulty/types.ts`) interpreted generically by `Enemy.preUpdate`
+and `PlayScene.fireEnemyBullet` respectively — adding a new pattern kind is
+a shared-interpreter change, but adding a new *archetype* that reuses an
+existing pattern kind is data-only.
+
+`eliteUnlocked(D)`/`eliteChance(D)` (and the equivalently-shaped
+`swarmerChance(D)`/`turretChance(D)`) gate composition: each archetype is
+impossible below its own `<name>UnlockD`, then its per-spawn odds ramp
+linearly to `<name>ChanceMax` by `<name>ChanceMaxD`. An **elite node**
+forces every spawn to roll `elite` regardless of D (`PlayScene.spawnEnemy()`);
+a **standard** node rolls per spawn via `rollSpawnArchetypeForDomain(D,
+domain)`, which layers the domain-flavored archetype (turret for ground
+levels, swarmer for air levels) on top of the elite/drone gate.
+`scaledEnemyStats()` combines a base config (`TUNING.enemies.<archetype>`)
+with the curves and this table to produce the numbers `Enemy.spawn()`
+actually uses — Enemy itself has no D/curve math.
+
+### Ground vs. air levels (cosmetic today, C5 #144)
+
+`PlayScene` rolls `isGroundLevel` once per non-boss episode
+(`TUNING.visuals.groundLevelChance`) and bakes a tiled dirt background from
+`sprites/manifest.json`'s `bgGround` sheet (`sprites/groundBackground.ts`'s
+`bakeGroundTexture`) instead of the starfield; the enemy composition roll
+above reads the same flag to prefer the matching domain's flavor archetype.
+Purely a per-episode coin flip for now — a future pass could tie it to
+node/map content instead.
 
 ## The overworld deadline
 

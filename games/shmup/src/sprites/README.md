@@ -119,6 +119,15 @@ self-contained read-only peek at the shared `ns97_fs_v1` localStorage key
 rather than an import of the live `fsStore` singleton (SHMUP is a
 separately-built bundle, not part of the Doors 97 React app).
 
+## Bundled art attribution
+
+Binary assets carry no supply-chain risk in the npm sense (root `CLAUDE.md`'s
+dependency policy), but the source/hash is documented here per that policy:
+
+| File | Source | SHA-256 |
+|---|---|---|
+| `effects/fx_bg_ground_01.png` | Noah-provided reference art (dirt/ground 4x4 tileset), cropped to 16 gutter-free 96×96 tiles and reassembled into one sheet for `sprites/manifest.json`'s `bgGround` entry | `6183b7ca3780d872af4d40c0172f302d54f8bc48b227a1e5d37aa9faf1338104` |
+
 ## Module map
 
 | File | Job |
