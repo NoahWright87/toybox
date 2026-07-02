@@ -146,6 +146,14 @@ describe("resolveLoadout — single resolution path", () => {
     expect(baseline.stats.pierce).toBeCloseTo(0.5, 10);
     expect(grazing.stats.pierce).toBeCloseTo(1.0, 10);
   });
+
+  it("statPickMods stack alongside chassisMods as separate persistent sources (chassis.spec.md)", () => {
+    const { stats } = resolveLoadout({
+      chassisMods: [{ kind: "flat", stat: "maxHp", amount: 10 }],
+      statPickMods: [{ kind: "flat", stat: "maxHp", amount: 12 }],
+    });
+    expect(stats.maxHp).toBeCloseTo(STAT_DEFS.maxHp.base + 22, 10);
+  });
 });
 
 interface SlotCase {
@@ -179,5 +187,10 @@ describe("resolveLoadout — 6 weapon-slot cap", () => {
     } else {
       expect(attempt).not.toThrow();
     }
+  });
+
+  it("a chassis-specific maxWeaponSlots overrides the framework default cap (chassis.spec.md)", () => {
+    expect(() => resolveLoadout({ weapons: ownedSlots(3), maxWeaponSlots: 2 })).toThrow();
+    expect(() => resolveLoadout({ weapons: ownedSlots(2), maxWeaponSlots: 2 })).not.toThrow();
   });
 });

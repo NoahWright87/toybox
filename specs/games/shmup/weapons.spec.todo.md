@@ -10,14 +10,14 @@ A **weapon** is data:
 - a base type + base stat values + **per-weapon projectile speed** (authored, see `combat.spec.todo.md`),
 - **firing arc** (forward / behind / sides — some exist to cover blind spots),
 - **target type** (ground-only / air-only / both — gates which weapons matter),
-- optional **focused-fire mode** (e.g. wide spray → concentrated stream when focusing),
+- optional **focused-fire mode** (`WeaponDef.focusedMods` — implemented, `chassis.spec.md`, F10 #138: e.g. wide spray → concentrated stream when focusing),
 - a **per-level bonus table** (see Upgrades),
 - optional **`pierceDecay`** (see Pierce, below) — defaults to `TUNING.weapons.defaultPierceDecay` when omitted,
 - `scalesWith: StatId[]` for the explicit-stat display.
 
 ## Slots
 
-**6 weapon slots per chassis** (bullet-heaven default + a hard performance ceiling that bounds worst-case concurrent projectiles). Each slot holds an **independent weapon instance with its own upgrade level** — you may buy the same weapon into two slots for redundancy *or* pour gold into one.
+**6 weapon slots per chassis** (bullet-heaven default + a hard performance ceiling that bounds worst-case concurrent projectiles) — the cap itself is owned by the equipped chassis (`ChassisDef.maxWeaponSlots`, `chassis.spec.md`, F10 #138), 6 just being the framework's default. Each slot holds an **independent weapon instance with its own upgrade level** — you may buy the same weapon into two slots for redundancy *or* pour gold into one.
 
 ## Attack-behavior modifiers (freeform, generic)
 

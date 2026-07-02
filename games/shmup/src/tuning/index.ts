@@ -36,11 +36,12 @@ export const TUNING = {
     reflexMoveK: 1,
     reflexBulletSlowCap: 0.8,
     reflexMoveSlowCap: 0.5,
-    // Focus (chassis.spec.todo.md): hold to move slower for precision. The
-    // default chassis (F10 #138) hasn't landed yet, so F6 ships the
-    // universal base behavior plus a hitbox shrink (genre-standard "graze
-    // box") as the vertical-slice default; a future chassis quirk may
-    // override hitboxRadiusFocus instead of relying on this global.
+    // Focus (chassis.spec.md, F10 #138): hold to move slower for precision —
+    // the universal base action every chassis has (`ChassisFocusDef.speedMult`).
+    // hitboxRadiusFocus below is DEFAULT_CHASSIS's own perk
+    // (`ChassisFocusDef.hitboxRadiusFocus`, content/chassis.ts), not a rule
+    // the framework imposes — a future chassis may omit it or use a
+    // different value entirely.
     focusSpeedMult: 0.45,
     hitboxRadiusNormal: 6,
     hitboxRadiusFocus: 3,
@@ -52,6 +53,29 @@ export const TUNING = {
     // Brief invulnerability after any non-dodged hit — without this, an
     // overlapping enemy/bullet would re-deal damage every physics step.
     playerIFrameMs: 500,
+  },
+  // Chassis content (chassis.spec.md, F10 #138 framework / C7 #146 content).
+  // Only Ikaruga-style polarity chassis read this block today — every other
+  // chassis has no `ChassisDef.polarity`, so these numbers are inert unless
+  // a polarity chassis is equipped.
+  chassis: {
+    ikaruga: {
+      // "Gates which enemies take full damage from your shots" — a shot
+      // fired at the wrong polarity bounces off harmlessly; the matching
+      // polarity deals full damage.
+      damageMultiplierSame: 0,
+      damageMultiplierOpposite: 1,
+      // Hype gained per same-polarity bullet absorbed, before scaling by the
+      // shared grazeMultiplier stat (repurposed as this chassis's
+      // absorb-meter gain rate, chassis.spec.md).
+      absorbHypeBase: 6,
+    },
+    // Shared tint applied to the player ship, enemies, and bullets when a
+    // polarity chassis is equipped — only Ikaruga-style chassis read this.
+    polarityColors: {
+      red: 0xff4444,
+      blue: 0x4488ff,
+    },
   },
   // Grazing (hype-and-ratings.spec.md, F7 #135): concentric rings as
   // fractions of the grazeRadius stat. Innermost ring only applies (no

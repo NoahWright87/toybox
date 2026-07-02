@@ -37,7 +37,7 @@ Level-ups (`economy.spec.todo.md`) only ever offer these (`MAIN_STAT_IDS` in `sy
 
 **Exotic stats** (`EXOTIC_STAT_IDS`) — Pierce, Blast Radius, Homing Strength — never appear in level-ups. They come only from weapons/items/shop, keeping the level pick legible and exotic builds intentional. Pierce and Homing Strength are unbounded percentages; Blast Radius is a flat px value. Pierce used to be four separate stats (Pierce/Bounce/Fork/Chain) — they were behaviorally redundant, so they were consolidated into one unified Pierce stat with per-weapon `PierceDecay` driving the above-100% forking behavior (`weapons.spec.todo.md`).
 
-Hype/graze-specific stats — `grazeRadius`, `grazeMultiplier` — are exotics too, added to `EXOTIC_STAT_IDS` by `hype-and-ratings.spec.md` (F7 #135), using the same `StatDef` shape as the rest of this table. Hitbox size is not a stat; it's a fixed normal/Focus radius pair (`TUNING.combat.hitboxRadiusNormal`/`hitboxRadiusFocus`, F6 #134).
+Hype/graze-specific stats — `grazeRadius`, `grazeMultiplier` — are exotics too, added to `EXOTIC_STAT_IDS` by `hype-and-ratings.spec.md` (F7 #135), using the same `StatDef` shape as the rest of this table. Hitbox size is not a stat; it's a normal/Focus radius pair owned by the equipped chassis (`ChassisDef.hitboxRadiusNormal`/`focus.hitboxRadiusFocus`, `chassis.spec.md`, F10 #138).
 
 ## StatDef shape
 

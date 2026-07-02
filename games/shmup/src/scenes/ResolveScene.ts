@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
-import { copy, itemById, ratingsTierForScore, ratingsTierName, weaponById } from "../content";
+import { chassisById, copy, itemById, ratingsTierForScore, ratingsTierName, weaponById } from "../content";
 import { applyRatingsDelta } from "../systems/hype";
 import { advanceDeadline } from "../systems/map";
 import { advanceToNextSeason, createNewCareer, loadCareer, saveCareer } from "../systems/career";
@@ -127,8 +127,15 @@ export class ResolveScene extends Phaser.Scene {
         return item ? { item, count: ref.count } : undefined;
       })
       .filter((owned): owned is OwnedItem => owned !== undefined);
-    const chassisMods = statPickMods(career.statPicks);
-    return resolveLoadout({ weapons, items, chassisMods }).stats.playerSpeed;
+    const chassis = chassisById(career.chassisId);
+    return resolveLoadout({
+      weapons,
+      items,
+      chassisBase: chassis.statBase,
+      chassisMods: chassis.mods,
+      statPickMods: statPickMods(career.statPicks),
+      maxWeaponSlots: chassis.maxWeaponSlots,
+    }).stats.playerSpeed;
   }
 
   /**

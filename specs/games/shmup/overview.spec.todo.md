@@ -41,7 +41,8 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 | `combat.spec.todo.md` | damage, defense pipeline, mobility | F3 #131, F6 #134 |
 | `weapons.spec.todo.md` | effect engine, attack modifiers, gold upgrades | F4 #132, C1 #140, C2 #141 |
 | `items-and-brands.spec.todo.md` | items, stacking, brand tags, offer weighting (offer-weighting math **implemented** by F9; item/brand catalog growth still open) | F4 #132, F9 #137, C3 #142, C4 #143 |
-| `chassis.spec.todo.md` | chassis framework, focus, polarity example | F10 #138, C7 #146, C8 #147 |
+| `chassis.spec.md` | chassis framework, default chassis, Focus mode, Ikaruga polarity chassis, chassis-selection Hangar — **implemented** | F10 #138, C7 #146 |
+| `chassis.spec.todo.md` | remaining Epic 2 chassis content (more chassis, polish) | C8 #147 |
 | `hype-and-ratings.spec.md` | grazing, Hype + Ratings formulas (Model 1) — **implemented** | F7 #135 |
 | `economy.spec.md` | currencies, level-ups (end-of-level break only), coins/tips, interest, shop, gold sinks, offer weighting — **implemented** | F9 #137 |
 | `economy.spec.todo.md` | remaining balance pass + content growth | F9 #137 |

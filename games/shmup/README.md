@@ -25,7 +25,7 @@ games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.to
     scenes/          BootScene, MapScene (Season node-map), PlayScene (F6 loop), ResolveScene (episode->map cash-in)
     content/         copy registry ("copy is an asset")
     tuning/          numeric levers ("tuning is an asset")
-    systems/         stat/effect/economy engines land here (F3/F4/F9…)
+    systems/         stat/effect/chassis/economy engines land here (F3/F4/F10/F9…)
     sprites/         sprite registry — placeholder primitives + manifest.json (F5)
     assets/sprites/  bundled sprite art, wired by path from sprites/manifest.json (F5)
     save/            SaveStore — swappable save/settings persistence (S1)

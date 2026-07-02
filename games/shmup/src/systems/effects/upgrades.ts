@@ -22,6 +22,21 @@ export function weaponModsAtTier(weapon: WeaponDef, tier: number): StatModifier[
   }));
 }
 
+/**
+ * Same statValue(tier) scaling as `weaponModsAtTier`, but for a weapon's
+ * optional `focusedMods` (chassis.spec.md) — the caller only includes these
+ * while Focus is actually held, as transient mods (stats.spec.md's
+ * toggled-by-condition-flip convention). Weapons without a focused-fire
+ * variant simply have nothing to add here.
+ */
+export function weaponFocusModsAtTier(weapon: WeaponDef, tier: number): StatModifier[] {
+  const safeTier = Math.max(0, Math.floor(tier));
+  return (weapon.focusedMods ?? []).map(({ base, perLevel }) => ({
+    ...base,
+    amount: base.amount + perLevel * safeTier,
+  }));
+}
+
 /** brandDiscount = min(cap, perItem * ownedCount(brand)) (weapons.spec.todo.md). */
 export function brandDiscount(ownedBrandCount: number): number {
   const { brandDiscountPerItem, brandDiscountCap } = TUNING.weapons;

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
-import { ALL_ITEMS, ALL_WEAPONS, copy, itemById, ratingsTierForScore, ratingsTierRank, weaponById } from "../content";
+import { ALL_ITEMS, ALL_WEAPONS, chassisById, copy, itemById, ratingsTierForScore, ratingsTierRank, weaponById } from "../content";
 import { loadCareer, saveCareer } from "../systems/career";
 import type { CareerState, OwnedItemRef } from "../systems/career";
 import {
@@ -143,10 +143,14 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private resolvedStats(career: CareerState) {
+    const chassis = chassisById(career.chassisId);
     return resolveLoadout({
       weapons: this.ownedWeapons(career),
       items: this.ownedItems(career),
-      chassisMods: statPickMods(career.statPicks),
+      chassisBase: chassis.statBase,
+      chassisMods: chassis.mods,
+      statPickMods: statPickMods(career.statPicks),
+      maxWeaponSlots: chassis.maxWeaponSlots,
     }).stats;
   }
 

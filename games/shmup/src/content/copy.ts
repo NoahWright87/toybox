@@ -42,6 +42,12 @@ export const COPY = {
   "enemy.placeholder.name": "Drone",
   "enemy.placeholder.description": "Cheap, expendable, everywhere.",
 
+  // ---- Chassis (chassis.spec.md, F10 #138 / C7 #146) ----
+  "chassis.default.name": "Roadrunner Mk. I",
+  "chassis.default.description": "No frills, no gimmicks. A balanced stock frame.",
+  "chassis.ikaruga.name": "Chromashift Mk. I",
+  "chassis.ikaruga.description": "Switch polarity to absorb same-color fire into Hype. Wrong-color shots bounce off enemies harmlessly.",
+
   // ---- Passive items (items-and-brands.spec.todo.md, F9 #137) ----
   "item.lucky-rabbits-foot.name": "Lucky Rabbit's Foot",
   "item.piggy-bank.name": "Piggy Bank",
@@ -102,6 +108,13 @@ export const COPY = {
   "map.newCareer.confirm": "TAP AGAIN TO CONFIRM",
   "map.desynced.title": "MAP ERROR",
   "map.desynced.flavor": "No reachable episodes from here. Start a new career to keep playing.",
+  "map.hangar": "HANGAR",
+
+  // ---- Hangar / chassis selection (chassis.spec.md, F10 #138 / C7 #146) ----
+  "hangar.title": "HANGAR",
+  "hangar.hint": "Tap a chassis to equip it",
+  "hangar.equipped": "EQUIPPED",
+  "hangar.back": "BACK TO MAP",
 
   // ---- Level-up (economy.spec.todo.md, F9 #137): end-of-level break only, batched, never mid-play ----
   "levelup.title": "LEVEL UP!",

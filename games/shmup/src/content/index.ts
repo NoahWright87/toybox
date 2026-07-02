@@ -24,6 +24,7 @@ export { BRANDS } from "./brands";
 export type { SponsorBrand, BrandId } from "./brands";
 export { PLACEHOLDER_WEAPON, ALL_WEAPONS, weaponById } from "./weapons";
 export { ALL_ITEMS, itemById } from "./items";
+export { DEFAULT_CHASSIS, IKARUGA_CHASSIS, ALL_CHASSIS, chassisById } from "./chassis";
 export { CROWD_COMMENTS } from "./crowdComments";
 export type { CrowdCommentLine } from "./crowdComments";
 export type { CrowdTag } from "./tags";

@@ -75,6 +75,7 @@ export class MapScene extends Phaser.Scene {
     const positions = this.layoutPositions(map);
 
     this.drawNewCareerControl(GAME_WIDTH - 12, 12, false);
+    this.drawHangarControl(12, 12);
 
     this.add
       .text(GAME_WIDTH / 2, 20, copy("map.title", { season: career.season }), {
@@ -173,8 +174,22 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
+  /** Opposite corner from the New Career control — the Hangar (chassis.spec.md, F10 #138 / C7 #146) is reachable any time, not gated behind starting a new career. */
+  private drawHangarControl(x: number, y: number): void {
+    this.add
+      .text(x, y, copy("map.hangar"), {
+        fontFamily: "monospace",
+        fontSize: "10px",
+        color: "#7b3dbe",
+      })
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerdown", () => this.scene.start(SCENE_KEYS.chassisSelect));
+  }
+
   private renderSyndication(career: CareerState): void {
     this.drawNewCareerControl(GAME_WIDTH - 12, 12, false);
+    this.drawHangarControl(12, 12);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, copy("map.syndication.title"), {
@@ -244,6 +259,7 @@ export class MapScene extends Phaser.Scene {
         season: TUNING.difficulty.seasonCount,
         D,
         ratings: career.ratings,
+        chassisId: career.chassisId,
         weapons: career.weapons,
         items: career.items,
         statPicks: career.statPicks,
@@ -415,6 +431,7 @@ export class MapScene extends Phaser.Scene {
         season: career.season,
         D,
         ratings: career.ratings,
+        chassisId: career.chassisId,
         weapons: career.weapons,
         items: career.items,
         statPicks: career.statPicks,

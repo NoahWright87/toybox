@@ -1,28 +1,32 @@
-# Shmup — Chassis Spec
+# Shmup — Chassis TODO
 
-> Issues: **F10 #138** (framework), **C7 #146** (Ikaruga), **C8 #147** (more chassis). Status: framing locked.
+> Issues: **F10 #138** (framework, implemented), **C7 #146** (Ikaruga,
+> implemented — see `chassis.spec.md`), **C8 #147** (more chassis). Status:
+> framework + flagship shipped; further chassis content is Epic 2.
 
-## Framework
+## Remaining work (Epic 2 content)
 
-A chassis is **data**, defining:
-- weapon-slot config (default cap **6**),
-- hitbox size (distinct from sprite size),
-- stat weightings,
-- 1–2 identity **quirks** that *reinterpret existing stats* (Brotato-character model), composed through the effect engine — **no bespoke per-chassis subsystems**.
+- **C8 #147 — more chassis.** Vary slot count, hitbox size, stat weighting,
+  and quirks — the same way Brotato characters differ. All expressed as
+  `ChassisDef` data through the existing engines; Ikaruga's `polarity` hook
+  proved the framework can carry a full offense/defense mechanic with zero
+  engine changes, so expect future chassis ideas to fit the same shape.
+  Revisit only if a genuinely new idea can't be expressed with the current
+  `ChassisDef`/`ChassisPolarityDef` fields.
+- **At least one weapon should actually declare `focusedMods`** once C1/C2
+  grow the weapon roster, so the focused-fire variant described in
+  `chassis.spec.md` is player-visible rather than only unit-tested.
+- **Ikaruga polish** (not required by C7's acceptance criteria, but natural
+  follow-ups): a mobile-friendly polarity-switch control (currently keyboard
+  `X` only, same gap as Focus's own "mobile Focus is TBD" note); a HUD
+  indicator for current polarity beyond the ship/bullet tint; enemy-type
+  variety in how polarity is assigned (currently uniform random 50/50 per
+  spawn) once real enemy archetypes beyond drone/elite/boss exist.
 
-Ship the **default chassis** in the framework issue; additional chassis are content.
+## Related
 
-## Focus (lives on the chassis)
-
-Focus is an action, not a stat:
-- **Base (universal):** hold to move slower for precise dodging. No automatic hitbox shrink.
-- **Weapon-defined:** a weapon may switch to a focused-fire mode (wide → concentrated).
-- **Chassis-defined perks:** hitbox shrink, a focus shield, etc. — identity, not a universal rule.
-
-## Flagship example — Ikaruga polarity chassis
-
-Instead of grazing, a **polarity switch**: same-color absorption feeds the **same underlying graze-multiplier stat**, repurposed as absorb-meter gain rate; current polarity gates which enemies take full damage. This must slot into the framework by **remapping an input onto an existing stat and gating damage by state** — validating that the framework needs no new subsystem for such a chassis.
-
-## Variety axes for future chassis
-
-Vary slot count, hitbox size, stat weighting, and quirks — the same way Brotato characters differ. All expressed as data through existing engines.
+- [`chassis.spec.md`](chassis.spec.md) — the shipped framework, default
+  chassis, and Ikaruga polarity chassis this TODO extends
+- [`weapons.spec.todo.md`](weapons.spec.todo.md) — weapon roster growth (C1
+  #140, C2 #141) that Focus-mode weapon variety depends on
+- [`overview.spec.todo.md`](overview.spec.todo.md) — spec map

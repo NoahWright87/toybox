@@ -72,6 +72,15 @@ export interface WeaponDef {
   /** Stats this weapon's tooltip should display itself scaling with. */
   scalesWith: StatId[];
   mods: ScalingModifier[];
+  /**
+   * Optional focused-fire variant (chassis.spec.md's "weapons MAY define a
+   * focused-fire mode", e.g. wide spray unfocused -> concentrated stream
+   * focused): extra scaling modifiers layered on top of `mods`, as transient
+   * mods, only while the chassis's Focus action is held. Same
+   * `ScalingModifier` shape and per-tier scaling as `mods` — expressed as
+   * data over the shared stat pool, not a bespoke firing-pattern mechanic.
+   */
+  focusedMods?: ScalingModifier[];
 }
 
 /**
