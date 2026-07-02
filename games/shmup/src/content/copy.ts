@@ -11,6 +11,16 @@ export const COPY = {
   "intro.presents": "Noahsoft presents:",
   "intro.sticker": "Works on Doors 97!",
 
+  // ---- Main menu / app flow (run-structure app-flow, S3 #173) ----
+  "menu.newCareer": "NEW CAREER",
+  "menu.continue": "CONTINUE",
+  "menu.continue.disabled": "CONTINUE (NO SAVE)",
+  "menu.settings": "SETTINGS",
+  "menu.hallOfFame": "HALL OF FAME",
+  "menu.hint": "Arrows or Tap to select · Enter/Tap to confirm",
+  "menu.stub.comingSoon": "Coming soon.",
+  "menu.stub.back": "PRESS ANY KEY OR TAP TO GO BACK",
+
   // ---- Season / Finale / Syndication flavor (run-structure.spec.todo.md) ----
   "season.finale.title": "SEASON FINALE",
   "season.finale.flavor": "The network's watching. Don't blow it.",
@@ -86,7 +96,7 @@ export const COPY = {
   "resolve.syndicationScore": "Syndication Score: {score}",
   "resolve.goldCollected": "+{gold}g collected",
   "resolve.levelUp": "LEVEL UP x{count}",
-  "cancelled.restartPrompt": "PRESS ANY KEY OR TAP TO START A NEW CAREER",
+  "cancelled.restartPrompt": "PRESS ANY KEY OR TAP TO RETURN TO THE MENU",
 
   // ---- Season node-map (run-structure.spec.todo.md, F8 #136) ----
   "map.title": "SEASON {season}",

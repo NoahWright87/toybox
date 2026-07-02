@@ -7,7 +7,10 @@ import { SCENE_KEYS } from "./sceneData";
 /**
  * Title card — proves the skeleton renders and that copy comes from the
  * content registry (specs/content-and-assets), not inline strings.
- * Press any key / tap to drop into the Season map (run-structure.spec.todo.md, F8 #136).
+ * Press any key / tap to land on the main menu (S3 #173) — the intro splash
+ * sequence itself (S2 #172) isn't built yet, so this card is the whole
+ * pre-menu beat for now; a real splash can slot in ahead of it later
+ * without touching where it hands off to.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -62,7 +65,7 @@ export class BootScene extends Phaser.Scene {
     // handler — this tap is the only one guaranteed before PlayScene exists.
     const start = () => {
       requestMotionPermission();
-      this.scene.start(SCENE_KEYS.map);
+      this.scene.start(SCENE_KEYS.mainMenu);
     };
     this.input.keyboard?.once("keydown", start);
     this.input.once("pointerdown", start);

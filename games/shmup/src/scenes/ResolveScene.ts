@@ -3,7 +3,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { chassisById, copy, itemById, ratingsTierForScore, ratingsTierName, weaponById } from "../content";
 import { applyRatingsDelta } from "../systems/hype";
 import { advanceDeadline } from "../systems/map";
-import { advanceToNextSeason, createNewCareer, loadCareer, saveCareer } from "../systems/career";
+import { advanceToNextSeason, loadCareer, saveCareer } from "../systems/career";
 import type { CareerState } from "../systems/career";
 import { applyExpGain, statPickMods } from "../systems/economy";
 import { resolveLoadout } from "../systems/effects";
@@ -247,7 +247,14 @@ export class ResolveScene extends Phaser.Scene {
     );
   }
 
-  /** Cumulative Ratings < 0 is Cancelled — the career ends here; no meta-progression carries into the next one. `syndicationScore` is only recorded when the cancellation happened during Syndication. */
+  /**
+   * Cumulative Ratings < 0 is Cancelled — the career ends here; no
+   * meta-progression carries into the next one. `syndicationScore` is only
+   * recorded when the cancellation happened during Syndication. Per the
+   * app-level flow (S3 #173: boot -> menu -> game -> results -> menu), a
+   * finished career lands back on MainMenuScene rather than auto-starting a
+   * new one — the player picks New Career from there themselves.
+   */
   private showCancelled(syndicationScore: number | null): void {
     const lines = [
       copy("cancelled.title"),
@@ -258,10 +265,7 @@ export class ResolveScene extends Phaser.Scene {
     if (syndicationScore !== null) lines.push(copy("resolve.syndicationScore", { score: Math.round(syndicationScore) }));
     lines.push("", copy("cancelled.restartPrompt"));
 
-    this.render(lines, () => {
-      saveCareer(createNewCareer());
-      this.scene.start(SCENE_KEYS.map);
-    });
+    this.render(lines, () => this.scene.start(SCENE_KEYS.mainMenu));
   }
 
   private ratingsLine(career: CareerState): string {

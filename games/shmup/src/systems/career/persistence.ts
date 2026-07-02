@@ -95,3 +95,14 @@ export function loadCareer(): CareerState {
 export function saveCareer(state: CareerState): void {
   saveStore.write(CAREER_SAVE_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
 }
+
+/** MainMenuScene's Continue gate (S3 #173) — true only when a save exists AND parses/validates, same trust bar as `loadCareer()` itself. Never creates one as a side effect (unlike `loadCareer()`), so checking this can't spuriously plant a fresh career. */
+export function hasCareerSave(): boolean {
+  const raw = saveStore.read(CAREER_SAVE_KEY);
+  if (!raw) return false;
+  try {
+    return isValidCareerState(JSON.parse(raw));
+  } catch {
+    return false;
+  }
+}
