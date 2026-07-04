@@ -238,6 +238,29 @@
 }
 
 .shmup-tile-preview__body {
+  position: relative;
+  display: flex;
+}
+.shmup-tile-preview__body--empty {
+  background-color: #999;
+}
+
+/* One cell per footprint column -- each shows a full copy of the tile's
+   art, scaled to fill its own square (not a small repeating pattern). */
+.shmup-tile-preview__cell {
+  flex: 1 1 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.shmup-tile-preview__body--empty .shmup-tile-preview__cell {
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
+}
+
+.shmup-tile-preview__label {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -247,17 +270,10 @@
   text-shadow: 1px 1px 0 #000;
   font-size: 8px;
   text-align: center;
-  padding: 4px;
-  background-repeat: repeat;
-  background-size: 80px 80px;
+  pointer-events: none;
 }
-.shmup-tile-preview--edit .shmup-tile-preview__body {
-  background-size: 128px 128px;
+.shmup-tile-preview--edit .shmup-tile-preview__label {
   font-size: 11px;
-}
-.shmup-tile-preview__body--empty {
-  background-color: #999;
-  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
 }
 .shmup-tile-preview__name {
   word-break: break-word;

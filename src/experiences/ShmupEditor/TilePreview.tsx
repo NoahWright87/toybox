@@ -82,15 +82,19 @@ export default function TilePreview({
         <div className="shmup-tile-preview__corner" />
 
         {renderEdge("west", 0, oriented.west, "w")}
-        <div
-          className={`shmup-tile-preview__body ${image.url ? "" : "shmup-tile-preview__body--empty"}`}
-          style={{
-            gridColumn: `span ${columns}`,
-            backgroundImage: image.url ? `url(${image.url})` : undefined,
-          }}
-        >
-          <span className="shmup-tile-preview__name">{tile.name}</span>
-          {tile.isConnector && <span className="shmup-tile-preview__badge">CONNECTOR</span>}
+        <div className={`shmup-tile-preview__body ${image.url ? "" : "shmup-tile-preview__body--empty"}`} style={{ gridColumn: `span ${columns}` }}>
+          {/* One full copy of the tile's art per column, scaled to fill its own square — not a small repeating pattern. */}
+          {Array.from({ length: columns }, (_, i) => (
+            <div
+              key={i}
+              className="shmup-tile-preview__cell"
+              style={image.url ? { backgroundImage: `url(${image.url})` } : undefined}
+            />
+          ))}
+          <div className="shmup-tile-preview__label">
+            <span className="shmup-tile-preview__name">{tile.name}</span>
+            {tile.isConnector && <span className="shmup-tile-preview__badge">CONNECTOR</span>}
+          </div>
         </div>
         {renderEdge("east", 0, oriented.east, "e")}
 

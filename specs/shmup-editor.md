@@ -35,9 +35,12 @@ A tile (`TileDef`) has:
   every south slot's tag to the wildcard (`*`), matching any incoming edge.
 - `weight`, `imageId`, `name`: authoring metadata (weight is exported;
   imageId/name are editor-only, not part of the gameplay shape). `imageId`
-  picks from a small built-in set (`tileImages.ts`: none/water/grass —
-  real per-tile art import is still future work) rendered as a tiled
-  background across the tile's full footprint, not a flat color swatch.
+  picks from a small built-in set (`tileImages.ts`: none/water/grass/shore
+  — real per-tile art import is still future work). Each image is one
+  whole 1x1 tile's art, scaled to fill its square; a footprint > 1 tile
+  renders one full copy per column (`TilePreview`'s `__cell` divs), not
+  one image stretched or tiled as a small repeating pattern across the
+  whole width.
 
 Rotation: footprint-1 tiles get all 4 rotations x flip (8 orientations);
 footprint 2/3 tiles only get 0°/180° x flip (4) — rotating a
