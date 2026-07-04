@@ -33,7 +33,9 @@ const COLUMN_WIDTH: Record<PreviewSize, string> = {
   // tile overflows into horizontal scroll on the same small screen.
   edit: "min(78vw, 420px)",
 };
-const CORNER_WIDTH: Record<PreviewSize, string> = { small: "20px", medium: "26px", edit: "28px" };
+// Wide enough for the rotated (writing-mode: vertical-rl) west/east
+// dropdown text to actually be legible, not just show the arrow icon.
+const CORNER_WIDTH: Record<PreviewSize, string> = { small: "26px", medium: "32px", edit: "40px" };
 
 export default function TilePreview({
   tile,
@@ -54,22 +56,27 @@ export default function TilePreview({
   const gridTemplateColumns = `${CORNER_WIDTH[size]} repeat(${columns}, ${COLUMN_WIDTH[size]}) ${CORNER_WIDTH[size]}`;
 
   function renderEdge(side: "north" | "south" | "east" | "west", index: number, slot: EdgeSlot, key: string) {
+    const vertical = side === "east" || side === "west";
+    const verticalClass = vertical ? "shmup-tile-preview__edge--vertical" : "";
     if (editable && onEdgeChange && onRegisterTag) {
       return (
-        <div key={key} className="shmup-tile-preview__edge shmup-tile-preview__edge--editable">
+        <div key={key} className={`shmup-tile-preview__edge shmup-tile-preview__edge--editable ${verticalClass}`}>
           <EdgeSelect
             slot={slot}
             availableTags={availableTags}
             onChange={(s) => onEdgeChange(side, index, s)}
             onRegisterTag={onRegisterTag}
             disabled={side === "south" && tile.isConnector}
+            vertical={vertical}
           />
         </div>
       );
     }
     return (
-      <div key={key} className={`shmup-tile-preview__edge ${slot.hardwall ? "shmup-tile-preview__edge--hardwall" : ""}`}>
-        {slot.hardwall ? "WALL" : slot.tag || "?"}
+      <div key={key} className={`shmup-tile-preview__edge ${slot.hardwall ? "shmup-tile-preview__edge--hardwall" : ""} ${verticalClass}`}>
+        <span className={vertical ? "shmup-tile-preview__edge-text--vertical" : undefined}>
+          {slot.hardwall ? "WALL" : slot.tag || "?"}
+        </span>
       </div>
     );
   }

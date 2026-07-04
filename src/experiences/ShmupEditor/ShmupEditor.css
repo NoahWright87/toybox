@@ -218,6 +218,20 @@
 .shmup-tile-preview--edit .shmup-tile-preview__edge--editable {
   padding: 5px;
 }
+/* West/east cells are a narrow column -- writing-mode (not transform:rotate)
+   turns the text/control sideways so it's actually legible. transform:rotate
+   was tried first but a select's *unrotated* width has to be huge to read
+   as tall once rotated, which overflows a flex-centered cell and rotates
+   around a badly-offset center -- writing-mode lays it out correctly the
+   first time, no oversized-then-rotated box to mis-position. */
+.shmup-tile-preview__edge--vertical {
+  overflow: hidden;
+}
+.shmup-tile-preview__edge-text--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+}
 
 .shmup-edge-select {
   width: 100%;
@@ -235,6 +249,22 @@
 }
 .shmup-edge-select--adding {
   background: #ffffcc;
+}
+/* Sideways so the full tag/option text is legible in a narrow west/east
+   column. width/height 100% fills the cell naturally -- no per-size magic
+   numbers needed, unlike the transform:rotate approach this replaced.
+   Padding is cut down from the base/edit rules: the column is only
+   26-40px wide (now the *inline* direction), so the normal 3-6px padding
+   ate most of the space, leaving room for only the dropdown arrow. */
+.shmup-edge-select--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 100%;
+  height: 100%;
+}
+.shmup-edge-select.shmup-edge-select--vertical,
+.shmup-tile-preview--edit .shmup-edge-select.shmup-edge-select--vertical {
+  padding: 2px 1px;
 }
 
 .shmup-tile-preview__body {

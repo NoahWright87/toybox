@@ -10,40 +10,48 @@ interface EdgeSelectProps {
   onChange: (slot: EdgeSlot) => void;
   onRegisterTag: (tag: string) => void;
   disabled?: boolean;
+  /** East/west controls sit in a narrow column — rendered rotated so the text is actually legible instead of clipped to a couple of characters. */
+  vertical?: boolean;
 }
 
 /** One edge's tag/hard-wall control, embedded directly in the tile schematic — a single dropdown, not a text field + checkbox pair. */
-export default function EdgeSelect({ slot, availableTags, onChange, onRegisterTag, disabled }: EdgeSelectProps) {
+export default function EdgeSelect({ slot, availableTags, onChange, onRegisterTag, disabled, vertical }: EdgeSelectProps) {
   const [adding, setAdding] = useState(false);
   const [draftTag, setDraftTag] = useState("");
 
   if (adding) {
+    // Committing on blur (not just Enter) matters on mobile: virtual
+    // keyboards don't reliably fire a clean keydown "Enter" (Android
+    // Chrome/Gboard in particular), so relying on onKeyDown alone silently
+    // discarded whatever was typed the moment the field lost focus.
+    const commit = () => {
+      const trimmed = draftTag.trim();
+      if (trimmed) {
+        onRegisterTag(trimmed);
+        onChange({ tag: trimmed, hardwall: false });
+      }
+      setAdding(false);
+      setDraftTag("");
+    };
     return (
       <input
         autoFocus
         type="text"
-        className="shmup-edge-select shmup-edge-select--adding"
+        className={`shmup-edge-select shmup-edge-select--adding ${vertical ? "shmup-edge-select--vertical" : ""}`}
         value={draftTag}
         placeholder="new tag"
         onChange={(e) => setDraftTag(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            const trimmed = draftTag.trim();
-            if (trimmed) {
-              onRegisterTag(trimmed);
-              onChange({ tag: trimmed, hardwall: false });
-            }
-            setAdding(false);
-            setDraftTag("");
+            e.preventDefault();
+            commit();
           } else if (e.key === "Escape") {
-            setAdding(false);
+            // Clear first so the blur Escape triggers commits nothing.
             setDraftTag("");
+            setAdding(false);
           }
         }}
-        onBlur={() => {
-          setAdding(false);
-          setDraftTag("");
-        }}
+        onBlur={commit}
       />
     );
   }
@@ -52,7 +60,7 @@ export default function EdgeSelect({ slot, availableTags, onChange, onRegisterTa
 
   return (
     <select
-      className="shmup-edge-select"
+      className={`shmup-edge-select ${vertical ? "shmup-edge-select--vertical" : ""}`}
       value={value}
       disabled={disabled}
       onChange={(e) => {

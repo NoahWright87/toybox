@@ -63,16 +63,28 @@ whichever view is active.
 - **Tile editor form** — the schematic diagram itself *is* the edge editor:
   each edge cell is a dropdown (`EdgeSelect`) offering Hard Wall, every tag
   already used anywhere in the library, and "+ New tag..." (reveals an
-  inline text field; confirming registers the tag and applies it in one
-  step). No separate fieldset of text inputs — the diagram is the only
-  place edges are set, addressing an early usability pass where freeform
-  text tags were a typo trap (`"dirt"` vs `"dirrt"` would silently never
-  match) and the form duplicated the same information twice. Name,
+  inline text field). No separate fieldset of text inputs — the diagram is
+  the only place edges are set, addressing an early usability pass where
+  freeform text tags were a typo trap (`"dirt"` vs `"dirrt"` would silently
+  never match) and the form duplicated the same information twice. Name,
   footprint picker, and connector toggle sit in a compact toolbar above
   the diagram; a background image picker (thumbnail buttons showing the
   actual texture) and weight below it. The diagram is always shown at
   identity orientation while editing (rotation is a read-only concept,
   see below). Save is disabled until every edge has a tag or Hard Wall.
+  - **"+ New tag..." commits on blur, not just Enter.** Mobile virtual
+    keyboards (Android Chrome/Gboard in particular) don't reliably fire a
+    clean `keydown` "Enter", so relying on `onKeyDown` alone silently
+    discarded whatever was typed the instant the field lost focus. Both
+    Enter and blur now run the same commit path; Escape explicitly clears
+    the draft first so a blur it triggers can't accidentally commit.
+  - **East/west edges render sideways** (`writing-mode: vertical-rl`, not
+    `transform: rotate` — rotating a select wide enough to read once
+    rotated overflowed its flex-centered cell and rotated around a
+    badly-offset center) so the full tag text is legible in a narrow
+    column instead of being clipped to a sliver showing only the dropdown
+    arrow. Applies to both the editable dropdown and the read-only label
+    (tile list / connection tester).
 - **Mobile-first sizing** — the edit-form diagram's column width is
   `min(78vw, 420px)` (a dedicated `size="edit"` `TilePreview` variant,
   distinct from the compact `"small"`/`"medium"` variants used by the tile
