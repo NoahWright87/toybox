@@ -20,7 +20,7 @@ export default function TileList({ tiles, onEdit, onDuplicate, onDelete }: TileL
     <div className="shmup-tile-list">
       {tiles.map((tile) => (
         <div key={tile.id} className="shmup-tile-list__card">
-          <TilePreview tile={tile} orientation={{ rotation: 0, flip: false }} size="small" />
+          <TilePreview tile={tile} size="small" />
           <div className="shmup-tile-list__meta">
             <span className="shmup-tile-list__name">{tile.name}</span>
             <span className="shmup-tile-list__footprint">{tile.footprint}x1</span>

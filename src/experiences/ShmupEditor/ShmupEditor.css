@@ -56,6 +56,10 @@
   padding: 3px 6px;
   font-size: 8px;
 }
+.shmup-btn--big {
+  padding: 20px 28px;
+  font-size: 14px;
+}
 .shmup-btn--primary {
   color: #fff;
   background: #cc4400;
@@ -316,13 +320,6 @@
   padding: 2px 4px;
 }
 
-.shmup-tile-preview__orientations {
-  display: flex;
-  gap: 3px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-
 /* ── Tile list ─────────────────────────────────────────────────────── */
 
 .shmup-tile-list {
@@ -348,53 +345,88 @@
   word-break: break-word;
 }
 
+/* ── Tile art (Connection Tester) ─────────────────────────────────────
+   Art-only rendering, no edge labels -- just what the tile looks like. */
+
+.shmup-tile-art {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.shmup-tile-art__row {
+  display: flex;
+  border: 2px solid #808080;
+}
+.shmup-tile-art__cell {
+  width: 70px;
+  height: 70px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.shmup-tile-art--thumb .shmup-tile-art__cell {
+  width: 40px;
+  height: 40px;
+}
+.shmup-tile-art__cell--empty {
+  background-color: #999;
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
+}
+.shmup-tile-art__image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+.shmup-tile-art__name {
+  font-size: 7px;
+  text-align: center;
+  max-width: 140px;
+  word-break: break-word;
+}
+
 /* ── Connection tester ─────────────────────────────────────────────── */
 
-.shmup-connection-tester__pair {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
+.shmup-connection-tester__add-row {
   margin-bottom: 14px;
 }
-.shmup-connection-tester__slot {
-  width: 240px;
+
+.shmup-tile-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-tile-picker__option {
+  background: none;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 4px;
+  cursor: pointer;
+}
+.shmup-tile-picker__option:active {
+  border-color: #808080 #ffffff #ffffff #808080;
 }
 
-.shmup-connection-tester__results h4 {
-  font-size: 9px;
-  margin: 0 0 8px;
-}
-
-.shmup-alignment {
+.shmup-connection-tester__row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px;
-  margin-bottom: 4px;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 12px;
 }
-.shmup-alignment--match {
-  background: #d4f5d4;
-}
-.shmup-alignment--mismatch {
-  background: #f5d4d4;
-}
-.shmup-alignment__offset {
-  font-weight: bold;
-  width: 90px;
-}
-.shmup-alignment__status {
-  width: 90px;
-}
-.shmup-alignment__columns {
+.shmup-connection-tester__controls {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 3px;
 }
-.shmup-col-ok {
-  color: #228833;
-}
-.shmup-col-bad {
-  color: #aa2222;
-  font-weight: bold;
+
+.shmup-connection-tester__joint {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 4px 44px;
+  font-size: 18px;
 }
