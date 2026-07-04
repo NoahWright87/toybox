@@ -41,6 +41,17 @@ export default function TileEditorForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const error = useMemo(() => validate(draft), [draft]);
 
+  // Built-ins plus (if present) this tile's own upload, in one list so the
+  // picker is a single render loop instead of a built-in block plus a
+  // hand-duplicated custom-thumbnail block.
+  const imageOptions = useMemo(
+    () =>
+      draft.customImage
+        ? [...TILE_IMAGES, { id: CUSTOM_IMAGE_ID, label: "Custom upload", url: draft.customImage }]
+        : TILE_IMAGES,
+    [draft.customImage]
+  );
+
   async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file later
@@ -58,11 +69,17 @@ export default function TileEditorForm({
   }
 
   function removeCustomImage() {
+    setUploadError(null);
     setDraft((prev) => ({
       ...prev,
       customImage: null,
       imageId: prev.imageId === CUSTOM_IMAGE_ID ? NONE_IMAGE_ID : prev.imageId,
     }));
+  }
+
+  function selectImage(imageId: string) {
+    setUploadError(null);
+    setDraft((prev) => ({ ...prev, imageId }));
   }
 
   function setFootprint(footprint: Footprint) {
@@ -148,34 +165,25 @@ export default function TileEditorForm({
       <div className="shmup-field">
         <span>Background</span>
         <div className="shmup-image-picker">
-          {TILE_IMAGES.map((img) => (
+          {imageOptions.map((img) => (
             <button
               key={img.id}
               type="button"
               className={`shmup-image-picker__option ${draft.imageId === img.id ? "shmup-image-picker__option--active" : ""}`}
               style={img.url ? { backgroundImage: `url(${img.url})` } : undefined}
-              onClick={() => setDraft((prev) => ({ ...prev, imageId: img.id }))}
+              onClick={() => selectImage(img.id)}
               title={img.label}
             >
               {!img.url && <span>{img.label}</span>}
             </button>
           ))}
-          {draft.customImage && (
-            <button
-              type="button"
-              className={`shmup-image-picker__option ${draft.imageId === CUSTOM_IMAGE_ID ? "shmup-image-picker__option--active" : ""}`}
-              style={{ backgroundImage: `url(${draft.customImage})` }}
-              onClick={() => setDraft((prev) => ({ ...prev, imageId: CUSTOM_IMAGE_ID }))}
-              title="Custom upload"
-            />
-          )}
         </div>
         <div className="shmup-btn-row">
           <button type="button" className="shmup-btn shmup-btn--small" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
             {uploading ? "Loading..." : "Upload Custom Art..."}
           </button>
           {draft.customImage && (
-            <button type="button" className="shmup-btn shmup-btn--small" onClick={removeCustomImage}>
+            <button type="button" className="shmup-btn shmup-btn--small" disabled={uploading} onClick={removeCustomImage}>
               Remove Custom Art
             </button>
           )}
@@ -204,7 +212,7 @@ export default function TileEditorForm({
       {error && <p className="shmup-error">{error}</p>}
 
       <div className="shmup-btn-row">
-        <button type="button" className="shmup-btn shmup-btn--primary" disabled={!!error} onClick={handleSave}>
+        <button type="button" className="shmup-btn shmup-btn--primary" disabled={!!error || uploading} onClick={handleSave}>
           Save Tile
         </button>
         <button type="button" className="shmup-btn" onClick={onCancel}>

@@ -84,12 +84,16 @@ whichever view is active.
   tag or Hard Wall.
   - **Custom art upload** (`imageUpload.ts`) — "Upload Custom Art..."
     opens a file picker; the chosen image is decoded, cover-fit cropped
-    onto a 256x256 canvas, and re-encoded as a PNG data URL stored on the
-    tile's own `customImage` field (not a shared library asset — each
-    tile carries its own upload). The downscale step exists because the
-    tile library round-trips through `fsStore`'s `LocalStorageAdapter`,
-    which caps out around 5-10MB total — an unconstrained multi-MB photo
-    upload per tile would exhaust that quota after a handful of tiles.
+    onto a 256x256 canvas, and re-encoded as a JPEG (q0.85) data URL
+    stored on the tile's own `customImage` field (not a shared library
+    asset — each tile carries its own upload) — same format choice as
+    `utils/imageResize.ts`'s `resizeImageToDataUrl`, which shares
+    `imageUpload.ts`'s `loadImage()` decode helper (`utils/loadImage.ts`,
+    also used by `NsDoors97/imageDegrade.ts`). The downscale step exists
+    because the tile library round-trips through `fsStore`'s
+    `LocalStorageAdapter`, which caps out around 5-10MB total — an
+    unconstrained multi-MB photo upload per tile would exhaust that quota
+    after a handful of tiles.
     Uploading sets `imageId` to the reserved `CUSTOM_IMAGE_ID` and adds a
     live thumbnail of the upload to the picker row (selectable like any
     built-in, so switching back to a built-in and back to the custom

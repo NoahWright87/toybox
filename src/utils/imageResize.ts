@@ -4,17 +4,10 @@
 // it's a plain high-quality resize for apps that want to keep image detail
 // (e.g. a jigsaw puzzle photo).
 
+import { loadImage } from "./loadImage";
+
 const DEFAULT_MAX_DIM = 1024;
 const DEFAULT_QUALITY = 0.85;
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Failed to load image"));
-    img.src = src;
-  });
-}
 
 export interface ResizedImage {
   dataUrl: string;

@@ -6,10 +6,14 @@
  */
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
+import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID } from "./tileImages";
 import type { EdgeSlot, TileDef } from "./types";
 
 // v2: `color` swatch replaced by `imageId` (tileImages.ts) — bumping so a
 // pre-v2 save (missing imageId) is discarded rather than half-loaded.
+// `customImage`/`biome` (added later) do NOT bump this further — they're
+// purely additive optional fields, so a v2 save missing them is still
+// valid; normalizeTile() below backfills the defaults instead.
 const SAVE_VERSION = 2;
 
 interface SavedLibrary {
@@ -41,17 +45,22 @@ function isValidTileDef(value: unknown): value is TileDef {
     isEdgeSlot(tile.west) &&
     typeof tile.isConnector === "boolean" &&
     typeof tile.weight === "number" &&
-    typeof tile.imageId === "string" &&
-    (tile.customImage === undefined || tile.customImage === null || typeof tile.customImage === "string") &&
-    (tile.biome === undefined || tile.biome === null || typeof tile.biome === "string")
+    typeof tile.imageId === "string"
   );
 }
 
 // `customImage`/`biome` were added after v2 shipped as purely additive,
-// optional fields — a v2 save missing them is still valid, just backfilled
-// to their default (null) rather than being discarded wholesale.
+// optional fields, so their shape is deliberately NOT part of
+// isValidTileDef above — a save missing or malformed on just one of these
+// (including a hand-edited TILES.DAT, which this hackable app explicitly
+// permits per root CLAUDE.md) gets that one field reset to its default
+// here rather than the whole tile being discarded.
 function normalizeTile(tile: TileDef): TileDef {
-  return { ...tile, customImage: tile.customImage ?? null, biome: tile.biome ?? null };
+  const customImage = typeof tile.customImage === "string" && tile.customImage ? tile.customImage : null;
+  const biome = typeof tile.biome === "string" && tile.biome.trim() ? tile.biome : null;
+  // A tile can't be left pointing imageId at a custom image that doesn't exist.
+  const imageId = tile.imageId === CUSTOM_IMAGE_ID && !customImage ? NONE_IMAGE_ID : tile.imageId;
+  return { ...tile, imageId, customImage, biome };
 }
 
 export function loadTiles(): TileDef[] {

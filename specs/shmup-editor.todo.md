@@ -60,6 +60,12 @@ biome...").
 - In-editor sketching of tile art (today's upload flow takes an existing
   image file; drawing new art from scratch in the tool is still future
   work).
+- The tile-edit form's in-progress draft (`TileEditorForm`'s `draft`
+  state, including a freshly-uploaded `customImage`) only persists on
+  explicit Save — unlike root `CLAUDE.md`'s mandatory in-progress-session
+  rule, a mid-edit reload/rotation loses it. Pre-existing gap (predates
+  custom art/biome), but worth closing alongside a future E1 pass since a
+  lost upload is a worse loss than a lost edge-tag pick.
 
 ### E2 — Enemy editor (#192)
 
