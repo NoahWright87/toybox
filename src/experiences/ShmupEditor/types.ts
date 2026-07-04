@@ -6,6 +6,7 @@
  * exported JSON *shape* is kept compatible with the game's L1 data model
  * (specs/games/shmup/levels-and-tiles.spec.todo.md), not the code.
  */
+import { NONE_IMAGE_ID } from "./tileImages";
 
 export type EdgeTag = string;
 
@@ -49,20 +50,14 @@ export interface TileDef {
   isConnector: boolean;
   /** Relative weight when multiple tiles/orientations match the same frontier (default 1). */
   weight: number;
-  /** Editor-only flavor for telling tiles apart at a glance in lists/previews — not part of the exported gameplay shape. */
-  color: string;
+  /** Id into tileImages.ts's built-in image set (art import/sketching is future work) — editor-only, not part of the exported gameplay shape. */
+  imageId: string;
   createdAt: number;
   modifiedAt: number;
 }
 
 export function makeTileId(): string {
   return `tile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-const DEFAULT_COLORS = ["#7b3dbe", "#cc4400", "#228833", "#0077aa", "#aa5500", "#884499"];
-
-export function pickDefaultColor(existingCount: number): string {
-  return DEFAULT_COLORS[existingCount % DEFAULT_COLORS.length];
 }
 
 export function createBlankTile(existingCount: number): TileDef {
@@ -77,7 +72,7 @@ export function createBlankTile(existingCount: number): TileDef {
     west: edgeSlot("", true),
     isConnector: false,
     weight: 1,
-    color: pickDefaultColor(existingCount),
+    imageId: NONE_IMAGE_ID,
     createdAt: now,
     modifiedAt: now,
   };

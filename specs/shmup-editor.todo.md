@@ -36,17 +36,21 @@ persist via **fsStore**, not localStorage.
 
 ### E1 — Tile editor (#191) — partially shipped
 
-**Done** (see `shmup-editor.md`): footprint picker with a preview that
-actually scales width per footprint, per-column edge dropdowns (tag
-registry + "+ New tag..." instead of freeform text — avoids typo-based
-mismatches) doubling as the diagram itself, start/end connector toggle,
-tile list (edit/duplicate/delete), fsStore-backed persistence, and a
-connection tester (the one surface with rotate/flip) that validates tiles
-actually attach.
+**Done** (see `shmup-editor.md`): mobile-first footprint sizing (a 1x1
+tile fills most of a phone's width; wider footprints scroll horizontally,
+contained to the diagram itself), per-column edge dropdowns (tag registry
++ "+ New tag..." instead of freeform text — avoids typo-based mismatches)
+doubling as the diagram itself, a built-in tile-image set (none/water/
+grass, tiled across the footprint) replacing the flat color swatch,
+start/end connector toggle, tile list (edit/duplicate/delete), menu-driven
+navigation (no duplicate on-screen nav buttons), fsStore-backed
+persistence, and a connection tester (the one surface with rotate/flip)
+that validates tiles actually attach.
 
 **Remaining:**
-- Import/sketch real background art per footprint (currently a flat
-  color swatch stands in for art).
+- Import/sketch *custom* background art per tile (currently a small fixed
+  built-in set — none/water/grass — stands in; no upload/sketch pipeline
+  yet).
 - Attach spawn variants to a tile (needs E3's spawn-node editor to exist
   first — a tile variant *is* a spawn-node configuration per the design
   doc, so this is blocked on E3, not purely an E1 gap).

@@ -1,6 +1,12 @@
 .shmup-editor {
   display: flex;
   flex-direction: column;
+  /* StandaloneWindow's content area centers its child by default (align-items:
+     center), which sizes flex items to their own content width -- without
+     this, a wide tile diagram further down would pull the whole window wide
+     instead of scrolling internally. */
+  align-self: stretch;
+  min-width: 0;
   gap: 8px;
   height: 100%;
   padding: 10px;
@@ -11,14 +17,14 @@
   overflow-y: auto;
 }
 
-.shmup-editor__tabs {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+.shmup-editor__heading {
+  margin: 0 0 10px;
+  font-size: 11px;
 }
 
 .shmup-editor__body {
   flex: 1;
+  min-width: 0;
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
@@ -125,6 +131,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
   max-width: 720px;
 }
 .shmup-tile-form__toolbar {
@@ -133,18 +140,40 @@
   flex-wrap: wrap;
   align-items: flex-end;
 }
-.shmup-tile-form__footer {
-  display: flex;
-  gap: 16px;
-}
 .shmup-field--inline {
   margin-bottom: 0;
+}
+
+.shmup-image-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shmup-image-picker__option {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+}
+.shmup-image-picker__option--active {
+  border-color: #cc4400;
+  border-width: 3px;
+  box-shadow: 0 0 0 1px #cc4400;
 }
 
 /* ── Tile schematic preview ───────────────────────────────────────── */
 
 .shmup-tile-preview {
   overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .shmup-tile-preview__grid {
@@ -157,6 +186,9 @@
 }
 .shmup-tile-preview--small .shmup-tile-preview__grid {
   grid-template-rows: auto 44px auto;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__grid {
+  grid-template-rows: auto min(50vw, 220px) auto;
 }
 
 .shmup-tile-preview__corner {
@@ -183,6 +215,9 @@
   padding: 3px;
   background: #fff;
 }
+.shmup-tile-preview--edit .shmup-tile-preview__edge--editable {
+  padding: 5px;
+}
 
 .shmup-edge-select {
   width: 100%;
@@ -193,6 +228,10 @@
   border-color: #808080 #ffffff #ffffff #808080;
   background: #fff;
   color: #000;
+}
+.shmup-tile-preview--edit .shmup-edge-select {
+  font-size: 14px;
+  padding: 6px;
 }
 .shmup-edge-select--adding {
   background: #ffffcc;
@@ -209,9 +248,21 @@
   font-size: 8px;
   text-align: center;
   padding: 4px;
+  background-repeat: repeat;
+  background-size: 80px 80px;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__body {
+  background-size: 128px 128px;
+  font-size: 11px;
+}
+.shmup-tile-preview__body--empty {
+  background-color: #999;
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
 }
 .shmup-tile-preview__name {
   word-break: break-word;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 4px;
 }
 .shmup-tile-preview__badge {
   font-size: 6px;

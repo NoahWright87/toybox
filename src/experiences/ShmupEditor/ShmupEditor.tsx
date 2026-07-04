@@ -84,40 +84,31 @@ export default function ShmupEditor() {
 
   return (
     <div className="shmup-editor">
-      <div className="shmup-editor__tabs">
-        <button
-          type="button"
-          className={`shmup-btn ${view === "list" ? "shmup-btn--active" : ""}`}
-          onClick={() => setView("list")}
-        >
-          Tiles ({tiles.length})
-        </button>
-        <button type="button" className="shmup-btn" onClick={handleNewTile}>
-          + New Tile
-        </button>
-        <button
-          type="button"
-          className={`shmup-btn ${view === "connections" ? "shmup-btn--active" : ""}`}
-          onClick={() => setView("connections")}
-        >
-          Connection Tester
-        </button>
-      </div>
-
       <div className="shmup-editor__body">
         {view === "list" && (
-          <TileList tiles={tiles} onEdit={handleEditTile} onDuplicate={handleDuplicateTile} onDelete={handleDeleteTile} />
+          <>
+            <h3 className="shmup-editor__heading">Tile Library ({tiles.length})</h3>
+            <TileList tiles={tiles} onEdit={handleEditTile} onDuplicate={handleDuplicateTile} onDelete={handleDeleteTile} />
+          </>
         )}
         {view === "edit" && editingTile && (
-          <TileEditorForm
-            tile={editingTile}
-            availableTags={availableTags}
-            onRegisterTag={registerTag}
-            onSave={handleSaveTile}
-            onCancel={handleCancelEdit}
-          />
+          <>
+            <h3 className="shmup-editor__heading">{tiles.some((t) => t.id === editingTile.id) ? "Edit Tile" : "New Tile"}</h3>
+            <TileEditorForm
+              tile={editingTile}
+              availableTags={availableTags}
+              onRegisterTag={registerTag}
+              onSave={handleSaveTile}
+              onCancel={handleCancelEdit}
+            />
+          </>
         )}
-        {view === "connections" && <ConnectionTester tiles={tiles} />}
+        {view === "connections" && (
+          <>
+            <h3 className="shmup-editor__heading">Connection Tester</h3>
+            <ConnectionTester tiles={tiles} />
+          </>
+        )}
       </div>
     </div>
   );

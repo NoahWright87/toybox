@@ -8,7 +8,9 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
 import type { EdgeSlot, TileDef } from "./types";
 
-const SAVE_VERSION = 1;
+// v2: `color` swatch replaced by `imageId` (tileImages.ts) — bumping so a
+// pre-v2 save (missing imageId) is discarded rather than half-loaded.
+const SAVE_VERSION = 2;
 
 interface SavedLibrary {
   version: number;
@@ -39,7 +41,7 @@ function isValidTileDef(value: unknown): value is TileDef {
     isEdgeSlot(tile.west) &&
     typeof tile.isConnector === "boolean" &&
     typeof tile.weight === "number" &&
-    typeof tile.color === "string"
+    typeof tile.imageId === "string"
   );
 }
 

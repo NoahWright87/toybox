@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import TilePreview from "./TilePreview";
+import { TILE_IMAGES } from "./tileImages";
 import { FOOTPRINTS, WILDCARD, edgeSlot, resizeSlots, type EdgeSlot, type Footprint, type TileDef } from "./types";
 
 interface TileEditorFormProps {
@@ -98,34 +99,42 @@ export default function TileEditorForm({ tile, availableTags, onRegisterTag, onS
 
       <TilePreview
         tile={draft}
+        size="edit"
         editable
         availableTags={availableTags}
         onEdgeChange={handleEdgeChange}
         onRegisterTag={onRegisterTag}
       />
 
-      <div className="shmup-tile-form__footer">
-        <label className="shmup-field shmup-field--inline">
-          <span>Weight</span>
-          <input
-            type="number"
-            min={0}
-            step={0.1}
-            className="shmup-input shmup-input--small"
-            value={draft.weight}
-            onChange={(e) => setDraft((prev) => ({ ...prev, weight: Number(e.target.value) }))}
-          />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Color</span>
-          <input
-            type="color"
-            className="shmup-input-color"
-            value={draft.color}
-            onChange={(e) => setDraft((prev) => ({ ...prev, color: e.target.value }))}
-          />
-        </label>
+      <div className="shmup-field">
+        <span>Background</span>
+        <div className="shmup-image-picker">
+          {TILE_IMAGES.map((img) => (
+            <button
+              key={img.id}
+              type="button"
+              className={`shmup-image-picker__option ${draft.imageId === img.id ? "shmup-image-picker__option--active" : ""}`}
+              style={img.url ? { backgroundImage: `url(${img.url})` } : undefined}
+              onClick={() => setDraft((prev) => ({ ...prev, imageId: img.id }))}
+              title={img.label}
+            >
+              {!img.url && <span>{img.label}</span>}
+            </button>
+          ))}
+        </div>
       </div>
+
+      <label className="shmup-field shmup-field--inline">
+        <span>Weight</span>
+        <input
+          type="number"
+          min={0}
+          step={0.1}
+          className="shmup-input shmup-input--small"
+          value={draft.weight}
+          onChange={(e) => setDraft((prev) => ({ ...prev, weight: Number(e.target.value) }))}
+        />
+      </label>
 
       {error && <p className="shmup-error">{error}</p>}
 
