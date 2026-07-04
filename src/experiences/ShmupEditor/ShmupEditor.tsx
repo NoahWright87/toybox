@@ -5,6 +5,7 @@ import TileList from "./TileList";
 import TileEditorForm from "./TileEditorForm";
 import ConnectionTester from "./ConnectionTester";
 import { loadTiles, saveTiles } from "./tileStore";
+import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
 import "./ShmupEditor.css";
 
@@ -14,6 +15,19 @@ export default function ShmupEditor() {
   const [tiles, setTiles] = useState<TileDef[]>(() => loadTiles());
   const [view, setView] = useState<View>("list");
   const [editingTile, setEditingTile] = useState<TileDef | null>(null);
+  // Tags typed in via "+ New tag..." this session but not yet saved on any
+  // tile — kept around so the dropdown offers them immediately without
+  // requiring a save-then-reopen round trip first.
+  const [extraTags, setExtraTags] = useState<string[]>([]);
+
+  const availableTags = useMemo(() => {
+    const merged = new Set([...collectUsedTags(tiles), ...extraTags]);
+    return [...merged].sort((a, b) => a.localeCompare(b));
+  }, [tiles, extraTags]);
+
+  function registerTag(tag: string) {
+    setExtraTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+  }
 
   function persist(next: TileDef[]) {
     setTiles(next);
@@ -95,7 +109,13 @@ export default function ShmupEditor() {
           <TileList tiles={tiles} onEdit={handleEditTile} onDuplicate={handleDuplicateTile} onDelete={handleDeleteTile} />
         )}
         {view === "edit" && editingTile && (
-          <TileEditorForm tile={editingTile} onSave={handleSaveTile} onCancel={handleCancelEdit} />
+          <TileEditorForm
+            tile={editingTile}
+            availableTags={availableTags}
+            onRegisterTag={registerTag}
+            onSave={handleSaveTile}
+            onCancel={handleCancelEdit}
+          />
         )}
         {view === "connections" && <ConnectionTester tiles={tiles} />}
       </div>

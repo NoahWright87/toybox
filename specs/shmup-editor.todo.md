@@ -36,10 +36,13 @@ persist via **fsStore**, not localStorage.
 
 ### E1 — Tile editor (#191) — partially shipped
 
-**Done** (see `shmup-editor.md`): footprint picker, per-column edge tags
-with hard-wall marking, start/end connector toggle, rotate/flip schematic
-preview, tile list (edit/duplicate/delete), fsStore-backed persistence,
-and a connection tester that validates tiles actually attach.
+**Done** (see `shmup-editor.md`): footprint picker with a preview that
+actually scales width per footprint, per-column edge dropdowns (tag
+registry + "+ New tag..." instead of freeform text — avoids typo-based
+mismatches) doubling as the diagram itself, start/end connector toggle,
+tile list (edit/duplicate/delete), fsStore-backed persistence, and a
+connection tester (the one surface with rotate/flip) that validates tiles
+actually attach.
 
 **Remaining:**
 - Import/sketch real background art per footprint (currently a flat

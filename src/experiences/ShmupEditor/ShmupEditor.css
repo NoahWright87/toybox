@@ -106,36 +106,6 @@
   font-size: 8px;
   cursor: pointer;
 }
-.shmup-checkbox--row {
-  margin-bottom: 10px;
-}
-
-.shmup-fieldset {
-  border: 2px solid;
-  border-color: #808080 #ffffff #ffffff #808080;
-  padding: 8px;
-  margin-bottom: 10px;
-}
-.shmup-fieldset legend {
-  font-size: 8px;
-  padding: 0 4px;
-}
-
-.shmup-edge-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.shmup-edge-input {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: flex-start;
-}
-.shmup-edge-input__label {
-  font-size: 7px;
-  color: #444;
-}
 
 .shmup-hint {
   font-family: "Courier New", Courier, monospace;
@@ -153,29 +123,40 @@
 
 .shmup-tile-form {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+}
+.shmup-tile-form__toolbar {
+  display: flex;
+  gap: 14px;
   flex-wrap: wrap;
+  align-items: flex-end;
 }
-.shmup-tile-form__fields {
-  flex: 1;
-  min-width: 280px;
+.shmup-tile-form__footer {
+  display: flex;
+  gap: 16px;
 }
-.shmup-tile-form__preview {
-  width: 240px;
-  flex-shrink: 0;
+.shmup-field--inline {
+  margin-bottom: 0;
 }
 
 /* ── Tile schematic preview ───────────────────────────────────────── */
 
+.shmup-tile-preview {
+  overflow-x: auto;
+}
+
 .shmup-tile-preview__grid {
   display: grid;
-  grid-template-rows: 32px 70px 32px;
+  grid-template-rows: auto 70px auto;
   gap: 2px;
   background: #808080;
   padding: 2px;
+  width: max-content;
 }
 .shmup-tile-preview--small .shmup-tile-preview__grid {
-  grid-template-rows: 20px 44px 20px;
+  grid-template-rows: auto 44px auto;
 }
 
 .shmup-tile-preview__corner {
@@ -191,11 +172,30 @@
   text-align: center;
   overflow: hidden;
   word-break: break-all;
-  padding: 2px;
+  padding: 4px 2px;
+  min-height: 24px;
 }
 .shmup-tile-preview__edge--hardwall {
   background: #333;
   color: #fff;
+}
+.shmup-tile-preview__edge--editable {
+  padding: 3px;
+  background: #fff;
+}
+
+.shmup-edge-select {
+  width: 100%;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  padding: 3px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+}
+.shmup-edge-select--adding {
+  background: #ffffcc;
 }
 
 .shmup-tile-preview__body {

@@ -40,23 +40,44 @@ Rotation: footprint-1 tiles get all 4 rotations x flip (8 orientations);
 footprint 2/3 tiles only get 0°/180° x flip (4) — rotating a
 wider-than-tall tile 90° would make it taller-than-wide, which this grid
 can't represent. This mirrors the same resolution the game's L1 generator
-uses for the same ambiguity in the source design doc.
+uses for the same ambiguity in the source design doc. A tile is always
+*authored* at identity orientation — rotation is a read-only verification
+concept (see Connection tester below), not an editing mode, since editing
+a rotated view would have to be mapped back onto the tile's stored
+unrotated slots.
 
 ## Surfaces
 
 - **Tile list** — every saved tile as a schematic card (edit/duplicate/delete).
-- **Tile editor form** — name, footprint picker, per-column north/south
-  `EdgeSlot` inputs (tag + "Wall" checkbox), east/west inputs, connector
-  toggle, weight, color, with a live schematic preview alongside (rotate/
-  flip buttons cycle through every valid orientation). Save is disabled
-  until every non-wall edge has a non-empty tag.
+- **Tile editor form** — the schematic diagram itself *is* the edge editor:
+  each edge cell is a dropdown (`EdgeSelect`) offering Hard Wall, every tag
+  already used anywhere in the library, and "+ New tag..." (reveals an
+  inline text field; confirming registers the tag and applies it in one
+  step). No separate fieldset of text inputs — the diagram is the only
+  place edges are set, addressing an early usability pass where freeform
+  text tags were a typo trap (`"dirt"` vs `"dirrt"` would silently never
+  match) and the form duplicated the same information twice. Name,
+  footprint picker, and connector toggle sit in a compact toolbar above
+  the diagram; weight/color below it. The diagram is always shown at
+  identity orientation while editing (rotation is a read-only concept,
+  see below) and its column width scales with footprint — a 3x1 tile
+  renders visibly wider than a 1x1, not just subdivided into thirds of
+  the same box. Save is disabled until every edge has a tag or Hard Wall.
+- **Tag registry** (`tagRegistry.ts`) — the dropdown's tag list is every
+  distinct tag already used across the saved library, plus any tags
+  registered via "+ New tag..." this session but not yet attached to a
+  saved tile (kept in `ShmupEditor`'s `extraTags` state so they're
+  immediately available to every other edge dropdown without a save
+  round-trip first).
 - **Connection tester** — pick two tiles + independent orientations for
-  each; shows every horizontal alignment where the "below" tile's south
-  could attach under the "above" tile's north, per-column tag comparison,
-  and whether that alignment actually attaches. This is the "usage" check
-  for authored tiles — it exercises the same one-matching-slot-plus-
-  vacant-space rule the real generator (L1 #183) uses, including that a
-  hard-wall column never presents an attachable frontier.
+  each (this is the only surface with rotate/flip buttons — verifying a
+  rotation is a read-only check, not an editing operation); shows every
+  horizontal alignment where the "below" tile's south could attach under
+  the "above" tile's north, per-column tag comparison, and whether that
+  alignment actually attaches. This is the "usage" check for authored
+  tiles — it exercises the same one-matching-slot-plus-vacant-space rule
+  the real generator (L1 #183) uses, including that a hard-wall column
+  never presents an attachable frontier.
 
 ## Persistence
 
