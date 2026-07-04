@@ -33,6 +33,16 @@ The crowd cheers because you *almost died and didn't*. Grazing and showy play fe
 
 A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss**; the last ends in the **Series Finale** → optional endless **Syndication**. One ship across the whole career. **One death ends the episode** (no hull lives), costing Ratings; **Ratings < 0 = Cancelled = career over.** See `run-structure.spec.todo.md`.
 
+**Epic 5 #181** replaces each node's Play scene content (previously one
+unchanging scrolling background + naive timer-spawn) with a generated,
+tile-based level populated by data-driven enemies — see
+`levels-and-tiles.spec.todo.md`, `enemies-and-bullets.spec.todo.md`,
+`spawn-and-warnings.spec.todo.md`. This only adds a `biome` tag to
+`MapNode`; the Season/node-map/career/`D` system itself is unchanged.
+**Epic 6 #182** is the companion `/shmup-editor` authoring tool (a main
+Doors 97 app route, not part of this Phaser workspace) that produces the
+JSON content Epic 5 consumes.
+
 ## Spec map
 
 | Spec | Covers | Issues |
@@ -53,3 +63,7 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 | `content-and-assets.spec.todo.md` | copy registry | F2 #130 |
 | `save.spec.md` | swappable SaveStore, Doors-FS-backed default — **implemented** | S1 #171 |
 | `tuning.spec.todo.md` | the single home of every numeric lever | (all) |
+| `levels-and-tiles.spec.todo.md` | grid-fill tile generation, JIT streaming, camera bounds-box easing, biome tagging | L1 #183, L2 #184, L7 #189 |
+| `enemies-and-bullets.spec.todo.md` | enemy node-graph model, bullets-as-enemies, boss tiles | L3 #185, L4 #186, L8 #190 |
+| `spawn-and-warnings.spec.todo.md` | generalized difficulty-budget scaling, spawn nodes, warning indicators | L5 #187, L6 #188 |
+| `../../shmup-editor.todo.md` | `/shmup-editor` authoring tool (separate main-app route) | Epic 6 #182, E1–E5 #191–#195 |
