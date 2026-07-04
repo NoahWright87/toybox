@@ -319,6 +319,10 @@
   background: #000;
   padding: 2px 4px;
 }
+.shmup-tile-preview__badge--biome {
+  background: #5b2d8e;
+  text-transform: uppercase;
+}
 
 /* ── Tile list ─────────────────────────────────────────────────────── */
 

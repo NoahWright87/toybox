@@ -6,7 +6,7 @@
  * exported JSON *shape* is kept compatible with the game's L1 data model
  * (specs/games/shmup/levels-and-tiles.spec.todo.md), not the code.
  */
-import { NONE_IMAGE_ID } from "./tileImages";
+import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID, tileImageById } from "./tileImages";
 
 export type EdgeTag = string;
 
@@ -50,10 +50,20 @@ export interface TileDef {
   isConnector: boolean;
   /** Relative weight when multiple tiles/orientations match the same frontier (default 1). */
   weight: number;
-  /** Id into tileImages.ts's built-in image set (art import/sketching is future work) — editor-only, not part of the exported gameplay shape. */
+  /** Id into tileImages.ts's built-in image set, or CUSTOM_IMAGE_ID when `customImage` is in use — editor-only, not part of the exported gameplay shape. */
   imageId: string;
+  /** User-uploaded art (downscaled square PNG data URL) for this tile, or null when using a built-in image. Only rendered when imageId === CUSTOM_IMAGE_ID. */
+  customImage: string | null;
+  /** Which biome tile-set this tile belongs to (per L7 #189 — water/dirt/woods/city/desert/etc.), or null for biome-agnostic (start/end connector tiles). Editor-only, threaded into the exported shape once the game's biome field lands. */
+  biome: string | null;
   createdAt: number;
   modifiedAt: number;
+}
+
+/** Resolves the actual image URL to render for a tile, accounting for a custom upload overriding the built-in set. */
+export function resolveTileImageUrl(tile: TileDef): string | null {
+  if (tile.imageId === CUSTOM_IMAGE_ID) return tile.customImage;
+  return tileImageById(tile.imageId).url;
 }
 
 export function makeTileId(): string {
@@ -73,6 +83,8 @@ export function createBlankTile(existingCount: number): TileDef {
     isConnector: false,
     weight: 1,
     imageId: NONE_IMAGE_ID,
+    customImage: null,
+    biome: null,
     createdAt: now,
     modifiedAt: now,
   };

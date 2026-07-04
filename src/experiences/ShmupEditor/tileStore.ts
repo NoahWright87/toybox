@@ -41,8 +41,17 @@ function isValidTileDef(value: unknown): value is TileDef {
     isEdgeSlot(tile.west) &&
     typeof tile.isConnector === "boolean" &&
     typeof tile.weight === "number" &&
-    typeof tile.imageId === "string"
+    typeof tile.imageId === "string" &&
+    (tile.customImage === undefined || tile.customImage === null || typeof tile.customImage === "string") &&
+    (tile.biome === undefined || tile.biome === null || typeof tile.biome === "string")
   );
+}
+
+// `customImage`/`biome` were added after v2 shipped as purely additive,
+// optional fields — a v2 save missing them is still valid, just backfilled
+// to their default (null) rather than being discarded wholesale.
+function normalizeTile(tile: TileDef): TileDef {
+  return { ...tile, customImage: tile.customImage ?? null, biome: tile.biome ?? null };
 }
 
 export function loadTiles(): TileDef[] {
@@ -51,7 +60,7 @@ export function loadTiles(): TileDef[] {
   try {
     const parsed = JSON.parse(content) as SavedLibrary;
     if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return [];
-    return parsed.tiles.filter(isValidTileDef);
+    return parsed.tiles.filter(isValidTileDef).map(normalizeTile);
   } catch {
     return [];
   }

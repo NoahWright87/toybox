@@ -44,18 +44,22 @@ doubling as the diagram itself, a built-in tile-image set (none/water/
 grass, tiled across the footprint) replacing the flat color swatch,
 start/end connector toggle, tile list (edit/duplicate/delete), menu-driven
 navigation (no duplicate on-screen nav buttons), fsStore-backed
-persistence, and a connection tester (the one surface with rotate/flip)
-that validates tiles actually attach.
+persistence, a connection tester (the one surface with rotate/flip)
+that validates tiles actually attach, per-tile **custom art upload**
+(downscaled/cover-cropped to a 256x256 PNG data URL so a handful of
+uploads can't exhaust `LocalStorageAdapter`'s quota — see `imageUpload.ts`),
+and **biome tagging** (`BiomeSelect.tsx`/`biomeRegistry.ts` — a `biome:
+string | null` field per tile, `null` meaning agnostic, with a seeded
+water/dirt/woods/city/desert list per L7 #189 extendable via "+ New
+biome...").
 
 **Remaining:**
-- Import/sketch *custom* background art per tile (currently a small fixed
-  built-in set — none/water/grass — stands in; no upload/sketch pipeline
-  yet).
 - Attach spawn variants to a tile (needs E3's spawn-node editor to exist
   first — a tile variant *is* a spawn-node configuration per the design
   doc, so this is blocked on E3, not purely an E1 gap).
-- Biome tagging on tiles (so a tile can declare which biome tile-set it
-  belongs to, per L7 #189) — not yet modeled.
+- In-editor sketching of tile art (today's upload flow takes an existing
+  image file; drawing new art from scratch in the tool is still future
+  work).
 
 ### E2 — Enemy editor (#192)
 

@@ -6,6 +6,7 @@ import TileEditorForm from "./TileEditorForm";
 import ConnectionTester from "./ConnectionTester";
 import { loadTiles, saveTiles } from "./tileStore";
 import { collectUsedTags } from "./tagRegistry";
+import { collectUsedBiomes } from "./biomeRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
 import "./ShmupEditor.css";
 
@@ -19,14 +20,25 @@ export default function ShmupEditor() {
   // tile — kept around so the dropdown offers them immediately without
   // requiring a save-then-reopen round trip first.
   const [extraTags, setExtraTags] = useState<string[]>([]);
+  // Same session-only "registered but not yet saved on any tile" pattern as extraTags, for biomes.
+  const [extraBiomes, setExtraBiomes] = useState<string[]>([]);
 
   const availableTags = useMemo(() => {
     const merged = new Set([...collectUsedTags(tiles), ...extraTags]);
     return [...merged].sort((a, b) => a.localeCompare(b));
   }, [tiles, extraTags]);
 
+  const availableBiomes = useMemo(() => {
+    const merged = new Set([...collectUsedBiomes(tiles), ...extraBiomes]);
+    return [...merged].sort((a, b) => a.localeCompare(b));
+  }, [tiles, extraBiomes]);
+
   function registerTag(tag: string) {
     setExtraTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+  }
+
+  function registerBiome(biome: string) {
+    setExtraBiomes((prev) => (prev.includes(biome) ? prev : [...prev, biome]));
   }
 
   function persist(next: TileDef[]) {
@@ -97,7 +109,9 @@ export default function ShmupEditor() {
             <TileEditorForm
               tile={editingTile}
               availableTags={availableTags}
+              availableBiomes={availableBiomes}
               onRegisterTag={registerTag}
+              onRegisterBiome={registerBiome}
               onSave={handleSaveTile}
               onCancel={handleCancelEdit}
             />

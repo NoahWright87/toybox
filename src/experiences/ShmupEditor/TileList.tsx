@@ -23,7 +23,9 @@ export default function TileList({ tiles, onEdit, onDuplicate, onDelete }: TileL
           <TilePreview tile={tile} size="small" />
           <div className="shmup-tile-list__meta">
             <span className="shmup-tile-list__name">{tile.name}</span>
-            <span className="shmup-tile-list__footprint">{tile.footprint}x1</span>
+            <span className="shmup-tile-list__footprint">
+              {tile.footprint}x1{tile.biome ? ` · ${tile.biome}` : ""}
+            </span>
           </div>
           <div className="shmup-btn-row">
             <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEdit(tile)}>

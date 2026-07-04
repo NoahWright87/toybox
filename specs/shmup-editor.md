@@ -33,10 +33,19 @@ A tile (`TileDef`) has:
 - `east`/`west`: a single `EdgeSlot` each (footprint height is always 1).
 - `isConnector`: marks a start/end connector tile — toggling it forces
   every south slot's tag to the wildcard (`*`), matching any incoming edge.
-- `weight`, `imageId`, `name`: authoring metadata (weight is exported;
-  imageId/name are editor-only, not part of the gameplay shape). `imageId`
-  picks from a small built-in set (`tileImages.ts`: none/water/grass/shore
-  — real per-tile art import is still future work). Each image is one
+- `weight`, `imageId`, `customImage`, `biome`, `name`: authoring metadata
+  (weight is exported; the rest are editor-only, not part of the gameplay
+  shape). `imageId` picks from a small built-in set (`tileImages.ts`:
+  none/water/grass/shore) **or** the reserved `CUSTOM_IMAGE_ID`, which
+  renders `customImage` instead — a per-tile uploaded image (see Custom
+  art below). `biome` is a free string (or `null` for biome-agnostic,
+  e.g. connector tiles) declaring which biome tile-set (L7 #189: water,
+  dirt, woods, city, desert, ...) the tile belongs to; `biomeRegistry.ts`
+  seeds a starting suggestion list, extendable via "+ New biome..."
+  (`BiomeSelect.tsx`), same pattern as edge tags. `resolveTileImageUrl()`
+  (`types.ts`) is the one place that knows how to turn `imageId`/
+  `customImage` into an actual URL — `TileArt`/`TilePreview` both call it
+  rather than reading `imageId` directly. Each image is one
   whole 1x1 tile's art, scaled to fill its square; a footprint > 1 tile
   renders one full copy per column (`TilePreview`'s `__cell` divs), not
   one image stretched or tiled as a small repeating pattern across the
@@ -69,9 +78,33 @@ whichever view is active.
   never match) and the form duplicated the same information twice. Name,
   footprint picker, and connector toggle sit in a compact toolbar above
   the diagram; a background image picker (thumbnail buttons showing the
-  actual texture) and weight below it. The diagram is always shown at
-  identity orientation while editing (rotation is a read-only concept,
-  see below). Save is disabled until every edge has a tag or Hard Wall.
+  actual texture), a biome picker, and weight below it. The diagram is
+  always shown at identity orientation while editing (rotation is a
+  read-only concept, see below). Save is disabled until every edge has a
+  tag or Hard Wall.
+  - **Custom art upload** (`imageUpload.ts`) — "Upload Custom Art..."
+    opens a file picker; the chosen image is decoded, cover-fit cropped
+    onto a 256x256 canvas, and re-encoded as a PNG data URL stored on the
+    tile's own `customImage` field (not a shared library asset — each
+    tile carries its own upload). The downscale step exists because the
+    tile library round-trips through `fsStore`'s `LocalStorageAdapter`,
+    which caps out around 5-10MB total — an unconstrained multi-MB photo
+    upload per tile would exhaust that quota after a handful of tiles.
+    Uploading sets `imageId` to the reserved `CUSTOM_IMAGE_ID` and adds a
+    live thumbnail of the upload to the picker row (selectable like any
+    built-in, so switching back to a built-in and back to the custom
+    upload doesn't require re-uploading); "Remove Custom Art" clears it
+    and falls back to `none` if it was the active selection. Real
+    in-editor sketching (vs. upload of existing art) is still deferred.
+  - **Biome picker** (`BiomeSelect.tsx` + `biomeRegistry.ts`) — same "+
+    New..." registry pattern as edge tags (`KNOWN_BIOMES` seeds water/
+    dirt/woods/city/desert per L7 #189's examples, extended by whatever's
+    already used across the library or registered this session). Biome
+    is not required — leaving it "— Agnostic —" (`null`) is the correct
+    choice for start/end connector tiles, which the L7 spec says are
+    biome-agnostic or carry biome-flavored art variants but never gate on
+    biome logically. A tile's biome shows as a badge on both the edit
+    diagram and the read-only tile-list schematic.
   - **"+ New tag..." commits on blur, not just Enter.** Mobile virtual
     keyboards (Android Chrome/Gboard in particular) don't reliably fire a
     clean `keydown` "Enter", so relying on `onKeyDown` alone silently
@@ -135,7 +168,11 @@ not localStorage: `C:\Programs\Accessories\Shmup Editor\TILES.DAT` holds
 the whole library as a versioned JSON array (`{ version, tiles }`), loaded/
 saved via `src/experiences/ShmupEditor/tileStore.ts`. A corrupt or
 stale-shape save falls back to an empty library rather than crashing
-(same defensive-load pattern as `MahjongSolitaire`'s save state). The
+(same defensive-load pattern as `MahjongSolitaire`'s save state).
+Purely-additive optional fields (`customImage`, `biome`) don't bump
+`SAVE_VERSION` — a pre-existing save missing them is still valid and gets
+backfilled to their default (`null`) on load, rather than the whole
+library being discarded for a one-field gap. The
 folder + file are seeded for new installs (`filesystem/seed.ts`) and
 backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`).
 

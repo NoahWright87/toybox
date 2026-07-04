@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import EdgeSelect from "./EdgeSelect";
 import { applyOrientation, type Orientation } from "./orientation";
-import { tileImageById } from "./tileImages";
-import type { EdgeSlot, TileDef } from "./types";
+import { resolveTileImageUrl, type EdgeSlot, type TileDef } from "./types";
 
 const IDENTITY: Orientation = { rotation: 0, flip: false };
 
@@ -45,7 +44,7 @@ export default function TilePreview({
   onRegisterTag,
 }: TilePreviewProps) {
   const oriented = useMemo(() => applyOrientation(tile, IDENTITY), [tile]);
-  const image = tileImageById(tile.imageId);
+  const imageUrl = resolveTileImageUrl(tile);
 
   const columns = oriented.footprint;
   const gridTemplateColumns = `${CORNER_WIDTH[size]} repeat(${columns}, ${COLUMN_WIDTH[size]}) ${CORNER_WIDTH[size]}`;
@@ -84,18 +83,19 @@ export default function TilePreview({
         <div className="shmup-tile-preview__corner" />
 
         {renderEdge("west", 0, oriented.west, "w")}
-        <div className={`shmup-tile-preview__body ${image.url ? "" : "shmup-tile-preview__body--empty"}`} style={{ gridColumn: `span ${columns}` }}>
+        <div className={`shmup-tile-preview__body ${imageUrl ? "" : "shmup-tile-preview__body--empty"}`} style={{ gridColumn: `span ${columns}` }}>
           {/* One full copy of the tile's art per column, scaled to fill its own square — not a small repeating pattern. */}
           {Array.from({ length: columns }, (_, i) => (
             <div
               key={i}
               className="shmup-tile-preview__cell"
-              style={image.url ? { backgroundImage: `url(${image.url})` } : undefined}
+              style={imageUrl ? { backgroundImage: `url(${imageUrl})` } : undefined}
             />
           ))}
           <div className="shmup-tile-preview__label">
             <span className="shmup-tile-preview__name">{tile.name}</span>
             {tile.isConnector && <span className="shmup-tile-preview__badge">CONNECTOR</span>}
+            {tile.biome && <span className="shmup-tile-preview__badge shmup-tile-preview__badge--biome">{tile.biome}</span>}
           </div>
         </div>
         {renderEdge("east", 0, oriented.east, "e")}

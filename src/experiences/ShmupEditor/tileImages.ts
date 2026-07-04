@@ -14,6 +14,9 @@ export interface TileImageOption {
 
 export const NONE_IMAGE_ID = "none";
 
+/** imageId value meaning "use this tile's own `customImage` upload instead of a built-in". */
+export const CUSTOM_IMAGE_ID = "custom";
+
 export const TILE_IMAGES: TileImageOption[] = [
   { id: NONE_IMAGE_ID, label: "None", url: null },
   { id: "water", label: "Water", url: "/shmup-editor/tiles/water.png" },
