@@ -1,0 +1,303 @@
+.shmup-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 10px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #000;
+  overflow-y: auto;
+}
+
+.shmup-editor__tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.shmup-editor__body {
+  flex: 1;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px;
+}
+
+/* ── Buttons / inputs ─────────────────────────────────────────────── */
+
+.shmup-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #000;
+}
+.shmup-btn:active,
+.shmup-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+.shmup-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+.shmup-btn--small {
+  padding: 3px 6px;
+  font-size: 8px;
+}
+.shmup-btn--primary {
+  color: #fff;
+  background: #cc4400;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.shmup-btn--primary:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+.shmup-btn--danger {
+  color: #fff;
+  background: #aa2222;
+}
+.shmup-btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.shmup-input,
+.shmup-input-color {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+}
+.shmup-input--small {
+  width: 80px;
+}
+.shmup-input-color {
+  width: 50px;
+  height: 26px;
+  padding: 2px;
+}
+
+.shmup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.shmup-field-row {
+  display: flex;
+  gap: 16px;
+}
+
+.shmup-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  cursor: pointer;
+}
+.shmup-checkbox--row {
+  margin-bottom: 10px;
+}
+
+.shmup-fieldset {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+.shmup-fieldset legend {
+  font-size: 8px;
+  padding: 0 4px;
+}
+
+.shmup-edge-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.shmup-edge-input {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+.shmup-edge-input__label {
+  font-size: 7px;
+  color: #444;
+}
+
+.shmup-hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #444;
+}
+.shmup-error {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #aa2222;
+  font-weight: bold;
+}
+
+/* ── Tile editor form layout ──────────────────────────────────────── */
+
+.shmup-tile-form {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.shmup-tile-form__fields {
+  flex: 1;
+  min-width: 280px;
+}
+.shmup-tile-form__preview {
+  width: 240px;
+  flex-shrink: 0;
+}
+
+/* ── Tile schematic preview ───────────────────────────────────────── */
+
+.shmup-tile-preview__grid {
+  display: grid;
+  grid-template-rows: 32px 70px 32px;
+  gap: 2px;
+  background: #808080;
+  padding: 2px;
+}
+.shmup-tile-preview--small .shmup-tile-preview__grid {
+  grid-template-rows: 20px 44px 20px;
+}
+
+.shmup-tile-preview__corner {
+  background: #808080;
+}
+
+.shmup-tile-preview__edge {
+  background: #ffffcc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  text-align: center;
+  overflow: hidden;
+  word-break: break-all;
+  padding: 2px;
+}
+.shmup-tile-preview__edge--hardwall {
+  background: #333;
+  color: #fff;
+}
+
+.shmup-tile-preview__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+  font-size: 8px;
+  text-align: center;
+  padding: 4px;
+}
+.shmup-tile-preview__name {
+  word-break: break-word;
+}
+.shmup-tile-preview__badge {
+  font-size: 6px;
+  background: #000;
+  padding: 2px 4px;
+}
+
+.shmup-tile-preview__orientations {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* ── Tile list ─────────────────────────────────────────────────────── */
+
+.shmup-tile-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+.shmup-tile-list__card {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-tile-list__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+}
+.shmup-tile-list__name {
+  word-break: break-word;
+}
+
+/* ── Connection tester ─────────────────────────────────────────────── */
+
+.shmup-connection-tester__pair {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.shmup-connection-tester__slot {
+  width: 240px;
+}
+
+.shmup-connection-tester__results h4 {
+  font-size: 9px;
+  margin: 0 0 8px;
+}
+
+.shmup-alignment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  margin-bottom: 4px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+}
+.shmup-alignment--match {
+  background: #d4f5d4;
+}
+.shmup-alignment--mismatch {
+  background: #f5d4d4;
+}
+.shmup-alignment__offset {
+  font-weight: bold;
+  width: 90px;
+}
+.shmup-alignment__status {
+  width: 90px;
+}
+.shmup-alignment__columns {
+  display: flex;
+  gap: 6px;
+}
+.shmup-col-ok {
+  color: #228833;
+}
+.shmup-col-bad {
+  color: #aa2222;
+  font-weight: bold;
+}

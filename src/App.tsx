@@ -29,6 +29,7 @@ import MahjongSolitairePage from "./pages/MahjongSolitairePage";
 import JazzballPage from "./pages/JazzballPage";
 import BrickBreakerPage from "./pages/BrickBreakerPage";
 import JigsawPuzzlePage from "./pages/JigsawPuzzlePage";
+import ShmupEditorPage from "./pages/ShmupEditorPage";
 
 export default function App() {
   return (
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/jazzball" element={<JazzballPage />} />
         <Route path="/brick-breaker" element={<BrickBreakerPage />} />
         <Route path="/jigsaw-puzzle" element={<JigsawPuzzlePage />} />
+        <Route path="/shmup-editor" element={<ShmupEditorPage />} />
       </Routes>
     </BrowserRouter>
   );

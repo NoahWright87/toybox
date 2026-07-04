@@ -1,0 +1,61 @@
+/**
+ * fsStore-backed persistence for the tile library (specs/shmup-editor.todo.md,
+ * E1 #191). Per root CLAUDE.md's mandatory rule: anything that saves data
+ * uses the virtual filesystem, never raw localStorage — TILES.DAT is
+ * hackable in Notebook like every other *.DAT file in the OS.
+ */
+import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
+import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
+import type { EdgeSlot, TileDef } from "./types";
+
+const SAVE_VERSION = 1;
+
+interface SavedLibrary {
+  version: number;
+  tiles: TileDef[];
+}
+
+function isEdgeSlot(value: unknown): value is EdgeSlot {
+  if (typeof value !== "object" || value === null) return false;
+  const slot = value as Record<string, unknown>;
+  return typeof slot.tag === "string" && typeof slot.hardwall === "boolean";
+}
+
+/** Defensive shape check (same spirit as MahjongSolitaire's loadSavedState) — a corrupt or stale-shape save falls back to an empty library rather than crashing. */
+function isValidTileDef(value: unknown): value is TileDef {
+  if (typeof value !== "object" || value === null) return false;
+  const tile = value as Record<string, unknown>;
+  return (
+    typeof tile.id === "string" &&
+    typeof tile.name === "string" &&
+    (tile.footprint === 1 || tile.footprint === 2 || tile.footprint === 3) &&
+    Array.isArray(tile.north) &&
+    tile.north.every(isEdgeSlot) &&
+    tile.north.length === tile.footprint &&
+    Array.isArray(tile.south) &&
+    tile.south.every(isEdgeSlot) &&
+    tile.south.length === tile.footprint &&
+    isEdgeSlot(tile.east) &&
+    isEdgeSlot(tile.west) &&
+    typeof tile.isConnector === "boolean" &&
+    typeof tile.weight === "number" &&
+    typeof tile.color === "string"
+  );
+}
+
+export function loadTiles(): TileDef[] {
+  const content = fsStore.getFile(SHMUP_EDITOR_TILES_ID)?.content;
+  if (!content) return [];
+  try {
+    const parsed = JSON.parse(content) as SavedLibrary;
+    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return [];
+    return parsed.tiles.filter(isValidTileDef);
+  } catch {
+    return [];
+  }
+}
+
+export function saveTiles(tiles: TileDef[]): void {
+  const saved: SavedLibrary = { version: SAVE_VERSION, tiles };
+  fsStore.writeFile(SHMUP_EDITOR_TILES_ID, JSON.stringify(saved));
+}

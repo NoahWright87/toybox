@@ -6,6 +6,7 @@ import {
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
   SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_TILES_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -388,6 +389,39 @@ export class FileSystemStore {
           parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           system: false,
         } as FSFolder);
+        changed = true;
+      }
+    }
+
+    // Ensure Shmup Editor's folder + TILES.DAT exist (existing sessions)
+    if (!this.nodes.has(SHMUP_EDITOR_TILES_ID)) {
+      let shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (!shmupEditorDir) {
+        const accDir = this.getNodeByPath("C:\\Programs\\Accessories");
+        if (accDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: SHMUP_EDITOR_FOLDER_ID, kind: "folder", name: "Shmup Editor",
+            parentId: accDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:shmup-editor-readme", {
+            id: "fs:shmup-editor-readme", kind: "file", name: "README.TXT",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "text",
+            content: "Shmup Editor - Noahsoft (in development)\nOpen the tile editor at /shmup-editor.\nTILES.DAT holds your authored tile library as JSON.\n",
+            mimeType: "text/plain", system: false, readonly: true,
+          } as FSFile);
+          shmupEditorDir = folder;
+        }
+      }
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_TILES_ID, {
+          id: SHMUP_EDITOR_TILES_ID, kind: "file", name: "TILES.DAT",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
         changed = true;
       }
     }

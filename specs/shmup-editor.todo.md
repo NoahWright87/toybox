@@ -1,35 +1,25 @@
 # Shmup Level & Enemy Editor — TODOs (PRD)
 
-> Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor),
-> **E2 #192** (enemy editor), **E3 #193** (spawn node editor), **E4 #194**
-> (preview/playtest), **E5 #195** (export/import pipeline). Status: design
-> locked, nothing built yet. Source: design handoff doc (Claude Chat →
-> Claude Code), 2026-07-04.
+> Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
+> partially shipped, see `shmup-editor.md`), **E2 #192** (enemy editor),
+> **E3 #193** (spawn node editor), **E4 #194** (preview/playtest), **E5
+> #195** (export/import pipeline). Source: design handoff doc (Claude
+> Chat → Claude Code), 2026-07-04.
 
 ## What this is
 
-A new browser-based authoring tool, served at **`/shmup-editor`**, used to
-create tiles, enemy definitions, and spawn configurations for the shmup
-game's data-driven level system (`specs/games/shmup/levels-and-tiles.spec.todo.md`,
+A browser-based authoring tool at **`/shmup-editor`**, used to create
+tiles, enemy definitions, and spawn configurations for the shmup game's
+data-driven level system (`specs/games/shmup/levels-and-tiles.spec.todo.md`,
 `enemies-and-bullets.spec.todo.md`, `spawn-and-warnings.spec.todo.md`). It
-outputs JSON files that a human commits into the `games/shmup` workspace
-as static content.
+will output JSON files that a human commits into the `games/shmup`
+workspace as static content (the concrete hand-off mechanics are E5's job
+— nothing lands there automatically yet).
 
-## Why a route in the main app, not inside games/shmup
-
-`games/shmup/` is a separately-built Vite/Phaser bundle, outside the main
-Doors 97 app's router — it can't import `fsStore` or
-`@noahwright/design` without pulling the whole main app into its bundle
-(see `specs/games/shmup/content-and-assets.spec.md`'s FS-override notes
-for the same constraint on sprite overrides). The editor is a
-content-authoring tool, not a live game system: it doesn't need Phaser,
-and building it as an ordinary React route keeps it inside this repo's
-standard experience conventions (retro Win95 chrome, `@noahwright/design`
-components, this spec file).
-
-**The editor and the game do not share a live connection.** The editor's
-job is to produce valid JSON; landing that JSON inside `games/shmup` is a
-separate, manual (for now) step — see E5 below.
+Settled (see `shmup-editor.md` for the shipped slice): the editor is a
+route in the **main app**, not inside `games/shmup`'s Phaser workspace;
+it shares **no runtime code** with the game (only the JSON shape); tiles
+persist via **fsStore**, not localStorage.
 
 ## Non-goals for this tool
 
@@ -44,13 +34,21 @@ separate, manual (for now) step — see E5 below.
 
 ## Surfaces (build in this order — E1/E2 are load-bearing)
 
-### E1 — Tile editor (#191)
+### E1 — Tile editor (#191) — partially shipped
 
-Import/sketch background art per footprint (1x1/2x1/3x1), assign edge
-tags per side (with an 8-orientation rotate/flip preview), define one or
-more mutually-exclusive spawn variants per tile, mark hard-wall edges,
-mark start/end connector tiles. Outputs tile JSON matching
-`levels-and-tiles.spec.todo.md`'s data model.
+**Done** (see `shmup-editor.md`): footprint picker, per-column edge tags
+with hard-wall marking, start/end connector toggle, rotate/flip schematic
+preview, tile list (edit/duplicate/delete), fsStore-backed persistence,
+and a connection tester that validates tiles actually attach.
+
+**Remaining:**
+- Import/sketch real background art per footprint (currently a flat
+  color swatch stands in for art).
+- Attach spawn variants to a tile (needs E3's spawn-node editor to exist
+  first — a tile variant *is* a spawn-node configuration per the design
+  doc, so this is blocked on E3, not purely an E1 gap).
+- Biome tagging on tiles (so a tile can declare which biome tile-set it
+  belongs to, per L7 #189) — not yet modeled.
 
 ### E2 — Enemy editor (#192)
 
@@ -86,14 +84,13 @@ editor rather than crashing the game at runtime.
 
 - Exact landing directory + filename convention inside `games/shmup/src/`
   for exported tiles/enemies/spawn-nodes/biome tile-sets.
-- Whether the editor's own authoring state (in-progress, unexported work)
-  persists via `fsStore` per this repo's mandatory reload-survival rule
-  (root `CLAUDE.md`) — likely yes, since it's a main-app experience like
-  any other; needs a stable FS path/ID once E1 construction starts.
 - Whether tile/enemy art in the editor reuses the shmup sprite-registry
   manifest convention (`content-and-assets.spec.md`) directly, or needs
   its own lighter-weight asset-reference scheme suited to sketch/import
   workflows.
+- Whether this tool ever gets a Doors 97 window/Taskbar entry (full
+  `NsDoors97/CLAUDE.md` registration checklist) or stays a standalone-only
+  dev route indefinitely, like Hell Map Editor.
 
 ## Related
 
@@ -105,5 +102,5 @@ editor rather than crashing the game at runtime.
 
 ## Reminders
 
-- Move completed items to a `shmup-editor.md` spec once E1 ships — this
-  file is the PRD/roadmap, not current state.
+- `shmup-editor.md` now tracks current (partial-E1) behavior; keep
+  promoting sections here into it as E1's remaining gaps and E2-E5 ship.
