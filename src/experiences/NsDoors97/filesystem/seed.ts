@@ -8,6 +8,7 @@ import {
   SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_TILES_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -498,6 +499,16 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const midiDir = store.createFolder(ACC_ID, "MIDI Editor");
   store.createFile(midiDir.id, "MIDI Editor.exe", { fileType: "exe", appId: "midi-editor" });
+
+  // SHMUP Editor's authored tile library — edited via the standalone
+  // /shmup-editor page (specs/shmup-editor.todo.md), not yet a Doors 97
+  // window. TILES.DAT is hackable like any other SAVE.DAT/SCORES.DAT.
+  const shmupEditorDir = store.createFolder(ACC_ID, "Shmup Editor", { id: SHMUP_EDITOR_FOLDER_ID });
+  store.createFile(shmupEditorDir.id, "README.TXT", {
+    fileType: "text", readonly: true,
+    content: "Shmup Editor - Noahsoft (in development)\nOpen the tile editor at /shmup-editor.\nTILES.DAT holds your authored tile library as JSON.\n",
+  });
+  store.createFile(shmupEditorDir.id, "TILES.DAT", { id: SHMUP_EDITOR_TILES_ID, fileType: "dat", content: "" });
 
   // Programs > Internet
   const internetDir = store.createFolder(PROGRAMS_ID, "Internet");

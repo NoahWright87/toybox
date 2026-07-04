@@ -1,0 +1,432 @@
+.shmup-editor {
+  display: flex;
+  flex-direction: column;
+  /* StandaloneWindow's content area centers its child by default (align-items:
+     center), which sizes flex items to their own content width -- without
+     this, a wide tile diagram further down would pull the whole window wide
+     instead of scrolling internally. */
+  align-self: stretch;
+  min-width: 0;
+  gap: 8px;
+  height: 100%;
+  padding: 10px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #000;
+  overflow-y: auto;
+}
+
+.shmup-editor__heading {
+  margin: 0 0 10px;
+  font-size: 11px;
+}
+
+.shmup-editor__body {
+  flex: 1;
+  min-width: 0;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px;
+}
+
+/* ── Buttons / inputs ─────────────────────────────────────────────── */
+
+.shmup-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #000;
+}
+.shmup-btn:active,
+.shmup-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+.shmup-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+.shmup-btn--small {
+  padding: 3px 6px;
+  font-size: 8px;
+}
+.shmup-btn--big {
+  padding: 20px 28px;
+  font-size: 14px;
+}
+.shmup-btn--primary {
+  color: #fff;
+  background: #cc4400;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.shmup-btn--primary:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+.shmup-btn--danger {
+  color: #fff;
+  background: #aa2222;
+}
+.shmup-btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.shmup-input,
+.shmup-input-color {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+}
+.shmup-input--small {
+  width: 80px;
+}
+.shmup-input-color {
+  width: 50px;
+  height: 26px;
+  padding: 2px;
+}
+
+.shmup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.shmup-field-row {
+  display: flex;
+  gap: 16px;
+}
+
+.shmup-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.shmup-hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #444;
+}
+.shmup-error {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #aa2222;
+  font-weight: bold;
+}
+
+/* ── Tile editor form layout ──────────────────────────────────────── */
+
+.shmup-tile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 720px;
+}
+.shmup-tile-form__toolbar {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.shmup-field--inline {
+  margin-bottom: 0;
+}
+
+.shmup-image-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shmup-image-picker__option {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+}
+.shmup-image-picker__option--active {
+  border-color: #cc4400;
+  border-width: 3px;
+  box-shadow: 0 0 0 1px #cc4400;
+}
+
+/* ── Tile schematic preview ───────────────────────────────────────── */
+
+.shmup-tile-preview {
+  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shmup-tile-preview__grid {
+  display: grid;
+  grid-template-rows: auto 70px auto;
+  gap: 2px;
+  background: #808080;
+  padding: 2px;
+  width: max-content;
+}
+.shmup-tile-preview--small .shmup-tile-preview__grid {
+  grid-template-rows: auto 44px auto;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__grid {
+  grid-template-rows: auto min(50vw, 220px) auto;
+}
+
+.shmup-tile-preview__corner {
+  background: #808080;
+}
+
+.shmup-tile-preview__edge {
+  background: #ffffcc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  text-align: center;
+  overflow: hidden;
+  word-break: break-all;
+  padding: 4px 2px;
+  min-height: 24px;
+}
+.shmup-tile-preview__edge--hardwall {
+  background: #333;
+  color: #fff;
+}
+.shmup-tile-preview__edge--editable {
+  padding: 3px;
+  background: #fff;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__edge--editable {
+  padding: 5px;
+}
+/* West/east cells are a narrow column -- writing-mode (not transform:rotate)
+   turns the text/control sideways so it's actually legible. transform:rotate
+   was tried first but a select's *unrotated* width has to be huge to read
+   as tall once rotated, which overflows a flex-centered cell and rotates
+   around a badly-offset center -- writing-mode lays it out correctly the
+   first time, no oversized-then-rotated box to mis-position. */
+.shmup-tile-preview__edge--vertical {
+  overflow: hidden;
+}
+.shmup-tile-preview__edge-text--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+}
+
+.shmup-edge-select {
+  width: 100%;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  padding: 3px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+}
+.shmup-tile-preview--edit .shmup-edge-select {
+  font-size: 14px;
+  padding: 6px;
+}
+.shmup-edge-select--adding {
+  background: #ffffcc;
+}
+/* Sideways so the full tag/option text is legible in a narrow west/east
+   column. width/height 100% fills the cell naturally -- no per-size magic
+   numbers needed, unlike the transform:rotate approach this replaced.
+   Padding is cut down from the base/edit rules: the column is only
+   26-40px wide (now the *inline* direction), so the normal 3-6px padding
+   ate most of the space, leaving room for only the dropdown arrow. */
+.shmup-edge-select--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 100%;
+  height: 100%;
+}
+.shmup-edge-select.shmup-edge-select--vertical,
+.shmup-tile-preview--edit .shmup-edge-select.shmup-edge-select--vertical {
+  padding: 2px 1px;
+}
+
+.shmup-tile-preview__body {
+  position: relative;
+  display: flex;
+}
+.shmup-tile-preview__body--empty {
+  background-color: #999;
+}
+
+/* One cell per footprint column -- each shows a full copy of the tile's
+   art, scaled to fill its own square (not a small repeating pattern). */
+.shmup-tile-preview__cell {
+  flex: 1 1 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.shmup-tile-preview__body--empty .shmup-tile-preview__cell {
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
+}
+
+.shmup-tile-preview__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+  font-size: 8px;
+  text-align: center;
+  pointer-events: none;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__label {
+  font-size: 11px;
+}
+.shmup-tile-preview__name {
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 4px;
+}
+.shmup-tile-preview__badge {
+  font-size: 6px;
+  background: #000;
+  padding: 2px 4px;
+}
+
+/* ── Tile list ─────────────────────────────────────────────────────── */
+
+.shmup-tile-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+.shmup-tile-list__card {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-tile-list__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+}
+.shmup-tile-list__name {
+  word-break: break-word;
+}
+
+/* ── Tile art (Connection Tester) ─────────────────────────────────────
+   Art-only rendering, no edge labels -- just what the tile looks like. */
+
+.shmup-tile-art {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.shmup-tile-art__row {
+  display: flex;
+  border: 2px solid #808080;
+}
+.shmup-tile-art__cell {
+  width: 70px;
+  height: 70px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.shmup-tile-art--thumb .shmup-tile-art__cell {
+  width: 40px;
+  height: 40px;
+}
+.shmup-tile-art__cell--empty {
+  background-color: #999;
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
+}
+.shmup-tile-art__image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+.shmup-tile-art__name {
+  font-size: 7px;
+  text-align: center;
+  max-width: 140px;
+  word-break: break-word;
+}
+
+/* ── Connection tester ─────────────────────────────────────────────── */
+
+.shmup-connection-tester__add-row {
+  margin-bottom: 14px;
+}
+
+.shmup-tile-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-tile-picker__option {
+  background: none;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 4px;
+  cursor: pointer;
+}
+.shmup-tile-picker__option:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.shmup-connection-tester__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.shmup-connection-tester__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.shmup-connection-tester__joint {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 4px 44px;
+  font-size: 18px;
+}

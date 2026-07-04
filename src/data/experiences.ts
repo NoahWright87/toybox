@@ -203,4 +203,11 @@ export const experiences: Experience[] = [
     category: "game",
     path: "/jigsaw-puzzle",
   },
+  {
+    id: "shmup-editor",
+    title: "Shmup Editor",
+    description: "Author tiles for the SHMUP level generator: footprints, edge tags, hard walls, connectors, and a connection tester. In development.",
+    category: "toy",
+    path: "/shmup-editor",
+  },
 ];
