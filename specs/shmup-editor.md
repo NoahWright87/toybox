@@ -84,16 +84,30 @@ whichever view is active.
   tag or Hard Wall.
   - **Custom art upload** (`imageUpload.ts`) — "Upload Custom Art..."
     opens a file picker; the chosen image is decoded, cover-fit cropped
-    onto a 256x256 canvas, and re-encoded as a JPEG (q0.85) data URL
-    stored on the tile's own `customImage` field (not a shared library
-    asset — each tile carries its own upload) — same format choice as
-    `utils/imageResize.ts`'s `resizeImageToDataUrl`, which shares
-    `imageUpload.ts`'s `loadImage()` decode helper (`utils/loadImage.ts`,
-    also used by `NsDoors97/imageDegrade.ts`). The downscale step exists
-    because the tile library round-trips through `fsStore`'s
-    `LocalStorageAdapter`, which caps out around 5-10MB total — an
-    unconstrained multi-MB photo upload per tile would exhaust that quota
-    after a handful of tiles.
+    onto a 256x256 canvas, then **quantized to a limited palette and
+    stored as a genuine indexed-color PNG** — not truecolor PNG or JPEG.
+    A "Colors" dropdown next to the upload button (256/128/64/32/16/8,
+    default 32) picks the palette size before uploading; fewer colors
+    means a smaller saved file, which matters for flat tile/sprite art the
+    same way it did in Photoshop's old "Indexed Color" mode.
+    `utils/paletteQuantize.ts` runs median-cut quantization down to that
+    many colors, then Floyd-Steinberg dithers *against the resulting fixed
+    palette* (not per-channel posterization like `NsDoors97/imageDegrade.ts`'s
+    wallpaper effect — diffusing error toward arbitrary RGB values can
+    produce more distinct colors than fit in a palette; dithering against
+    a fixed palette is also how real 256-color VGA/GIF art faked extra
+    colors). `utils/indexedPng.ts` then hand-writes the actual PNG bytes
+    (`IHDR`/`PLTE`/optional `tRNS`/`IDAT`/`IEND`, each with a CRC32) since
+    Canvas's own `toDataURL`/`toBlob` can only emit truecolor PNGs — no
+    browser API produces an indexed/paletted one. `IDAT`'s DEFLATE
+    compression uses the browser's built-in `CompressionStream("deflate")`
+    rather than a hand-rolled DEFLATE implementation. Both `paletteQuantize.ts`
+    and `indexedPng.ts` live in `src/utils/` (not `ShmupEditor/`) so NS Art's
+    planned palette-size feature (`specs/ns-art.todo.md` issue #82) and the
+    wallpaper degrade pipeline can adopt the same primitives later without
+    rework. The downscale-before-encode step still matters independent of
+    the format: the tile library round-trips through `fsStore`'s
+    `LocalStorageAdapter`, which caps out around 5-10MB total.
     Uploading sets `imageId` to the reserved `CUSTOM_IMAGE_ID` and adds a
     live thumbnail of the upload to the picker row (selectable like any
     built-in, so switching back to a built-in and back to the custom

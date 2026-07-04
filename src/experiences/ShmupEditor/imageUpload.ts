@@ -3,15 +3,21 @@
  * "import custom background art per tile" gap). The tile library is
  * fsStore-backed, which persists through LocalStorageAdapter — an
  * unconstrained photo upload could blow past localStorage's ~5-10MB quota
- * after a handful of tiles, so every upload is decoded and redrawn onto a
+ * after a handful of tiles, so every upload is decoded, redrawn onto a
  * small square canvas (cover-fit crop, matching how built-in tile images
- * fill their square) before being stored as a JPEG data URL — same
- * quota-motivated format choice as utils/imageResize.ts's resizeImageToDataUrl.
+ * fill their square), then quantized to a limited palette and stored as a
+ * genuine indexed-color PNG (utils/paletteQuantize.ts + utils/indexedPng.ts)
+ * — much smaller than truecolor PNG or JPEG for flat, low-color tile/sprite
+ * art, and (unlike JPEG) keeps pixel-perfect edges and real transparency.
  */
 import { loadImage } from "../../utils/loadImage";
+import { quantizeImage } from "../../utils/paletteQuantize";
+import { encodeIndexedPng, pngBytesToDataUrl } from "../../utils/indexedPng";
 
 const MAX_DIM = 256;
-const JPEG_QUALITY = 0.85;
+
+export const DEFAULT_PALETTE_SIZE = 32;
+export const PALETTE_SIZE_OPTIONS = [256, 128, 64, 32, 16, 8] as const;
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,8 +28,8 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Reads an uploaded image file and returns a downscaled, cover-cropped square JPEG data URL. */
-export async function loadTileImageFile(file: File): Promise<string> {
+/** Reads an uploaded image file and returns a downscaled, cover-cropped, palette-quantized indexed PNG data URL. */
+export async function loadTileImageFile(file: File, paletteSize: number = DEFAULT_PALETTE_SIZE): Promise<string> {
   // A non-empty MIME type that isn't image/* is a reliable reject; an empty
   // type (some mobile pickers/renamed files) is not — let decode below be
   // the real gate rather than false-rejecting a legitimate image.
@@ -46,5 +52,8 @@ export async function loadTileImageFile(file: File): Promise<string> {
   const h = img.height * scale;
   ctx.drawImage(img, (MAX_DIM - w) / 2, (MAX_DIM - h) / 2, w, h);
 
-  return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+  const imageData = ctx.getImageData(0, 0, MAX_DIM, MAX_DIM);
+  const quantized = quantizeImage(imageData, paletteSize);
+  const pngBytes = await encodeIndexedPng(quantized);
+  return pngBytesToDataUrl(pngBytes);
 }

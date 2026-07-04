@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import BiomeSelect from "./BiomeSelect";
 import TilePreview from "./TilePreview";
-import { loadTileImageFile } from "./imageUpload";
+import { DEFAULT_PALETTE_SIZE, PALETTE_SIZE_OPTIONS, loadTileImageFile } from "./imageUpload";
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID, TILE_IMAGES } from "./tileImages";
 import { FOOTPRINTS, WILDCARD, edgeSlot, resizeSlots, type EdgeSlot, type Footprint, type TileDef } from "./types";
 
@@ -38,6 +38,7 @@ export default function TileEditorForm({
   const [draft, setDraft] = useState<TileDef>(tile);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [paletteSize, setPaletteSize] = useState(DEFAULT_PALETTE_SIZE);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const error = useMemo(() => validate(draft), [draft]);
 
@@ -59,7 +60,7 @@ export default function TileEditorForm({
     setUploadError(null);
     setUploading(true);
     try {
-      const dataUrl = await loadTileImageFile(file);
+      const dataUrl = await loadTileImageFile(file, paletteSize);
       setDraft((prev) => ({ ...prev, customImage: dataUrl, imageId: CUSTOM_IMAGE_ID }));
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Could not load that image.");
@@ -182,12 +183,28 @@ export default function TileEditorForm({
           <button type="button" className="shmup-btn shmup-btn--small" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
             {uploading ? "Loading..." : "Upload Custom Art..."}
           </button>
+          <label className="shmup-checkbox">
+            Colors
+            <select
+              className="shmup-input"
+              value={paletteSize}
+              disabled={uploading}
+              onChange={(e) => setPaletteSize(Number(e.target.value))}
+            >
+              {PALETTE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
           {draft.customImage && (
             <button type="button" className="shmup-btn shmup-btn--small" disabled={uploading} onClick={removeCustomImage}>
               Remove Custom Art
             </button>
           )}
         </div>
+        <p className="shmup-hint">Fewer colors means a smaller saved file — good for flat tile/sprite art; use 256 for photo-like uploads.</p>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
         {uploadError && <p className="shmup-error">{uploadError}</p>}
       </div>
