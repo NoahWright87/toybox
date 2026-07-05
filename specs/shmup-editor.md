@@ -1,8 +1,8 @@
 # Shmup Level & Enemy Editor
 
 > Epic: **[Shmup Editor] Epic 6 #182**. This spec covers what's actually
-> shipped; see `shmup-editor.todo.md` for what's still ahead (E2-E5 and
-> the rest of E1).
+> shipped; see `shmup-editor.todo.md` for what's still ahead (E3-E5, the
+> rest of E1, and E2's deferred scaling-curves piece).
 
 ## What it is
 
@@ -314,6 +314,152 @@ shows a plain heading for whichever view is active.
     it to the pointer (excluded from physics that tick) and lets it go on
     release rather than requiring a separate "lock" mode.
 
+## Enemy editor (E2)
+
+A second top-level **Enemies** menu (alongside **Tiles**, same
+`useWindowMenus` pattern — "New Enemy...", "Enemy List") authors
+`EnemyDef`s: node-graph enemies matching
+[`enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md)'s
+design exactly. Enemy List (`EnemyList.tsx`) is the same visual-checker
+grid as the tile list — sprite art tiled edge-to-edge, actions behind a
+small "⋮" corner button — with the enemy's node/edge count shown in its
+corner menu instead of a footprint.
+
+### Data model (`enemyTypes.ts`)
+
+An `EnemyDef` is a **strict chain**, not a general graph: every `GraphNode`
+has at most one outgoing `GraphEdge`, built by "growing" a node off an
+existing one in the editor — there is no free "connect any two existing
+nodes" gesture. A `BranchCondition` (HP/time threshold → jump to any other
+node id, by id) is the one place a *second*, conditional target is
+reachable, independent of the primary chain — this is what makes the whole
+thing a graph rather than a literal linked list, and is how flee-at-low-HP,
+enrage, phase changes, and the elapsed-time boss bail-out all fall out of
+one mechanism (spec §5). This was a deliberate scope decision for E2: the
+alternative (arbitrary multi-edge fan-out per node) would have needed a
+free-form "connect any two nodes" canvas gesture and left the runtime
+meaning of multiple *unconditional* simultaneous paths out of a node
+undefined.
+
+- **Nodes** own state: position, optional `DwellBehavior` (wait/orbit,
+  spec §3), optional `AttackPayload` (spec §6), optional `BranchCondition`
+  (spec §5), optional `ExitConfig` (meaningful only on a leaf — a node with
+  no outgoing edge — spec §4), optional `EntranceAppearance` (meaningful
+  only on the entrance node — spec's "Entrance" section).
+- **Edges** own a single `MovementBehavior` (straightLine/wave/spiral/
+  teleport, spec §2), plus their own independent optional `AttackPayload`
+  and `BranchCondition` — attack and branch are a parallel track, not owned
+  by the path, exactly as the spec frames it.
+- **Bullets are minimal enemies** (spec §7): `AttackPayload.bullet` is a
+  `BulletDef` — sprite + one of the 3 non-teleport `MovementBehavior`
+  primitives (a bullet's spawn/expire *are* its entrance/exit, so it never
+  needs `teleport`, dwell, or branch) + an optional nested `AttackPayload`
+  of its own. This is what makes splitting/homing/curving/boomerang
+  bullets, and bullets-that-spawn-splitting-bullets, fall out of reusing
+  one data shape at a smaller scale rather than needing special-case code.
+
+Per-param scaling curves (flat vs. scales-with-difficulty, mentioned in
+`shmup-editor.todo.md`'s original one-line E2 scope) are **deferred** —
+see that file's Remaining section. Every numeric param here is a plain
+flat number for now.
+
+### Canvas (`EnemyGraphEditor.tsx`, `enemyGraph.ts`)
+
+Free-form, tap-driven, deliberately **not** drag-to-connect: nodes are
+absolutely-positioned circular buttons showing the enemy's sprite (all
+nodes of one enemy show the same sprite — a node is a waypoint of one
+visual entity, not a different-looking thing), edges are SVG lines with an
+arrowhead underneath. Small badges overlay each node for at-a-glance state
+(▶ entrance, ⏳ dwell, 🔫 attack, ⚡ branch, 🚪 exit on a leaf).
+
+- **Tapping a node or edge** reveals small on-canvas quick-action buttons
+  (mirroring Connection Viewer's overlay-controls-on-the-tile-itself
+  pattern) — a node gets a ✥ drag handle (press-and-drag to reposition,
+  via native Pointer Capture so the move stays tracked even once the
+  pointer leaves the small handle), a "+" to grow a new linked child node
+  (hidden once the node already has an outgoing edge — one primary edge per
+  node, by design), and a ✕ delete. An edge just gets a ✕ delete.
+- **Below the canvas**, a settings panel (`NodePanel.tsx`/`EdgePanel.tsx`)
+  shows tabs for only what's actually eligible on the current selection —
+  Dwell/Attack/Branch always, Exit only if the node is a leaf, Entrance
+  only on the entrance node; Movement/Attack/Branch for an edge. This two-
+  tier split (tiny structural controls on the canvas itself, full param
+  forms below it) exists because the actual settings — movement curves,
+  attack pattern/aim/trigger, nested bullets — have too many fields to fit
+  in a small canvas-anchored popover on a phone screen, unlike Connection
+  Viewer's single-action overlay buttons.
+- **Deleting a node or edge cascades to its entire downstream subtree**
+  (`enemyGraph.ts`'s `deleteNode`/`deleteEdge`, backed by
+  `getDescendantNodeIds`) rather than leaving an orphaned, unreachable
+  fragment — there's no canvas gesture to re-attach a detached subtree
+  afterward, so a partial delete would just strand dead nodes with no way
+  to reconnect them. Deleting a node with more than itself downstream
+  arms an inline Confirm/Keep prompt first (same pattern as
+  `TileList`/`EnemyList`'s delete-confirm); a true leaf deletes immediately.
+  Any `BranchCondition` elsewhere in the graph that targeted a now-deleted
+  node is cleared rather than left dangling. Deleting the entrance node
+  clears the whole graph.
+- **A tap on any `<button>` never triggers the canvas's outside-click
+  deselect.** The first implementation closed the selected node/edge panel
+  on any pointerdown outside the canvas/panel — including a tap on Save/
+  Cancel themselves. That collapse happens synchronously on `pointerdown`,
+  before the paired `click` fires, and removing the panel shifts the page
+  layout out from under the still-in-flight tap; an end-to-end Playwright
+  pass caught this directly (`Save Enemy` silently no-opped because the
+  button had moved by the time the click landed). The fix excludes any
+  `<button>` target from the auto-close check entirely — a button's own
+  `onClick` already does the right thing and doesn't need this effect's help.
+- **Recursive bullet authoring is one component, not a second canvas.**
+  `AttackPayloadForm.tsx` renders a bullet's sprite/movement/nested-attack
+  inline (`BulletForm`), and a bullet's own attack payload is *the same
+  `AttackPayloadForm`* rendered one level deeper (indented with a dashed
+  left border) — since a bullet's payload has exactly the same shape as
+  any other attack payload, there's no separate recursive canvas to build;
+  recursion is free at the form-data level, matching how the spec frames
+  bullets as minimal enemies rather than a distinct authoring surface.
+
+### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
+
+Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly,
+but starts with only the `None` built-in — no placeholder sprite art has
+been supplied yet (`public/shmup-editor/enemies/README.md` documents the
+convention for when it is). Custom upload reuses the same
+`paletteQuantize.ts`/`indexedPng.ts` pipeline as tile art, generalized in
+`imageUpload.ts` into `decodeUpload`/`canvasToIndexedPngDataUrl` helpers
+shared by both `loadTileImageFile` (cover-fit crop, opaque — fills a whole
+square) and the new `loadSpriteImageFile` (**contain**-fit, transparent
+surround — a sprite must stay fully visible against a see-through
+background rather than being cropped to fill a square).
+
+### Enemy persistence
+
+Two more fsStore files alongside `TILES.DAT`, same folder
+(`C:\Programs\Accessories\Shmup Editor\`), same versioned-JSON-array
+pattern and defensive-load-falls-back-to-empty behavior as
+`tileStore.ts` (`enemyStore.ts`'s validators recurse through the nested
+`AttackPayload`/`BulletDef` shape, capped at a generous depth so a
+maliciously/corruptly deep hand-edited save fails validation instead of
+overflowing the stack):
+
+- **`ENEMIES.DAT`** — the saved enemy library, written on explicit Save
+  (same contract as tiles).
+- **`DRAFT.DAT`** — the enemy currently being edited, written after
+  *every* graph change, not just on Save. This closes a gap E1's tile form
+  still has (noted in `shmup-editor.todo.md`): a half-built multi-node
+  enemy graph is a much bigger loss on an accidental mobile reload/rotation
+  than a half-picked tile edge tag, so root `CLAUDE.md`'s mandatory
+  in-progress-session rule gets a real implementation here from the start.
+  On mount, `ShmupEditor.tsx` checks for a saved draft and — if one exists
+  — resumes straight into the edit view with it, silently, rather than
+  prompting. Position drags are the one exception to "write on every
+  change": a drag updates only local component state, and the graph (and
+  thus `DRAFT.DAT`) is only updated once, on release, so dragging a node
+  around doesn't re-serialize the whole enemy on every pointer-move frame.
+
+Both files are seeded for new installs (`filesystem/seed.ts`) and
+backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`),
+same as `TILES.DAT`.
+
 ## Persistence
 
 Per root `CLAUDE.md`'s mandatory rule, the tile library is **fsStore-backed**,
@@ -333,11 +479,13 @@ backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`).
 
 There is currently no `.exe`/Doors-97-window entry for this tool — it's
 reachable only via the `/shmup-editor` route. The FS folder exists purely
-so `TILES.DAT` is hackable/discoverable in the file browser.
+so `TILES.DAT`/`ENEMIES.DAT`/`DRAFT.DAT` are hackable/discoverable in the
+file browser.
 
 ## Related
 
 - [`shmup-editor.todo.md`](shmup-editor.todo.md) — remaining work (E1's
-  art import, E2-E5)
-- [`games/shmup/levels-and-tiles.spec.todo.md`](games/shmup/levels-and-tiles.spec.todo.md) — the data model this editor's export shape matches
+  art import, E2's deferred scaling curves, E3-E5)
+- [`games/shmup/levels-and-tiles.spec.todo.md`](games/shmup/levels-and-tiles.spec.todo.md) — the data model this editor's tile export shape matches
+- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the data model this editor's enemy export shape matches
 - [`ns-doors-97.md`](ns-doors-97.md) — the filesystem this tool persists through

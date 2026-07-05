@@ -107,6 +107,10 @@
 .shmup-field-row {
   display: flex;
   gap: 16px;
+  /* Movement/attack-payload forms (E2 #192) pack several fields into one
+     row -- without wrap, a phone-width viewport clips the trailing fields
+     off the right edge instead of stacking them. */
+  flex-wrap: wrap;
 }
 
 .shmup-checkbox {
@@ -570,6 +574,138 @@
      rather than always at the bottom regardless of which direction/side
      is being extended. */
   padding: 4px;
+}
+
+/* ── Enemy editor (E2 #192) ───────────────────────────────────────────
+   Free-form node-graph canvas: nodes are absolutely-positioned circular
+   buttons, edges are SVG lines underneath. Tap-driven (no drag-to-connect,
+   see specs/shmup-editor.md) -- tapping a node/edge reveals small on-canvas
+   quick-action buttons plus a below-canvas settings panel. */
+
+.shmup-enemy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 720px;
+}
+
+.shmup-enemy-canvas-scroll {
+  overflow: auto;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  max-height: 60vh;
+}
+
+.shmup-enemy-canvas-stage {
+  position: relative;
+  min-width: 100%;
+  min-height: 200px;
+}
+
+.shmup-enemy-canvas-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.shmup-enemy-canvas-svg line {
+  pointer-events: stroke;
+}
+
+.shmup-enemy-node-wrap {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+}
+
+.shmup-enemy-node {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #cc4400;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #ffcc88;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+.shmup-enemy-node--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+
+.shmup-enemy-node__badges {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.shmup-enemy-node__controls {
+  position: absolute;
+  inset: -30px;
+  pointer-events: none;
+}
+.shmup-enemy-node__btn {
+  position: absolute;
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 14px;
+  cursor: pointer;
+}
+.shmup-enemy-node__btn--move {
+  top: 0;
+  left: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.shmup-enemy-node__btn--add {
+  top: 0;
+  right: 0;
+  background: rgba(34, 136, 51, 0.75);
+}
+.shmup-enemy-node__btn--delete {
+  bottom: 0;
+  right: 0;
+  background: rgba(153, 0, 0, 0.75);
+}
+
+.shmup-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shmup-panel--confirm {
+  border-color: #aa2222;
+}
+
+.shmup-bullet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* ── Tag graph ─────────────────────────────────────────────────────── */

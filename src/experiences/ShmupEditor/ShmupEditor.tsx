@@ -6,16 +6,25 @@ import TileList from "./TileList";
 import TileEditorForm from "./TileEditorForm";
 import ConnectionViewer from "./ConnectionViewer";
 import TagGraph from "./TagGraph";
+import EnemyList from "./EnemyList";
+import EnemyGraphEditor from "./EnemyGraphEditor";
 import { loadTiles, saveTiles } from "./tileStore";
+import { clearDraft, loadDraft, loadEnemies, saveDraft, saveEnemies } from "./enemyStore";
 import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
+import { createBlankEnemy, makeEnemyId, type EnemyDef } from "./enemyTypes";
 import "./ShmupEditor.css";
 
-type View = "list" | "edit" | "connections" | "graph";
+type View = "list" | "edit" | "connections" | "graph" | "enemy-list" | "enemy-edit";
 
 export default function ShmupEditor() {
   const [tiles, setTiles] = useState<TileDef[]>(() => loadTiles());
-  const [view, setView] = useState<View>("list");
+  const [enemies, setEnemies] = useState<EnemyDef[]>(() => loadEnemies());
+  // Resume an interrupted enemy-editing session silently (root CLAUDE.md's
+  // mandatory in-progress-session-survives-reload rule) — a half-built
+  // multi-node graph is a much bigger loss than E1's tile-form draft gap.
+  const [editingEnemyDef, setEditingEnemyDef] = useState<EnemyDef | null>(() => loadDraft());
+  const [view, setView] = useState<View>(() => (loadDraft() ? "enemy-edit" : "list"));
   const [editingTile, setEditingTile] = useState<TileDef | null>(null);
   // Tags typed in via "+ New tag..." this session but not yet saved on any
   // tile — kept around so the dropdown offers them immediately without
@@ -68,6 +77,45 @@ export default function ShmupEditor() {
     setView("list");
   }
 
+  function persistEnemies(next: EnemyDef[]) {
+    setEnemies(next);
+    saveEnemies(next);
+  }
+
+  function handleNewEnemy() {
+    setEditingEnemyDef(createBlankEnemy(enemies.length));
+    setView("enemy-edit");
+  }
+
+  function handleEditEnemy(enemy: EnemyDef) {
+    setEditingEnemyDef(enemy);
+    setView("enemy-edit");
+  }
+
+  function handleDuplicateEnemy(enemy: EnemyDef) {
+    const now = Date.now();
+    const copy: EnemyDef = { ...enemy, id: makeEnemyId(), name: `${enemy.name} copy`, createdAt: now, modifiedAt: now };
+    persistEnemies([...enemies, copy]);
+  }
+
+  function handleDeleteEnemy(enemy: EnemyDef) {
+    persistEnemies(enemies.filter((e) => e.id !== enemy.id));
+  }
+
+  function handleSaveEnemy(enemy: EnemyDef) {
+    const exists = enemies.some((e) => e.id === enemy.id);
+    persistEnemies(exists ? enemies.map((e) => (e.id === enemy.id ? enemy : e)) : [...enemies, enemy]);
+    setEditingEnemyDef(null);
+    clearDraft();
+    setView("enemy-list");
+  }
+
+  function handleCancelEnemyEdit() {
+    setEditingEnemyDef(null);
+    clearDraft();
+    setView("enemy-list");
+  }
+
   const menus = useMemo<MenuBarMenu[]>(
     () => [
       {
@@ -80,8 +128,16 @@ export default function ShmupEditor() {
           { label: "Tag Graph", onClick: () => setView("graph") },
         ],
       },
+      {
+        label: "Enemies",
+        items: [
+          { label: "New Enemy...", onClick: handleNewEnemy },
+          { separator: true },
+          { label: "Enemy List", onClick: () => setView("enemy-list") },
+        ],
+      },
     ],
-    [tiles.length]
+    [tiles.length, enemies.length]
   );
   useWindowMenus(menus);
   // The Connection Viewer trims its own heading to save vertical space —
@@ -114,6 +170,18 @@ export default function ShmupEditor() {
           <>
             <h3 className="shmup-editor__heading">Tag Graph</h3>
             <TagGraph tiles={tiles} onEditTile={handleEditTile} />
+          </>
+        )}
+        {view === "enemy-list" && (
+          <>
+            <h3 className="shmup-editor__heading">Enemy Library ({enemies.length})</h3>
+            <EnemyList enemies={enemies} onEdit={handleEditEnemy} onDuplicate={handleDuplicateEnemy} onDelete={handleDeleteEnemy} />
+          </>
+        )}
+        {view === "enemy-edit" && editingEnemyDef && (
+          <>
+            <h3 className="shmup-editor__heading">{enemies.some((e) => e.id === editingEnemyDef.id) ? "Edit Enemy" : "New Enemy"}</h3>
+            <EnemyGraphEditor enemy={editingEnemyDef} onSave={handleSaveEnemy} onCancel={handleCancelEnemyEdit} onDraftChange={saveDraft} />
           </>
         )}
       </div>
