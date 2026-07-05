@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import TileArt from "./TileArt";
 import { connects, rotationAngles, validOrientations, type Orientation, type OrientedTile } from "./orientation";
 import type { TileDef } from "./types";
@@ -57,22 +57,28 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
   const [strip, setStrip] = useState<StripEntry[]>([]);
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const stripRef = useRef<HTMLDivElement | null>(null);
 
-  // Deselect on a genuine outside click/tap. Scoped to the whole strip
-  // container (not just the selected tile) so clicking a DIFFERENT tile is
-  // handled entirely by that tile's own onClick — no race between this
-  // listener and that tile's click toggling selection to itself.
+  // Close the picker / deselect a tile on a genuine outside click — anything
+  // that isn't on a tile (for selection) or the picker/its trigger buttons
+  // (for the add menu). Checked by class rather than a single container ref
+  // so "empty space" *inside* the strip (e.g. an underfilled row) still
+  // counts as outside, and clicking a DIFFERENT tile/+Add button is left to
+  // that element's own onClick — no race between this listener and a click
+  // toggling selection/add-mode to a new target.
   useEffect(() => {
-    if (!selectedKey) return;
+    if (!selectedKey && addMode === null) return;
     function handlePointerDown(e: PointerEvent) {
-      if (stripRef.current && !stripRef.current.contains(e.target as Node)) {
+      const target = e.target instanceof Element ? e.target : null;
+      if (selectedKey && !target?.closest(".shmup-strip-entry")) {
         setSelectedKey(null);
+      }
+      if (addMode !== null && !target?.closest(".shmup-tile-picker") && !target?.closest(".shmup-strip-add")) {
+        setAddMode(null);
       }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [selectedKey]);
+  }, [selectedKey, addMode]);
 
   if (tiles.length === 0) {
     return <p className="shmup-hint">Create at least one tile to check connections.</p>;
@@ -127,6 +133,23 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
     });
   }
 
+  const picker = addMode !== null && (
+    <div className="shmup-tile-picker">
+      {candidates.length === 0 ? (
+        <p className="shmup-hint">No tiles connect here.</p>
+      ) : (
+        candidates.map(({ tile, orientation }) => (
+          <button key={tile.id} type="button" className="shmup-tile-picker__option" onClick={() => addTile(tile, orientation)}>
+            <TileArt tile={tile} orientation={orientation} size="thumb" />
+          </button>
+        ))
+      )}
+      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddMode(null)}>
+        Cancel
+      </button>
+    </div>
+  );
+
   return (
     <div className="shmup-connection-viewer">
       {strip.length === 0 ? (
@@ -134,12 +157,15 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
           <button type="button" className="shmup-strip-add" onClick={() => openPicker("above")}>
             + Add
           </button>
+          {picker}
         </div>
       ) : (
-        <div className="shmup-connection-viewer__strip" ref={stripRef}>
+        <div className="shmup-connection-viewer__strip">
           <button type="button" className="shmup-strip-add" onClick={() => openPicker("above")}>
             + Add
           </button>
+          {/* Rendered right where "+ Add" (above) was tapped, not at the bottom of the whole strip. */}
+          {addMode === "above" && picker}
           {strip.map((entry, index) => {
             const selected = selectedKey === entry.key;
             const rotList = rotationAngles(entry.tile.footprint);
@@ -213,23 +239,7 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
           <button type="button" className="shmup-strip-add" onClick={() => openPicker("below")}>
             + Add
           </button>
-        </div>
-      )}
-
-      {addMode !== null && (
-        <div className="shmup-tile-picker">
-          {candidates.length === 0 ? (
-            <p className="shmup-hint">No tiles connect here.</p>
-          ) : (
-            candidates.map(({ tile, orientation }) => (
-              <button key={tile.id} type="button" className="shmup-tile-picker__option" onClick={() => addTile(tile, orientation)}>
-                <TileArt tile={tile} orientation={orientation} size="thumb" />
-              </button>
-            ))
-          )}
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddMode(null)}>
-            Cancel
-          </button>
+          {addMode === "below" && picker}
         </div>
       )}
     </div>
