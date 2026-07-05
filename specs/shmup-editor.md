@@ -420,16 +420,25 @@ arrowhead underneath. Small badges overlay each node for at-a-glance state
 
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
-Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly,
-but starts with only the `None` built-in — no placeholder sprite art has
-been supplied yet (`public/shmup-editor/enemies/README.md` documents the
-convention for when it is). Custom upload reuses the same
+Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly.
+Built-in set: four "skull" Mad-Max-style vehicles Noah supplied
+(ChatGPT-generated) — dune buggy, gunner "technical," motorcycle,
+helicopter (`public/shmup-editor/enemies/README.md`). Each source sheet is
+actually a 4x4 idle/move/attack/die grid
+(`scripts/assets/skull-sprites-source/`), but only the idle frame is
+extracted for the built-in today, via `scripts/prepare-skull-sprites.mjs`
+— a one-time Jimp-based script that crops the idle cell, flood-fills real
+alpha transparency in (the source sheets bake a fake checkerboard into
+opaque near-gray pixels rather than using real alpha), trims to content,
+and pads to a square icon. Custom upload reuses the same
 `paletteQuantize.ts`/`indexedPng.ts` pipeline as tile art, generalized in
 `imageUpload.ts` into `decodeUpload`/`canvasToIndexedPngDataUrl` helpers
 shared by both `loadTileImageFile` (cover-fit crop, opaque — fills a whole
 square) and the new `loadSpriteImageFile` (**contain**-fit, transparent
 surround — a sprite must stay fully visible against a see-through
-background rather than being cropped to fill a square).
+background rather than being cropped to fill a square). Animating through
+the other 15 frames per skull sheet (idle/move/attack/die preview) is
+deferred — see `shmup-editor.todo.md`'s Remaining list.
 
 ### Enemy persistence
 

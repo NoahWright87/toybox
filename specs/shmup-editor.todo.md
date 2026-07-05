@@ -142,11 +142,23 @@ of one node.
   flat number today. Needs a design pass (what does a non-flat curve
   actually look like — linear in `D`? a small keyframe list?) before an
   editor UI can be built for it.
-- **No built-in placeholder sprite art yet** — `enemySprites.ts` ships with
-  only the `None` built-in (structured exactly like `tileImages.ts` so
-  adding real sprites later is a drop-in, per
-  `public/shmup-editor/enemies/README.md`). Custom upload already works
-  for authoring real enemies today.
+- **Built-in sprites**: four "skull" Mad-Max-style vehicles (buggy,
+  technical, motorcycle, helicopter — see `public/shmup-editor/enemies/README.md`
+  and `scripts/prepare-skull-sprites.mjs`), each only the idle-pose frame.
+  Custom upload also works for authoring any other enemy today.
+- **Animation preview is deferred.** Each skull sheet actually has 16
+  frames (4 states x 4 frames: idle/moving/attacking/dying —
+  `scripts/assets/skull-sprites-source/README.md`), but the editor only
+  ever shows a static idle sprite (for placement on the graph canvas and in
+  pickers/thumbnails) — there's no per-enemy concept of "the other 15
+  frames" in `EnemyDef` yet, and no player/preview UI to flip through them.
+  This is real, moderate-sized follow-up work, not a quick add: it needs
+  (a) a data-model decision for how frame sets attach to a sprite (a
+  built-in vs. a custom upload have very different provenance for this),
+  (b) re-running the background-removal step from
+  `prepare-skull-sprites.mjs` against the other 15 frames per sheet instead
+  of just frame 1, and (c) a small animation-player component. Reasonable
+  to fold into E4 (Preview/playtest mode) rather than block E2 on it.
 - Enemy variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
 

@@ -1,12 +1,14 @@
 /**
  * Built-in enemy/bullet sprites (specs/shmup-editor.todo.md, E2 #192) —
- * mirrors tileImages.ts's structure exactly. Starts with just "None": no
- * placeholder art has been supplied yet (unlike tiles/water.png etc., which
- * Noah supplied directly — see public/shmup-editor/tiles/README.md). Drop
- * additional sprite PNGs into public/shmup-editor/enemies/ and add an entry
- * below (documenting source/SHA-256 in that folder's README.md per root
- * CLAUDE.md's dependency policy) to extend this list — the editor's picker,
- * custom-upload flow, and fsStore persistence all already support it.
+ * mirrors tileImages.ts's structure exactly. The "skull" set (Mad-Max-style
+ * vehicles, ChatGPT-generated, supplied directly by Noah — see
+ * public/shmup-editor/enemies/README.md and
+ * scripts/prepare-skull-sprites.mjs) is the idle-pose frame of each vehicle;
+ * drop additional sprite PNGs into public/shmup-editor/enemies/ and add an
+ * entry below (documenting source/SHA-256 in that folder's README.md per
+ * root CLAUDE.md's dependency policy) to extend this list further — the
+ * editor's picker, custom-upload flow, and fsStore persistence all already
+ * support it.
  *
  * Unlike a tile image (a full opaque square), a sprite is expected to have
  * a transparent surround — see imageUpload.ts's loadSpriteImageFile, which
@@ -25,7 +27,13 @@ export const NONE_SPRITE_ID = "none";
 /** spriteId value meaning "use this enemy/bullet's own `customSprite` upload instead of a built-in". */
 export const CUSTOM_SPRITE_ID = "custom";
 
-export const BUILTIN_SPRITES: SpriteOption[] = [{ id: NONE_SPRITE_ID, label: "None", url: null }];
+export const BUILTIN_SPRITES: SpriteOption[] = [
+  { id: NONE_SPRITE_ID, label: "None", url: null },
+  { id: "skull-buggy", label: "Skull Buggy", url: "/shmup-editor/enemies/skull-buggy.png" },
+  { id: "skull-technical", label: "Skull Technical", url: "/shmup-editor/enemies/skull-technical.png" },
+  { id: "skull-motorcycle", label: "Skull Motorcycle", url: "/shmup-editor/enemies/skull-motorcycle.png" },
+  { id: "skull-helicopter", label: "Skull Helicopter", url: "/shmup-editor/enemies/skull-helicopter.png" },
+];
 
 export function spriteById(id: string): SpriteOption {
   return BUILTIN_SPRITES.find((s) => s.id === id) ?? BUILTIN_SPRITES[0];
