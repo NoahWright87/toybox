@@ -452,6 +452,20 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
+/* Scrolls horizontally; the grid inside is centered via margin:auto rather
+   than justify-content:center on the scroll container itself. When content
+   is wider than the viewport, a centered flex/grid container's overflow is
+   split evenly on both sides but a scrollable ancestor can only reach the
+   RIGHT side of that overflow (scrollLeft can't go negative) -- the left
+   portion becomes permanently unreachable, cutting off part of a wide tile
+   with no way to scroll to it. margin:auto on a width:max-content child
+   collapses to 0 once the child is wider than its parent, so the overflow
+   is entirely on the right and fully reachable by scrolling. */
+.shmup-connection-viewer__scroll {
+  overflow-x: auto;
+  background: #000;
+}
+
 .shmup-connection-viewer__grid {
   /* Single source of truth for the grid's cell size — TileArt's --strip
      variant (above) must match exactly or tiles placed north/south/east/
@@ -466,13 +480,12 @@
   display: grid;
   grid-auto-columns: auto;
   grid-auto-rows: auto;
-  justify-content: center;
   align-content: start;
+  width: max-content;
+  margin: 0 auto;
   /* The 1px is the whole point — enough to see two tiles are two tiles,
      not enough to hide a seam that doesn't actually line up. */
   gap: 1px;
-  overflow-x: auto;
-  background: #000;
 }
 
 .shmup-strip-add {

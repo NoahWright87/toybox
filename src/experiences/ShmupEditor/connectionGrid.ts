@@ -17,7 +17,7 @@ export interface GridEntry extends OrientedTile {
 
 export type Side = "north" | "south" | "east" | "west";
 
-/** One open (non-hardwall, unoccupied) place to grow from — a contiguous run on north/south (which can have multiple per side on a wide tile with a hardwall gap), or the single cell on east/west (always one column, since footprint is width-only). */
+/** One open (non-hardwall, unoccupied) place to grow from — always a single column, since each column of a multi-column edge can carry its own independent tag and so needs its own independent button (a north/south edge doesn't merge adjacent open columns into one run). East/west are inherently single-column already (footprint is width-only). */
 export interface AddPoint {
   key: string;
   entryKey: string;
@@ -44,22 +44,7 @@ export function buildOccupancy(entries: GridEntry[]): Map<string, GridEntry> {
   return map;
 }
 
-function findOpenRuns(length: number, isOpen: (i: number) => boolean): Array<[number, number]> {
-  const runs: Array<[number, number]> = [];
-  let start: number | null = null;
-  for (let i = 0; i < length; i++) {
-    if (isOpen(i)) {
-      if (start === null) start = i;
-    } else if (start !== null) {
-      runs.push([start, i - 1]);
-      start = null;
-    }
-  }
-  if (start !== null) runs.push([start, length - 1]);
-  return runs;
-}
-
-/** Every open add point around every placed entry. One per contiguous open run on north/south (a hardwall gap or an already-occupied cell splits a side into separate runs); at most one each for east/west. */
+/** Every open add point around every placed entry — one per open (non-hardwall, unoccupied) column on north/south, even where several sit side by side with nothing between them, since each column can carry a different tag and needs its own independently-matched button; at most one each for east/west. */
 export function computeAddPoints(entries: GridEntry[]): AddPoint[] {
   const occupancy = buildOccupancy(entries);
   const points: AddPoint[] = [];
@@ -68,20 +53,13 @@ export function computeAddPoints(entries: GridEntry[]): AddPoint[] {
     const oriented = applyOrientation(entry.tile, entry.orientation);
     const footprint = entry.tile.footprint;
 
-    const northRuns = findOpenRuns(
-      footprint,
-      (i) => slotTag(oriented.north[i]) !== HARDWALL && !occupancy.has(cellKey(entry.row - 1, entry.col + i))
-    );
-    for (const [s, e] of northRuns) {
-      points.push({ key: `${entry.key}-north-${s}`, entryKey: entry.key, side: "north", colStart: entry.col + s, colEnd: entry.col + e, row: entry.row - 1 });
-    }
-
-    const southRuns = findOpenRuns(
-      footprint,
-      (i) => slotTag(oriented.south[i]) !== HARDWALL && !occupancy.has(cellKey(entry.row + 1, entry.col + i))
-    );
-    for (const [s, e] of southRuns) {
-      points.push({ key: `${entry.key}-south-${s}`, entryKey: entry.key, side: "south", colStart: entry.col + s, colEnd: entry.col + e, row: entry.row + 1 });
+    for (let i = 0; i < footprint; i++) {
+      if (slotTag(oriented.north[i]) !== HARDWALL && !occupancy.has(cellKey(entry.row - 1, entry.col + i))) {
+        points.push({ key: `${entry.key}-north-${i}`, entryKey: entry.key, side: "north", colStart: entry.col + i, colEnd: entry.col + i, row: entry.row - 1 });
+      }
+      if (slotTag(oriented.south[i]) !== HARDWALL && !occupancy.has(cellKey(entry.row + 1, entry.col + i))) {
+        points.push({ key: `${entry.key}-south-${i}`, entryKey: entry.key, side: "south", colStart: entry.col + i, colEnd: entry.col + i, row: entry.row + 1 });
+      }
     }
 
     if (slotTag(oriented.east) !== HARDWALL && !occupancy.has(cellKey(entry.row, entry.col + footprint))) {
@@ -109,14 +87,24 @@ function spanFree(occupancy: Map<string, GridEntry>, row: number, colStart: numb
  * offset (not just dead-center), matching the real generator's "one
  * matching slot, rest lands on vacant space" rule; for east/west there's
  * no offset ambiguity (footprint is width-only, so a horizontal neighbor is
- * always a simple single-edge tag match).
+ * always a simple single-edge tag match). Beyond matching `point`'s own
+ * anchor, a candidate is also rejected if its position would put it
+ * touching any OTHER already-placed entry it doesn't connect to — since
+ * add points are now per-column, a tile placed at one column's point can
+ * land directly beside a tile already placed at a neighboring column's
+ * point, and that pair needs to match too, not just each one's own anchor.
  */
 export function candidatesForAddPoint(tiles: TileDef[], entries: GridEntry[], point: AddPoint): PlacedCandidate[] {
   const occupancy = buildOccupancy(entries);
   const anchor = entries.find((e) => e.key === point.entryKey);
   if (!anchor) return [];
   const anchorOriented = applyOrientation(anchor.tile, anchor.orientation);
+  const anchorKey = anchor.key;
   const out: PlacedCandidate[] = [];
+
+  function connectsToOtherNeighbors(candidate: PositionedTile): boolean {
+    return entries.every((other) => other.key === anchorKey || !isAdjacent(candidate, other) || coordsConnect(candidate, other));
+  }
 
   tileLoop: for (const tile of tiles) {
     for (const orientation of validOrientations(tile.footprint)) {
@@ -133,6 +121,7 @@ export function candidatesForAddPoint(tiles: TileDef[], entries: GridEntry[], po
           const col = point.side === "north" ? anchor.col + a.offset : anchor.col - a.offset;
           if (!rangesOverlap(col, col + tile.footprint - 1, point.colStart, point.colEnd)) continue;
           if (!spanFree(occupancy, point.row, col, tile.footprint)) continue;
+          if (!connectsToOtherNeighbors({ tile, orientation, row: point.row, col })) continue;
           out.push({ tile, orientation, row: point.row, col });
           continue tileLoop;
         }
@@ -143,6 +132,7 @@ export function candidatesForAddPoint(tiles: TileDef[], entries: GridEntry[], po
         // East: candidate's leftmost column starts right after anchor. West: candidate's rightmost column ends right before anchor.
         const col = point.side === "east" ? point.colStart : point.colStart - tile.footprint + 1;
         if (!spanFree(occupancy, point.row, col, tile.footprint)) continue;
+        if (!connectsToOtherNeighbors({ tile, orientation, row: point.row, col })) continue;
         out.push({ tile, orientation, row: point.row, col });
         continue tileLoop;
       }
@@ -156,6 +146,13 @@ interface PositionedTile {
   orientation: Orientation;
   row: number;
   col: number;
+}
+
+/** True if `a` and `b`'s footprints physically touch (adjacent row + overlapping columns, or adjacent column + same row) — regardless of whether their edge tags actually match. */
+function isAdjacent(a: PositionedTile, b: PositionedTile): boolean {
+  const horizontallyTouching = a.row === b.row && (a.col + a.tile.footprint === b.col || b.col + b.tile.footprint === a.col);
+  const verticallyTouching = Math.abs(a.row - b.row) === 1 && a.col < b.col + b.tile.footprint && b.col < a.col + a.tile.footprint;
+  return horizontallyTouching || verticallyTouching;
 }
 
 /** True if `a` and `b` — using their REAL placed positions, not a search — would actually connect given how they're actually touching (adjacent row+overlapping columns, or adjacent column same row). Used to re-validate an existing relationship after a hypothetical rotation/flip, as opposed to candidatesForAddPoint's job of finding a brand new valid placement. */
@@ -181,13 +178,7 @@ function coordsConnect(a: PositionedTile, b: PositionedTile): boolean {
 export function touchingEntries(entries: GridEntry[], entryKey: string): GridEntry[] {
   const entry = entries.find((e) => e.key === entryKey);
   if (!entry) return [];
-  return entries.filter((other) => {
-    if (other.key === entryKey) return false;
-    const horizontallyTouching = other.row === entry.row && (other.col + other.tile.footprint === entry.col || entry.col + entry.tile.footprint === other.col);
-    const verticallyTouching =
-      Math.abs(other.row - entry.row) === 1 && other.col < entry.col + entry.tile.footprint && other.col + other.tile.footprint > entry.col;
-    return horizontallyTouching || verticallyTouching;
-  });
+  return entries.filter((other) => other.key !== entryKey && isAdjacent(entry, other));
 }
 
 /** Would `orientation` still connect `entryKey` to every entry currently touching it? */

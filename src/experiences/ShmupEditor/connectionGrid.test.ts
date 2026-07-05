@@ -43,6 +43,18 @@ describe("computeAddPoints", () => {
     ]);
   });
 
+  it("gives a wide tile's fully-open north side one add point per column, not one merged point", () => {
+    // No hardwall between the two columns -- each still gets its own button
+    // since each column can carry an independent tag.
+    const t = tile({ footprint: 2, north: [edgeSlot("a"), edgeSlot("b")], south: [edgeSlot("x"), edgeSlot("x")] });
+    const points = computeAddPoints([entry(t, 0, 0)]).filter((p) => p.side === "north");
+    expect(points).toHaveLength(2);
+    expect(points.map((p) => [p.colStart, p.colEnd]).sort()).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+  });
+
   it("does not offer an add point where a neighbor is already placed", () => {
     const a = tile({ footprint: 1, north: [edgeSlot("a")], south: [edgeSlot("a")], east: edgeSlot("", true), west: edgeSlot("", true) });
     const b = tile({ footprint: 1, north: [edgeSlot("a")], south: [edgeSlot("a")], east: edgeSlot("", true), west: edgeSlot("", true) });
@@ -99,6 +111,26 @@ describe("candidatesForAddPoint", () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0].row).toBe(0);
     expect(candidates[0].col).toBe(1);
+  });
+
+  it("rejects a candidate that would match its own anchor but clash with an already-placed side neighbor", () => {
+    // A 2-wide anchor with independent per-column south tags; a tile is
+    // already placed under column 0. A candidate for column 1's point must
+    // match BOTH the anchor's column-1 south tag AND the existing column-0
+    // tile's east tag -- not just the anchor (this is the bug from a real
+    // report: two tiles placed south of a wide tile, each individually
+    // matching the anchor, but never checked against each other).
+    const anchor = tile({ footprint: 2, north: [edgeSlot("", true), edgeSlot("", true)], south: [edgeSlot("s0"), edgeSlot("s1")] });
+    const placedUnderCol0 = tile({ footprint: 1, north: [edgeSlot("s0")], east: edgeSlot("roadA") });
+    const matchesAnchorOnly = tile({ footprint: 1, north: [edgeSlot("s1")], west: edgeSlot("roadB") });
+    const matchesBoth = tile({ footprint: 1, north: [edgeSlot("s1")], west: edgeSlot("roadA") });
+    const entries = [entry(anchor, 0, 0, "anchor"), entry(placedUnderCol0, 1, 0, "col0")];
+    const points = computeAddPoints(entries).filter((p) => p.entryKey === "anchor" && p.side === "south");
+    expect(points).toHaveLength(1);
+    expect(points[0].colStart).toBe(1);
+    const candidates = candidatesForAddPoint([matchesAnchorOnly, matchesBoth], entries, points[0]);
+    expect(candidates.map((c) => c.tile.id)).not.toContain(matchesAnchorOnly.id);
+    expect(candidates.map((c) => c.tile.id)).toContain(matchesBoth.id);
   });
 
   it("skips a placement that would land on an already-occupied cell", () => {

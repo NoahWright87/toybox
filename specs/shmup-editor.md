@@ -189,17 +189,33 @@ shows a plain heading for whichever view is active.
   - **Empty state**: a single "+ Add" button, nothing else. Picking any
     tile places it at identity orientation with no constraint (nothing to
     attach to yet).
-  - **Add points are per open *segment*, not per whole side**
-    (`computeAddPoints`): north/south each get one add point per
-    contiguous open run — a hard-wall column (or an already-occupied
-    neighboring cell) splits a wide tile's edge into separate segments,
-    each with its own button, rather than one button covering the whole
-    side. East/west each get at most one add point (footprint is
-    width-only, so there's never more than one column to grow from on
-    those sides). Each button shows a directional arrow (↑↓→←,
-    `ADD_ARROW`) rather than a flat "+", since several buttons can appear
-    around one tile at once and the direction needs to be legible at a
-    glance.
+  - **Add points are per open *column*, not per whole side**
+    (`computeAddPoints`): north/south each get one add point per open
+    (non-hardwall, unoccupied) column — even several open columns sitting
+    side by side with no hard-wall between them still each get their own
+    button, since each column of a multi-column edge can carry a
+    completely different tag and independently needs its own matched
+    candidate list (a merged "one button per contiguous run" design was
+    tried first, but it meant a 2-wide tile's north edge showed only one
+    button even though its two columns could want two unrelated
+    neighbors — see below for why that also required closing a matching
+    gap between the two now-independent placements). East/west each get
+    at most one add point (footprint is width-only, so there's never more
+    than one column to grow from on those sides). Each button shows a
+    directional arrow (↑↓→←, `ADD_ARROW`) rather than a flat "+", since
+    several buttons can appear around one tile at once and the direction
+    needs to be legible at a glance.
+  - **A candidate must connect to every entry it would touch, not just
+    the add-point's own anchor** (`candidatesForAddPoint`): once add
+    points are per-column, placing a tile at one column's point can land
+    it directly beside a tile already placed at a neighboring column's
+    point — that pair needs to match too. Every candidate placement is
+    re-checked against every other currently-placed entry it would
+    physically touch (`isAdjacent` + `coordsConnect`, the same pairwise
+    check `orientationValidAt` uses for rotate/flip), not just the anchor
+    the button is attached to — closing a gap where two tiles could each
+    individually match a wide anchor's south edge while silently
+    mismatching each other's shared east/west edge.
   - **Candidates only offer the first connecting orientation per tile**
     (`candidatesForAddPoint`), not every permutation — rotate/flip after
     placing covers the rest, so the picker doesn't show the same
@@ -245,6 +261,26 @@ shows a plain heading for whichever view is active.
     the first tile) still map to valid (positive) CSS grid lines. A shared
     `--shmup-connection-grid-unit` custom property sizes both the grid
     cells and `TileArt`'s own cells from one source of truth.
+    **Per-track sizing, not a blanket `grid-auto-rows`/`-columns`**:
+    `ConnectionViewer.tsx` computes explicit `gridTemplateRows`/
+    `gridTemplateColumns` arrays — only a row/column that actually holds a
+    placed entry gets the full tile-unit size; a row/column that only
+    holds an add-point button or the open picker sizes to its own content
+    instead. Applying the unit size uniformly to every implicit track
+    (including add-only ones) made every "+ Add" button and the picker
+    itself render inside a giant tile-sized empty cell on a phone-width
+    viewport. **The grid is wrapped in a `.shmup-connection-viewer__scroll`
+    container and centered via `width: max-content; margin: 0 auto` on the
+    grid itself**, not `justify-content: center` on the scrollable
+    container directly — the latter centers overflowing content
+    symmetrically, but a scrollable ancestor can only reach the *right*
+    side of that overflow (`scrollLeft` can't go negative), permanently
+    stranding part of a wide tile off-screen to the left with no way to
+    scroll to it (including, in practice, the delete button of a wide leaf
+    tile sitting at the tile's horizontal center). `margin: auto` on a
+    `width: max-content` child collapses to 0 once the child is wider than
+    its parent, so overflowing content sits flush left and is fully
+    reachable by scrolling right instead.
 - **Tag Graph** (`TagGraph.tsx` + `tagGraph.ts`) — answers "what does my
   whole library's connectivity look like," a different question than the
   Connection Viewer's "does this one strip I built work." Since biome is

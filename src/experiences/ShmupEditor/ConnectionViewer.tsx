@@ -162,101 +162,103 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
 
   return (
     <div className="shmup-connection-viewer">
-      <div
-        className="shmup-connection-viewer__grid"
-        style={{ gridTemplateRows: gridTemplateRows.join(" "), gridTemplateColumns: gridTemplateColumns.join(" ") }}
-      >
-        {entries.map((entry) => {
-          const selected = selectedKey === entry.key;
-          const rotList = rotationAngles(entry.tile.footprint);
-          const rotIdx = rotList.indexOf(entry.orientation.rotation);
-          const canRotateLeft = orientationValidAt(entries, entry.key, { ...entry.orientation, rotation: rotList[(rotIdx - 1 + rotList.length) % rotList.length] });
-          const canRotateRight = orientationValidAt(entries, entry.key, { ...entry.orientation, rotation: rotList[(rotIdx + 1) % rotList.length] });
-          const canFlip = orientationValidAt(entries, entry.key, { ...entry.orientation, flip: !entry.orientation.flip });
-          const canDelete = canDeleteEntry(entries, entry.key);
-          return (
-            <div
-              key={entry.key}
-              className="shmup-strip-entry"
-              style={{ gridRow: gridRow(entry.row), gridColumn: `${gridCol(entry.col)} / span ${entry.tile.footprint}` }}
-              onClick={() => setSelectedKey((k) => (k === entry.key ? null : entry.key))}
+      <div className="shmup-connection-viewer__scroll">
+        <div
+          className="shmup-connection-viewer__grid"
+          style={{ gridTemplateRows: gridTemplateRows.join(" "), gridTemplateColumns: gridTemplateColumns.join(" ") }}
+        >
+          {entries.map((entry) => {
+            const selected = selectedKey === entry.key;
+            const rotList = rotationAngles(entry.tile.footprint);
+            const rotIdx = rotList.indexOf(entry.orientation.rotation);
+            const canRotateLeft = orientationValidAt(entries, entry.key, { ...entry.orientation, rotation: rotList[(rotIdx - 1 + rotList.length) % rotList.length] });
+            const canRotateRight = orientationValidAt(entries, entry.key, { ...entry.orientation, rotation: rotList[(rotIdx + 1) % rotList.length] });
+            const canFlip = orientationValidAt(entries, entry.key, { ...entry.orientation, flip: !entry.orientation.flip });
+            const canDelete = canDeleteEntry(entries, entry.key);
+            return (
+              <div
+                key={entry.key}
+                className="shmup-strip-entry"
+                style={{ gridRow: gridRow(entry.row), gridColumn: `${gridCol(entry.col)} / span ${entry.tile.footprint}` }}
+                onClick={() => setSelectedKey((k) => (k === entry.key ? null : entry.key))}
+              >
+                <TileArt tile={entry.tile} orientation={entry.orientation} size="strip" showName={false} />
+                {selected && (
+                  <>
+                    <button
+                      type="button"
+                      className="shmup-strip-entry__btn shmup-strip-entry__btn--delete"
+                      disabled={!canDelete}
+                      title={canDelete ? "Delete" : "Can't delete — would split the grid (only tiles with 0-1 neighbors can be removed)"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeTile(entry.key);
+                      }}
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-left"
+                      disabled={!canRotateLeft}
+                      title="Rotate"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        spin(entry.key, -1);
+                      }}
+                    >
+                      🔄
+                    </button>
+                    <button
+                      type="button"
+                      className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-right"
+                      disabled={!canRotateRight}
+                      title="Rotate"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        spin(entry.key, 1);
+                      }}
+                    >
+                      🔁
+                    </button>
+                    <button
+                      type="button"
+                      className="shmup-strip-entry__btn shmup-strip-entry__btn--flip"
+                      disabled={!canFlip}
+                      title="Flip"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        flip(entry.key);
+                      }}
+                    >
+                      🔀
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {addPoints.map((point) => (
+            <button
+              key={point.key}
+              type="button"
+              className={`shmup-grid-add shmup-grid-add--${point.side}`}
+              style={{ gridRow: gridRow(point.row), gridColumn: `${gridCol(point.colStart)} / span ${point.colEnd - point.colStart + 1}` }}
+              onClick={() => openPointPicker(point)}
+              title={`Add to the ${point.side}`}
             >
-              <TileArt tile={entry.tile} orientation={entry.orientation} size="strip" showName={false} />
-              {selected && (
-                <>
-                  <button
-                    type="button"
-                    className="shmup-strip-entry__btn shmup-strip-entry__btn--delete"
-                    disabled={!canDelete}
-                    title={canDelete ? "Delete" : "Can't delete — would split the grid (only tiles with 0-1 neighbors can be removed)"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeTile(entry.key);
-                    }}
-                  >
-                    ✕
-                  </button>
-                  <button
-                    type="button"
-                    className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-left"
-                    disabled={!canRotateLeft}
-                    title="Rotate"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      spin(entry.key, -1);
-                    }}
-                  >
-                    🔄
-                  </button>
-                  <button
-                    type="button"
-                    className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-right"
-                    disabled={!canRotateRight}
-                    title="Rotate"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      spin(entry.key, 1);
-                    }}
-                  >
-                    🔁
-                  </button>
-                  <button
-                    type="button"
-                    className="shmup-strip-entry__btn shmup-strip-entry__btn--flip"
-                    disabled={!canFlip}
-                    title="Flip"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      flip(entry.key);
-                    }}
-                  >
-                    🔀
-                  </button>
-                </>
-              )}
+              {ADD_ARROW[point.side]}
+            </button>
+          ))}
+          {addTarget !== null && addTarget !== "initial" && (
+            <div
+              className="shmup-connection-viewer__picker-slot"
+              style={{ gridRow: gridRow(addTarget.row), gridColumn: `${gridCol(addTarget.colStart)} / span ${addTarget.colEnd - addTarget.colStart + 1}` }}
+            >
+              {picker}
             </div>
-          );
-        })}
-        {addPoints.map((point) => (
-          <button
-            key={point.key}
-            type="button"
-            className={`shmup-grid-add shmup-grid-add--${point.side}`}
-            style={{ gridRow: gridRow(point.row), gridColumn: `${gridCol(point.colStart)} / span ${point.colEnd - point.colStart + 1}` }}
-            onClick={() => openPointPicker(point)}
-            title={`Add to the ${point.side}`}
-          >
-            {ADD_ARROW[point.side]}
-          </button>
-        ))}
-        {addTarget !== null && addTarget !== "initial" && (
-          <div
-            className="shmup-connection-viewer__picker-slot"
-            style={{ gridRow: gridRow(addTarget.row), gridColumn: `${gridCol(addTarget.colStart)} / span ${addTarget.colEnd - addTarget.colStart + 1}` }}
-          >
-            {picker}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
