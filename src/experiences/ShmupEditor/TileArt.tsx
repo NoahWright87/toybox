@@ -4,7 +4,9 @@ import { resolveTileImageUrl, type TileDef } from "./types";
 interface TileArtProps {
   tile: TileDef;
   orientation: Orientation;
-  size?: "thumb" | "large";
+  size?: "thumb" | "large" | "grid";
+  /** Hidden by the tile list's visual-checker grid, where the name would clutter tiles meant to be judged purely on how their art reads edge-to-edge. */
+  showName?: boolean;
 }
 
 /**
@@ -20,7 +22,7 @@ interface TileArtProps {
  * (today every column shows identical art so the reordering isn't visible,
  * but this stays correct once per-column art exists).
  */
-export default function TileArt({ tile, orientation, size = "large" }: TileArtProps) {
+export default function TileArt({ tile, orientation, size = "large", showName = true }: TileArtProps) {
   const imageUrl = resolveTileImageUrl(tile);
   const columns = tile.footprint;
   const transform = `scaleX(${orientation.flip ? -1 : 1}) rotate(${orientation.rotation}deg)`;
@@ -34,7 +36,7 @@ export default function TileArt({ tile, orientation, size = "large" }: TileArtPr
           </div>
         ))}
       </div>
-      <span className="shmup-tile-art__name">{tile.name}</span>
+      {showName && <span className="shmup-tile-art__name">{tile.name}</span>}
     </div>
   );
 }

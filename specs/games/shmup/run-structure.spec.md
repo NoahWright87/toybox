@@ -198,6 +198,6 @@ mid-episode, just the map the player was standing on before tapping the node.
 - [`save.spec.md`](save.spec.md) — the `SaveStore` port `systems/career/persistence.ts` is built on
 - [`tuning.spec.todo.md`](tuning.spec.todo.md) — every numeric constant referenced here (`TUNING.difficulty`, `TUNING.map`, `TUNING.enemies`)
 - [`stats.spec.md`](stats.spec.md) — Player Speed, the stat the overworld deadline reads
-- [`run-structure.spec.todo.md`](run-structure.spec.todo.md) — remaining future work (radar item, shop economy tie-in, F11's death/audience polish, node `biome` tagging)
-- [`levels-and-tiles.spec.todo.md`](levels-and-tiles.spec.todo.md) — Epic 5 #181's data-driven level content generated inside each node's Play scene, plugged in via the node `biome` tag only
+- [`run-structure.spec.todo.md`](run-structure.spec.todo.md) — remaining future work (radar item, shop economy tie-in, F11's death/audience polish)
+- [`levels-and-tiles.spec.todo.md`](levels-and-tiles.spec.todo.md) — Epic 5 #181's data-driven level content generated inside each node's Play scene; adds no field to this system at all (biome is tag-emergent, see its §5)
 - [`overview.spec.todo.md`](overview.spec.todo.md) — spec map

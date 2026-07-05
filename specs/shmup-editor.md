@@ -33,16 +33,12 @@ A tile (`TileDef`) has:
 - `east`/`west`: a single `EdgeSlot` each (footprint height is always 1).
 - `isConnector`: marks a start/end connector tile — toggling it forces
   every south slot's tag to the wildcard (`*`), matching any incoming edge.
-- `weight`, `imageId`, `customImage`, `biome`, `name`: authoring metadata
+- `weight`, `imageId`, `customImage`, `name`: authoring metadata
   (weight is exported; the rest are editor-only, not part of the gameplay
   shape). `imageId` picks from a small built-in set (`tileImages.ts`:
   none/water/grass/shore) **or** the reserved `CUSTOM_IMAGE_ID`, which
   renders `customImage` instead — a per-tile uploaded image (see Custom
-  art below). `biome` is a free string (or `null` for biome-agnostic,
-  e.g. connector tiles) declaring which biome tile-set (L7 #189: water,
-  dirt, woods, city, desert, ...) the tile belongs to; `biomeRegistry.ts`
-  seeds a starting suggestion list, extendable via "+ New biome..."
-  (`BiomeSelect.tsx`), same pattern as edge tags. `resolveTileImageUrl()`
+  art below). `resolveTileImageUrl()`
   (`types.ts`) is the one place that knows how to turn `imageId`/
   `customImage` into an actual URL — `TileArt`/`TilePreview` both call it
   rather than reading `imageId` directly. Each image is one
@@ -57,18 +53,27 @@ wider-than-tall tile 90° would make it taller-than-wide, which this grid
 can't represent. This mirrors the same resolution the game's L1 generator
 uses for the same ambiguity in the source design doc. A tile is always
 *authored* at identity orientation — rotation is a read-only verification
-concept (see Connection tester below), not an editing mode, since editing
+concept (see Connection Viewer below), not an editing mode, since editing
 a rotated view would have to be mapped back onto the tile's stored
 unrotated slots.
 
 ## Surfaces
 
-Navigation between views (Tile List / New Tile / Connection Tester) is
-via the **Tiles menu** in the window's menu bar (`useWindowMenus`) — no
-duplicate on-screen nav buttons; the body just shows a plain heading for
-whichever view is active.
+Navigation between views (Tile List / New Tile / Connection Viewer / Tag
+Graph) is via the **Tiles menu** in the window's menu bar
+(`useWindowMenus`) — no duplicate on-screen nav buttons; the body just
+shows a plain heading for whichever view is active.
 
-- **Tile list** — every saved tile as a schematic card (edit/duplicate/delete).
+- **Tile list — a visual checker, not a metadata card grid.** Tiles
+  render as pure art (`TileArt`, no schematic/edge-tag labels — that's
+  `TilePreview`'s job, and it's only used by the edit form now), tiled
+  **edge-to-edge with no gap** in a CSS grid, each tile spanning its real
+  footprint width so a 2x1 tile is visibly twice as wide as a neighboring
+  1x1 — the point is judging how tiles' art reads *next to each other*,
+  which matters a lot when the art comes from an AI image generator that
+  has no idea what tile sits next to it. Per-tile actions (Edit/Duplicate/
+  Delete) live behind a small "⋮" corner button instead of an
+  always-visible row, so they don't compete with the art for attention.
 - **Tile editor form** — the schematic diagram itself *is* the edge editor:
   each edge cell is a dropdown (`EdgeSelect`) offering Hard Wall, every tag
   already used anywhere in the library, and "+ New tag..." (reveals an
@@ -78,7 +83,7 @@ whichever view is active.
   never match) and the form duplicated the same information twice. Name,
   footprint picker, and connector toggle sit in a compact toolbar above
   the diagram; a background image picker (thumbnail buttons showing the
-  actual texture), a biome picker, and weight below it. The diagram is
+  actual texture) and weight below it. The diagram is
   always shown at identity orientation while editing (rotation is a
   read-only concept, see below). Save is disabled until every edge has a
   tag or Hard Wall.
@@ -114,15 +119,17 @@ whichever view is active.
     upload doesn't require re-uploading); "Remove Custom Art" clears it
     and falls back to `none` if it was the active selection. Real
     in-editor sketching (vs. upload of existing art) is still deferred.
-  - **Biome picker** (`BiomeSelect.tsx` + `biomeRegistry.ts`) — same "+
-    New..." registry pattern as edge tags (`KNOWN_BIOMES` seeds water/
-    dirt/woods/city/desert per L7 #189's examples, extended by whatever's
-    already used across the library or registered this session). Biome
-    is not required — leaving it "— Agnostic —" (`null`) is the correct
-    choice for start/end connector tiles, which the L7 spec says are
-    biome-agnostic or carry biome-flavored art variants but never gate on
-    biome logically. A tile's biome shows as a badge on both the edit
-    diagram and the read-only tile-list schematic.
+  - **No biome field, on purpose.** An earlier revision of this tool had
+    a per-tile `biome` field (`BiomeSelect.tsx`/`biomeRegistry.ts`,
+    removed) that let a tile declare which biome tile-set it belonged to.
+    It was dropped: biome turned out to be entirely emergent from ordinary
+    edge tags (see `specs/games/shmup/levels-and-tiles.spec.todo.md` §5)
+    — a tile with `grass-road` on one edge and `desert-road` on another
+    *is* a grass/desert bridge, with nothing else needed to express that,
+    and a dedicated field couldn't represent that tile any better than
+    "which one biome is it" would suggest. Rarity and which biomes border
+    which fall out of the tag graph's shape (how many tiles bridge two
+    tags) rather than being configured anywhere.
   - **"+ New tag..." commits on blur, not just Enter.** Mobile virtual
     keyboards (Android Chrome/Gboard in particular) don't reliably fire a
     clean `keydown` "Enter", so relying on `onKeyDown` alone silently
@@ -134,12 +141,15 @@ whichever view is active.
     rotated overflowed its flex-centered cell and rotated around a
     badly-offset center) so the full tag text is legible in a narrow
     column instead of being clipped to a sliver showing only the dropdown
-    arrow. Applies to both the editable dropdown and the read-only label
-    (tile list / connection tester).
+    arrow. Applies to both the editable dropdown and `TilePreview`'s
+    read-only label (currently unused outside the edit form, but kept
+    correct since nothing rules out a future schematic view needing it).
 - **Mobile-first sizing** — the edit-form diagram's column width is
-  `min(78vw, 420px)` (a dedicated `size="edit"` `TilePreview` variant,
-  distinct from the compact `"small"` variant used by the tile list), so a
-  1x1 tile fills most of a phone screen's width and a 2x1/3x1 tile is
+  `min(78vw, 420px)`. `TilePreview` only ever renders this one way now (its
+  earlier compact `"small"` variant, once used by the tile list, was
+  removed as dead code once the tile list became the pure-art visual
+  checker grid described above), so a 1x1 tile fills most of a phone
+  screen's width and a 2x1/3x1 tile is
   genuinely wider — not the same box subdivided into thinner slices — and
   overflows into horizontal scroll *contained to the diagram itself* on
   small screens. Getting that containment right required `min-width: 0`/
@@ -153,15 +163,28 @@ whichever view is active.
   saved tile (kept in `ShmupEditor`'s `extraTags` state so they're
   immediately available to every other edge dropdown without a save
   round-trip first).
-- **Connection tester** — a vertical **stack builder**, not a two-tile
-  comparison form. Starts empty with a single "+ Add Tile" button; picking
-  a tile from the popup grid prepends it to the top of the stack (index 0
-  = top = most recently added; last index = bottom = oldest). Each stacked
+- **Connection Viewer** (`ConnectionViewer.tsx`) — a vertical **stack
+  builder**, and deliberately a *visual flow-checker rather than a
+  pass/fail test*: the "+ Add Tile" picker only ever offers tiles (in
+  whichever orientations actually work) that are **guaranteed to attach**
+  to the current top of the stack — nothing invalid is ever selectable, so
+  building a stack always produces a structurally valid sequence. That
+  reframing matters because tag-matching correctness was never really the
+  open question once the tag-dropdown system shipped; with AI-generated
+  tile art, the real question is whether two tag-compatible tiles'
+  *art* actually reads well pressed together, which a pass/fail checkmark
+  can't tell you but building and eyeballing a real sequence can. Starts
+  empty with a single "+ Add Tile" button; picking a tile/orientation from
+  the (filtered) popup grid prepends it to the top of the stack (index 0 =
+  top = most recently added; last index = bottom = oldest). Each stacked
   tile shows only its **art** (`TileArt.tsx` — no edge-tag labels, "just
   show the whole tile" per design feedback) with three controls to its
   left: 🔁/🔄 cycle through that tile's valid rotations, 🔀 toggles flip,
-  ✕ removes it from the stack. Between every adjacent pair a ✅/❌ marker
-  shows whether they'd actually attach.
+  ✕ removes it from the stack. Rotating/flipping an already-placed tile
+  can still break the attach guarantee (it's a per-tile control, not
+  re-validated against neighbors at that point), so the ✅/❌ joint marker
+  between every adjacent pair stays live as a safety net for that case —
+  it just shouldn't ever show ❌ for a freshly-built stack.
   - **Adjacency direction, fixed from an earlier version**: the tile drawn
     lower on screen is "older" (attached-to) and the one above it is
     "newer" (attaching via its south edge to the lower tile's north edge)
@@ -178,6 +201,38 @@ whichever view is active.
     reverses column order in one transform — matching `orientation.ts`'s
     data-level column-reversal exactly, so what you see is what actually
     gets tested.
+- **Tag Graph** (`TagGraph.tsx` + `tagGraph.ts`) — answers "what does my
+  whole library's connectivity look like," a different question than the
+  Connection Viewer's "does this one stack I built work." Since biome is
+  purely emergent from edge tags (Data model note above), this is also
+  the tool for seeing biome clusters, rare bridge tiles, and accidental
+  dead ends, rather than anything biome-specific existing in the data
+  model to inspect.
+  - **Nodes are tags, not tiles** — literally "the edges of a tile become
+    the edges of the graph": for every tile, every distinct pair of real
+    tags it carries anywhere (north/south/east/west, hardwall and
+    wildcard excluded) forms one graph edge, so a tile with `grass-road`
+    on one side and `desert-road` on another shows up as a single edge
+    directly connecting the `grass-road` and `desert-road` nodes.
+  - **Node size = tile count carrying that tag; edge thickness = tile
+    count carrying both tags** — common tags/pairs read as visually
+    bigger/thicker, rare ones as small outliers, with no separate rarity
+    system to configure; it falls out of `tagGraph.ts`'s `buildTagGraph()`
+    directly from the library's actual content.
+  - **Hand-rolled force-directed layout** (`tagGraph.ts`'s
+    `stepSimulation()` — plain repel-every-pair-of-nodes + spring-along-
+    edges + damping + a mild centering pull, no graph library), styled
+    like Obsidian's graph view. Positions persist across library edits
+    (`preservePositions()` carries over any tag that still exists rather
+    than re-seeding the whole layout), so the view doesn't jump around
+    every time a tile is saved.
+  - **Click a node or edge to see its tiles**, rendered as the same small
+    `TileArt` thumbnail grid the Connection Viewer's picker uses; clicking
+    a tile there opens it directly in the tile editor (`onEditTile`,
+    threaded down from `ShmupEditor`'s `handleEditTile` — the same
+    function the tile list's "Edit" already used). Dragging a node pins
+    it to the pointer (excluded from physics that tick) and lets it go on
+    release rather than requiring a separate "lock" mode.
 
 ## Persistence
 
@@ -187,10 +242,12 @@ the whole library as a versioned JSON array (`{ version, tiles }`), loaded/
 saved via `src/experiences/ShmupEditor/tileStore.ts`. A corrupt or
 stale-shape save falls back to an empty library rather than crashing
 (same defensive-load pattern as `MahjongSolitaire`'s save state).
-Purely-additive optional fields (`customImage`, `biome`) don't bump
-`SAVE_VERSION` — a pre-existing save missing them is still valid and gets
-backfilled to their default (`null`) on load, rather than the whole
-library being discarded for a one-field gap. The
+Purely-additive optional fields (`customImage`) don't bump
+`SAVE_VERSION` — a pre-existing save missing it is still valid and gets
+backfilled to its default (`null`) on load, rather than the whole
+library being discarded for a one-field gap. A load also silently drops
+any leftover `biome` field from a save written before that field was
+removed — it's simply not part of `TileDef` anymore. The
 folder + file are seeded for new installs (`filesystem/seed.ts`) and
 backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`).
 

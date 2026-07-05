@@ -3,14 +3,14 @@ import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import TileList from "./TileList";
 import TileEditorForm from "./TileEditorForm";
-import ConnectionTester from "./ConnectionTester";
+import ConnectionViewer from "./ConnectionViewer";
+import TagGraph from "./TagGraph";
 import { loadTiles, saveTiles } from "./tileStore";
 import { collectUsedTags } from "./tagRegistry";
-import { collectUsedBiomes } from "./biomeRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
 import "./ShmupEditor.css";
 
-type View = "list" | "edit" | "connections";
+type View = "list" | "edit" | "connections" | "graph";
 
 export default function ShmupEditor() {
   const [tiles, setTiles] = useState<TileDef[]>(() => loadTiles());
@@ -20,25 +20,14 @@ export default function ShmupEditor() {
   // tile — kept around so the dropdown offers them immediately without
   // requiring a save-then-reopen round trip first.
   const [extraTags, setExtraTags] = useState<string[]>([]);
-  // Same session-only "registered but not yet saved on any tile" pattern as extraTags, for biomes.
-  const [extraBiomes, setExtraBiomes] = useState<string[]>([]);
 
   const availableTags = useMemo(() => {
     const merged = new Set([...collectUsedTags(tiles), ...extraTags]);
     return [...merged].sort((a, b) => a.localeCompare(b));
   }, [tiles, extraTags]);
 
-  const availableBiomes = useMemo(() => {
-    const merged = new Set([...collectUsedBiomes(tiles), ...extraBiomes]);
-    return [...merged].sort((a, b) => a.localeCompare(b));
-  }, [tiles, extraBiomes]);
-
   function registerTag(tag: string) {
     setExtraTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
-  }
-
-  function registerBiome(biome: string) {
-    setExtraBiomes((prev) => (prev.includes(biome) ? prev : [...prev, biome]));
   }
 
   function persist(next: TileDef[]) {
@@ -86,7 +75,8 @@ export default function ShmupEditor() {
           { label: "New Tile...", onClick: handleNewTile },
           { separator: true },
           { label: "Tile List", onClick: () => setView("list") },
-          { label: "Connection Tester", onClick: () => setView("connections") },
+          { label: "Connection Viewer", onClick: () => setView("connections") },
+          { label: "Tag Graph", onClick: () => setView("graph") },
         ],
       },
     ],
@@ -109,9 +99,7 @@ export default function ShmupEditor() {
             <TileEditorForm
               tile={editingTile}
               availableTags={availableTags}
-              availableBiomes={availableBiomes}
               onRegisterTag={registerTag}
-              onRegisterBiome={registerBiome}
               onSave={handleSaveTile}
               onCancel={handleCancelEdit}
             />
@@ -119,8 +107,14 @@ export default function ShmupEditor() {
         )}
         {view === "connections" && (
           <>
-            <h3 className="shmup-editor__heading">Connection Tester</h3>
-            <ConnectionTester tiles={tiles} />
+            <h3 className="shmup-editor__heading">Connection Viewer</h3>
+            <ConnectionViewer tiles={tiles} />
+          </>
+        )}
+        {view === "graph" && (
+          <>
+            <h3 className="shmup-editor__heading">Tag Graph</h3>
+            <TagGraph tiles={tiles} onEditTile={handleEditTile} />
           </>
         )}
       </div>

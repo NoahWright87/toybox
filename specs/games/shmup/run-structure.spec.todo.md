@@ -16,15 +16,16 @@
   a hall-of-fame / high-score list is `audience-and-score.spec.todo.md`'s job
   (T10 #161, C14 #163).
 
-## Map — biome tagging (Epic 5)
+## Map — no biome field (Epic 5, revised)
 
-- `MapNode` will gain a `biome` tag (`levels-and-tiles.spec.todo.md`'s L7
-  #189) so a node can say what kind of generated level it opens into
-  (jungle, sea, city, etc.). This is the **only** field Epic 5 #181 (the
-  data-driven tile/enemy system) adds to the map/career layer — node
-  types, `D`, Ratings-rank special-node weighting, and everything else in
-  this spec are unaffected. Biome is a pure content-selection input nothing
-  scales off of.
+- Epic 5 #181 (the data-driven tile/enemy system) adds **no field at all**
+  to `MapNode` or this map/career layer. An earlier plan had `MapNode`
+  gain a `biome` tag (`levels-and-tiles.spec.todo.md`'s L7 #189); that was
+  dropped in favor of biome being a purely emergent property of which
+  edge tags a generated stretch of tiles happens to use — see
+  `levels-and-tiles.spec.todo.md` §5 for why. Node types, `D`,
+  Ratings-rank special-node weighting, and everything else in this spec
+  are unaffected either way.
 
 ## Map — radar item and fog
 

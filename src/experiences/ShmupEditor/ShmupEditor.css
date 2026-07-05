@@ -188,9 +188,6 @@
   padding: 2px;
   width: max-content;
 }
-.shmup-tile-preview--small .shmup-tile-preview__grid {
-  grid-template-rows: auto 44px auto;
-}
 .shmup-tile-preview--edit .shmup-tile-preview__grid {
   grid-template-rows: auto min(50vw, 220px) auto;
 }
@@ -319,33 +316,62 @@
   background: #000;
   padding: 2px 4px;
 }
-.shmup-tile-preview__badge--biome {
-  background: #5b2d8e;
-  text-transform: uppercase;
-}
 
-/* ── Tile list ─────────────────────────────────────────────────────── */
+/* ── Tile list: visual-checker grid ───────────────────────────────────
+   Tiles tile edge-to-edge (no gap) at their real footprint width, so
+   neighboring art's seams are actually checkable — this is deliberately
+   NOT a metadata card grid. */
 
-.shmup-tile-list {
+.shmup-tile-list__grid {
+  /* Single source of truth for the grid's column unit — TileArt's --grid
+     cell size (below) must match exactly or footprint spans stop lining up. */
+  --shmup-tile-grid-unit: 56px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, var(--shmup-tile-grid-unit));
+  gap: 0;
+  background: #000;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
 }
-.shmup-tile-list__card {
+.shmup-tile-list__cell {
+  position: relative;
+}
+/* Grid variant: no border/gap between cells, sized to the grid's column unit so footprint spans line up exactly. */
+.shmup-tile-art--grid .shmup-tile-art__row {
+  border: none;
+}
+.shmup-tile-art--grid .shmup-tile-art__cell {
+  width: var(--shmup-tile-grid-unit, 56px);
+  height: var(--shmup-tile-grid-unit, 56px);
+}
+.shmup-tile-list__menu-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.shmup-tile-list__menu {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  min-width: 180px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.shmup-tile-list__meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 8px;
-}
-.shmup-tile-list__name {
+.shmup-tile-list__menu-name {
+  font-size: 7px;
   word-break: break-word;
 }
 
@@ -389,9 +415,9 @@
   word-break: break-word;
 }
 
-/* ── Connection tester ─────────────────────────────────────────────── */
+/* ── Connection viewer ─────────────────────────────────────────────── */
 
-.shmup-connection-tester__add-row {
+.shmup-connection-viewer__add-row {
   margin-bottom: 14px;
 }
 
@@ -407,6 +433,7 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 .shmup-tile-picker__option {
+  position: relative;
   background: none;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -416,21 +443,58 @@
 .shmup-tile-picker__option:active {
   border-color: #808080 #ffffff #ffffff #808080;
 }
+.shmup-tile-picker__orientation-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 6px;
+  padding: 1px 3px;
+}
 
-.shmup-connection-tester__row {
+.shmup-connection-viewer__row {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.shmup-connection-tester__controls {
+.shmup-connection-viewer__controls {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.shmup-connection-tester__joint {
+.shmup-connection-viewer__joint {
   display: flex;
   align-items: center;
   padding: 4px 0 4px 44px;
   font-size: 18px;
+}
+
+/* ── Tag graph ─────────────────────────────────────────────────────── */
+
+.shmup-tag-graph__canvas-wrap {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #180800;
+  margin-bottom: 10px;
+}
+.shmup-tag-graph__canvas {
+  display: block;
+  width: 100%;
+  height: 380px;
+  touch-action: none; /* dragging a node shouldn't also scroll the page */
+  cursor: grab;
+}
+.shmup-tag-graph__panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+}
+.shmup-tag-graph__panel-title {
+  font-size: 8px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  color: #cc4400;
 }

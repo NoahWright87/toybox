@@ -25,10 +25,14 @@ export interface OrientedEdges {
   west: EdgeSlot;
 }
 
+/** Rotation angles alone (no flip) — footprint 2/3 tiles can't take 90/270 without becoming taller than wide. Shared so "cycle rotation" controls (ConnectionViewer) and validOrientations() (which additionally crosses in flip) agree on what a "rotation step" is. */
+export function rotationAngles(footprint: Footprint): Array<0 | 90 | 180 | 270> {
+  return footprint === 1 ? [0, 90, 180, 270] : [0, 180];
+}
+
 export function validOrientations(footprint: Footprint): Orientation[] {
-  const rotations: Array<0 | 90 | 180 | 270> = footprint === 1 ? [0, 90, 180, 270] : [0, 180];
   const out: Orientation[] = [];
-  for (const rotation of rotations) {
+  for (const rotation of rotationAngles(footprint)) {
     out.push({ rotation, flip: false });
     out.push({ rotation, flip: true });
   }
@@ -103,6 +107,26 @@ export function findAlignments(above: OrientedEdges, below: OrientedEdges): Alig
     results.push({ offset, columns, allMatch: columns.every((c) => c.matched) });
   }
   return results;
+}
+
+export interface OrientedTile {
+  tile: TileDef;
+  orientation: Orientation;
+}
+
+/**
+ * True if `lower` (visually underneath) and `upper` (visually on top) would
+ * actually attach — `lower`'s NORTH edge is what `upper`'s SOUTH edge has to
+ * match, since generation grows "north"/upward and a newly-attached tile's
+ * south is what touches the existing frontier below it. Shared by
+ * ConnectionViewer (stack building) and anything else that needs "would
+ * these two placed tiles connect" (e.g. TagGraph could use this later to
+ * sanity-check an edge).
+ */
+export function connects(lower: OrientedTile, upper: OrientedTile): boolean {
+  const lowerOriented = applyOrientation(lower.tile, lower.orientation);
+  const upperOriented = applyOrientation(upper.tile, upper.orientation);
+  return findAlignments(lowerOriented, upperOriented).some((a) => a.offset === 0 && a.allMatch);
 }
 
 export { HARDWALL };

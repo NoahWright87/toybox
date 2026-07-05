@@ -42,16 +42,40 @@ contained to the diagram itself), per-column edge dropdowns (tag registry
 + "+ New tag..." instead of freeform text — avoids typo-based mismatches)
 doubling as the diagram itself, a built-in tile-image set (none/water/
 grass, tiled across the footprint) replacing the flat color swatch,
-start/end connector toggle, tile list (edit/duplicate/delete), menu-driven
-navigation (no duplicate on-screen nav buttons), fsStore-backed
-persistence, a connection tester (the one surface with rotate/flip)
-that validates tiles actually attach, per-tile **custom art upload**
-(downscaled/cover-cropped to a 256x256 PNG data URL so a handful of
-uploads can't exhaust `LocalStorageAdapter`'s quota — see `imageUpload.ts`),
-and **biome tagging** (`BiomeSelect.tsx`/`biomeRegistry.ts` — a `biome:
-string | null` field per tile, `null` meaning agnostic, with a seeded
-water/dirt/woods/city/desert list per L7 #189 extendable via "+ New
-biome...").
+start/end connector toggle, menu-driven navigation (no duplicate
+on-screen nav buttons), fsStore-backed persistence, and per-tile
+**custom art upload** (downscaled/cover-cropped, palette-quantized, and
+stored as an indexed PNG so a handful of uploads can't exhaust
+`LocalStorageAdapter`'s quota — see `imageUpload.ts`).
+
+Three surfaces were reworked around a "visually check it, don't just
+pass/fail it" theme, since tag-matching correctness stopped being the
+open question once the tag-dropdown system shipped — with AI-generated
+art the real question is whether tag-compatible tiles' *art* reads well
+together:
+- **Tile list → visual-checker grid**: tiles render as pure art tiled
+  edge-to-edge with no gap (real footprint width, so seams are actually
+  checkable), actions tucked behind a small "⋮" corner button instead of
+  an always-visible row.
+- **Connection Tester → Connection Viewer**: the "+ Add Tile" picker now
+  only offers tiles/orientations *guaranteed* to attach — nothing invalid
+  is ever selectable, so it's purely a flow-checker now, not a pass/fail
+  test.
+- **New: Tag Graph** (`TagGraph.tsx`/`tagGraph.ts`) — a hand-rolled
+  Obsidian-style force-directed graph where nodes are edge tags (not
+  tiles) and an edge exists wherever some tile carries both tags. Node
+  size/edge thickness track tile counts, so rarity and clustering are
+  visible directly rather than something you have to infer. Click a
+  node/edge to see its tiles; click a tile to edit it.
+
+A per-tile `biome` field (`BiomeSelect.tsx`/`biomeRegistry.ts`) was built
+and then **removed** — biome turned out to be entirely emergent from
+ordinary edge tags rather than something a tile needs to declare; see
+`shmup-editor.md`'s Data model note and
+`specs/games/shmup/levels-and-tiles.spec.todo.md` §5 for the reasoning.
+The Tag Graph above is what replaces it as the tool for spotting biome
+clusters/rarity — there's nothing biome-specific left in the data model
+to visualize instead.
 
 **Remaining:**
 - Attach spawn variants to a tile (needs E3's spawn-node editor to exist
@@ -64,8 +88,15 @@ biome...").
   state, including a freshly-uploaded `customImage`) only persists on
   explicit Save — unlike root `CLAUDE.md`'s mandatory in-progress-session
   rule, a mid-edit reload/rotation loses it. Pre-existing gap (predates
-  custom art/biome), but worth closing alongside a future E1 pass since a
+  custom art), but worth closing alongside a future E1 pass since a
   lost upload is a worse loss than a lost edge-tag pick.
+- (Side quest, not scoped yet) Some way to soften visibly-mismatched art
+  seams between adjacent AI-generated tiles at the actual seam — this is
+  a `games/shmup` runtime-rendering concern (a feathered edge-blend
+  between whichever two tiles end up adjacent at generation time), not
+  something the editor's static previews can address, since the editor
+  never renders two *different* tiles touching except in the Connection
+  Viewer's single-column stack.
 
 ### E2 — Enemy editor (#192)
 
@@ -100,7 +131,7 @@ editor rather than crashing the game at runtime.
 ## Open questions (resolve before/during E5)
 
 - Exact landing directory + filename convention inside `games/shmup/src/`
-  for exported tiles/enemies/spawn-nodes/biome tile-sets.
+  for exported tiles/enemies/spawn-nodes.
 - Whether tile/enemy art in the editor reuses the shmup sprite-registry
   manifest convention (`content-and-assets.spec.md`) directly, or needs
   its own lighter-weight asset-reference scheme suited to sketch/import

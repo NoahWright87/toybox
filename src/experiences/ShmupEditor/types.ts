@@ -54,8 +54,6 @@ export interface TileDef {
   imageId: string;
   /** User-uploaded art (downscaled square PNG data URL) for this tile, or null when using a built-in image. Only rendered when imageId === CUSTOM_IMAGE_ID. */
   customImage: string | null;
-  /** Which biome tile-set this tile belongs to (per L7 #189 — water/dirt/woods/city/desert/etc.), or null for biome-agnostic (start/end connector tiles). Editor-only, threaded into the exported shape once the game's biome field lands. */
-  biome: string | null;
   createdAt: number;
   modifiedAt: number;
 }
@@ -84,7 +82,6 @@ export function createBlankTile(existingCount: number): TileDef {
     weight: 1,
     imageId: NONE_IMAGE_ID,
     customImage: null,
-    biome: null,
     createdAt: now,
     modifiedAt: now,
   };

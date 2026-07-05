@@ -1,10 +1,13 @@
 # Shmup — Levels & Tiles Spec (grid-fill generation, JIT streaming, camera bounds, biomes)
 
 > Issues: **L1 #183** (tile model + generator), **L2 #184** (JIT streaming + camera
-> bounds), **L7 #189** (biome tagging). Part of **Epic 5 #181**. Status:
-> design locked, not yet implemented. Source: design handoff doc (Claude
-> Chat → Claude Code), 2026-07-04, reconciled against the shipped
-> `run-structure.spec.md` (F8 #136).
+> bounds), **L7 #189** (biome emergence via tags — revised, see §5; no longer
+> a `MapNode` field). Part of **Epic 5 #181**. Status: design locked, not yet
+> implemented. Source: design handoff doc (Claude Chat → Claude Code),
+> 2026-07-04, reconciled against the shipped `run-structure.spec.md` (F8 #136);
+> §5 revised 2026-07-05 after prototyping a per-tile biome field in the
+> `/shmup-editor` tool and concluding it fought the tag-matching model instead
+> of using it (see `specs/shmup-editor.md`).
 
 ## What this replaces
 
@@ -19,12 +22,12 @@ generated just-in-time as the player scrolls forward.
 
 The Season → node-map → career meta-structure (`run-structure.spec.md`)
 is untouched: `computeDifficulty()`, `generateSeasonMap()`,
-`CareerState`, the Boot→Map→Play→Resolve flow. **L7's `biome` tag on
-`MapNode` is the only new field this spec adds to that system** — a
-generated level's tile-set selection, not its difficulty. `D` continues to
-be computed exactly as it is today; this spec's generator consumes it as
-an input (see `spawn-and-warnings.spec.todo.md`, L5 #187) but does not
-change how it's produced.
+`CareerState`, the Boot→Map→Play→Resolve flow. **This spec adds no new
+field to that system at all** — see §5: biome is not a `MapNode`/episode
+concept, so there's nothing to thread through map generation or launch
+data. `D` continues to be computed exactly as it is today; this spec's
+generator consumes it as an input (see `spawn-and-warnings.spec.todo.md`,
+L5 #187) but does not change how it's produced.
 
 ## 1. Tile model (L1)
 
@@ -41,10 +44,11 @@ change how it's produced.
 - **Hard-wall edges** are a valid edge-tag value meaning "nothing may
   connect here" — the mechanism that prevents runaway width growth and
   forces the level to narrow back down.
-- **Start/end connector tiles**: one per biome (or biome-agnostic),
-  enemy-free, used at level start and immediately after a boss tile. They
-  trivially match any edge (no spawn content to gate on) — biome-flavored
-  art only.
+- **Start/end connector tiles**: enemy-free, used at level start and
+  immediately after a boss tile. They use the wildcard edge tag (matching
+  any incoming edge — no spawn content to gate on), so any number of
+  differently-themed connector art variants can exist without anything
+  gating which one gets picked structurally — see §5.
 - **Variants**: a tile definition can declare multiple mutually-exclusive
   spawn variants (each a full spawn-node configuration — see
   `spawn-and-warnings.spec.todo.md`). The generator picks one at placement
@@ -116,31 +120,52 @@ seed, the same way the Season node-map already is.
 - No bespoke per-platform camera code should be needed beyond this
   interpretation layer.
 
-## 5. Biomes (L7)
+## 5. Biomes (L7) — revised: emergent from tags, not a data field
 
-- Biomes (water, dirt, woods, city, desert, etc.) are primarily an **art +
-  edge-tag** concern, not a separate logic system — biome-appropriate
-  connector tiles, edge tags, and flavor of appear animation
-  (`enemies-and-bullets.spec.todo.md` §Entrance) are the only
-  biome-specific hooks needed structurally.
-- **Integration point with the existing map system**: `MapNode`
-  (`systems/map/types.ts`) gains a `biome: BiomeId` field, threaded
-  through `generateSeasonMap()` (weighted per node type, similar in
-  spirit to existing special-node-chance-by-Ratings-rank weighting — flat
-  weighting is acceptable for MVP) and into `EpisodeLaunchData`
-  (`scenes/sceneData.ts`). `PlayScene`'s tile generator reads
-  `episode.biome` to pick which tile-set to draw tiles from. This is the
-  **only** new field the whole Epic 5 design adds to the existing
-  Season/node-map/`D` system — nothing about scaling, node types, or
-  career progression changes.
-- Start/end connector tiles are biome-agnostic or carry biome-flavored art
-  variants per §1 above; they never gate on biome logically, only
-  visually.
+**There is no `biome` field anywhere in this design** — not on a tile, not
+on `MapNode`, not on `EpisodeLaunchData`. An earlier revision of this spec
+had `MapNode` gain a `biome: BiomeId` field that `PlayScene`'s generator
+would read to pick "which tile-set to draw from." That was prototyped as a
+per-tile field in the `/shmup-editor` authoring tool and dropped: it
+fought the tag-matching model instead of using it, and it couldn't
+represent transition tiles ("what biome is a tile that's grass on one
+edge and desert on another?") without becoming a fuzzy/multi-valued mess.
+
+Biome is instead a **purely emergent property of which edge tags exist
+and how tile authors chose to connect them** — the same tag-matching
+mechanism §2's generator already uses for everything else:
+
+- A tile's edges can carry **compound tags** (`grass`, `grass-road`,
+  `desert-road`, `magma-road`, ...) that simultaneously express theme,
+  feature (a road/river cutting through), and connectivity — one tile
+  with `grass-road` on one edge and `desert-road` on the opposite edge
+  *is* a grass-to-desert bridge, with no special "biome transition"
+  mechanism required. It's an ordinary tile to the generator.
+- **Rarity and adjacency are entirely emergent from the tag graph's
+  shape**, not configured: a biome with few tiles/tags is naturally rare;
+  two biomes only ever appear next to each other if some tile's authored
+  edges actually bridge their tags. A generated stretch can legitimately
+  wander from desert to ocean to snow and back, by chance — that's
+  intentional, not a bug to gate against.
+- Start/end connector tiles use the wildcard tag (§1) so they attach
+  anywhere; any number of differently-themed connector art variants can
+  coexist with nothing structurally selecting between them (an author
+  might reuse the same `weight` mechanism §1 already has to make one
+  variant more common, but that's authoring, not an engine concept).
+- **Ambience (music, particle flavor, etc.) is a future, purely
+  presentational layer** that can read the predominant non-hardwall tag(s)
+  visible around the player at any moment, rather than any discrete biome
+  state — nothing in this spec needs to track "what biome is the player
+  in" as a first-class value, because nothing else queries it.
+- Authoring-side graph health (are there dead-end tags, unreachable
+  clusters, accidental rarity cliffs) is a `/shmup-editor` concern — see
+  `specs/shmup-editor.todo.md`'s planned tag-graph visualizer — not
+  something this generator needs to validate at runtime.
 
 ## Related
 
 - [`run-structure.spec.md`](run-structure.spec.md) — the Season/node-map/`D`
-  system this spec plugs into via the `biome` field only
+  system, which this spec no longer touches at all (see §5)
 - [`enemies-and-bullets.spec.todo.md`](enemies-and-bullets.spec.todo.md) —
   the enemy node-graph system that populates generated tiles, and boss
   tiles (L8)
