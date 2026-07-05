@@ -350,8 +350,8 @@
   border: none;
 }
 .shmup-tile-art--strip .shmup-tile-art__cell {
-  width: min(84vw, 480px);
-  height: min(84vw, 480px);
+  width: var(--shmup-connection-grid-unit, min(84vw, 480px));
+  height: var(--shmup-connection-grid-unit, min(84vw, 480px));
 }
 .shmup-tile-list__menu-btn {
   position: absolute;
@@ -451,10 +451,15 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
-.shmup-connection-viewer__strip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.shmup-connection-viewer__grid {
+  /* Single source of truth for the grid's cell size — TileArt's --strip
+     variant (above) must match exactly or tiles placed north/south/east/
+     west of each other stop lining up. */
+  --shmup-connection-grid-unit: min(84vw, 480px);
+  display: grid;
+  grid-auto-columns: var(--shmup-connection-grid-unit);
+  grid-auto-rows: var(--shmup-connection-grid-unit);
+  justify-content: center;
   /* The 1px is the whole point — enough to see two tiles are two tiles,
      not enough to hide a seam that doesn't actually line up. */
   gap: 1px;
@@ -523,6 +528,24 @@
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
+}
+
+.shmup-grid-add {
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px dashed #808080;
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+.shmup-grid-add:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+.shmup-connection-viewer__picker-slot {
+  /* Hosts the picker directly next to whichever add-point was tapped,
+     rather than always at the bottom regardless of which direction/side
+     is being extended. */
+  padding: 4px;
 }
 
 /* ── Tag graph ─────────────────────────────────────────────────────── */

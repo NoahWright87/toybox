@@ -163,9 +163,9 @@ shows a plain heading for whichever view is active.
   saved tile (kept in `ShmupEditor`'s `extraTags` state so they're
   immediately available to every other edge dropdown without a save
   round-trip first).
-- **Connection Viewer** (`ConnectionViewer.tsx`) — a **bidirectional strip
-  builder**, and deliberately a *visual flow-checker rather than a
-  pass/fail test*: tiles render at large size, literally adjacent
+- **Connection Viewer** (`ConnectionViewer.tsx` + `connectionGrid.ts`) — a
+  **2D grid builder**, and deliberately a *visual flow-checker rather than
+  a pass/fail test*: tiles render at large size, literally adjacent
   (**~1px** between them — enough to see two tiles are two tiles, not
   enough to hide a seam that doesn't actually line up), because with
   AI-generated tile art the open question isn't whether tags match (the
@@ -174,50 +174,77 @@ shows a plain heading for whichever view is active.
   heading, no explanatory hint text, no tile names — the window's title
   bar carries "Connection Viewer" instead (`useWindowTitle`, see below),
   and every other pixel goes to the art itself.
+  - **Placement model** (`connectionGrid.ts`): each placed tile is a
+    `GridEntry` with a real `(row, col)` — row grows south/down, col grows
+    east/right, `col` is the leftmost occupied column. Tile height is
+    always exactly 1 row (per the data model), so footprint only ever
+    spans columns. Occupancy is tracked in a `Map<"row,col", GridEntry>`
+    for O(1) collision checks. Growth can start from **any open
+    (non-hardwall, unoccupied) edge of any placed tile** — not just the
+    top/bottom of a single vertical line — so the grid can extend in all
+    four directions from wherever it currently has open edges. Branch
+    merging (two independently-grown arms reaching for the same cell) is
+    explicitly deferred — a placement is simply never offered onto an
+    already-occupied cell, with no "snap the two arms together" behavior.
   - **Empty state**: a single "+ Add" button, nothing else. Picking any
     tile places it at identity orientation with no constraint (nothing to
     attach to yet).
-  - **Non-empty state**: one "+ Add" above the top-most tile and one below
-    the bottom-most — the strip grows in *either* direction, not just
-    appended one way, so it reads like building a real vertical level
-    segment rather than a single-direction stack. Each "+ Add" filters
-    candidates against whichever end it extends (`connects()`, reused from
-    `orientation.ts` — see below for the north/south argument-order logic)
-    and shows **only the first orientation that connects per tile**, not
-    every permutation — rotate/flip after placing covers the rest, so the
-    picker doesn't show the same near-symmetric tile 4-8 times over.
+  - **Add points are per open *segment*, not per whole side**
+    (`computeAddPoints`): north/south each get one add point per
+    contiguous open run — a hard-wall column (or an already-occupied
+    neighboring cell) splits a wide tile's edge into separate segments,
+    each with its own button, rather than one button covering the whole
+    side. East/west each get at most one add point (footprint is
+    width-only, so there's never more than one column to grow from on
+    those sides). Each button shows a directional arrow (↑↓→←,
+    `ADD_ARROW`) rather than a flat "+", since several buttons can appear
+    around one tile at once and the direction needs to be legible at a
+    glance.
+  - **Candidates only offer the first connecting orientation per tile**
+    (`candidatesForAddPoint`), not every permutation — rotate/flip after
+    placing covers the rest, so the picker doesn't show the same
+    near-symmetric tile 4-8 times over. North/south candidates reuse
+    `orientation.ts`'s `findAlignments(above, below)`, which returns every
+    valid column *offset*, not just offset-0: a narrower or wider tile is
+    positioned at its true matching column (shifted left/right as needed)
+    rather than naively centered on the anchor. East/west have no offset
+    ambiguity — footprint is width-only, so a horizontal neighbor is a
+    simple single-edge tag match placed immediately adjacent.
   - **Tap a tile to reveal its controls, overlaid directly on the tile**
     (not a side column, so tiles can render much larger): ✕ delete at top,
     🔄/🔁 rotate at left/right, 🔀 flip at bottom. Only one tile's controls
     show at a time; tapping a different tile switches directly, tapping
-    anywhere outside the strip closes them. **Invalid options render
-    disabled/greyed** rather than being hidden — `orientationValidAt()`
-    checks a hypothetical rotation/flip against *both* current neighbors
-    (a tile in the middle of the strip has one on each side) before
-    allowing it, so a control that would break an existing connection is
-    simply inert. **Delete only enables at the current two ends of the
-    strip** — a middle tile's ✕ stays disabled, since removing it would
-    split the strip into two disconnected pieces with no established way
-    to display that split.
+    anywhere outside the grid (or outside the open add picker) closes it —
+    checked via `Element.closest()` against the relevant class names
+    rather than a single container ref, so empty grid space also counts as
+    "outside." **Invalid options render disabled/greyed** rather than
+    being hidden — `orientationValidAt()` checks a hypothetical
+    rotation/flip against *every* entry currently touching that tile on
+    any of its 4 sides (`touchingEntries`) before allowing it, so a
+    control that would break an existing connection is simply inert.
+    **Delete only enables on a leaf** — `canDeleteEntry()` allows removal
+    only when the tile has 0 or 1 current neighbors; a tile with 2+
+    neighbors stays non-deletable, since removing it could split the grid
+    into disconnected pieces with no established way to display that
+    split (the direct 2D generalization of the earlier 1D "only the two
+    ends of the strip" rule).
   - **No connection checkmark.** An earlier version kept a ✅/❌ marker
     between every pair as a safety net for rotating a placed tile into an
     invalid state; that's no longer reachable now that invalid rotate/flip
     options are disabled outright, so the marker was dropped — it cost
     vertical space for a state that can't occur.
-  - **North/south argument order for `connects(lower, upper)`** (checks
-    `lower`'s north against `upper`'s south): extending **above** the
-    current top makes the *candidate* the upper tile (`connects(top,
-    candidate)`); extending **below** the current bottom makes the
-    *candidate* the lower tile (`connects(candidate, bottom)`). Get this
-    backwards and "add above" silently offers tiles that connect *below*
-    instead (they happen to share the same `connects()` call shape, just
-    with arguments swapped, so a mixed-up call still returns *some*
-    tiles — just the wrong ones).
   - Rotating/flipping is **visual, not just data**: `TileArt` applies
     `transform: scaleX(±1) rotate(...)` to the whole row of columns (not
     per-cell), which both mirrors each column's art and reverses column
     order in one transform — matching `orientation.ts`'s data-level
     column-reversal exactly, so what you see is what actually gets tested.
+  - **Layout**: a CSS Grid (`.shmup-connection-viewer__grid`) with entries
+    and add-point buttons positioned via inline `gridRow`/
+    `gridColumn: 'start / span N'`, normalized against the current
+    min row/col so entries with negative coordinates (growth north/west of
+    the first tile) still map to valid (positive) CSS grid lines. A shared
+    `--shmup-connection-grid-unit` custom property sizes both the grid
+    cells and `TileArt`'s own cells from one source of truth.
 - **Tag Graph** (`TagGraph.tsx` + `tagGraph.ts`) — answers "what does my
   whole library's connectivity look like," a different question than the
   Connection Viewer's "does this one strip I built work." Since biome is

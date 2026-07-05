@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import TileArt from "./TileArt";
-import { connects, rotationAngles, validOrientations, type Orientation, type OrientedTile } from "./orientation";
+import { canDeleteEntry, candidatesForAddPoint, computeAddPoints, orientationValidAt, type AddPoint, type GridEntry } from "./connectionGrid";
+import { rotationAngles, type Orientation } from "./orientation";
 import type { TileDef } from "./types";
 
 interface ConnectionViewerProps {
   tiles: TileDef[];
-}
-
-interface StripEntry extends OrientedTile {
-  key: string;
 }
 
 const IDENTITY: Orientation = { rotation: 0, flip: false };
@@ -17,231 +14,231 @@ function makeKey(tileId: string): string {
   return `${tileId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** First orientation (in validOrientations order) satisfying `isValid` per tile — not every permutation. Rotate/flip after placing covers the rest. */
-function firstMatchPerTile(tiles: TileDef[], isValid: (candidate: OrientedTile) => boolean): OrientedTile[] {
-  const out: OrientedTile[] = [];
-  for (const tile of tiles) {
-    for (const orientation of validOrientations(tile.footprint)) {
-      const candidate: OrientedTile = { tile, orientation };
-      if (isValid(candidate)) {
-        out.push(candidate);
-        break;
-      }
-    }
-  }
-  return out;
-}
+type AddTarget = AddPoint | "initial" | null;
 
-/** Would `orientation` still connect strip[index] to both of its current neighbors? */
-function orientationValidAt(strip: StripEntry[], index: number, orientation: Orientation): boolean {
-  const candidate: OrientedTile = { tile: strip[index].tile, orientation };
-  const north = strip[index - 1]; // physically above (more north)
-  const south = strip[index + 1]; // physically below (more south)
-  if (north && !connects(candidate, north)) return false;
-  if (south && !connects(south, candidate)) return false;
-  return true;
-}
-
-type AddMode = "above" | "below" | null;
+// Arrow (not a flat "+") since a single tile can now have several add
+// points around it at once — the direction needs to be legible at a glance.
+const ADD_ARROW: Record<AddPoint["side"], string> = { north: "↑", south: "↓", east: "→", west: "←" };
 
 /**
- * A strip builder, tiles literally touching (~1px), so seams are checkable
- * at a glance — not a pass/fail tester. "+ Add" only ever offers the FIRST
- * orientation that connects per tile (not every permutation); rotate/flip
- * after placing covers the rest. The strip grows in both directions (an
- * "+ Add" above the top tile and below the bottom one), matching how a real
- * level segment is built rather than a single append-only stack.
+ * A 2D grid builder, tiles literally touching (~1px), so seams are checkable
+ * at a glance — not a pass/fail tester. "+ Add" appears at every open
+ * (non-hardwall, unoccupied) edge of every placed tile — north/south/east/
+ * west, not just north/south — and only offers the FIRST orientation that
+ * connects per tile (not every permutation); rotate/flip after placing
+ * covers the rest. See connectionGrid.ts for the placement/alignment math.
  */
 export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
-  // Index 0 = top of the strip (most north); last index = bottom (most south).
-  const [strip, setStrip] = useState<StripEntry[]>([]);
-  const [addMode, setAddMode] = useState<AddMode>(null);
+  const [entries, setEntries] = useState<GridEntry[]>([]);
+  const [addTarget, setAddTarget] = useState<AddTarget>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   // Close the picker / deselect a tile on a genuine outside click — anything
-  // that isn't on a tile (for selection) or the picker/its trigger buttons
-  // (for the add menu). Checked by class rather than a single container ref
-  // so "empty space" *inside* the strip (e.g. an underfilled row) still
-  // counts as outside, and clicking a DIFFERENT tile/+Add button is left to
-  // that element's own onClick — no race between this listener and a click
-  // toggling selection/add-mode to a new target.
+  // that isn't on a tile (for selection) or the picker/an add-point button
+  // (for the add menu). Checked by class rather than a container ref so
+  // "empty space" inside the grid still counts as outside, and clicking a
+  // DIFFERENT tile/add-point is left to that element's own onClick.
   useEffect(() => {
-    if (!selectedKey && addMode === null) return;
+    if (!selectedKey && addTarget === null) return;
     function handlePointerDown(e: PointerEvent) {
       const target = e.target instanceof Element ? e.target : null;
       if (selectedKey && !target?.closest(".shmup-strip-entry")) {
         setSelectedKey(null);
       }
-      if (addMode !== null && !target?.closest(".shmup-tile-picker") && !target?.closest(".shmup-strip-add")) {
-        setAddMode(null);
+      if (addTarget !== null && !target?.closest(".shmup-tile-picker") && !target?.closest(".shmup-grid-add")) {
+        setAddTarget(null);
       }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [selectedKey, addMode]);
+  }, [selectedKey, addTarget]);
 
   if (tiles.length === 0) {
     return <p className="shmup-hint">Create at least one tile to check connections.</p>;
   }
 
-  const candidates: OrientedTile[] =
-    addMode === null
-      ? []
-      : strip.length === 0
-        ? tiles.map((tile) => ({ tile, orientation: IDENTITY }))
-        : addMode === "above"
-          ? // The candidate becomes the new top (more north): candidate is "upper", the current top is "lower" relative to it.
-            firstMatchPerTile(tiles, (c) => connects(strip[0], c))
-          : // The candidate becomes the new bottom (more south): candidate is "lower", the current bottom is "upper" relative to it.
-            firstMatchPerTile(tiles, (c) => connects(c, strip[strip.length - 1]));
+  const addPoints = computeAddPoints(entries);
 
-  function openPicker(mode: "above" | "below") {
+  const candidates =
+    addTarget === null ? [] : addTarget === "initial" ? tiles.map((tile) => ({ tile, orientation: IDENTITY, row: 0, col: 0 })) : candidatesForAddPoint(tiles, entries, addTarget);
+
+  function openInitialPicker() {
     setSelectedKey(null);
-    setAddMode(mode);
+    setAddTarget("initial");
   }
 
-  function addTile(tile: TileDef, orientation: Orientation) {
-    const entry: StripEntry = { key: makeKey(tile.id), tile, orientation };
-    setStrip((prev) => (addMode === "below" ? [...prev, entry] : [entry, ...prev]));
-    setAddMode(null);
+  function openPointPicker(point: AddPoint) {
+    setSelectedKey(null);
+    setAddTarget(point);
+  }
+
+  function placeTile(tile: TileDef, orientation: Orientation, row: number, col: number) {
+    setEntries((prev) => [...prev, { key: makeKey(tile.id), tile, orientation, row, col }]);
+    setAddTarget(null);
   }
 
   function removeTile(key: string) {
-    setStrip((prev) => prev.filter((e) => e.key !== key));
+    setEntries((prev) => prev.filter((e) => e.key !== key));
     setSelectedKey(null);
   }
 
   function spin(key: string, dir: 1 | -1) {
-    setStrip((prev) => {
-      const index = prev.findIndex((e) => e.key === key);
-      if (index === -1) return prev;
-      const list = rotationAngles(prev[index].tile.footprint);
-      const idx = list.indexOf(prev[index].orientation.rotation);
+    setEntries((prev) => {
+      const entry = prev.find((e) => e.key === key);
+      if (!entry) return prev;
+      const list = rotationAngles(entry.tile.footprint);
+      const idx = list.indexOf(entry.orientation.rotation);
       const rotation = list[(idx + dir + list.length) % list.length];
-      if (!orientationValidAt(prev, index, { ...prev[index].orientation, rotation })) return prev;
-      return prev.map((e, i) => (i === index ? { ...e, orientation: { ...e.orientation, rotation } } : e));
+      if (!orientationValidAt(prev, key, { ...entry.orientation, rotation })) return prev;
+      return prev.map((e) => (e.key === key ? { ...e, orientation: { ...e.orientation, rotation } } : e));
     });
   }
 
   function flip(key: string) {
-    setStrip((prev) => {
-      const index = prev.findIndex((e) => e.key === key);
-      if (index === -1) return prev;
-      const orientation = { ...prev[index].orientation, flip: !prev[index].orientation.flip };
-      if (!orientationValidAt(prev, index, orientation)) return prev;
-      return prev.map((e, i) => (i === index ? { ...e, orientation } : e));
+    setEntries((prev) => {
+      const entry = prev.find((e) => e.key === key);
+      if (!entry) return prev;
+      const orientation = { ...entry.orientation, flip: !entry.orientation.flip };
+      if (!orientationValidAt(prev, key, orientation)) return prev;
+      return prev.map((e) => (e.key === key ? { ...e, orientation } : e));
     });
   }
 
-  const picker = addMode !== null && (
+  // Map (row,col) to positive CSS grid line indices — entries/add-points can
+  // have negative coordinates (growth in any direction), but grid lines
+  // can't; this just offsets everything by the current min, uniformly.
+  const rows = [...entries.map((e) => e.row), ...addPoints.map((p) => p.row)];
+  const cols = [...entries.flatMap((e) => [e.col, e.col + e.tile.footprint - 1]), ...addPoints.map((p) => p.colStart), ...addPoints.map((p) => p.colEnd)];
+  const minRow = rows.length ? Math.min(...rows) : 0;
+  const minCol = cols.length ? Math.min(...cols) : 0;
+  const gridRow = (row: number) => row - minRow + 1;
+  const gridCol = (col: number) => col - minCol + 1;
+
+  const picker = addTarget !== null && (
     <div className="shmup-tile-picker">
       {candidates.length === 0 ? (
         <p className="shmup-hint">No tiles connect here.</p>
       ) : (
-        candidates.map(({ tile, orientation }) => (
-          <button key={tile.id} type="button" className="shmup-tile-picker__option" onClick={() => addTile(tile, orientation)}>
+        candidates.map(({ tile, orientation, row, col }) => (
+          <button key={tile.id} type="button" className="shmup-tile-picker__option" onClick={() => placeTile(tile, orientation, row, col)}>
             <TileArt tile={tile} orientation={orientation} size="thumb" />
           </button>
         ))
       )}
-      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddMode(null)}>
+      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddTarget(null)}>
         Cancel
       </button>
     </div>
   );
 
-  return (
-    <div className="shmup-connection-viewer">
-      {strip.length === 0 ? (
+  if (entries.length === 0) {
+    return (
+      <div className="shmup-connection-viewer">
         <div className="shmup-strip-add-row--initial">
-          <button type="button" className="shmup-strip-add" onClick={() => openPicker("above")}>
+          <button type="button" className="shmup-strip-add" onClick={openInitialPicker}>
             + Add
           </button>
           {picker}
         </div>
-      ) : (
-        <div className="shmup-connection-viewer__strip">
-          <button type="button" className="shmup-strip-add" onClick={() => openPicker("above")}>
-            + Add
+      </div>
+    );
+  }
+
+  return (
+    <div className="shmup-connection-viewer">
+      <div className="shmup-connection-viewer__grid">
+        {entries.map((entry) => {
+          const selected = selectedKey === entry.key;
+          const rotList = rotationAngles(entry.tile.footprint);
+          const rotIdx = rotList.indexOf(entry.orientation.rotation);
+          const canRotateLeft = orientationValidAt(entries, entry.key, { ...entry.orientation, rotation: rotList[(rotIdx - 1 + rotList.length) % rotList.length] });
+          const canRotateRight = orientationValidAt(entries, entry.key, { ...entry.orientation, rotation: rotList[(rotIdx + 1) % rotList.length] });
+          const canFlip = orientationValidAt(entries, entry.key, { ...entry.orientation, flip: !entry.orientation.flip });
+          const canDelete = canDeleteEntry(entries, entry.key);
+          return (
+            <div
+              key={entry.key}
+              className="shmup-strip-entry"
+              style={{ gridRow: gridRow(entry.row), gridColumn: `${gridCol(entry.col)} / span ${entry.tile.footprint}` }}
+              onClick={() => setSelectedKey((k) => (k === entry.key ? null : entry.key))}
+            >
+              <TileArt tile={entry.tile} orientation={entry.orientation} size="strip" showName={false} />
+              {selected && (
+                <>
+                  <button
+                    type="button"
+                    className="shmup-strip-entry__btn shmup-strip-entry__btn--delete"
+                    disabled={!canDelete}
+                    title={canDelete ? "Delete" : "Can't delete — would split the grid (only tiles with 0-1 neighbors can be removed)"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeTile(entry.key);
+                    }}
+                  >
+                    ✕
+                  </button>
+                  <button
+                    type="button"
+                    className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-left"
+                    disabled={!canRotateLeft}
+                    title="Rotate"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      spin(entry.key, -1);
+                    }}
+                  >
+                    🔄
+                  </button>
+                  <button
+                    type="button"
+                    className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-right"
+                    disabled={!canRotateRight}
+                    title="Rotate"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      spin(entry.key, 1);
+                    }}
+                  >
+                    🔁
+                  </button>
+                  <button
+                    type="button"
+                    className="shmup-strip-entry__btn shmup-strip-entry__btn--flip"
+                    disabled={!canFlip}
+                    title="Flip"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      flip(entry.key);
+                    }}
+                  >
+                    🔀
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+        {addPoints.map((point) => (
+          <button
+            key={point.key}
+            type="button"
+            className={`shmup-grid-add shmup-grid-add--${point.side}`}
+            style={{ gridRow: gridRow(point.row), gridColumn: `${gridCol(point.colStart)} / span ${point.colEnd - point.colStart + 1}` }}
+            onClick={() => openPointPicker(point)}
+            title={`Add to the ${point.side}`}
+          >
+            {ADD_ARROW[point.side]}
           </button>
-          {/* Rendered right where "+ Add" (above) was tapped, not at the bottom of the whole strip. */}
-          {addMode === "above" && picker}
-          {strip.map((entry, index) => {
-            const selected = selectedKey === entry.key;
-            const rotList = rotationAngles(entry.tile.footprint);
-            const rotIdx = rotList.indexOf(entry.orientation.rotation);
-            const canRotateLeft = orientationValidAt(strip, index, { ...entry.orientation, rotation: rotList[(rotIdx - 1 + rotList.length) % rotList.length] });
-            const canRotateRight = orientationValidAt(strip, index, { ...entry.orientation, rotation: rotList[(rotIdx + 1) % rotList.length] });
-            const canFlip = orientationValidAt(strip, index, { ...entry.orientation, flip: !entry.orientation.flip });
-            const canDelete = index === 0 || index === strip.length - 1;
-            return (
-              <div
-                key={entry.key}
-                className="shmup-strip-entry"
-                onClick={() => setSelectedKey((k) => (k === entry.key ? null : entry.key))}
-              >
-                <TileArt tile={entry.tile} orientation={entry.orientation} size="strip" showName={false} />
-                {selected && (
-                  <>
-                    <button
-                      type="button"
-                      className="shmup-strip-entry__btn shmup-strip-entry__btn--delete"
-                      disabled={!canDelete}
-                      title="Delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeTile(entry.key);
-                      }}
-                    >
-                      ✕
-                    </button>
-                    <button
-                      type="button"
-                      className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-left"
-                      disabled={!canRotateLeft}
-                      title="Rotate"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        spin(entry.key, -1);
-                      }}
-                    >
-                      🔄
-                    </button>
-                    <button
-                      type="button"
-                      className="shmup-strip-entry__btn shmup-strip-entry__btn--rotate-right"
-                      disabled={!canRotateRight}
-                      title="Rotate"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        spin(entry.key, 1);
-                      }}
-                    >
-                      🔁
-                    </button>
-                    <button
-                      type="button"
-                      className="shmup-strip-entry__btn shmup-strip-entry__btn--flip"
-                      disabled={!canFlip}
-                      title="Flip"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        flip(entry.key);
-                      }}
-                    >
-                      🔀
-                    </button>
-                  </>
-                )}
-              </div>
-            );
-          })}
-          <button type="button" className="shmup-strip-add" onClick={() => openPicker("below")}>
-            + Add
-          </button>
-          {addMode === "below" && picker}
-        </div>
-      )}
+        ))}
+        {addTarget !== null && addTarget !== "initial" && (
+          <div
+            className="shmup-connection-viewer__picker-slot"
+            style={{ gridRow: gridRow(addTarget.row), gridColumn: `${gridCol(addTarget.colStart)} / span ${Math.max(3, addTarget.colEnd - addTarget.colStart + 1)}` }}
+          >
+            {picker}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
