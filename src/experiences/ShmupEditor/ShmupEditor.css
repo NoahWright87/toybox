@@ -435,6 +435,7 @@
   align-items: center;
   padding: 10px;
   margin-bottom: 14px;
+  max-width: min(84vw, 480px);
   background: #fff;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
@@ -454,12 +455,19 @@
 .shmup-connection-viewer__grid {
   /* Single source of truth for the grid's cell size — TileArt's --strip
      variant (above) must match exactly or tiles placed north/south/east/
-     west of each other stop lining up. */
+     west of each other stop lining up. Row/column track sizes themselves
+     come from an inline gridTemplateRows/Columns style (ConnectionViewer.tsx):
+     only rows/columns that actually hold a placed tile use this unit size —
+     an add-only row/column sizes to its own content instead, otherwise every
+     "+ Add" button or open picker would render inside a giant tile-sized
+     empty cell. grid-auto-* below is just a safety net for any track outside
+     that explicit template. */
   --shmup-connection-grid-unit: min(84vw, 480px);
   display: grid;
-  grid-auto-columns: var(--shmup-connection-grid-unit);
-  grid-auto-rows: var(--shmup-connection-grid-unit);
+  grid-auto-columns: auto;
+  grid-auto-rows: auto;
   justify-content: center;
+  align-content: start;
   /* The 1px is the whole point — enough to see two tiles are two tiles,
      not enough to hide a seam that doesn't actually line up. */
   gap: 1px;
@@ -534,9 +542,12 @@
   background: rgba(255, 255, 255, 0.08);
   border: 2px dashed #808080;
   color: #fff;
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
+  padding: 16px 20px;
+  min-width: 48px;
+  min-height: 48px;
 }
 .shmup-grid-add:active {
   background: rgba(255, 255, 255, 0.18);

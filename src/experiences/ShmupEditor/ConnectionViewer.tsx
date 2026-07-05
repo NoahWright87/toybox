@@ -110,9 +110,25 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
   const rows = [...entries.map((e) => e.row), ...addPoints.map((p) => p.row)];
   const cols = [...entries.flatMap((e) => [e.col, e.col + e.tile.footprint - 1]), ...addPoints.map((p) => p.colStart), ...addPoints.map((p) => p.colEnd)];
   const minRow = rows.length ? Math.min(...rows) : 0;
+  const maxRow = rows.length ? Math.max(...rows) : 0;
   const minCol = cols.length ? Math.min(...cols) : 0;
+  const maxCol = cols.length ? Math.max(...cols) : 0;
   const gridRow = (row: number) => row - minRow + 1;
   const gridCol = (col: number) => col - minCol + 1;
+
+  // Explicit per-track sizing instead of a blanket grid-auto-rows/columns:
+  // a row/column that actually holds a placed tile needs the full tile unit
+  // (so footprints line up), but a row/column that only holds an add-point
+  // button or the picker (nothing placed there yet) should size to its own
+  // content — otherwise every add-only row/column would render as a giant
+  // empty tile-sized cell.
+  const entryRows = new Set(entries.map((e) => e.row));
+  const entryCols = new Set<number>();
+  for (const e of entries) for (let c = 0; c < e.tile.footprint; c++) entryCols.add(e.col + c);
+  const gridTemplateRows: string[] = [];
+  for (let r = minRow; r <= maxRow; r++) gridTemplateRows.push(entryRows.has(r) ? "var(--shmup-connection-grid-unit)" : "auto");
+  const gridTemplateColumns: string[] = [];
+  for (let c = minCol; c <= maxCol; c++) gridTemplateColumns.push(entryCols.has(c) ? "var(--shmup-connection-grid-unit)" : "auto");
 
   const picker = addTarget !== null && (
     <div className="shmup-tile-picker">
@@ -146,7 +162,10 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
 
   return (
     <div className="shmup-connection-viewer">
-      <div className="shmup-connection-viewer__grid">
+      <div
+        className="shmup-connection-viewer__grid"
+        style={{ gridTemplateRows: gridTemplateRows.join(" "), gridTemplateColumns: gridTemplateColumns.join(" ") }}
+      >
         {entries.map((entry) => {
           const selected = selectedKey === entry.key;
           const rotList = rotationAngles(entry.tile.footprint);
@@ -233,7 +252,7 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
         {addTarget !== null && addTarget !== "initial" && (
           <div
             className="shmup-connection-viewer__picker-slot"
-            style={{ gridRow: gridRow(addTarget.row), gridColumn: `${gridCol(addTarget.colStart)} / span ${Math.max(3, addTarget.colEnd - addTarget.colStart + 1)}` }}
+            style={{ gridRow: gridRow(addTarget.row), gridColumn: `${gridCol(addTarget.colStart)} / span ${addTarget.colEnd - addTarget.colStart + 1}` }}
           >
             {picker}
           </div>
