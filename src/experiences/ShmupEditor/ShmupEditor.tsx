@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import { useWindowTitle } from "../../components/Window/useWindowTitle";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import TileList from "./TileList";
 import TileEditorForm from "./TileEditorForm";
@@ -83,6 +84,9 @@ export default function ShmupEditor() {
     [tiles.length]
   );
   useWindowMenus(menus);
+  // The Connection Viewer trims its own heading to save vertical space —
+  // the title bar carries that context instead.
+  useWindowTitle(view === "connections" ? "Connection Viewer" : null);
 
   return (
     <div className="shmup-editor">
@@ -105,12 +109,7 @@ export default function ShmupEditor() {
             />
           </>
         )}
-        {view === "connections" && (
-          <>
-            <h3 className="shmup-editor__heading">Connection Viewer</h3>
-            <ConnectionViewer tiles={tiles} />
-          </>
-        )}
+        {view === "connections" && <ConnectionViewer tiles={tiles} />}
         {view === "graph" && (
           <>
             <h3 className="shmup-editor__heading">Tag Graph</h3>

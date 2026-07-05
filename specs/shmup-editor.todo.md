@@ -57,10 +57,16 @@ together:
   edge-to-edge with no gap (real footprint width, so seams are actually
   checkable), actions tucked behind a small "⋮" corner button instead of
   an always-visible row.
-- **Connection Tester → Connection Viewer**: the "+ Add Tile" picker now
-  only offers tiles/orientations *guaranteed* to attach — nothing invalid
-  is ever selectable, so it's purely a flow-checker now, not a pass/fail
-  test.
+- **Connection Tester → Connection Viewer**: further reworked into a
+  bidirectional strip builder — tiles render large and literally adjacent
+  (~1px apart) so seams are checkable at a glance, "+ Add" appears above
+  *and* below the strip (grows either direction, not append-only), the
+  picker offers only the first connecting orientation per tile (not every
+  permutation), and per-tile rotate/flip/delete controls overlay directly
+  on the tile (shown one at a time, on tap) instead of a side column — see
+  `shmup-editor.md` for the full design (including why the old ✅/❌ joint
+  marker was dropped, and the window-title-suffix mechanism,
+  `useWindowTitle`, that lets it drop its on-screen heading too).
 - **New: Tag Graph** (`TagGraph.tsx`/`tagGraph.ts`) — a hand-rolled
   Obsidian-style force-directed graph where nodes are edge tags (not
   tiles) and an edge exists wherever some tile carries both tags. Node

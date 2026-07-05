@@ -163,47 +163,64 @@ shows a plain heading for whichever view is active.
   saved tile (kept in `ShmupEditor`'s `extraTags` state so they're
   immediately available to every other edge dropdown without a save
   round-trip first).
-- **Connection Viewer** (`ConnectionViewer.tsx`) — a vertical **stack
+- **Connection Viewer** (`ConnectionViewer.tsx`) — a **bidirectional strip
   builder**, and deliberately a *visual flow-checker rather than a
-  pass/fail test*: the "+ Add Tile" picker only ever offers tiles (in
-  whichever orientations actually work) that are **guaranteed to attach**
-  to the current top of the stack — nothing invalid is ever selectable, so
-  building a stack always produces a structurally valid sequence. That
-  reframing matters because tag-matching correctness was never really the
-  open question once the tag-dropdown system shipped; with AI-generated
-  tile art, the real question is whether two tag-compatible tiles'
-  *art* actually reads well pressed together, which a pass/fail checkmark
-  can't tell you but building and eyeballing a real sequence can. Starts
-  empty with a single "+ Add Tile" button; picking a tile/orientation from
-  the (filtered) popup grid prepends it to the top of the stack (index 0 =
-  top = most recently added; last index = bottom = oldest). Each stacked
-  tile shows only its **art** (`TileArt.tsx` — no edge-tag labels, "just
-  show the whole tile" per design feedback) with three controls to its
-  left: 🔁/🔄 cycle through that tile's valid rotations, 🔀 toggles flip,
-  ✕ removes it from the stack. Rotating/flipping an already-placed tile
-  can still break the attach guarantee (it's a per-tile control, not
-  re-validated against neighbors at that point), so the ✅/❌ joint marker
-  between every adjacent pair stays live as a safety net for that case —
-  it just shouldn't ever show ❌ for a freshly-built stack.
-  - **Adjacency direction, fixed from an earlier version**: the tile drawn
-    lower on screen is "older" (attached-to) and the one above it is
-    "newer" (attaching via its south edge to the lower tile's north edge)
-    — generation grows north/upward, so a newly-placed tile's south is
-    what touches the frontier below it. `connects(lower, upper)` checks
-    `lower`'s north against `upper`'s south at offset 0. The original
-    two-picker design compared each tile's own north against the *other*
-    tile's south — i.e. the two tiles' outer, never-touching edges — which
-    read as backwards because it was: the edges that are actually drawn
-    touching on screen were never the ones being tested.
-  - Rotating/flipping in this view is **visual, not just data**: `TileArt`
-    applies `transform: scaleX(±1) rotate(...)` to the whole row of
-    columns (not per-cell), which both mirrors each column's art and
-    reverses column order in one transform — matching `orientation.ts`'s
-    data-level column-reversal exactly, so what you see is what actually
-    gets tested.
+  pass/fail test*: tiles render at large size, literally adjacent
+  (**~1px** between them — enough to see two tiles are two tiles, not
+  enough to hide a seam that doesn't actually line up), because with
+  AI-generated tile art the open question isn't whether tags match (the
+  tag-dropdown system already guarantees that) but whether two
+  tag-compatible tiles' *art* actually reads well pressed together. No
+  heading, no explanatory hint text, no tile names — the window's title
+  bar carries "Connection Viewer" instead (`useWindowTitle`, see below),
+  and every other pixel goes to the art itself.
+  - **Empty state**: a single "+ Add" button, nothing else. Picking any
+    tile places it at identity orientation with no constraint (nothing to
+    attach to yet).
+  - **Non-empty state**: one "+ Add" above the top-most tile and one below
+    the bottom-most — the strip grows in *either* direction, not just
+    appended one way, so it reads like building a real vertical level
+    segment rather than a single-direction stack. Each "+ Add" filters
+    candidates against whichever end it extends (`connects()`, reused from
+    `orientation.ts` — see below for the north/south argument-order logic)
+    and shows **only the first orientation that connects per tile**, not
+    every permutation — rotate/flip after placing covers the rest, so the
+    picker doesn't show the same near-symmetric tile 4-8 times over.
+  - **Tap a tile to reveal its controls, overlaid directly on the tile**
+    (not a side column, so tiles can render much larger): ✕ delete at top,
+    🔄/🔁 rotate at left/right, 🔀 flip at bottom. Only one tile's controls
+    show at a time; tapping a different tile switches directly, tapping
+    anywhere outside the strip closes them. **Invalid options render
+    disabled/greyed** rather than being hidden — `orientationValidAt()`
+    checks a hypothetical rotation/flip against *both* current neighbors
+    (a tile in the middle of the strip has one on each side) before
+    allowing it, so a control that would break an existing connection is
+    simply inert. **Delete only enables at the current two ends of the
+    strip** — a middle tile's ✕ stays disabled, since removing it would
+    split the strip into two disconnected pieces with no established way
+    to display that split.
+  - **No connection checkmark.** An earlier version kept a ✅/❌ marker
+    between every pair as a safety net for rotating a placed tile into an
+    invalid state; that's no longer reachable now that invalid rotate/flip
+    options are disabled outright, so the marker was dropped — it cost
+    vertical space for a state that can't occur.
+  - **North/south argument order for `connects(lower, upper)`** (checks
+    `lower`'s north against `upper`'s south): extending **above** the
+    current top makes the *candidate* the upper tile (`connects(top,
+    candidate)`); extending **below** the current bottom makes the
+    *candidate* the lower tile (`connects(candidate, bottom)`). Get this
+    backwards and "add above" silently offers tiles that connect *below*
+    instead (they happen to share the same `connects()` call shape, just
+    with arguments swapped, so a mixed-up call still returns *some*
+    tiles — just the wrong ones).
+  - Rotating/flipping is **visual, not just data**: `TileArt` applies
+    `transform: scaleX(±1) rotate(...)` to the whole row of columns (not
+    per-cell), which both mirrors each column's art and reverses column
+    order in one transform — matching `orientation.ts`'s data-level
+    column-reversal exactly, so what you see is what actually gets tested.
 - **Tag Graph** (`TagGraph.tsx` + `tagGraph.ts`) — answers "what does my
   whole library's connectivity look like," a different question than the
-  Connection Viewer's "does this one stack I built work." Since biome is
+  Connection Viewer's "does this one strip I built work." Since biome is
   purely emergent from edge tags (Data model note above), this is also
   the tool for seeing biome clusters, rare bridge tiles, and accidental
   dead ends, rather than anything biome-specific existing in the data

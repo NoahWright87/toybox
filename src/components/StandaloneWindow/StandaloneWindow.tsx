@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import TitleBar from "../Window/TitleBar";
 import MenuBar, { type MenuBarMenu } from "../MenuBar/MenuBar";
 import { WindowMenuContext } from "../Window/useWindowMenus";
+import { WindowTitleContext } from "../Window/useWindowTitle";
 import "./StandaloneWindow.css";
 
 interface StandaloneWindowProps {
@@ -23,6 +24,16 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
     if (m !== dynamicMenusRef.current) {
       dynamicMenusRef.current = m;
       setDynamicMenus(m);
+    }
+  }, []);
+
+  // Dynamic title suffix registered by child apps via useWindowTitle
+  const [titleSuffix, setTitleSuffix] = useState<string | null>(null);
+  const titleSuffixRef = useRef<string | null>(null);
+  const registerTitleSuffix = useCallback((s: string | null) => {
+    if (s !== titleSuffixRef.current) {
+      titleSuffixRef.current = s;
+      setTitleSuffix(s);
     }
   }, []);
 
@@ -48,11 +59,13 @@ export default function StandaloneWindow({ title, icon, helpContent, children }:
   return (
     <div className="standalone-page">
       <div className="standalone-window">
-        <TitleBar title={title} icon={icon} onClose={exitToDoors} />
+        <TitleBar title={titleSuffix ? `${title} - ${titleSuffix}` : title} icon={icon} onClose={exitToDoors} />
         <MenuBar menus={menus} />
         <div className="standalone-window__content">
           <WindowMenuContext.Provider value={registerMenus}>
-            {children}
+            <WindowTitleContext.Provider value={registerTitleSuffix}>
+              {children}
+            </WindowTitleContext.Provider>
           </WindowMenuContext.Provider>
         </div>
 

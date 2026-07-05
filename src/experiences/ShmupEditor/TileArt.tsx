@@ -4,7 +4,7 @@ import { resolveTileImageUrl, type TileDef } from "./types";
 interface TileArtProps {
   tile: TileDef;
   orientation: Orientation;
-  size?: "thumb" | "large" | "grid";
+  size?: "thumb" | "large" | "grid" | "strip";
   /** Hidden by the tile list's visual-checker grid, where the name would clutter tiles meant to be judged purely on how their art reads edge-to-edge. */
   showName?: boolean;
 }

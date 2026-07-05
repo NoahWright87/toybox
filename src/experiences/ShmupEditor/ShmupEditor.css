@@ -344,6 +344,15 @@
   width: var(--shmup-tile-grid-unit, 56px);
   height: var(--shmup-tile-grid-unit, 56px);
 }
+/* Strip variant (Connection Viewer): no border either, sized large — the
+   whole point is judging art at real size, not a small schematic thumbnail. */
+.shmup-tile-art--strip .shmup-tile-art__row {
+  border: none;
+}
+.shmup-tile-art--strip .shmup-tile-art__cell {
+  width: min(84vw, 480px);
+  height: min(84vw, 480px);
+}
 .shmup-tile-list__menu-btn {
   position: absolute;
   top: 2px;
@@ -415,11 +424,9 @@
   word-break: break-word;
 }
 
-/* ── Connection viewer ─────────────────────────────────────────────── */
-
-.shmup-connection-viewer__add-row {
-  margin-bottom: 14px;
-}
+/* ── Connection viewer: a strip, tiles literally touching ────────────
+   Everything here optimizes for "the art fills the screen" — the point is
+   seeing whether tiles actually tile, not reading labels or controls. */
 
 .shmup-tile-picker {
   display: flex;
@@ -443,32 +450,79 @@
 .shmup-tile-picker__option:active {
   border-color: #808080 #ffffff #ffffff #808080;
 }
-.shmup-tile-picker__orientation-badge {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  font-size: 6px;
-  padding: 1px 3px;
-}
 
-.shmup-connection-viewer__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.shmup-connection-viewer__controls {
+.shmup-connection-viewer__strip {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  /* The 1px is the whole point — enough to see two tiles are two tiles,
+     not enough to hide a seam that doesn't actually line up. */
+  gap: 1px;
+  overflow-x: auto;
+  background: #000;
 }
 
-.shmup-connection-viewer__joint {
+.shmup-strip-add {
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  padding: 14px 24px;
+  margin: 6px 0;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+.shmup-strip-add:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-strip-add-row--initial {
+  display: flex;
+  justify-content: center;
+}
+
+.shmup-strip-entry {
+  position: relative;
+  cursor: pointer;
+}
+.shmup-strip-entry__btn {
+  position: absolute;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
-  padding: 4px 0 4px 44px;
-  font-size: 18px;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 16px;
+  cursor: pointer;
+}
+.shmup-strip-entry__btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+.shmup-strip-entry__btn--delete {
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(153, 0, 0, 0.75);
+}
+.shmup-strip-entry__btn--flip {
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.shmup-strip-entry__btn--rotate-left {
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.shmup-strip-entry__btn--rotate-right {
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* ── Tag graph ─────────────────────────────────────────────────────── */
