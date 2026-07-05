@@ -6,10 +6,14 @@
  */
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
+import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID } from "./tileImages";
 import type { EdgeSlot, TileDef } from "./types";
 
 // v2: `color` swatch replaced by `imageId` (tileImages.ts) — bumping so a
 // pre-v2 save (missing imageId) is discarded rather than half-loaded.
+// `customImage` (added later) does NOT bump this further — it's a purely
+// additive optional field, so a v2 save missing it is still valid;
+// normalizeTile() below backfills the default instead.
 const SAVE_VERSION = 2;
 
 interface SavedLibrary {
@@ -45,13 +49,29 @@ function isValidTileDef(value: unknown): value is TileDef {
   );
 }
 
+// `customImage` was added after v2 shipped as a purely additive, optional
+// field, so its shape is deliberately NOT part of isValidTileDef above —
+// a save missing or malformed on it (including a hand-edited TILES.DAT,
+// which this hackable app explicitly permits per root CLAUDE.md) gets it
+// reset to its default here rather than the whole tile being discarded.
+function normalizeTile(tile: TileDef): TileDef {
+  const customImage = typeof tile.customImage === "string" && tile.customImage ? tile.customImage : null;
+  // A tile can't be left pointing imageId at a custom image that doesn't exist.
+  const imageId = tile.imageId === CUSTOM_IMAGE_ID && !customImage ? NONE_IMAGE_ID : tile.imageId;
+  // Strip a stale `biome` key left over from a removed feature — not part
+  // of TileDef anymore, so a load shouldn't resurrect/re-persist it.
+  const clean: TileDef & { biome?: unknown } = { ...tile, imageId, customImage };
+  delete clean.biome;
+  return clean;
+}
+
 export function loadTiles(): TileDef[] {
   const content = fsStore.getFile(SHMUP_EDITOR_TILES_ID)?.content;
   if (!content) return [];
   try {
     const parsed = JSON.parse(content) as SavedLibrary;
     if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return [];
-    return parsed.tiles.filter(isValidTileDef);
+    return parsed.tiles.filter(isValidTileDef).map(normalizeTile);
   } catch {
     return [];
   }

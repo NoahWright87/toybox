@@ -37,8 +37,9 @@ A **career** = ~5 **Seasons**, each a node map ending in a **Season Finale boss*
 unchanging scrolling background + naive timer-spawn) with a generated,
 tile-based level populated by data-driven enemies — see
 `levels-and-tiles.spec.todo.md`, `enemies-and-bullets.spec.todo.md`,
-`spawn-and-warnings.spec.todo.md`. This only adds a `biome` tag to
-`MapNode`; the Season/node-map/career/`D` system itself is unchanged.
+`spawn-and-warnings.spec.todo.md`. This adds **no field at all** to
+`MapNode`/the Season/node-map/career/`D` system — biome is emergent from
+edge tags, not a tracked value (see `levels-and-tiles.spec.todo.md` §5).
 **Epic 6 #182** is the companion `/shmup-editor` authoring tool (a main
 Doors 97 app route, not part of this Phaser workspace) that produces the
 JSON content Epic 5 consumes.
@@ -63,7 +64,7 @@ JSON content Epic 5 consumes.
 | `content-and-assets.spec.todo.md` | copy registry | F2 #130 |
 | `save.spec.md` | swappable SaveStore, Doors-FS-backed default — **implemented** | S1 #171 |
 | `tuning.spec.todo.md` | the single home of every numeric lever | (all) |
-| `levels-and-tiles.spec.todo.md` | grid-fill tile generation, JIT streaming, camera bounds-box easing, biome tagging | L1 #183, L2 #184, L7 #189 |
+| `levels-and-tiles.spec.todo.md` | grid-fill tile generation, JIT streaming, camera bounds-box easing, biome emergence via tags | L1 #183, L2 #184, L7 #189 |
 | `enemies-and-bullets.spec.todo.md` | enemy node-graph model, bullets-as-enemies, boss tiles | L3 #185, L4 #186, L8 #190 |
 | `spawn-and-warnings.spec.todo.md` | generalized difficulty-budget scaling, spawn nodes, warning indicators | L5 #187, L6 #188 |
 | `../../shmup-editor.todo.md` | `/shmup-editor` authoring tool (separate main-app route) | Epic 6 #182, E1–E5 #191–#195 |

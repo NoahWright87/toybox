@@ -188,9 +188,6 @@
   padding: 2px;
   width: max-content;
 }
-.shmup-tile-preview--small .shmup-tile-preview__grid {
-  grid-template-rows: auto 44px auto;
-}
 .shmup-tile-preview--edit .shmup-tile-preview__grid {
   grid-template-rows: auto min(50vw, 220px) auto;
 }
@@ -320,28 +317,70 @@
   padding: 2px 4px;
 }
 
-/* ── Tile list ─────────────────────────────────────────────────────── */
+/* ── Tile list: visual-checker grid ───────────────────────────────────
+   Tiles tile edge-to-edge (no gap) at their real footprint width, so
+   neighboring art's seams are actually checkable — this is deliberately
+   NOT a metadata card grid. */
 
-.shmup-tile-list {
+.shmup-tile-list__grid {
+  /* Single source of truth for the grid's column unit — TileArt's --grid
+     cell size (below) must match exactly or footprint spans stop lining up. */
+  --shmup-tile-grid-unit: 56px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, var(--shmup-tile-grid-unit));
+  gap: 0;
+  background: #000;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
 }
-.shmup-tile-list__card {
+.shmup-tile-list__cell {
+  position: relative;
+}
+/* Grid variant: no border/gap between cells, sized to the grid's column unit so footprint spans line up exactly. */
+.shmup-tile-art--grid .shmup-tile-art__row {
+  border: none;
+}
+.shmup-tile-art--grid .shmup-tile-art__cell {
+  width: var(--shmup-tile-grid-unit, 56px);
+  height: var(--shmup-tile-grid-unit, 56px);
+}
+/* Strip variant (Connection Viewer): no border either, sized large — the
+   whole point is judging art at real size, not a small schematic thumbnail. */
+.shmup-tile-art--strip .shmup-tile-art__row {
+  border: none;
+}
+.shmup-tile-art--strip .shmup-tile-art__cell {
+  width: var(--shmup-connection-grid-unit, min(84vw, 480px));
+  height: var(--shmup-connection-grid-unit, min(84vw, 480px));
+}
+.shmup-tile-list__menu-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.shmup-tile-list__menu {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  min-width: 180px;
   background: #c0c0c0;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.shmup-tile-list__meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 8px;
-}
-.shmup-tile-list__name {
+.shmup-tile-list__menu-name {
+  font-size: 7px;
   word-break: break-word;
 }
 
@@ -385,11 +424,9 @@
   word-break: break-word;
 }
 
-/* ── Connection tester ─────────────────────────────────────────────── */
-
-.shmup-connection-tester__add-row {
-  margin-bottom: 14px;
-}
+/* ── Connection viewer: a strip, tiles literally touching ────────────
+   Everything here optimizes for "the art fills the screen" — the point is
+   seeing whether tiles actually tile, not reading labels or controls. */
 
 .shmup-tile-picker {
   display: flex;
@@ -398,11 +435,13 @@
   align-items: center;
   padding: 10px;
   margin-bottom: 14px;
+  max-width: min(84vw, 480px);
   background: #fff;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
 }
 .shmup-tile-picker__option {
+  position: relative;
   background: none;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff;
@@ -413,20 +452,150 @@
   border-color: #808080 #ffffff #ffffff #808080;
 }
 
-.shmup-connection-tester__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.shmup-connection-tester__controls {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+/* Scrolls horizontally; the grid inside is centered via margin:auto rather
+   than justify-content:center on the scroll container itself. When content
+   is wider than the viewport, a centered flex/grid container's overflow is
+   split evenly on both sides but a scrollable ancestor can only reach the
+   RIGHT side of that overflow (scrollLeft can't go negative) -- the left
+   portion becomes permanently unreachable, cutting off part of a wide tile
+   with no way to scroll to it. margin:auto on a width:max-content child
+   collapses to 0 once the child is wider than its parent, so the overflow
+   is entirely on the right and fully reachable by scrolling. */
+.shmup-connection-viewer__scroll {
+  overflow-x: auto;
+  background: #000;
 }
 
-.shmup-connection-tester__joint {
+.shmup-connection-viewer__grid {
+  /* Single source of truth for the grid's cell size — TileArt's --strip
+     variant (above) must match exactly or tiles placed north/south/east/
+     west of each other stop lining up. Row/column track sizes themselves
+     come from an inline gridTemplateRows/Columns style (ConnectionViewer.tsx):
+     only rows/columns that actually hold a placed tile use this unit size —
+     an add-only row/column sizes to its own content instead, otherwise every
+     "+ Add" button or open picker would render inside a giant tile-sized
+     empty cell. grid-auto-* below is just a safety net for any track outside
+     that explicit template. */
+  --shmup-connection-grid-unit: min(84vw, 480px);
+  display: grid;
+  grid-auto-columns: auto;
+  grid-auto-rows: auto;
+  align-content: start;
+  width: max-content;
+  margin: 0 auto;
+  /* The 1px is the whole point — enough to see two tiles are two tiles,
+     not enough to hide a seam that doesn't actually line up. */
+  gap: 1px;
+}
+
+.shmup-strip-add {
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  padding: 14px 24px;
+  margin: 6px 0;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+.shmup-strip-add:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-strip-add-row--initial {
+  display: flex;
+  justify-content: center;
+}
+
+.shmup-strip-entry {
+  position: relative;
+  cursor: pointer;
+}
+.shmup-strip-entry__btn {
+  position: absolute;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
-  padding: 4px 0 4px 44px;
-  font-size: 18px;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 16px;
+  cursor: pointer;
+}
+.shmup-strip-entry__btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+.shmup-strip-entry__btn--delete {
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(153, 0, 0, 0.75);
+}
+.shmup-strip-entry__btn--flip {
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.shmup-strip-entry__btn--rotate-left {
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.shmup-strip-entry__btn--rotate-right {
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.shmup-grid-add {
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px dashed #808080;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 16px 20px;
+  min-width: 48px;
+  min-height: 48px;
+}
+.shmup-grid-add:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+.shmup-connection-viewer__picker-slot {
+  /* Hosts the picker directly next to whichever add-point was tapped,
+     rather than always at the bottom regardless of which direction/side
+     is being extended. */
+  padding: 4px;
+}
+
+/* ── Tag graph ─────────────────────────────────────────────────────── */
+
+.shmup-tag-graph__canvas-wrap {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #180800;
+  margin-bottom: 10px;
+}
+.shmup-tag-graph__canvas {
+  display: block;
+  width: 100%;
+  height: 380px;
+  touch-action: none; /* dragging a node shouldn't also scroll the page */
+  cursor: grab;
+}
+.shmup-tag-graph__panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+}
+.shmup-tag-graph__panel-title {
+  font-size: 8px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  color: #cc4400;
 }

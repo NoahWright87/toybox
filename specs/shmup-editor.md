@@ -33,10 +33,15 @@ A tile (`TileDef`) has:
 - `east`/`west`: a single `EdgeSlot` each (footprint height is always 1).
 - `isConnector`: marks a start/end connector tile — toggling it forces
   every south slot's tag to the wildcard (`*`), matching any incoming edge.
-- `weight`, `imageId`, `name`: authoring metadata (weight is exported;
-  imageId/name are editor-only, not part of the gameplay shape). `imageId`
-  picks from a small built-in set (`tileImages.ts`: none/water/grass/shore
-  — real per-tile art import is still future work). Each image is one
+- `weight`, `imageId`, `customImage`, `name`: authoring metadata
+  (weight is exported; the rest are editor-only, not part of the gameplay
+  shape). `imageId` picks from a small built-in set (`tileImages.ts`:
+  none/water/grass/shore) **or** the reserved `CUSTOM_IMAGE_ID`, which
+  renders `customImage` instead — a per-tile uploaded image (see Custom
+  art below). `resolveTileImageUrl()`
+  (`types.ts`) is the one place that knows how to turn `imageId`/
+  `customImage` into an actual URL — `TileArt`/`TilePreview` both call it
+  rather than reading `imageId` directly. Each image is one
   whole 1x1 tile's art, scaled to fill its square; a footprint > 1 tile
   renders one full copy per column (`TilePreview`'s `__cell` divs), not
   one image stretched or tiled as a small repeating pattern across the
@@ -48,18 +53,27 @@ wider-than-tall tile 90° would make it taller-than-wide, which this grid
 can't represent. This mirrors the same resolution the game's L1 generator
 uses for the same ambiguity in the source design doc. A tile is always
 *authored* at identity orientation — rotation is a read-only verification
-concept (see Connection tester below), not an editing mode, since editing
+concept (see Connection Viewer below), not an editing mode, since editing
 a rotated view would have to be mapped back onto the tile's stored
 unrotated slots.
 
 ## Surfaces
 
-Navigation between views (Tile List / New Tile / Connection Tester) is
-via the **Tiles menu** in the window's menu bar (`useWindowMenus`) — no
-duplicate on-screen nav buttons; the body just shows a plain heading for
-whichever view is active.
+Navigation between views (Tile List / New Tile / Connection Viewer / Tag
+Graph) is via the **Tiles menu** in the window's menu bar
+(`useWindowMenus`) — no duplicate on-screen nav buttons; the body just
+shows a plain heading for whichever view is active.
 
-- **Tile list** — every saved tile as a schematic card (edit/duplicate/delete).
+- **Tile list — a visual checker, not a metadata card grid.** Tiles
+  render as pure art (`TileArt`, no schematic/edge-tag labels — that's
+  `TilePreview`'s job, and it's only used by the edit form now), tiled
+  **edge-to-edge with no gap** in a CSS grid, each tile spanning its real
+  footprint width so a 2x1 tile is visibly twice as wide as a neighboring
+  1x1 — the point is judging how tiles' art reads *next to each other*,
+  which matters a lot when the art comes from an AI image generator that
+  has no idea what tile sits next to it. Per-tile actions (Edit/Duplicate/
+  Delete) live behind a small "⋮" corner button instead of an
+  always-visible row, so they don't compete with the art for attention.
 - **Tile editor form** — the schematic diagram itself *is* the edge editor:
   each edge cell is a dropdown (`EdgeSelect`) offering Hard Wall, every tag
   already used anywhere in the library, and "+ New tag..." (reveals an
@@ -69,9 +83,53 @@ whichever view is active.
   never match) and the form duplicated the same information twice. Name,
   footprint picker, and connector toggle sit in a compact toolbar above
   the diagram; a background image picker (thumbnail buttons showing the
-  actual texture) and weight below it. The diagram is always shown at
-  identity orientation while editing (rotation is a read-only concept,
-  see below). Save is disabled until every edge has a tag or Hard Wall.
+  actual texture) and weight below it. The diagram is
+  always shown at identity orientation while editing (rotation is a
+  read-only concept, see below). Save is disabled until every edge has a
+  tag or Hard Wall.
+  - **Custom art upload** (`imageUpload.ts`) — "Upload Custom Art..."
+    opens a file picker; the chosen image is decoded, cover-fit cropped
+    onto a 256x256 canvas, then **quantized to a limited palette and
+    stored as a genuine indexed-color PNG** — not truecolor PNG or JPEG.
+    A "Colors" dropdown next to the upload button (256/128/64/32/16/8,
+    default 32) picks the palette size before uploading; fewer colors
+    means a smaller saved file, which matters for flat tile/sprite art the
+    same way it did in Photoshop's old "Indexed Color" mode.
+    `utils/paletteQuantize.ts` runs median-cut quantization down to that
+    many colors, then Floyd-Steinberg dithers *against the resulting fixed
+    palette* (not per-channel posterization like `NsDoors97/imageDegrade.ts`'s
+    wallpaper effect — diffusing error toward arbitrary RGB values can
+    produce more distinct colors than fit in a palette; dithering against
+    a fixed palette is also how real 256-color VGA/GIF art faked extra
+    colors). `utils/indexedPng.ts` then hand-writes the actual PNG bytes
+    (`IHDR`/`PLTE`/optional `tRNS`/`IDAT`/`IEND`, each with a CRC32) since
+    Canvas's own `toDataURL`/`toBlob` can only emit truecolor PNGs — no
+    browser API produces an indexed/paletted one. `IDAT`'s DEFLATE
+    compression uses the browser's built-in `CompressionStream("deflate")`
+    rather than a hand-rolled DEFLATE implementation. Both `paletteQuantize.ts`
+    and `indexedPng.ts` live in `src/utils/` (not `ShmupEditor/`) so NS Art's
+    planned palette-size feature (`specs/ns-art.todo.md` issue #82) and the
+    wallpaper degrade pipeline can adopt the same primitives later without
+    rework. The downscale-before-encode step still matters independent of
+    the format: the tile library round-trips through `fsStore`'s
+    `LocalStorageAdapter`, which caps out around 5-10MB total.
+    Uploading sets `imageId` to the reserved `CUSTOM_IMAGE_ID` and adds a
+    live thumbnail of the upload to the picker row (selectable like any
+    built-in, so switching back to a built-in and back to the custom
+    upload doesn't require re-uploading); "Remove Custom Art" clears it
+    and falls back to `none` if it was the active selection. Real
+    in-editor sketching (vs. upload of existing art) is still deferred.
+  - **No biome field, on purpose.** An earlier revision of this tool had
+    a per-tile `biome` field (`BiomeSelect.tsx`/`biomeRegistry.ts`,
+    removed) that let a tile declare which biome tile-set it belonged to.
+    It was dropped: biome turned out to be entirely emergent from ordinary
+    edge tags (see `specs/games/shmup/levels-and-tiles.spec.todo.md` §5)
+    — a tile with `grass-road` on one edge and `desert-road` on another
+    *is* a grass/desert bridge, with nothing else needed to express that,
+    and a dedicated field couldn't represent that tile any better than
+    "which one biome is it" would suggest. Rarity and which biomes border
+    which fall out of the tag graph's shape (how many tiles bridge two
+    tags) rather than being configured anywhere.
   - **"+ New tag..." commits on blur, not just Enter.** Mobile virtual
     keyboards (Android Chrome/Gboard in particular) don't reliably fire a
     clean `keydown` "Enter", so relying on `onKeyDown` alone silently
@@ -83,12 +141,15 @@ whichever view is active.
     rotated overflowed its flex-centered cell and rotated around a
     badly-offset center) so the full tag text is legible in a narrow
     column instead of being clipped to a sliver showing only the dropdown
-    arrow. Applies to both the editable dropdown and the read-only label
-    (tile list / connection tester).
+    arrow. Applies to both the editable dropdown and `TilePreview`'s
+    read-only label (currently unused outside the edit form, but kept
+    correct since nothing rules out a future schematic view needing it).
 - **Mobile-first sizing** — the edit-form diagram's column width is
-  `min(78vw, 420px)` (a dedicated `size="edit"` `TilePreview` variant,
-  distinct from the compact `"small"` variant used by the tile list), so a
-  1x1 tile fills most of a phone screen's width and a 2x1/3x1 tile is
+  `min(78vw, 420px)`. `TilePreview` only ever renders this one way now (its
+  earlier compact `"small"` variant, once used by the tile list, was
+  removed as dead code once the tile list became the pure-art visual
+  checker grid described above), so a 1x1 tile fills most of a phone
+  screen's width and a 2x1/3x1 tile is
   genuinely wider — not the same box subdivided into thinner slices — and
   overflows into horizontal scroll *contained to the diagram itself* on
   small screens. Getting that containment right required `min-width: 0`/
@@ -102,31 +163,156 @@ whichever view is active.
   saved tile (kept in `ShmupEditor`'s `extraTags` state so they're
   immediately available to every other edge dropdown without a save
   round-trip first).
-- **Connection tester** — a vertical **stack builder**, not a two-tile
-  comparison form. Starts empty with a single "+ Add Tile" button; picking
-  a tile from the popup grid prepends it to the top of the stack (index 0
-  = top = most recently added; last index = bottom = oldest). Each stacked
-  tile shows only its **art** (`TileArt.tsx` — no edge-tag labels, "just
-  show the whole tile" per design feedback) with three controls to its
-  left: 🔁/🔄 cycle through that tile's valid rotations, 🔀 toggles flip,
-  ✕ removes it from the stack. Between every adjacent pair a ✅/❌ marker
-  shows whether they'd actually attach.
-  - **Adjacency direction, fixed from an earlier version**: the tile drawn
-    lower on screen is "older" (attached-to) and the one above it is
-    "newer" (attaching via its south edge to the lower tile's north edge)
-    — generation grows north/upward, so a newly-placed tile's south is
-    what touches the frontier below it. `connects(lower, upper)` checks
-    `lower`'s north against `upper`'s south at offset 0. The original
-    two-picker design compared each tile's own north against the *other*
-    tile's south — i.e. the two tiles' outer, never-touching edges — which
-    read as backwards because it was: the edges that are actually drawn
-    touching on screen were never the ones being tested.
-  - Rotating/flipping in this view is **visual, not just data**: `TileArt`
-    applies `transform: scaleX(±1) rotate(...)` to the whole row of
-    columns (not per-cell), which both mirrors each column's art and
-    reverses column order in one transform — matching `orientation.ts`'s
-    data-level column-reversal exactly, so what you see is what actually
-    gets tested.
+- **Connection Viewer** (`ConnectionViewer.tsx` + `connectionGrid.ts`) — a
+  **2D grid builder**, and deliberately a *visual flow-checker rather than
+  a pass/fail test*: tiles render at large size, literally adjacent
+  (**~1px** between them — enough to see two tiles are two tiles, not
+  enough to hide a seam that doesn't actually line up), because with
+  AI-generated tile art the open question isn't whether tags match (the
+  tag-dropdown system already guarantees that) but whether two
+  tag-compatible tiles' *art* actually reads well pressed together. No
+  heading, no explanatory hint text, no tile names — the window's title
+  bar carries "Connection Viewer" instead (`useWindowTitle`, see below),
+  and every other pixel goes to the art itself.
+  - **Placement model** (`connectionGrid.ts`): each placed tile is a
+    `GridEntry` with a real `(row, col)` — row grows south/down, col grows
+    east/right, `col` is the leftmost occupied column. Tile height is
+    always exactly 1 row (per the data model), so footprint only ever
+    spans columns. Occupancy is tracked in a `Map<"row,col", GridEntry>`
+    for O(1) collision checks. Growth can start from **any open
+    (non-hardwall, unoccupied) edge of any placed tile** — not just the
+    top/bottom of a single vertical line — so the grid can extend in all
+    four directions from wherever it currently has open edges. Branch
+    merging (two independently-grown arms reaching for the same cell) is
+    explicitly deferred — a placement is simply never offered onto an
+    already-occupied cell, with no "snap the two arms together" behavior.
+  - **Empty state**: a single "+ Add" button, nothing else. Picking any
+    tile places it at identity orientation with no constraint (nothing to
+    attach to yet).
+  - **Add points are per open *column*, not per whole side**
+    (`computeAddPoints`): north/south each get one add point per open
+    (non-hardwall, unoccupied) column — even several open columns sitting
+    side by side with no hard-wall between them still each get their own
+    button, since each column of a multi-column edge can carry a
+    completely different tag and independently needs its own matched
+    candidate list (a merged "one button per contiguous run" design was
+    tried first, but it meant a 2-wide tile's north edge showed only one
+    button even though its two columns could want two unrelated
+    neighbors — see below for why that also required closing a matching
+    gap between the two now-independent placements). East/west each get
+    at most one add point (footprint is width-only, so there's never more
+    than one column to grow from on those sides). Each button shows a
+    directional arrow (↑↓→←, `ADD_ARROW`) rather than a flat "+", since
+    several buttons can appear around one tile at once and the direction
+    needs to be legible at a glance.
+  - **A candidate must connect to every entry it would touch, not just
+    the add-point's own anchor** (`candidatesForAddPoint`): once add
+    points are per-column, placing a tile at one column's point can land
+    it directly beside a tile already placed at a neighboring column's
+    point — that pair needs to match too. Every candidate placement is
+    re-checked against every other currently-placed entry it would
+    physically touch (`isAdjacent` + `coordsConnect`, the same pairwise
+    check `orientationValidAt` uses for rotate/flip), not just the anchor
+    the button is attached to — closing a gap where two tiles could each
+    individually match a wide anchor's south edge while silently
+    mismatching each other's shared east/west edge.
+  - **Candidates only offer the first connecting orientation per tile**
+    (`candidatesForAddPoint`), not every permutation — rotate/flip after
+    placing covers the rest, so the picker doesn't show the same
+    near-symmetric tile 4-8 times over. North/south candidates reuse
+    `orientation.ts`'s `findAlignments(above, below)`, which returns every
+    valid column *offset*, not just offset-0: a narrower or wider tile is
+    positioned at its true matching column (shifted left/right as needed)
+    rather than naively centered on the anchor. East/west have no offset
+    ambiguity — footprint is width-only, so a horizontal neighbor is a
+    simple single-edge tag match placed immediately adjacent.
+  - **Tap a tile to reveal its controls, overlaid directly on the tile**
+    (not a side column, so tiles can render much larger): ✕ delete at top,
+    🔄/🔁 rotate at left/right, 🔀 flip at bottom. Only one tile's controls
+    show at a time; tapping a different tile switches directly, tapping
+    anywhere outside the grid (or outside the open add picker) closes it —
+    checked via `Element.closest()` against the relevant class names
+    rather than a single container ref, so empty grid space also counts as
+    "outside." **Invalid options render disabled/greyed** rather than
+    being hidden — `orientationValidAt()` checks a hypothetical
+    rotation/flip against *every* entry currently touching that tile on
+    any of its 4 sides (`touchingEntries`) before allowing it, so a
+    control that would break an existing connection is simply inert.
+    **Delete only enables on a leaf** — `canDeleteEntry()` allows removal
+    only when the tile has 0 or 1 current neighbors; a tile with 2+
+    neighbors stays non-deletable, since removing it could split the grid
+    into disconnected pieces with no established way to display that
+    split (the direct 2D generalization of the earlier 1D "only the two
+    ends of the strip" rule).
+  - **No connection checkmark.** An earlier version kept a ✅/❌ marker
+    between every pair as a safety net for rotating a placed tile into an
+    invalid state; that's no longer reachable now that invalid rotate/flip
+    options are disabled outright, so the marker was dropped — it cost
+    vertical space for a state that can't occur.
+  - Rotating/flipping is **visual, not just data**: `TileArt` applies
+    `transform: scaleX(±1) rotate(...)` to the whole row of columns (not
+    per-cell), which both mirrors each column's art and reverses column
+    order in one transform — matching `orientation.ts`'s data-level
+    column-reversal exactly, so what you see is what actually gets tested.
+  - **Layout**: a CSS Grid (`.shmup-connection-viewer__grid`) with entries
+    and add-point buttons positioned via inline `gridRow`/
+    `gridColumn: 'start / span N'`, normalized against the current
+    min row/col so entries with negative coordinates (growth north/west of
+    the first tile) still map to valid (positive) CSS grid lines. A shared
+    `--shmup-connection-grid-unit` custom property sizes both the grid
+    cells and `TileArt`'s own cells from one source of truth.
+    **Per-track sizing, not a blanket `grid-auto-rows`/`-columns`**:
+    `ConnectionViewer.tsx` computes explicit `gridTemplateRows`/
+    `gridTemplateColumns` arrays — only a row/column that actually holds a
+    placed entry gets the full tile-unit size; a row/column that only
+    holds an add-point button or the open picker sizes to its own content
+    instead. Applying the unit size uniformly to every implicit track
+    (including add-only ones) made every "+ Add" button and the picker
+    itself render inside a giant tile-sized empty cell on a phone-width
+    viewport. **The grid is wrapped in a `.shmup-connection-viewer__scroll`
+    container and centered via `width: max-content; margin: 0 auto` on the
+    grid itself**, not `justify-content: center` on the scrollable
+    container directly — the latter centers overflowing content
+    symmetrically, but a scrollable ancestor can only reach the *right*
+    side of that overflow (`scrollLeft` can't go negative), permanently
+    stranding part of a wide tile off-screen to the left with no way to
+    scroll to it (including, in practice, the delete button of a wide leaf
+    tile sitting at the tile's horizontal center). `margin: auto` on a
+    `width: max-content` child collapses to 0 once the child is wider than
+    its parent, so overflowing content sits flush left and is fully
+    reachable by scrolling right instead.
+- **Tag Graph** (`TagGraph.tsx` + `tagGraph.ts`) — answers "what does my
+  whole library's connectivity look like," a different question than the
+  Connection Viewer's "does this one strip I built work." Since biome is
+  purely emergent from edge tags (Data model note above), this is also
+  the tool for seeing biome clusters, rare bridge tiles, and accidental
+  dead ends, rather than anything biome-specific existing in the data
+  model to inspect.
+  - **Nodes are tags, not tiles** — literally "the edges of a tile become
+    the edges of the graph": for every tile, every distinct pair of real
+    tags it carries anywhere (north/south/east/west, hardwall and
+    wildcard excluded) forms one graph edge, so a tile with `grass-road`
+    on one side and `desert-road` on another shows up as a single edge
+    directly connecting the `grass-road` and `desert-road` nodes.
+  - **Node size = tile count carrying that tag; edge thickness = tile
+    count carrying both tags** — common tags/pairs read as visually
+    bigger/thicker, rare ones as small outliers, with no separate rarity
+    system to configure; it falls out of `tagGraph.ts`'s `buildTagGraph()`
+    directly from the library's actual content.
+  - **Hand-rolled force-directed layout** (`tagGraph.ts`'s
+    `stepSimulation()` — plain repel-every-pair-of-nodes + spring-along-
+    edges + damping + a mild centering pull, no graph library), styled
+    like Obsidian's graph view. Positions persist across library edits
+    (`preservePositions()` carries over any tag that still exists rather
+    than re-seeding the whole layout), so the view doesn't jump around
+    every time a tile is saved.
+  - **Click a node or edge to see its tiles**, rendered as the same small
+    `TileArt` thumbnail grid the Connection Viewer's picker uses; clicking
+    a tile there opens it directly in the tile editor (`onEditTile`,
+    threaded down from `ShmupEditor`'s `handleEditTile` — the same
+    function the tile list's "Edit" already used). Dragging a node pins
+    it to the pointer (excluded from physics that tick) and lets it go on
+    release rather than requiring a separate "lock" mode.
 
 ## Persistence
 
@@ -135,7 +321,13 @@ not localStorage: `C:\Programs\Accessories\Shmup Editor\TILES.DAT` holds
 the whole library as a versioned JSON array (`{ version, tiles }`), loaded/
 saved via `src/experiences/ShmupEditor/tileStore.ts`. A corrupt or
 stale-shape save falls back to an empty library rather than crashing
-(same defensive-load pattern as `MahjongSolitaire`'s save state). The
+(same defensive-load pattern as `MahjongSolitaire`'s save state).
+Purely-additive optional fields (`customImage`) don't bump
+`SAVE_VERSION` — a pre-existing save missing it is still valid and gets
+backfilled to its default (`null`) on load, rather than the whole
+library being discarded for a one-field gap. A load also silently drops
+any leftover `biome` field from a save written before that field was
+removed — it's simply not part of `TileDef` anymore. The
 folder + file are seeded for new installs (`filesystem/seed.ts`) and
 backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`).
 

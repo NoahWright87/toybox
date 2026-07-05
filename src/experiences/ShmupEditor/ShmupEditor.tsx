@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
+import { useWindowTitle } from "../../components/Window/useWindowTitle";
 import type { MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import TileList from "./TileList";
 import TileEditorForm from "./TileEditorForm";
-import ConnectionTester from "./ConnectionTester";
+import ConnectionViewer from "./ConnectionViewer";
+import TagGraph from "./TagGraph";
 import { loadTiles, saveTiles } from "./tileStore";
 import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
 import "./ShmupEditor.css";
 
-type View = "list" | "edit" | "connections";
+type View = "list" | "edit" | "connections" | "graph";
 
 export default function ShmupEditor() {
   const [tiles, setTiles] = useState<TileDef[]>(() => loadTiles());
@@ -74,13 +76,17 @@ export default function ShmupEditor() {
           { label: "New Tile...", onClick: handleNewTile },
           { separator: true },
           { label: "Tile List", onClick: () => setView("list") },
-          { label: "Connection Tester", onClick: () => setView("connections") },
+          { label: "Connection Viewer", onClick: () => setView("connections") },
+          { label: "Tag Graph", onClick: () => setView("graph") },
         ],
       },
     ],
     [tiles.length]
   );
   useWindowMenus(menus);
+  // The Connection Viewer trims its own heading to save vertical space —
+  // the title bar carries that context instead.
+  useWindowTitle(view === "connections" ? "Connection Viewer" : null);
 
   return (
     <div className="shmup-editor">
@@ -103,10 +109,11 @@ export default function ShmupEditor() {
             />
           </>
         )}
-        {view === "connections" && (
+        {view === "connections" && <ConnectionViewer tiles={tiles} />}
+        {view === "graph" && (
           <>
-            <h3 className="shmup-editor__heading">Connection Tester</h3>
-            <ConnectionTester tiles={tiles} />
+            <h3 className="shmup-editor__heading">Tag Graph</h3>
+            <TagGraph tiles={tiles} onEditTile={handleEditTile} />
           </>
         )}
       </div>

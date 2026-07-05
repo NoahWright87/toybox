@@ -17,6 +17,14 @@ Planned improvements, in rough priority order. Each section describes the target
   - Add a menu-bar option to set palette size: 8, 16, or 32 colors
   - When a palette color is changed, re-map existing image pixels to the nearest new palette color
   - Enables saving a proper limited-palette PNG that matches the chosen palette
+  - The quantization + indexed-PNG-writing primitives this needs already
+    exist, built for the shmup-editor's custom tile/sprite art upload:
+    `src/utils/paletteQuantize.ts` (median-cut + palette-based Floyd-Steinberg
+    dithering) and `src/utils/indexedPng.ts` (hand-rolled PNG color-type-3
+    encoder, since Canvas can only ever emit truecolor PNGs). This issue
+    should consume those directly rather than re-implementing quantization —
+    see `specs/shmup-editor.md`'s Custom art upload section for how the
+    editor wires them together.
 
 ## Later
 
