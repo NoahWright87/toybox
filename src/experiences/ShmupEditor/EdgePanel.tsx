@@ -1,29 +1,27 @@
 import { useState } from "react";
 import AttackPayloadForm from "./AttackPayloadForm";
-import BranchForm from "./BranchForm";
 import MovementForm from "./MovementForm";
-import { getNodeOptions, updateEdge } from "./enemyGraph";
-import type { EnemyDef, GraphEdge } from "./enemyTypes";
+import { updateEdge } from "./encounterGraph";
+import type { EncounterEnemy, GraphEdge } from "./encounterTypes";
 
 interface EdgePanelProps {
-  enemy: EnemyDef;
+  instance: EncounterEnemy;
   edge: GraphEdge;
-  onChange: (enemy: EnemyDef) => void;
+  onChange: (instance: EncounterEnemy) => void;
 }
 
-type Tab = "movement" | "attack" | "branch";
+type Tab = "movement" | "attack";
 const TABS: { id: Tab; label: string }[] = [
   { id: "movement", label: "Movement" },
   { id: "attack", label: "Attack" },
-  { id: "branch", label: "Branch" },
 ];
 
 /** Below-canvas settings panel for a selected edge (the movement segment between two nodes). */
-export default function EdgePanel({ enemy, edge, onChange }: EdgePanelProps) {
+export default function EdgePanel({ instance, edge, onChange }: EdgePanelProps) {
   const [tab, setTab] = useState<Tab>("movement");
 
   function patch(fields: Partial<GraphEdge>) {
-    onChange(updateEdge(enemy, edge.id, fields));
+    onChange(updateEdge(instance, edge.id, fields));
   }
 
   return (
@@ -38,7 +36,6 @@ export default function EdgePanel({ enemy, edge, onChange }: EdgePanelProps) {
 
       {tab === "movement" && <MovementForm movement={edge.movement} onChange={(movement) => patch({ movement })} />}
       {tab === "attack" && <AttackPayloadForm payload={edge.attack} onChange={(attack) => patch({ attack })} label="Attack enabled on this edge" />}
-      {tab === "branch" && <BranchForm branch={edge.branch} nodeOptions={getNodeOptions(enemy)} onChange={(branch) => patch({ branch })} />}
     </div>
   );
 }

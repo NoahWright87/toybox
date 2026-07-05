@@ -152,6 +152,28 @@
   margin-bottom: 0;
 }
 
+/* ── Encounters list (inside the tile form) ───────────────────────────── */
+.shmup-encounter-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-encounter-list__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px 8px;
+  font-size: 8px;
+}
+
 .shmup-image-picker {
   display: flex;
   gap: 8px;
@@ -684,6 +706,77 @@
   bottom: 0;
   right: 0;
   background: rgba(153, 0, 0, 0.75);
+}
+
+.shmup-enemy-node__label {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Encounter editor's tile reference frame ──────────────────────────
+   A read-only silhouette of the tile's real footprint/edges, so an
+   enemy's entrance/exit can be placed meaningfully against where the
+   tile actually connects to its neighbors (specs/shmup-editor.md). */
+.shmup-encounter-frame {
+  position: relative;
+  border: 2px dashed #7b3dbe;
+  background-color: rgba(123, 61, 190, 0.12);
+  background-size: cover;
+  background-position: center;
+  box-sizing: border-box;
+}
+.shmup-encounter-frame__edge {
+  position: absolute;
+  display: flex;
+  font-size: 6px;
+  color: #ffcc88;
+  text-shadow: 1px 1px 0 #000;
+  gap: 4px;
+  pointer-events: none;
+}
+.shmup-encounter-frame__edge--north {
+  top: -12px;
+  left: 0;
+  right: 0;
+  justify-content: space-around;
+}
+.shmup-encounter-frame__edge--south {
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  justify-content: space-around;
+}
+.shmup-encounter-frame__edge--east {
+  right: -4px;
+  top: 50%;
+  transform: translate(100%, -50%);
+}
+.shmup-encounter-frame__edge--west {
+  left: -4px;
+  top: 50%;
+  transform: translate(-100%, -50%);
+}
+
+.shmup-enemy-picker-thumb {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6px;
+  color: #444;
+  text-align: center;
 }
 
 .shmup-panel {

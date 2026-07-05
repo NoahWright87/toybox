@@ -1,4 +1,4 @@
-import type { EntranceAppearance, EntranceStyle } from "./enemyTypes";
+import type { EntranceAppearance, EntranceStyle } from "./encounterTypes";
 
 interface EntranceFormProps {
   appearance: EntranceAppearance;

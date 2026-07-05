@@ -1,4 +1,4 @@
-import { defaultOrbitDwell, defaultWaitDwell, type DwellBehavior } from "./enemyTypes";
+import { defaultOrbitDwell, defaultWaitDwell, type DwellBehavior } from "./encounterTypes";
 
 interface DwellFormProps {
   dwell: DwellBehavior | null;

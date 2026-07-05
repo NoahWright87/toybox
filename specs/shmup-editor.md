@@ -314,109 +314,108 @@ shows a plain heading for whichever view is active.
     it to the pointer (excluded from physics that tick) and lets it go on
     release rather than requiring a separate "lock" mode.
 
-## Enemy editor (E2)
+## Enemy + Encounter editor (E2)
 
-A second top-level **Enemies** menu (alongside **Tiles**, same
-`useWindowMenus` pattern — "New Enemy...", "Enemy List") authors
-`EnemyDef`s: node-graph enemies matching
+**Revised mid-build**: the first pass at E2 put a full movement/dwell/
+attack node-graph directly on the enemy definition, matching
 [`enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md)'s
-design exactly. Enemy List (`EnemyList.tsx`) is the same visual-checker
-grid as the tile list — sprite art tiled edge-to-edge, actions behind a
-small "⋮" corner button — with the enemy's node/edge count shown in its
-corner menu instead of a footprint.
+literal wording ("an enemy is a node graph"). That didn't match the actual
+intended content-authoring model: an enemy should be reusable, simple
+sprite-plus-stats data, with movement/attack behavior authored separately,
+per appearance, on the **tile** that spawns it. This section documents the
+shape that replaced it — see git history for the earlier enemy-owns-the-
+graph version if it's ever useful.
 
-### Data model (`enemyTypes.ts`)
+The mental model: **tiles have encounters, encounters place enemies.**
+- An **enemy** (`EnemyDef`, `enemyTypes.ts`) is just a sprite + stats — HP,
+  contact damage, score value, base speed, hitbox size. No behavior. A
+  small **Enemies** menu (alongside **Tiles**) manages this library via
+  `EnemyStatsForm.tsx`, a plain field form with no canvas at all —
+  `EnemyList.tsx` is the same visual-checker sprite grid as the tile list.
+- An **encounter** (`EncounterDef`, `encounterTypes.ts`) belongs to one
+  specific tile (`TileDef.encounters`) — "each tile can have multiple
+  encounters; a random one (weighted) is picked when the tile spawns in a
+  level." An encounter places one or more **enemy instances**
+  (`EncounterEnemy`), each referencing an `EnemyDef` by id and carrying its
+  own independent movement/dwell/attack graph. The same "Skull Buggy" can
+  move in a straight line in one tile's encounter and spiral in another's
+  — behavior belongs to the appearance, not the enemy's identity.
+- Encounters are authored **inside the tile editor**, not from a separate
+  top-level menu — `TileEditorForm.tsx` gained an Encounters section
+  (list + New/Edit/Delete); editing one switches to a dedicated
+  `EncounterEditor.tsx` view and back, the same view-switching pattern
+  Tile List ↔ Tile Editor already used.
 
-An `EnemyDef` is a **strict chain**, not a general graph: every `GraphNode`
-has at most one outgoing `GraphEdge`, built by "growing" a node off an
-existing one in the editor — there is no free "connect any two existing
-nodes" gesture. A `BranchCondition` (HP/time threshold → jump to any other
-node id, by id) is the one place a *second*, conditional target is
-reachable, independent of the primary chain — this is what makes the whole
-thing a graph rather than a literal linked list, and is how flee-at-low-HP,
-enrage, phase changes, and the elapsed-time boss bail-out all fall out of
-one mechanism (spec §5). This was a deliberate scope decision for E2: the
-alternative (arbitrary multi-edge fan-out per node) would have needed a
-free-form "connect any two nodes" canvas gesture and left the runtime
-meaning of multiple *unconditional* simultaneous paths out of a node
-undefined.
+**Branch conditions were cut entirely**, not just deferred — an HP/time-
+threshold conditional jump was real complexity for both the editor and
+content authors to work through, and the request was explicit: ship
+without it, add it back only if content actually turns out to need it. The
+graph is a strict chain: every node has at most one outgoing edge, built
+by "growing" a node off an existing one — there's no "connect any two
+nodes" gesture and no conditional second target.
 
-- **Nodes** own state: position, optional `DwellBehavior` (wait/orbit,
-  spec §3), optional `AttackPayload` (spec §6), optional `BranchCondition`
-  (spec §5), optional `ExitConfig` (meaningful only on a leaf — a node with
-  no outgoing edge — spec §4), optional `EntranceAppearance` (meaningful
-  only on the entrance node — spec's "Entrance" section).
-- **Edges** own a single `MovementBehavior` (straightLine/wave/spiral/
-  teleport, spec §2), plus their own independent optional `AttackPayload`
-  and `BranchCondition` — attack and branch are a parallel track, not owned
-  by the path, exactly as the spec frames it.
+### Data model (`encounterTypes.ts`)
+
+- **`GraphNode`** owns state: position, optional `DwellBehavior`
+  (wait/orbit, spec §3), optional `AttackPayload` (spec §6), optional
+  `ExitConfig` (meaningful only on a leaf — spec §4), optional
+  `EntranceAppearance` (meaningful only on the entrance node).
+- **`GraphEdge`** owns a single `MovementBehavior` (straightLine/wave/
+  spiral/teleport, spec §2) plus its own independent optional
+  `AttackPayload`.
 - **Bullets are minimal enemies** (spec §7): `AttackPayload.bullet` is a
   `BulletDef` — sprite + one of the 3 non-teleport `MovementBehavior`
-  primitives (a bullet's spawn/expire *are* its entrance/exit, so it never
-  needs `teleport`, dwell, or branch) + an optional nested `AttackPayload`
-  of its own. This is what makes splitting/homing/curving/boomerang
-  bullets, and bullets-that-spawn-splitting-bullets, fall out of reusing
-  one data shape at a smaller scale rather than needing special-case code.
+  primitives (a bullet's spawn/expire *are* its entrance/exit) + an
+  optional nested `AttackPayload` of its own — free recursion for
+  splitting/homing/curving/boomerang bullets, unchanged from the first
+  pass.
+- **`EncounterEnemy`** = `{ id, enemyDefId, entranceNodeId, nodes, edges }`
+  — one enemy's placement + behavior within one encounter.
+- **`EncounterDef`** = `{ id, name, weight, enemies, createdAt, modifiedAt }`.
 
-Per-param scaling curves (flat vs. scales-with-difficulty, mentioned in
-`shmup-editor.todo.md`'s original one-line E2 scope) are **deferred** —
-see that file's Remaining section. Every numeric param here is a plain
-flat number for now.
+Per-param scaling curves and encounter difficulty-range gating (both
+floated as possible future work) are **deferred** — see
+`shmup-editor.todo.md`'s Remaining section. Weight is a plain flat number.
 
-### Canvas (`EnemyGraphEditor.tsx`, `enemyGraph.ts`)
+### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterGraph.ts`)
 
-Free-form, tap-driven, deliberately **not** drag-to-connect: nodes are
-absolutely-positioned circular buttons showing the enemy's sprite (all
-nodes of one enemy show the same sprite — a node is a waypoint of one
-visual entity, not a different-looking thing), edges are SVG lines with an
-arrowhead underneath. Small badges overlay each node for at-a-glance state
-(▶ entrance, ⏳ dwell, 🔫 attack, ⚡ branch, 🚪 exit on a leaf).
+Same tap-driven interaction model as the original pass (tap a node for a
+✥ move handle / "+" grow / ✕ delete overlay, tap an edge for ✕ delete,
+below-canvas tabbed settings panels for the real param forms — see
+`NodePanel.tsx`/`EdgePanel.tsx`), generalized to host **multiple
+independent enemy instances on one shared canvas**, anchored against the
+tile's actual shape:
 
-- **Tapping a node or edge** reveals small on-canvas quick-action buttons
-  (mirroring Connection Viewer's overlay-controls-on-the-tile-itself
-  pattern) — a node gets a ✥ drag handle (press-and-drag to reposition,
-  via native Pointer Capture so the move stays tracked even once the
-  pointer leaves the small handle), a "+" to grow a new linked child node
-  (hidden once the node already has an outgoing edge — one primary edge per
-  node, by design), and a ✕ delete. An edge just gets a ✕ delete.
-- **Below the canvas**, a settings panel (`NodePanel.tsx`/`EdgePanel.tsx`)
-  shows tabs for only what's actually eligible on the current selection —
-  Dwell/Attack/Branch always, Exit only if the node is a leaf, Entrance
-  only on the entrance node; Movement/Attack/Branch for an edge. This two-
-  tier split (tiny structural controls on the canvas itself, full param
-  forms below it) exists because the actual settings — movement curves,
-  attack pattern/aim/trigger, nested bullets — have too many fields to fit
-  in a small canvas-anchored popover on a phone screen, unlike Connection
-  Viewer's single-action overlay buttons.
-- **Deleting a node or edge cascades to its entire downstream subtree**
-  (`enemyGraph.ts`'s `deleteNode`/`deleteEdge`, backed by
-  `getDescendantNodeIds`) rather than leaving an orphaned, unreachable
-  fragment — there's no canvas gesture to re-attach a detached subtree
-  afterward, so a partial delete would just strand dead nodes with no way
-  to reconnect them. Deleting a node with more than itself downstream
-  arms an inline Confirm/Keep prompt first (same pattern as
-  `TileList`/`EnemyList`'s delete-confirm); a true leaf deletes immediately.
-  Any `BranchCondition` elsewhere in the graph that targeted a now-deleted
-  node is cleared rather than left dangling. Deleting the entrance node
-  clears the whole graph.
+- **`EncounterTileFrame.tsx`** renders a read-only dashed rectangle sized
+  to the tile's real footprint, labeled with its actual north/south/
+  east/west edge tags — so an enemy's entrance/exit can be placed
+  meaningfully relative to where the tile really connects to its
+  neighbors, not an abstract unrelated space. The canvas's bounding box
+  always includes this frame, so it's visible even before any enemy is
+  placed.
+- **"+ Add Enemy"** opens a picker of the enemy library (sprite
+  thumbnails); picking one adds a new `EncounterEnemy` instance with its
+  entrance node staggered diagonally from any existing instances (so
+  default placement doesn't render two entrance labels on top of each
+  other) — draggable afterward via the same move handle as any other node.
+- Each instance renders its own sprite (looked up by `enemyDefId` from the
+  enemy library) on every node, with the enemy's name labeled under its
+  entrance node so multiple instances stay distinguishable.
+- **Deleting an instance's entrance node removes the whole instance from
+  the encounter** (not just clearing its graph to empty, which would leave
+  a useless graph-less stub in `encounter.enemies`) — the delete button's
+  tooltip changes to "Remove this enemy from the encounter" specifically
+  for that case. Deleting any other node cascades to its downstream
+  subtree exactly as the original pass's `deleteNode` did (ported to
+  `encounterGraph.ts`, operating on `EncounterEnemy` instead of the old
+  enemy-owns-the-graph shape).
 - **A tap on any `<button>` never triggers the canvas's outside-click
-  deselect.** The first implementation closed the selected node/edge panel
-  on any pointerdown outside the canvas/panel — including a tap on Save/
-  Cancel themselves. That collapse happens synchronously on `pointerdown`,
-  before the paired `click` fires, and removing the panel shifts the page
-  layout out from under the still-in-flight tap; an end-to-end Playwright
-  pass caught this directly (`Save Enemy` silently no-opped because the
-  button had moved by the time the click landed). The fix excludes any
-  `<button>` target from the auto-close check entirely — a button's own
-  `onClick` already does the right thing and doesn't need this effect's help.
-- **Recursive bullet authoring is one component, not a second canvas.**
-  `AttackPayloadForm.tsx` renders a bullet's sprite/movement/nested-attack
-  inline (`BulletForm`), and a bullet's own attack payload is *the same
-  `AttackPayloadForm`* rendered one level deeper (indented with a dashed
-  left border) — since a bullet's payload has exactly the same shape as
-  any other attack payload, there's no separate recursive canvas to build;
-  recursion is free at the form-data level, matching how the spec frames
-  bullets as minimal enemies rather than a distinct authoring surface.
+  deselect** — carried over from the original pass's fix (collapsing the
+  panel on `pointerdown` shifts the page layout out from under an
+  in-flight click, which an end-to-end Playwright pass caught directly:
+  `Save Enemy` silently no-opped because the button had moved by the time
+  the click landed). Any `<button>` target is excluded from the auto-close
+  check.
 
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
@@ -434,40 +433,51 @@ and pads to a square icon. Custom upload reuses the same
 `paletteQuantize.ts`/`indexedPng.ts` pipeline as tile art, generalized in
 `imageUpload.ts` into `decodeUpload`/`canvasToIndexedPngDataUrl` helpers
 shared by both `loadTileImageFile` (cover-fit crop, opaque — fills a whole
-square) and the new `loadSpriteImageFile` (**contain**-fit, transparent
-surround — a sprite must stay fully visible against a see-through
-background rather than being cropped to fill a square). Animating through
-the other 15 frames per skull sheet (idle/move/attack/die preview) is
-deferred — see `shmup-editor.todo.md`'s Remaining list.
+square) and `loadSpriteImageFile` (**contain**-fit, transparent surround —
+a sprite must stay fully visible against a see-through background rather
+than being cropped to fill a square). Animating through the other 15
+frames per skull sheet (idle/move/attack/die preview) is deferred — see
+`shmup-editor.todo.md`'s Remaining list.
 
-### Enemy persistence
+### Persistence
 
-Two more fsStore files alongside `TILES.DAT`, same folder
-(`C:\Programs\Accessories\Shmup Editor\`), same versioned-JSON-array
-pattern and defensive-load-falls-back-to-empty behavior as
-`tileStore.ts` (`enemyStore.ts`'s validators recurse through the nested
-`AttackPayload`/`BulletDef` shape, capped at a generous depth so a
-maliciously/corruptly deep hand-edited save fails validation instead of
-overflowing the stack):
+An encounter is saved as part of its owning tile — `TileDef.encounters` is
+a plain field inside `TILES.DAT` (`tileStore.ts`), validated recursively by
+`encounterValidation.ts` (shared with the session draft below; capped at a
+generous nesting depth so a maliciously/corruptly deep hand-edited save
+fails validation instead of overflowing the stack) and backfilled to `[]`
+for pre-existing saves, the same purely-additive-field treatment
+`customImage` already got. There's no separate encounter library or file.
 
-- **`ENEMIES.DAT`** — the saved enemy library, written on explicit Save
-  (same contract as tiles).
-- **`DRAFT.DAT`** — the enemy currently being edited, written after
-  *every* graph change, not just on Save. This closes a gap E1's tile form
-  still has (noted in `shmup-editor.todo.md`): a half-built multi-node
-  enemy graph is a much bigger loss on an accidental mobile reload/rotation
-  than a half-picked tile edge tag, so root `CLAUDE.md`'s mandatory
-  in-progress-session rule gets a real implementation here from the start.
-  On mount, `ShmupEditor.tsx` checks for a saved draft and — if one exists
-  — resumes straight into the edit view with it, silently, rather than
-  prompting. Position drags are the one exception to "write on every
-  change": a drag updates only local component state, and the graph (and
-  thus `DRAFT.DAT`) is only updated once, on release, so dragging a node
-  around doesn't re-serialize the whole enemy on every pointer-move frame.
+Two more fsStore files alongside `TILES.DAT`/`ENEMIES.DAT`, same folder
+(`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory
+in-progress-session-survives-reload rule — a half-built tile/encounter is a
+much bigger loss on an accidental mobile reload/rotation than E1's original
+tile-form draft gap:
 
-Both files are seeded for new installs (`filesystem/seed.ts`) and
-backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`),
-same as `TILES.DAT`.
+- **`ENEMY-DRAFT.DAT`** (`enemyStore.ts`'s `loadEnemyDraft`/`saveEnemyDraft`)
+  — the enemy stats form currently being edited, written on every field
+  change.
+- **`TILE-DRAFT.DAT`** (`loadTileSession`/`saveTileSession`) — the *whole*
+  tile-editing session: the tile currently being edited (name, edges,
+  image, and its `encounters` list as saved-so-far) **plus** whichever
+  single encounter is mid-edit, if any, since that encounter's own draft
+  hasn't been merged into the tile's `encounters` array yet. `TileEditorForm`
+  bubbles every field change up via `onDraftChange` (simplest done via a
+  `useEffect([draft])` rather than touching every individual `setDraft`
+  call site) specifically so navigating to the Encounter editor and back
+  doesn't lose in-progress tile-level edits — `TileEditorForm` unmounts
+  while a different view is showing, so anything not yet bubbled up would
+  otherwise be lost. On mount, `ShmupEditor.tsx` checks for a saved
+  session and resumes silently into either the tile-edit or encounter-edit
+  view, whichever the session was left in. Position drags on the
+  Encounter canvas are the one exception to "write on every change" — a
+  drag updates only local component state, committed to the session once
+  on release, not on every pointer-move frame.
+
+Both new files are seeded for new installs (`filesystem/seed.ts`) and
+backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`), same
+as `TILES.DAT`.
 
 ## Persistence
 
@@ -488,8 +498,8 @@ backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`).
 
 There is currently no `.exe`/Doors-97-window entry for this tool — it's
 reachable only via the `/shmup-editor` route. The FS folder exists purely
-so `TILES.DAT`/`ENEMIES.DAT`/`DRAFT.DAT` are hackable/discoverable in the
-file browser.
+so `TILES.DAT`/`ENEMIES.DAT`/`ENEMY-DRAFT.DAT`/`TILE-DRAFT.DAT` are
+hackable/discoverable in the file browser.
 
 ## Related
 

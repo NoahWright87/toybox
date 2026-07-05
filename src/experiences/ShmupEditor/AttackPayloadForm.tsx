@@ -1,6 +1,6 @@
 import MovementForm from "./MovementForm";
 import SpritePicker from "./SpritePicker";
-import { createBlankAttackPayload, createBlankBullet, type AimMode, type AttackPayload, type AttackTrigger, type BulletDef, type PatternShape } from "./enemyTypes";
+import { createBlankAttackPayload, createBlankBullet, type AimMode, type AttackPayload, type AttackTrigger, type BulletDef, type PatternShape } from "./encounterTypes";
 
 interface AttackPayloadFormProps {
   payload: AttackPayload | null;

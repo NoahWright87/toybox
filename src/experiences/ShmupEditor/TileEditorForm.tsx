@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import TilePreview from "./TilePreview";
 import { DEFAULT_PALETTE_SIZE, PALETTE_SIZE_OPTIONS, loadTileImageFile } from "./imageUpload";
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID, TILE_IMAGES } from "./tileImages";
+import type { EncounterDef } from "./encounterTypes";
 import { FOOTPRINTS, WILDCARD, edgeSlot, resizeSlots, type EdgeSlot, type Footprint, type TileDef } from "./types";
 
 interface TileEditorFormProps {
@@ -10,6 +11,11 @@ interface TileEditorFormProps {
   onRegisterTag: (tag: string) => void;
   onSave: (tile: TileDef) => void;
   onCancel: () => void;
+  /** Called on every change (not just Save) so the caller can persist the in-progress draft and keep it live while navigating to/from the Encounter editor — root CLAUDE.md's mandatory in-progress-session-survives-reload rule. */
+  onDraftChange: (tile: TileDef) => void;
+  onNewEncounter: () => void;
+  onEditEncounter: (encounter: EncounterDef) => void;
+  onDeleteEncounter: (encounterId: string) => void;
 }
 
 function validate(tile: TileDef): string | null {
@@ -23,13 +29,34 @@ function validate(tile: TileDef): string | null {
   return null;
 }
 
-export default function TileEditorForm({ tile, availableTags, onRegisterTag, onSave, onCancel }: TileEditorFormProps) {
+export default function TileEditorForm({
+  tile,
+  availableTags,
+  onRegisterTag,
+  onSave,
+  onCancel,
+  onDraftChange,
+  onNewEncounter,
+  onEditEncounter,
+  onDeleteEncounter,
+}: TileEditorFormProps) {
   const [draft, setDraft] = useState<TileDef>(tile);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [paletteSize, setPaletteSize] = useState(DEFAULT_PALETTE_SIZE);
+  const [pendingDeleteEncounterId, setPendingDeleteEncounterId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const error = useMemo(() => validate(draft), [draft]);
+
+  // Fires after every draft change (including the initial mount) — simplest
+  // way to keep the parent's copy live without touching every individual
+  // setDraft call site below. Also what makes switching to the Encounter
+  // editor and back not lose in-progress name/edge/image edits, since
+  // TileEditorForm unmounts while a different view is showing.
+  useEffect(() => {
+    onDraftChange(draft);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   // Built-ins plus (if present) this tile's own upload, in one list so the
   // picker is a single render loop instead of a built-in block plus a
@@ -208,6 +235,55 @@ export default function TileEditorForm({ tile, availableTags, onRegisterTag, onS
           onChange={(e) => setDraft((prev) => ({ ...prev, weight: Number(e.target.value) }))}
         />
       </label>
+
+      <div className="shmup-field">
+        <span>Encounters ({draft.encounters.length})</span>
+        <p className="shmup-hint">A random encounter (weighted) is picked when this tile spawns in a level. Each has its own enemies and movement/attack behavior.</p>
+        {draft.encounters.length === 0 ? (
+          <p className="shmup-hint">No encounters yet.</p>
+        ) : (
+          <ul className="shmup-encounter-list">
+            {draft.encounters.map((enc) => (
+              <li key={enc.id} className="shmup-encounter-list__row">
+                <span>
+                  {enc.name} — weight {enc.weight}, {enc.enemies.length} enem{enc.enemies.length === 1 ? "y" : "ies"}
+                </span>
+                <div className="shmup-btn-row">
+                  <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEditEncounter(enc)}>
+                    Edit
+                  </button>
+                  {pendingDeleteEncounterId === enc.id ? (
+                    <>
+                      <button
+                        type="button"
+                        className="shmup-btn shmup-btn--small shmup-btn--danger"
+                        onClick={() => {
+                          onDeleteEncounter(enc.id);
+                          setPendingDeleteEncounterId(null);
+                        }}
+                      >
+                        Confirm
+                      </button>
+                      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteEncounterId(null)}>
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteEncounterId(enc.id)}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="shmup-btn-row">
+          <button type="button" className="shmup-btn shmup-btn--small" onClick={onNewEncounter}>
+            + New Encounter
+          </button>
+        </div>
+      </div>
 
       {error && <p className="shmup-error">{error}</p>}
 

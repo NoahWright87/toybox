@@ -5,7 +5,7 @@ import {
   defaultWave,
   type MovementBehavior,
   type Waveform,
-} from "./enemyTypes";
+} from "./encounterTypes";
 
 interface MovementFormProps {
   movement: MovementBehavior;

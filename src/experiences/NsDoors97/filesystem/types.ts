@@ -33,6 +33,7 @@ export const SHMUP_EDITOR_FOLDER_ID = "fs:shmup-editor";
 export const SHMUP_EDITOR_TILES_ID  = "fs:shmup-editor-tiles";
 export const SHMUP_EDITOR_ENEMIES_ID = "fs:shmup-editor-enemies";
 export const SHMUP_EDITOR_ENEMY_DRAFT_ID = "fs:shmup-editor-enemy-draft";
+export const SHMUP_EDITOR_TILE_DRAFT_ID = "fs:shmup-editor-tile-draft";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

@@ -64,7 +64,7 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
             {expandedId === enemy.id && (
               <div className="shmup-tile-list__menu">
                 <span className="shmup-tile-list__menu-name">
-                  {enemy.name} ({enemy.nodes.length} node{enemy.nodes.length === 1 ? "" : "s"})
+                  {enemy.name} ({enemy.hp} HP)
                 </span>
                 <div className="shmup-btn-row">
                   <button

@@ -1,11 +1,11 @@
 # Shmup Level & Enemy Editor — TODOs (PRD)
 
 > Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
-> partially shipped, see `shmup-editor.md`), **E2 #192** (enemy editor —
-> shipped minus scaling curves, see `shmup-editor.md`), **E3 #193** (spawn
-> node editor), **E4 #194** (preview/playtest), **E5 #195** (export/import
-> pipeline). Source: design handoff doc (Claude Chat → Claude Code),
-> 2026-07-04.
+> partially shipped, see `shmup-editor.md`), **E2 #192** (enemy +
+> encounter editor — shipped minus scaling curves/difficulty gating, see
+> `shmup-editor.md`), **E3 #193** (spawn node editor), **E4 #194**
+> (preview/playtest), **E5 #195** (export/import pipeline). Source: design
+> handoff doc (Claude Chat → Claude Code), 2026-07-04.
 
 ## What this is
 
@@ -105,43 +105,66 @@ to visualize instead.
   never renders two *different* tiles touching except in the Connection
   Viewer's single-column stack.
 
-### E2 — Enemy editor (#192) — shipped, minus scaling curves
+### E2 — Enemy + Encounter editor (#192) — shipped, minus scaling curves
 
-**Done** (see `shmup-editor.md`'s "Enemy editor (E2)" section for the full
-design): sprite picker (built-in-plus-custom-upload, same pipeline as tile
-art, contain-fit + transparent instead of cover-fit + opaque), a free-form
-tap-driven node-graph canvas (place/move/delete nodes, each new node
-already linked to its parent — no drag-to-connect gesture), a movement
-behavior + params per edge (all 4 primitives), a dwell behavior + params
-per node (both), entrance appear-animation on the entrance node, exit type
-on any leaf node, attack payloads on any node/edge (pattern shape x aim
-mode x trigger), branch conditions (HP/time threshold jump) on any
-node/edge, and nested bullet payloads authored recursively through the
-same `AttackPayloadForm` component (a bullet is a minimal enemy per
-`enemies-and-bullets.spec.todo.md` §7, so its own attack payload reuses the
-identical form one level deeper — no separate recursive canvas needed).
-Saves to `ENEMIES.DAT` via `enemyStore.ts`; the in-progress draft survives
-reload/rotation via `DRAFT.DAT` (root `CLAUDE.md`'s mandatory rule) —
-resumed silently on mount, unlike E1's tile form (see E1's Remaining list
-above).
+**Revised mid-build**: the first pass put a full movement/dwell/attack
+node-graph directly on the enemy definition. That didn't match the
+intended content model — an enemy should be simple, reusable sprite+stats
+data, with behavior authored separately per tile. See
+`shmup-editor.md`'s "Enemy + Encounter editor (E2)" section for the full
+current design; this entry describes what actually shipped after the
+correction.
 
-**Scope decision**: the graph is a strict chain (each node has at most one
-outgoing movement edge) rather than a fully general multi-edge graph — a
-second target is only reachable via a `BranchCondition` jump. This matches
-the spec's "chain... across multiple nodes" framing and kept both the
-canvas interaction and the delete-cascade logic simple; revisit only if a
-concrete enemy design needs multiple unconditional simultaneous paths out
-of one node.
+**Done**:
+- **Enemies** are sprite + stats only (HP, contact damage, score value,
+  base speed, hitbox size) — `EnemyStatsForm.tsx`, a plain field form, no
+  canvas. `EnemyList.tsx` is the same visual-checker sprite grid as the
+  tile list.
+- **Encounters** belong to a tile (`TileDef.encounters`) and are authored
+  from inside the tile editor (a new Encounters section on
+  `TileEditorForm.tsx`, New/Edit/Delete), not a separate top-level menu.
+  Editing one opens `EncounterEditor.tsx`: a free-form, tap-driven canvas
+  (place/move/delete nodes, each new node already linked to its parent —
+  no drag-to-connect gesture) that can host **multiple independent enemy
+  instances** at once, each referencing an enemy from the library and
+  carrying its own movement/dwell/attack graph. The tile's real
+  footprint/edges render as a read-only reference frame
+  (`EncounterTileFrame.tsx`) so entrance/exit placement is meaningful
+  relative to where the tile actually connects to its neighbors.
+- Movement behavior + params per edge (all 4 primitives), dwell behavior +
+  params per node (both), entrance appear-animation on the entrance node,
+  exit type on any leaf node, attack payloads on any node/edge (pattern
+  shape x aim mode x trigger), and nested bullet payloads authored
+  recursively through the same `AttackPayloadForm` component (a bullet is
+  a minimal enemy per `enemies-and-bullets.spec.todo.md` §7) — all
+  unchanged from the first pass, just relocated from the enemy definition
+  onto each encounter's per-instance graph.
+- Saves as part of the owning tile in `TILES.DAT`; the in-progress
+  tile-plus-encounter session survives reload/rotation via `TILE-DRAFT.DAT`
+  (and the enemy stats form via `ENEMY-DRAFT.DAT`) per root `CLAUDE.md`'s
+  mandatory rule — resumed silently on mount into whichever view (tile-edit
+  or encounter-edit) the session was left in.
+
+**Scope decisions**:
+- **Branch conditions were cut entirely**, not deferred-but-present —
+  removed from the data model, forms, and validators. Explicit ask: ship
+  the simpler system, add conditional jumps back only if a concrete
+  content need shows up.
+- The graph is still a strict chain (each node has at most one outgoing
+  movement edge) — unchanged reasoning from the first pass, now just
+  scoped to one enemy instance within one encounter instead of to the
+  enemy's own identity.
 
 **Remaining:**
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —
-  deferred for the whole E2 pass. `shmup-editor.todo.md`'s original
-  one-line E2 scope mentioned this, but `enemies-and-bullets.spec.todo.md`
-  never defines a curve shape beyond "flat" as one option, so there was
-  nothing concrete to build against yet. Every numeric param is a plain
-  flat number today. Needs a design pass (what does a non-flat curve
-  actually look like — linear in `D`? a small keyframe list?) before an
-  editor UI can be built for it.
+  deferred. `enemies-and-bullets.spec.todo.md` never defines a curve shape
+  beyond "flat" as one option, so there was nothing concrete to build
+  against yet. Every numeric param is a plain flat number today.
+- **Encounter difficulty-range gating** — Noah floated this alongside
+  weight ("super rare treasure event, extra hard bosses, vs boring normal
+  enemies"); weight shipped (plain number, default 1), but gating an
+  encounter to a difficulty-budget range depends on the difficulty-budget
+  system (`spawn-and-warnings.spec.todo.md`), which doesn't exist yet.
 - **Built-in sprites**: four "skull" Mad-Max-style vehicles (buggy,
   technical, motorcycle, helicopter — see `public/shmup-editor/enemies/README.md`
   and `scripts/prepare-skull-sprites.mjs`), each only the idle-pose frame.
@@ -149,16 +172,15 @@ of one node.
 - **Animation preview is deferred.** Each skull sheet actually has 16
   frames (4 states x 4 frames: idle/moving/attacking/dying —
   `scripts/assets/skull-sprites-source/README.md`), but the editor only
-  ever shows a static idle sprite (for placement on the graph canvas and in
-  pickers/thumbnails) — there's no per-enemy concept of "the other 15
-  frames" in `EnemyDef` yet, and no player/preview UI to flip through them.
-  This is real, moderate-sized follow-up work, not a quick add: it needs
-  (a) a data-model decision for how frame sets attach to a sprite (a
-  built-in vs. a custom upload have very different provenance for this),
-  (b) re-running the background-removal step from
-  `prepare-skull-sprites.mjs` against the other 15 frames per sheet instead
-  of just frame 1, and (c) a small animation-player component. Reasonable
-  to fold into E4 (Preview/playtest mode) rather than block E2 on it.
+  ever shows a static idle sprite — there's no per-enemy concept of "the
+  other 15 frames" yet, and no player/preview UI to flip through them.
+  Real, moderate-sized follow-up work: (a) a data-model decision for how
+  frame sets attach to a sprite (a built-in vs. a custom upload have very
+  different provenance for this), (b) re-running the background-removal
+  step from `prepare-skull-sprites.mjs` against the other 15 frames per
+  sheet instead of just frame 1, and (c) a small animation-player
+  component. Reasonable to fold into E4 (Preview/playtest mode) rather
+  than block E2 on it.
 - Enemy variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
 

@@ -1,4 +1,4 @@
-import type { ExitConfig, ExitType } from "./enemyTypes";
+import type { ExitConfig, ExitType } from "./encounterTypes";
 
 interface ExitFormProps {
   exit: ExitConfig | null;
