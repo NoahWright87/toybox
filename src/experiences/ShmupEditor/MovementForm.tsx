@@ -1,17 +1,8 @@
-import {
-  defaultSpiral,
-  defaultStraightLine,
-  defaultTeleport,
-  defaultWave,
-  type MovementBehavior,
-  type Waveform,
-} from "./encounterTypes";
+import { defaultSpiral, defaultStraightLine, defaultWave, type MovementBehavior, type Waveform } from "./unitTypes";
 
 interface MovementFormProps {
   movement: MovementBehavior;
   onChange: (movement: MovementBehavior) => void;
-  /** Bullets use only the 3 primitives that don't need entrance/exit concepts (spec §7) — teleport is edge-only. */
-  allowTeleport?: boolean;
 }
 
 const WAVEFORMS: Waveform[] = ["smooth", "triangle", "square"];
@@ -25,8 +16,8 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
   );
 }
 
-/** Kind-switch + param form for the 4 movement primitives (specs/games/shmup/enemies-and-bullets.spec.todo.md §2). Used on graph edges and (minus teleport) on bullets. */
-export default function MovementForm({ movement, onChange, allowTeleport = true }: MovementFormProps) {
+/** Kind-switch + param form for the 3 movement primitives (specs/games/shmup/enemies-and-bullets.spec.todo.md §2 — Teleport dissolved into an ordinary Action's `visible` flag, see unitTypes.ts). Used on Actions. */
+export default function MovementForm({ movement, onChange }: MovementFormProps) {
   return (
     <div className="shmup-movement-form">
       <div className="shmup-btn-row">
@@ -39,11 +30,6 @@ export default function MovementForm({ movement, onChange, allowTeleport = true 
         <button type="button" className={`shmup-btn shmup-btn--small ${movement.kind === "spiral" ? "shmup-btn--active" : ""}`} onClick={() => onChange(defaultSpiral())}>
           Spiral
         </button>
-        {allowTeleport && (
-          <button type="button" className={`shmup-btn shmup-btn--small ${movement.kind === "teleport" ? "shmup-btn--active" : ""}`} onClick={() => onChange(defaultTeleport())}>
-            Teleport
-          </button>
-        )}
       </div>
 
       {movement.kind === "straightLine" && (
@@ -84,16 +70,6 @@ export default function MovementForm({ movement, onChange, allowTeleport = true 
           <NumberField label="Radius" value={movement.radius} onChange={(radius) => onChange({ ...movement, radius })} />
           <NumberField label="Angular speed" value={movement.angularSpeed} onChange={(angularSpeed) => onChange({ ...movement, angularSpeed })} />
           <NumberField label="Radius growth" value={movement.radiusGrowth} step={0.1} onChange={(radiusGrowth) => onChange({ ...movement, radiusGrowth })} />
-        </div>
-      )}
-
-      {movement.kind === "teleport" && (
-        <div className="shmup-field-row">
-          <NumberField label="Delay (sec)" value={movement.delay} step={0.1} onChange={(delay) => onChange({ ...movement, delay })} />
-          <label className="shmup-checkbox">
-            <input type="checkbox" checked={movement.telegraphAtDestination} onChange={(e) => onChange({ ...movement, telegraphAtDestination: e.target.checked })} />
-            Telegraph at destination
-          </label>
         </div>
       )}
     </div>

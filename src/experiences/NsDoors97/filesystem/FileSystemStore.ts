@@ -6,7 +6,7 @@ import {
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
   SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
-  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_ENEMIES_ID, SHMUP_EDITOR_ENEMY_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -426,12 +426,12 @@ export class FileSystemStore {
       }
     }
 
-    // Ensure ENEMIES.DAT exists (E2 #192's enemy library, existing sessions predating it)
-    if (!this.nodes.has(SHMUP_EDITOR_ENEMIES_ID)) {
+    // Ensure UNITS.DAT exists (E2 #192's Unit library, existing sessions predating it)
+    if (!this.nodes.has(SHMUP_EDITOR_UNITS_ID)) {
       const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
       if (shmupEditorDir?.kind === "folder") {
-        this.nodes.set(SHMUP_EDITOR_ENEMIES_ID, {
-          id: SHMUP_EDITOR_ENEMIES_ID, kind: "file", name: "ENEMIES.DAT",
+        this.nodes.set(SHMUP_EDITOR_UNITS_ID, {
+          id: SHMUP_EDITOR_UNITS_ID, kind: "file", name: "UNITS.DAT",
           parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
@@ -440,13 +440,13 @@ export class FileSystemStore {
       }
     }
 
-    // Ensure ENEMY-DRAFT.DAT exists (in-progress enemy edit session — root
+    // Ensure UNIT-DRAFT.DAT exists (in-progress Unit edit session — root
     // CLAUDE.md's mandatory in-progress-session-survives-reload rule)
-    if (!this.nodes.has(SHMUP_EDITOR_ENEMY_DRAFT_ID)) {
+    if (!this.nodes.has(SHMUP_EDITOR_UNIT_DRAFT_ID)) {
       const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
       if (shmupEditorDir?.kind === "folder") {
-        this.nodes.set(SHMUP_EDITOR_ENEMY_DRAFT_ID, {
-          id: SHMUP_EDITOR_ENEMY_DRAFT_ID, kind: "file", name: "ENEMY-DRAFT.DAT",
+        this.nodes.set(SHMUP_EDITOR_UNIT_DRAFT_ID, {
+          id: SHMUP_EDITOR_UNIT_DRAFT_ID, kind: "file", name: "UNIT-DRAFT.DAT",
           parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
@@ -456,7 +456,7 @@ export class FileSystemStore {
     }
 
     // Ensure TILE-DRAFT.DAT exists (in-progress tile-plus-encounters edit
-    // session — same mandatory rule, separate slot since tile and enemy
+    // session — same mandatory rule, separate slot since tile and Unit
     // editing are mutually exclusive contexts)
     if (!this.nodes.has(SHMUP_EDITOR_TILE_DRAFT_ID)) {
       const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");

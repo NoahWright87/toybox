@@ -314,108 +314,140 @@ shows a plain heading for whichever view is active.
     it to the pointer (excluded from physics that tick) and lets it go on
     release rather than requiring a separate "lock" mode.
 
-## Enemy + Encounter editor (E2)
+## Unit + Encounter editor (E2)
 
-**Revised mid-build**: the first pass at E2 put a full movement/dwell/
-attack node-graph directly on the enemy definition, matching
+**Revised twice.** The first pass put a full movement/dwell/attack
+node-graph directly on the enemy definition, matching
 [`enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md)'s
-literal wording ("an enemy is a node graph"). That didn't match the actual
-intended content-authoring model: an enemy should be reusable, simple
-sprite-plus-stats data, with movement/attack behavior authored separately,
-per appearance, on the **tile** that spawns it. This section documents the
-shape that replaced it — see git history for the earlier enemy-owns-the-
-graph version if it's ever useful.
+literal wording ("an enemy is a node graph"). That didn't match the
+intended content-authoring model, so it was corrected to enemy-is-stats-
+only with the graph moved onto the encounter (`EnemyDef` + `EncounterEnemy`
+owning a node/edge graph). A second design pass (informed by an external
+design-handoff doc, 2026-07) went further: **enemies were renamed Units**,
+each owning a reusable **buffet of named Actions** authored once, and
+encounters stopped being a node/edge graph entirely — an encounter now
+places units along a **flat ordered list of steps**, each step just
+referencing one of the unit's Actions by id. See git history for both
+earlier shapes if useful.
 
-The mental model: **tiles have encounters, encounters place enemies.**
-- An **enemy** (`EnemyDef`, `enemyTypes.ts`) is just a sprite + stats — HP,
-  contact damage, score value, base speed, hitbox size. No behavior. A
-  small **Enemies** menu (alongside **Tiles**) manages this library via
-  `EnemyStatsForm.tsx`, a plain field form with no canvas at all —
-  `EnemyList.tsx` is the same visual-checker sprite grid as the tile list.
-- An **encounter** (`EncounterDef`, `encounterTypes.ts`) belongs to one
-  specific tile (`TileDef.encounters`) — "each tile can have multiple
-  encounters; a random one (weighted) is picked when the tile spawns in a
-  level." An encounter places one or more **enemy instances**
-  (`EncounterEnemy`), each referencing an `EnemyDef` by id and carrying its
-  own independent movement/dwell/attack graph. The same "Skull Buggy" can
-  move in a straight line in one tile's encounter and spiral in another's
-  — behavior belongs to the appearance, not the enemy's identity.
-- Encounters are authored **inside the tile editor**, not from a separate
-  top-level menu — `TileEditorForm.tsx` gained an Encounters section
-  (list + New/Edit/Delete); editing one switches to a dedicated
-  `EncounterEditor.tsx` view and back, the same view-switching pattern
-  Tile List ↔ Tile Editor already used.
+The mental model: **a Unit owns a buffet of Actions; an encounter places
+Units and walks each one through an ordered list of steps, each step
+picking one Action off that Unit's buffet.**
 
-**Branch conditions were cut entirely**, not just deferred — an HP/time-
-threshold conditional jump was real complexity for both the editor and
-content authors to work through, and the request was explicit: ship
-without it, add it back only if content actually turns out to need it. The
-graph is a strict chain: every node has at most one outgoing edge, built
-by "growing" a node off an existing one — there's no "connect any two
-nodes" gesture and no conditional second target.
+- A **Unit** (`UnitDef`, `unitTypes.ts`) is a sprite + stats — HP, contact
+  damage, score value, base speed, hitbox size — **plus** `actions:
+  ActionDef[]`, a reusable list of named behaviors authored once and
+  referenced (not re-authored) from any encounter step. A small **Units**
+  menu (alongside **Tiles**) manages the library via `UnitStatsForm.tsx`
+  (stats fields plus an Actions section — list with New/Edit/Delete,
+  mirroring the tile editor's Encounters section); `UnitList.tsx` is the
+  same visual-checker sprite grid as the tile list.
+- An **`ActionDef`** (`unitTypes.ts`) bundles everything one moment of
+  behavior needs: an optional `movement` (straightLine/wave/spiral — see
+  below), an optional `attack` (`AttackPayload`, unchanged shape from the
+  original pass), an `animationState` (`idle`/`moving`/`attacking`/
+  `dying`), and a `visible` flag. `createIdleAction()` builds the
+  mandatory baseline every new Unit is seeded with — movement `null`
+  (stationary), attack `null`, `visible: true` — so a Unit is never
+  saved with zero Actions (`UnitStatsForm`'s Delete button disables at 1
+  remaining action, tooltip "A Unit needs at least one Action").
+- An **encounter** (`EncounterDef`, `encounterTypes.ts`) still belongs to
+  one specific tile (`TileDef.encounters`) and is still authored **inside
+  the tile editor** (Encounters section on `TileEditorForm.tsx`,
+  New/Edit/Delete, switching to a dedicated `EncounterEditor.tsx` view and
+  back). Each **`EncounterUnit`** instance references a `UnitDef` by id and
+  owns its own `steps: EncounterStep[]` — a plain array, not a graph. Each
+  `EncounterStep` is `{ id, pos, actionId, trigger, aimAngleOverride?,
+  speedMultiplier? }`: a position on the canvas, which of the unit's
+  Actions plays there, and a `Trigger` (see below) deciding when to
+  advance to it. The same "Skull Buggy" Unit can be walked through a
+  straight-line-then-spiral step sequence in one tile's encounter and a
+  single stationary step in another's — behavior sequencing belongs to the
+  placement, not the Unit's identity.
 
-### Data model (`encounterTypes.ts`)
+**Three dedicated concepts dissolved into ordinary Actions/steps** rather
+than surviving as their own types, once behavior stopped living on a
+graph:
+- **Dwell** — an Action with `movement: null` *is* dwell-in-place; there's
+  no separate `DwellBehavior` type or dwell-specific form anymore.
+- **Entrance/Exit** — the first and last step in an instance's step list
+  are just ordinary steps using ordinary Actions; there's no dedicated
+  `EntranceAppearance`/`ExitConfig` type, and no enable/disable logic for
+  "can this step have an exit" — the "+ Add next step" button is always
+  available on the last step, full stop.
+- **Teleport** — no dedicated `TeleportMovement` primitive. An Action with
+  `visible: false` (still called "Disappear" in the UI) followed by a
+  later step at a different position using a `visible: true` Action
+  ("Reappear") composes to the same visible effect without a special case
+  in the movement vocabulary. `MovementForm.tsx` only offers Straight
+  Line/Wave/Spiral now.
 
-- **`GraphNode`** owns state: position, optional `DwellBehavior`
-  (wait/orbit, spec §3), optional `AttackPayload` (spec §6), optional
-  `ExitConfig` (meaningful only on a leaf — spec §4), optional
-  `EntranceAppearance` (meaningful only on the entrance node).
-- **`GraphEdge`** owns a single `MovementBehavior` (straightLine/wave/
-  spiral/teleport, spec §2) plus its own independent optional
-  `AttackPayload`.
-- **Bullets are minimal enemies** (spec §7): `AttackPayload.bullet` is a
-  `BulletDef` — sprite + one of the 3 non-teleport `MovementBehavior`
-  primitives (a bullet's spawn/expire *are* its entrance/exit) + an
-  optional nested `AttackPayload` of its own — free recursion for
-  splitting/homing/curving/boomerang bullets, unchanged from the first
-  pass.
-- **`EncounterEnemy`** = `{ id, enemyDefId, entranceNodeId, nodes, edges }`
-  — one enemy's placement + behavior within one encounter.
-- **`EncounterDef`** = `{ id, name, weight, enemies, createdAt, modifiedAt }`.
+**Branch conditions remain cut entirely** (unchanged from the prior
+pass) — no conditional jump exists anywhere in the step list; steps play
+in the fixed order they're authored in.
 
-Per-param scaling curves and encounter difficulty-range gating (both
-floated as possible future work) are **deferred** — see
-`shmup-editor.todo.md`'s Remaining section. Weight is a plain flat number.
+### Triggers (`encounterTypes.ts`)
 
-### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterGraph.ts`)
+A step's `Trigger` decides when the previous step hands off to it —
+`TriggerKind = "always" | "unitPosition" | "playerPosition" | "time"`.
+`"always"` fires immediately once the prior step's Action would otherwise
+be considered complete; the other three carry a numeric `value` (percent
+along the canvas for position-based triggers, seconds for `"time"`).
+**Proximity-to-player as a trigger was explicitly cut** (it appeared in
+earlier discussion but was dropped in the design-handoff doc for
+determinism — a proximity-gated step wouldn't replay identically twice
+with the same inputs, which matters for `E4`'s future preview/playtest
+mode). `StepPanel.tsx` renders the trigger kind dropdown plus the
+conditional value field (hidden entirely for `"always"`).
 
-Same tap-driven interaction model as the original pass (tap a node for a
-✥ move handle / "+" grow / ✕ delete overlay, tap an edge for ✕ delete,
-below-canvas tabbed settings panels for the real param forms — see
-`NodePanel.tsx`/`EdgePanel.tsx`), generalized to host **multiple
-independent enemy instances on one shared canvas**, anchored against the
-tile's actual shape:
+### Per-step overrides (`StepPanel.tsx`)
 
-- **`EncounterTileFrame.tsx`** renders a read-only dashed rectangle sized
-  to the tile's real footprint, labeled with its actual north/south/
-  east/west edge tags — so an enemy's entrance/exit can be placed
-  meaningfully relative to where the tile really connects to its
-  neighbors, not an abstract unrelated space. The canvas's bounding box
-  always includes this frame, so it's visible even before any enemy is
-  placed.
-- **"+ Add Enemy"** opens a picker of the enemy library (sprite
-  thumbnails); picking one adds a new `EncounterEnemy` instance with its
-  entrance node staggered diagonally from any existing instances (so
-  default placement doesn't render two entrance labels on top of each
-  other) — draggable afterward via the same move handle as any other node.
-- Each instance renders its own sprite (looked up by `enemyDefId` from the
-  enemy library) on every node, with the enemy's name labeled under its
-  entrance node so multiple instances stay distinguishable.
-- **Deleting an instance's entrance node removes the whole instance from
-  the encounter** (not just clearing its graph to empty, which would leave
-  a useless graph-less stub in `encounter.enemies`) — the delete button's
-  tooltip changes to "Remove this enemy from the encounter" specifically
-  for that case. Deleting any other node cascades to its downstream
-  subtree exactly as the original pass's `deleteNode` did (ported to
-  `encounterGraph.ts`, operating on `EncounterEnemy` instead of the old
-  enemy-owns-the-graph shape).
+A narrow, explicit whitelist of fields a step can override on top of
+whatever its chosen Action already specifies — not a general "edit the
+Action's params here" escape hatch:
+- **`aimAngleOverride`** — shown only when the selected Action's
+  `attack?.aim === "fixed"`.
+- **`speedMultiplier`** — shown only when the selected Action has a
+  non-null `movement`.
+
+Both are optional; omitted means "use the Action's own value unmodified."
+
+### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterSteps.ts`)
+
+Same tap-driven interaction model as both earlier passes (tap a node to
+select it, overlay quick-action buttons, below-canvas settings panel for
+the real fields), simplified by the graph-to-array collapse: consecutive
+steps within one instance render as a plain non-interactive SVG `<line>`
+— there's no separately-configured transition anymore, so there's nothing
+to tap or delete on the connector itself.
+
+- **`EncounterTileFrame.tsx`** is unchanged from the graph-based pass — a
+  read-only dashed rectangle sized to the tile's real footprint, labeled
+  with its actual edge tags, always present in the canvas's bounding box.
+- **`encounterSteps.ts`** replaces the old `encounterGraph.ts` graph CRUD
+  with pure array operations on one instance's `steps` list —
+  `addStep`/`updateStep`/`moveStep`/`isFirstStep`/`isLastStep`/
+  `deleteStepsFrom` (truncates the array from a given step to the end,
+  the array equivalent of the old cascade-delete-a-subtree behavior).
+  `encounterSteps.test.ts` covers all of these directly against arrays —
+  no graph-traversal test helpers needed.
+- **"+ Add Unit"** opens a picker of the Unit library (sprite thumbnails);
+  picking one adds a new `EncounterUnit` instance seeded with one step
+  using the unit's first Action, staggered diagonally from any existing
+  instances.
+- Each instance renders its own sprite (looked up by `unitDefId`) on every
+  step, with the unit's name labeled under its first step. Step badges:
+  ▶ marks the first step, 🔫 marks a step whose Action has an enabled
+  attack, 👻 marks a step whose Action is `visible: false` (rendered with
+  `.shmup-enemy-node--hidden` — dashed border, reduced opacity — so a
+  Disappear/teleport-out step reads as ghosted at a glance).
+- **Deleting the first step removes the whole instance** from the
+  encounter (confirm-then-`removeInstance`) — same reasoning as the prior
+  pass's entrance-node special case, just phrased in step-list terms.
+  Deleting any other step truncates the array from that point on
+  (confirm-then-`deleteStepsFrom`) when it would remove more than one step.
 - **A tap on any `<button>` never triggers the canvas's outside-click
-  deselect** — carried over from the original pass's fix (collapsing the
-  panel on `pointerdown` shifts the page layout out from under an
-  in-flight click, which an end-to-end Playwright pass caught directly:
-  `Save Enemy` silently no-opped because the button had moved by the time
-  the click landed). Any `<button>` target is excluded from the auto-close
-  check.
+  deselect** — carried over unchanged from both earlier passes.
 
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
@@ -442,22 +474,31 @@ frames per skull sheet (idle/move/attack/die preview) is deferred — see
 ### Persistence
 
 An encounter is saved as part of its owning tile — `TileDef.encounters` is
-a plain field inside `TILES.DAT` (`tileStore.ts`), validated recursively by
-`encounterValidation.ts` (shared with the session draft below; capped at a
-generous nesting depth so a maliciously/corruptly deep hand-edited save
-fails validation instead of overflowing the stack) and backfilled to `[]`
-for pre-existing saves, the same purely-additive-field treatment
-`customImage` already got. There's no separate encounter library or file.
+a plain field inside `TILES.DAT` (`tileStore.ts`). `encounterValidation.ts`
+got much smaller in this pass: since an `EncounterStep` only carries an
+`actionId` string reference (not the nested movement/attack/bullet data
+itself anymore), `isValidEncounter()` just checks the step-list shape —
+no more recursive movement/attack/bullet validation. That recursive
+validation moved to `unitStore.ts` instead, since Units are what own
+Actions now: `loadUnits`/`saveUnits` validate `actions[]` recursively
+(`isMovement`/`isAttackPayload`/`isBullet`/`isActionDef`/`isValidUnitDef`,
+same generous-nesting-depth-cap reasoning as before) before trusting a
+saved library. There's no separate encounter library or file.
 
-Two more fsStore files alongside `TILES.DAT`/`ENEMIES.DAT`, same folder
+Two more fsStore files alongside `TILES.DAT`/`UNITS.DAT`, same folder
 (`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory
-in-progress-session-survives-reload rule — a half-built tile/encounter is a
-much bigger loss on an accidental mobile reload/rotation than E1's original
-tile-form draft gap:
+in-progress-session-survives-reload rule — a half-built tile/encounter or
+unit/action is a much bigger loss on an accidental mobile reload/rotation
+than E1's original tile-form draft gap:
 
-- **`ENEMY-DRAFT.DAT`** (`enemyStore.ts`'s `loadEnemyDraft`/`saveEnemyDraft`)
-  — the enemy stats form currently being edited, written on every field
-  change.
+- **`UNIT-DRAFT.DAT`** (`unitStore.ts`'s `loadUnitDraft`/`saveUnitDraft`) —
+  a `UnitEditSession { unit, activeAction }`: the Unit stats form currently
+  being edited, plus whichever single Action is mid-edit (if any), mirroring
+  the tile/encounter session shape one level down. `UnitStatsForm` and
+  `ActionEditor` both bubble every field change up via `onDraftChange`
+  (a `useEffect([draft])` in each), so navigating from the Unit form to the
+  Action editor and back doesn't lose in-progress edits on either side —
+  each form unmounts while the other view is showing.
 - **`TILE-DRAFT.DAT`** (`loadTileSession`/`saveTileSession`) — the *whole*
   tile-editing session: the tile currently being edited (name, edges,
   image, and its `encounters` list as saved-so-far) **plus** whichever
@@ -469,11 +510,12 @@ tile-form draft gap:
   doesn't lose in-progress tile-level edits — `TileEditorForm` unmounts
   while a different view is showing, so anything not yet bubbled up would
   otherwise be lost. On mount, `ShmupEditor.tsx` checks for a saved
-  session and resumes silently into either the tile-edit or encounter-edit
-  view, whichever the session was left in. Position drags on the
-  Encounter canvas are the one exception to "write on every change" — a
-  drag updates only local component state, committed to the session once
-  on release, not on every pointer-move frame.
+  session (checking `UNIT-DRAFT.DAT` first, then `TILE-DRAFT.DAT`) and
+  resumes silently into whichever of the four views (unit-edit,
+  action-edit, tile-edit, encounter-edit) the session was left in.
+  Position drags on the Encounter canvas are the one exception to "write
+  on every change" — a drag updates only local component state, committed
+  to the session once on release, not on every pointer-move frame.
 
 Both new files are seeded for new installs (`filesystem/seed.ts`) and
 backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`), same
@@ -498,7 +540,7 @@ backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`).
 
 There is currently no `.exe`/Doors-97-window entry for this tool — it's
 reachable only via the `/shmup-editor` route. The FS folder exists purely
-so `TILES.DAT`/`ENEMIES.DAT`/`ENEMY-DRAFT.DAT`/`TILE-DRAFT.DAT` are
+so `TILES.DAT`/`UNITS.DAT`/`UNIT-DRAFT.DAT`/`TILE-DRAFT.DAT` are
 hackable/discoverable in the file browser.
 
 ## Related
@@ -506,5 +548,5 @@ hackable/discoverable in the file browser.
 - [`shmup-editor.todo.md`](shmup-editor.todo.md) — remaining work (E1's
   art import, E2's deferred scaling curves, E3-E5)
 - [`games/shmup/levels-and-tiles.spec.todo.md`](games/shmup/levels-and-tiles.spec.todo.md) — the data model this editor's tile export shape matches
-- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the data model this editor's enemy export shape matches
+- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the bullet/attack-payload shape this editor still matches; its enemy-is-a-node-graph section is superseded by this editor's Unit+Action+flat-step-list model (see "Unit + Encounter editor (E2)" above) and needs a future update to stay in sync
 - [`ns-doors-97.md`](ns-doors-97.md) — the filesystem this tool persists through

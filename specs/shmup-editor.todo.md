@@ -1,11 +1,12 @@
 # Shmup Level & Enemy Editor — TODOs (PRD)
 
 > Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
-> partially shipped, see `shmup-editor.md`), **E2 #192** (enemy +
-> encounter editor — shipped minus scaling curves/difficulty gating, see
-> `shmup-editor.md`), **E3 #193** (spawn node editor), **E4 #194**
-> (preview/playtest), **E5 #195** (export/import pipeline). Source: design
-> handoff doc (Claude Chat → Claude Code), 2026-07-04.
+> partially shipped, see `shmup-editor.md`), **E2 #192** (Unit +
+> Encounter editor — shipped minus the timeline scrubber, layers, Parts/
+> attack-tracks, and the Scaling system, see `shmup-editor.md`), **E3
+> #193** (spawn node editor), **E4 #194** (preview/playtest), **E5 #195**
+> (export/import pipeline). Source: design handoff docs (Claude Chat →
+> Claude Code), 2026-07-04 and 2026-07-11.
 
 ## What this is
 
@@ -105,55 +106,80 @@ to visualize instead.
   never renders two *different* tiles touching except in the Connection
   Viewer's single-column stack.
 
-### E2 — Enemy + Encounter editor (#192) — shipped, minus scaling curves
+### E2 — Unit + Encounter editor (#192) — shipped, minus scrubber/scaling/layers
 
-**Revised mid-build**: the first pass put a full movement/dwell/attack
+**Revised twice.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition. That didn't match the
-intended content model — an enemy should be simple, reusable sprite+stats
-data, with behavior authored separately per tile. See
-`shmup-editor.md`'s "Enemy + Encounter editor (E2)" section for the full
-current design; this entry describes what actually shipped after the
-correction.
+intended content model, so it was corrected to enemy-is-stats-only with
+the graph moved onto the encounter. A second design pass (external
+design-handoff doc, 2026-07) went further: enemies were renamed **Units**,
+each owning a reusable buffet of named **Actions**, and encounters became a
+**flat ordered step list** instead of a node/edge graph. See
+`shmup-editor.md`'s "Unit + Encounter editor (E2)" section for the full
+current design; this entry describes what actually shipped.
 
 **Done**:
-- **Enemies** are sprite + stats only (HP, contact damage, score value,
-  base speed, hitbox size) — `EnemyStatsForm.tsx`, a plain field form, no
-  canvas. `EnemyList.tsx` is the same visual-checker sprite grid as the
-  tile list.
-- **Encounters** belong to a tile (`TileDef.encounters`) and are authored
-  from inside the tile editor (a new Encounters section on
-  `TileEditorForm.tsx`, New/Edit/Delete), not a separate top-level menu.
-  Editing one opens `EncounterEditor.tsx`: a free-form, tap-driven canvas
-  (place/move/delete nodes, each new node already linked to its parent —
-  no drag-to-connect gesture) that can host **multiple independent enemy
-  instances** at once, each referencing an enemy from the library and
-  carrying its own movement/dwell/attack graph. The tile's real
-  footprint/edges render as a read-only reference frame
-  (`EncounterTileFrame.tsx`) so entrance/exit placement is meaningful
+- **Units** are sprite + stats (HP, contact damage, score value, base
+  speed, hitbox size) **plus** a reusable `actions: ActionDef[]` buffet —
+  `UnitStatsForm.tsx` (stats fields plus an Actions list, New/Edit/Delete,
+  `ActionEditor.tsx` for the individual Action). `UnitList.tsx` is the same
+  visual-checker sprite grid as the tile list. Every Unit is seeded with
+  one mandatory idle Action; the last remaining Action can't be deleted.
+- **Encounters** still belong to a tile (`TileDef.encounters`) and are
+  still authored from inside the tile editor (Encounters section on
+  `TileEditorForm.tsx`, New/Edit/Delete). Editing one opens
+  `EncounterEditor.tsx`: a tap-driven canvas that can host multiple
+  independent Unit instances (`EncounterUnit`), each walking a **flat
+  ordered `steps: EncounterStep[]` list** — `{ pos, actionId, trigger,
+  aimAngleOverride?, speedMultiplier? }` — instead of a node/edge graph.
+  `encounterSteps.ts` replaces the old graph-CRUD module with plain array
+  operations (`addStep`/`updateStep`/`moveStep`/`deleteStepsFrom`). The
+  tile's real footprint/edges still render as a read-only reference frame
+  (`EncounterTileFrame.tsx`, unchanged) so step placement is meaningful
   relative to where the tile actually connects to its neighbors.
-- Movement behavior + params per edge (all 4 primitives), dwell behavior +
-  params per node (both), entrance appear-animation on the entrance node,
-  exit type on any leaf node, attack payloads on any node/edge (pattern
-  shape x aim mode x trigger), and nested bullet payloads authored
-  recursively through the same `AttackPayloadForm` component (a bullet is
-  a minimal enemy per `enemies-and-bullets.spec.todo.md` §7) — all
-  unchanged from the first pass, just relocated from the enemy definition
-  onto each encounter's per-instance graph.
+- **Dwell, Entrance/Exit, and Teleport all dissolved** into ordinary
+  Actions/steps rather than surviving as dedicated types: dwell is an
+  Action with `movement: null`; entrance/exit are just the first/last step
+  in an instance's list; teleport is a `visible: false` Action (Disappear)
+  followed by a differently-positioned `visible: true` Action (Reappear).
+  `DwellForm.tsx`/`EntranceForm.tsx`/`ExitForm.tsx` and the `Teleport`
+  movement primitive were deleted, not kept around unused.
+- **Triggers**: a shared vocabulary (`"always"|"unitPosition"|
+  "playerPosition"|"time"`) replaces per-node/per-edge param forms for
+  "when does this happen" — `StepPanel.tsx` renders one dropdown plus a
+  conditional value field. Proximity-to-player as a trigger kind was
+  considered and explicitly cut for determinism (a future preview/replay
+  mode needs identical playback given identical inputs).
+- Attack payloads (pattern shape x aim mode x trigger) and nested bullet
+  payloads (a bullet is a minimal enemy per
+  `enemies-and-bullets.spec.todo.md` §7) are unchanged in shape from both
+  earlier passes, just relocated onto each Action instead of each node/edge.
+  A narrow per-step override whitelist (`aimAngleOverride`,
+  `speedMultiplier`) lets one step nudge its Action's behavior without
+  re-authoring the whole Action.
 - Saves as part of the owning tile in `TILES.DAT`; the in-progress
   tile-plus-encounter session survives reload/rotation via `TILE-DRAFT.DAT`
-  (and the enemy stats form via `ENEMY-DRAFT.DAT`) per root `CLAUDE.md`'s
-  mandatory rule — resumed silently on mount into whichever view (tile-edit
-  or encounter-edit) the session was left in.
+  and the unit-plus-action session via `UNIT-DRAFT.DAT`, per root
+  `CLAUDE.md`'s mandatory rule — resumed silently on mount into whichever
+  of the four views (unit-edit, action-edit, tile-edit, encounter-edit) the
+  session was left in.
 
 **Scope decisions**:
-- **Branch conditions were cut entirely**, not deferred-but-present —
-  removed from the data model, forms, and validators. Explicit ask: ship
-  the simpler system, add conditional jumps back only if a concrete
-  content need shows up.
-- The graph is still a strict chain (each node has at most one outgoing
-  movement edge) — unchanged reasoning from the first pass, now just
-  scoped to one enemy instance within one encounter instead of to the
-  enemy's own identity.
+- **Branch conditions remain cut entirely** — no conditional jump exists
+  anywhere in the step list.
+- **The visual timeline scrubber is deferred to a following pass** — steps
+  are authored and edited directly on the canvas/step-panel today; a
+  dedicated scrubber UI for previewing/scrubbing through a step sequence
+  over time is planned next but not built yet.
+- **Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
+  time-locked) are deferred** — every step today is a plain canvas
+  position with no layer or frame-of-reference concept.
+- **Visual Parts, independent attack tracks, and the unified arc-range
+  weapon model (fan/spread/radial/gap/spiral) are deferred** — attack
+  payloads stay in their original single-payload-per-Action shape from the
+  first pass rather than being decomposed into parts/tracks.
+- **The Scaling system is deferred** — no conserved-difficulty-budget
+  system or scaling panel exists; Weight is still a plain flat number.
 
 **Remaining:**
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —
@@ -168,11 +194,11 @@ correction.
 - **Built-in sprites**: four "skull" Mad-Max-style vehicles (buggy,
   technical, motorcycle, helicopter — see `public/shmup-editor/enemies/README.md`
   and `scripts/prepare-skull-sprites.mjs`), each only the idle-pose frame.
-  Custom upload also works for authoring any other enemy today.
+  Custom upload also works for authoring any other Unit today.
 - **Animation preview is deferred.** Each skull sheet actually has 16
   frames (4 states x 4 frames: idle/moving/attacking/dying —
   `scripts/assets/skull-sprites-source/README.md`), but the editor only
-  ever shows a static idle sprite — there's no per-enemy concept of "the
+  ever shows a static idle sprite — there's no per-Unit concept of "the
   other 15 frames" yet, and no player/preview UI to flip through them.
   Real, moderate-sized follow-up work: (a) a data-model decision for how
   frame sets attach to a sprite (a built-in vs. a custom upload have very
@@ -181,8 +207,12 @@ correction.
   sheet instead of just frame 1, and (c) a small animation-player
   component. Reasonable to fold into E4 (Preview/playtest mode) rather
   than block E2 on it.
-- Enemy variants aren't attachable to a tile yet — still blocked on E3's
+- Unit variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
+- The visual timeline scrubber (see Scope decisions above) is next up
+  after this pass, per explicit instruction — steps are functionally
+  complete but only editable via the canvas/step-panel, not a dedicated
+  time-based scrubbing UI.
 
 ### E3 — Spawn node editor (#193)
 

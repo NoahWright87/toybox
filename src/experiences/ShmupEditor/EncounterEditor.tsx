@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import EdgePanel from "./EdgePanel";
 import EncounterTileFrame from "./EncounterTileFrame";
-import NodePanel from "./NodePanel";
+import StepPanel from "./StepPanel";
 import { resolveSpriteUrl } from "./enemySprites";
-import type { EnemyDef } from "./enemyTypes";
-import { addChildNode, addRootNode, deleteEdge, deleteNode, getDescendantNodeIds, hasOutgoingEdge, moveNode } from "./encounterGraph";
-import { createEncounterEnemy, type EncounterDef, type EncounterEnemy, type Vec2 } from "./encounterTypes";
+import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep } from "./encounterSteps";
+import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 import type { TileDef } from "./types";
+import type { UnitDef } from "./unitTypes";
 
 interface EncounterEditorProps {
   tile: TileDef;
-  enemies: EnemyDef[];
+  units: UnitDef[];
   encounter: EncounterDef;
   onSave: (encounter: EncounterDef) => void;
   onCancel: () => void;
@@ -18,12 +17,12 @@ interface EncounterEditorProps {
   onDraftChange: (encounter: EncounterDef) => void;
 }
 
-type Selection = { kind: "node"; instanceId: string; nodeId: string } | { kind: "edge"; instanceId: string; edgeId: string } | null;
+type Selection = { instanceId: string; stepId: string } | null;
 
 const NODE_DIAMETER = 56;
 const NODE_RADIUS = NODE_DIAMETER / 2;
 const PADDING = 60;
-/** Reference-frame sizing: matches encounterGraph.ts's default child-node offset, so a freshly grown chain reads at a similar scale to the tile itself. */
+/** Reference-frame sizing: matches encounterSteps.ts's default next-step offset, so a freshly grown sequence reads at a similar scale to the tile itself. */
 const TILE_UNIT = 130;
 
 function validate(encounter: EncounterDef): string | null {
@@ -32,27 +31,28 @@ function validate(encounter: EncounterDef): string | null {
   return null;
 }
 
-function deleteKey(instanceId: string, id: string): string {
-  return `${instanceId}:${id}`;
+function deleteKey(instanceId: string, stepId: string): string {
+  return `${instanceId}:${stepId}`;
 }
 
 /**
- * Canvas for one tile's encounter — places one or more enemy INSTANCES
- * (each referencing an EnemyDef for sprite/stats) and, independently for
- * each, a movement/dwell/attack graph (specs/shmup-editor.md's Encounter
- * editor section). The tile's real footprint/edges render as a fixed
- * reference frame (EncounterTileFrame) so entrance/exit placement is
- * meaningful relative to the tile's actual neighbors, not an abstract
- * space. Tap-driven, same interaction model as the graph canvas this
- * replaced: tap a node for a move handle/+add/delete overlay, tap a link
- * for delete, below-canvas tabbed panels for the real param forms.
+ * Canvas for one tile's encounter — places one or more Unit INSTANCES
+ * (each referencing a UnitDef for sprite/stats/Action buffet) and, for
+ * each, a flat ordered STEP sequence (specs/shmup-editor.md's Encounter
+ * editor section). No graph, no separately-configured edges — a step is
+ * `{ position, trigger, action }`, and the action (movement/attack/
+ * animation) is looked up on the referenced Unit, not authored here. The
+ * tile's real footprint/edges render as a fixed reference frame
+ * (EncounterTileFrame) so placement is meaningful relative to the tile's
+ * actual neighbors. Tap a step to move/extend/delete it and edit its
+ * trigger + which Action it uses.
  */
-export default function EncounterEditor({ tile, enemies, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
+export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
   const [draft, setDraft] = useState<EncounterDef>(encounter);
   const [selection, setSelection] = useState<Selection>(null);
-  const [dragPos, setDragPos] = useState<{ instanceId: string; nodeId: string; pos: Vec2 } | null>(null);
+  const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
-  const [addingEnemy, setAddingEnemy] = useState(false);
+  const [addingUnit, setAddingUnit] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const error = validate(draft);
 
@@ -61,8 +61,8 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
     onDraftChange(next);
   }
 
-  function updateInstance(instanceId: string, updater: (instance: EncounterEnemy) => EncounterEnemy) {
-    updateDraft({ ...draft, enemies: draft.enemies.map((e) => (e.id === instanceId ? updater(e) : e)) });
+  function updateInstance(instanceId: string, updater: (instance: EncounterUnit) => EncounterUnit) {
+    updateDraft({ ...draft, units: draft.units.map((u) => (u.id === instanceId ? updater(u) : u)) });
   }
 
   useEffect(() => {
@@ -82,8 +82,8 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [selection]);
 
-  function nodePos(instanceId: string, node: { id: string; pos: Vec2 }): Vec2 {
-    return dragPos && dragPos.instanceId === instanceId && dragPos.nodeId === node.id ? dragPos.pos : node.pos;
+  function stepPos(instanceId: string, step: { id: string; pos: Vec2 }): Vec2 {
+    return dragPos && dragPos.instanceId === instanceId && dragPos.stepId === step.id ? dragPos.pos : step.pos;
   }
 
   function handleSave() {
@@ -91,81 +91,72 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
     onSave({ ...draft, name: draft.name.trim(), modifiedAt: Date.now() });
   }
 
-  function selectNode(instanceId: string, nodeId: string) {
+  function selectStep(instanceId: string, stepId: string) {
     setPendingDeleteKey(null);
-    setSelection({ kind: "node", instanceId, nodeId });
-  }
-  function selectEdge(instanceId: string, edgeId: string) {
-    setPendingDeleteKey(null);
-    setSelection({ kind: "edge", instanceId, edgeId });
+    setSelection({ instanceId, stepId });
   }
 
-  function addEnemyInstance(enemyDefId: string) {
-    const index = draft.enemies.length;
+  function addUnitInstance(unitDefId: string) {
+    const unitDef = units.find((u) => u.id === unitDefId);
+    const firstActionId = unitDef?.actions[0]?.id;
+    if (!firstActionId) return;
+    const index = draft.units.length;
     // Staggered diagonally (not just horizontally) so each new instance's
-    // entrance label doesn't render directly on top of the previous one's —
-    // still just a default, since the move handle can reposition either.
+    // label doesn't render directly on top of the previous one's — still
+    // just a default, since the move handle can reposition either.
     const startPos: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
-    const instance = addRootNode(createEncounterEnemy(enemyDefId), startPos);
-    updateDraft({ ...draft, enemies: [...draft.enemies, instance] });
-    setAddingEnemy(false);
-    if (instance.entranceNodeId) selectNode(instance.id, instance.entranceNodeId);
+    const instance = addStep(createEncounterUnit(unitDefId), firstActionId, startPos);
+    updateDraft({ ...draft, units: [...draft.units, instance] });
+    setAddingUnit(false);
+    const added = instance.steps[0];
+    if (added) selectStep(instance.id, added.id);
   }
 
   function removeInstance(instanceId: string) {
-    updateDraft({ ...draft, enemies: draft.enemies.filter((e) => e.id !== instanceId) });
+    updateDraft({ ...draft, units: draft.units.filter((u) => u.id !== instanceId) });
     setSelection(null);
     setPendingDeleteKey(null);
   }
 
-  function addChild(instanceId: string, parentNodeId: string) {
-    const before = draft.enemies.find((e) => e.id === instanceId)!;
-    const after = addChildNode(before, parentNodeId);
+  function addNextStep(instanceId: string) {
+    const before = draft.units.find((u) => u.id === instanceId);
+    if (!before) return;
+    const unitDef = units.find((u) => u.id === before.unitDefId);
+    const firstActionId = unitDef?.actions[0]?.id;
+    if (!firstActionId) return;
+    const after = addStep(before, firstActionId);
     updateInstance(instanceId, () => after);
-    const added = after.nodes.find((n) => !before.nodes.some((old) => old.id === n.id));
-    if (added) selectNode(instanceId, added.id);
+    const added = after.steps[after.steps.length - 1];
+    if (added) selectStep(instanceId, added.id);
   }
 
-  /** Deleting an instance's entrance removes the whole instance from the encounter — an empty graph-less instance stub has no purpose. */
-  function requestDeleteNode(instanceId: string, nodeId: string) {
-    const instance = draft.enemies.find((e) => e.id === instanceId);
+  /** Deleting an instance's first step removes the whole instance from the encounter — an empty, step-less instance stub has no purpose. */
+  function requestDeleteStep(instanceId: string, stepId: string) {
+    const instance = draft.units.find((u) => u.id === instanceId);
     if (!instance) return;
-    const key = deleteKey(instanceId, nodeId);
-    const subtreeSize = getDescendantNodeIds(instance, nodeId).size;
-    const isEntrance = nodeId === instance.entranceNodeId;
-    const needsConfirm = (isEntrance || subtreeSize > 1) && pendingDeleteKey !== key;
+    const idx = instance.steps.findIndex((s) => s.id === stepId);
+    if (idx === -1) return;
+    const key = deleteKey(instanceId, stepId);
+    const first = isFirstStep(instance, stepId);
+    const subtreeSize = instance.steps.length - idx;
+    const needsConfirm = (first || subtreeSize > 1) && pendingDeleteKey !== key;
     if (needsConfirm) {
       setPendingDeleteKey(key);
       return;
     }
-    if (isEntrance) {
+    if (first) {
       removeInstance(instanceId);
       return;
     }
-    updateInstance(instanceId, (i) => deleteNode(i, nodeId));
+    updateInstance(instanceId, (i) => deleteStepsFrom(i, stepId));
     setSelection(null);
     setPendingDeleteKey(null);
   }
 
-  function requestDeleteEdge(instanceId: string, edgeId: string) {
-    const instance = draft.enemies.find((e) => e.id === instanceId);
-    const edge = instance?.edges.find((e) => e.id === edgeId);
-    if (!instance || !edge) return;
-    const key = deleteKey(instanceId, edgeId);
-    const subtreeSize = getDescendantNodeIds(instance, edge.toNodeId).size;
-    if (subtreeSize > 1 && pendingDeleteKey !== key) {
-      setPendingDeleteKey(key);
-      return;
-    }
-    updateInstance(instanceId, (i) => deleteEdge(i, edgeId));
-    setSelection(null);
-    setPendingDeleteKey(null);
-  }
-
-  function beginDrag(instanceId: string, nodeId: string, pos: Vec2, e: ReactPointerEvent<HTMLButtonElement>) {
+  function beginDrag(instanceId: string, stepId: string, pos: Vec2, e: ReactPointerEvent<HTMLButtonElement>) {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
-    setDragPos({ instanceId, nodeId, pos });
+    setDragPos({ instanceId, stepId, pos });
   }
   function onDragMove(e: ReactPointerEvent<HTMLDivElement>) {
     if (!dragPos || !stageRef.current) return;
@@ -174,15 +165,15 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
   }
   function endDrag() {
     if (!dragPos) return;
-    updateInstance(dragPos.instanceId, (i) => moveNode(i, dragPos.nodeId, dragPos.pos));
+    updateInstance(dragPos.instanceId, (i) => moveStep(i, dragPos.stepId, dragPos.pos));
     setDragPos(null);
   }
 
-  // Bounding box spans every instance's every node PLUS the tile reference frame itself, so the frame is always visible even before any enemy is placed.
+  // Bounding box spans every instance's every step PLUS the tile reference frame itself, so the frame is always visible even before any Unit is placed.
   const allPositions: Vec2[] = [
     { x: 0, y: 0 },
     { x: tile.footprint * TILE_UNIT, y: TILE_UNIT },
-    ...draft.enemies.flatMap((inst) => inst.nodes.map((n) => nodePos(inst.id, n))),
+    ...draft.units.flatMap((inst) => inst.steps.map((s) => stepPos(inst.id, s))),
   ];
   const minX = Math.min(...allPositions.map((p) => p.x));
   const minY = Math.min(...allPositions.map((p) => p.y));
@@ -195,18 +186,9 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
     return { x: pos.x - minX + PADDING, y: pos.y - minY + PADDING };
   }
 
-  type Selected = { kind: "node"; instance: EncounterEnemy; node: (typeof draft.enemies)[number]["nodes"][number] } | { kind: "edge"; instance: EncounterEnemy; edge: (typeof draft.enemies)[number]["edges"][number] } | null;
-  const selected: Selected = (() => {
-    if (!selection) return null;
-    const instance = draft.enemies.find((e) => e.id === selection.instanceId);
-    if (!instance) return null;
-    if (selection.kind === "node") {
-      const node = instance.nodes.find((n) => n.id === selection.nodeId);
-      return node ? { kind: "node", instance, node } : null;
-    }
-    const edge = instance.edges.find((e) => e.id === selection.edgeId);
-    return edge ? { kind: "edge", instance, edge } : null;
-  })();
+  const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
+  const selectedStep: EncounterStep | undefined = selectedInstance?.steps.find((s) => s.id === selection?.stepId);
+  const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
 
   const framePos = toStage({ x: 0, y: 0 });
 
@@ -231,8 +213,8 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
       </div>
 
       <p className="shmup-hint">
-        Tap a node or link to edit it. Tap the + to grow a linked node; drag the ✥ handle to reposition. The dashed box is this tile's real
-        footprint/edges, for reference.
+        Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition. The dashed box is this tile's
+        real footprint/edges, for reference.
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -254,79 +236,59 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
                 <path d="M0,0 L10,5 L0,10 z" fill="#ffcc88" />
               </marker>
             </defs>
-            {draft.enemies.flatMap((instance) =>
-              instance.edges.map((edge) => {
-                const from = instance.nodes.find((n) => n.id === edge.fromNodeId);
-                const to = instance.nodes.find((n) => n.id === edge.toNodeId);
-                if (!from || !to) return null;
-                const a = toStage(nodePos(instance.id, from));
-                const b = toStage(nodePos(instance.id, to));
-                const isSelected = selection?.kind === "edge" && selection.instanceId === instance.id && selection.edgeId === edge.id;
-                return (
-                  <g key={edge.id}>
-                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={isSelected ? "#ff6b00" : "#ffcc88"} strokeWidth={isSelected ? 4 : 2} markerEnd="url(#shmup-arrow)" />
-                    <line
-                      x1={a.x}
-                      y1={a.y}
-                      x2={b.x}
-                      y2={b.y}
-                      stroke="transparent"
-                      strokeWidth={20}
-                      style={{ cursor: "pointer" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectEdge(instance.id, edge.id);
-                      }}
-                    />
-                  </g>
-                );
+            {draft.units.flatMap((instance) =>
+              instance.steps.slice(1).map((step, i) => {
+                const prev = instance.steps[i];
+                const a = toStage(stepPos(instance.id, prev));
+                const b = toStage(stepPos(instance.id, step));
+                return <line key={step.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffcc88" strokeWidth={2} markerEnd="url(#shmup-arrow)" />;
               })
             )}
           </svg>
 
-          {draft.enemies.flatMap((instance) => {
-            const enemyDef = enemies.find((en) => en.id === instance.enemyDefId);
-            const spriteUrl = enemyDef ? resolveSpriteUrl(enemyDef.spriteId, enemyDef.customSprite) : null;
-            return instance.nodes.map((node) => {
-              const pos = toStage(nodePos(instance.id, node));
-              const isEntrance = instance.entranceNodeId === node.id;
-              const isLeaf = !hasOutgoingEdge(instance, node.id);
-              const isSelected = selection?.kind === "node" && selection.instanceId === instance.id && selection.nodeId === node.id;
+          {draft.units.flatMap((instance) => {
+            const unitDef = units.find((u) => u.id === instance.unitDefId);
+            const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+            return instance.steps.map((step) => {
+              const pos = toStage(stepPos(instance.id, step));
+              const first = isFirstStep(instance, step.id);
+              const last = isLastStep(instance, step.id);
+              const action = unitDef?.actions.find((a) => a.id === step.actionId);
+              const isSelected = selection?.instanceId === instance.id && selection.stepId === step.id;
               return (
-                <div key={node.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
+                <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
                   <button
                     type="button"
-                    className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""}`}
+                    className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${action && !action.visible ? "shmup-enemy-node--hidden" : ""}`}
                     style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
                     onClick={(e) => {
                       e.stopPropagation();
-                      selectNode(instance.id, node.id);
+                      selectStep(instance.id, step.id);
                     }}
-                    title={enemyDef?.name ?? "(missing enemy)"}
+                    title={unitDef?.name ?? "(missing Unit)"}
                   >
                     {!spriteUrl && "●"}
                   </button>
-                  {isEntrance && <div className="shmup-enemy-node__label">{enemyDef?.name ?? "?"}</div>}
+                  {first && <div className="shmup-enemy-node__label">{unitDef?.name ?? "?"}</div>}
                   <div className="shmup-enemy-node__badges">
-                    {isEntrance && <span title="Entrance">▶</span>}
-                    {node.dwell && <span title="Dwell">⏳</span>}
-                    {node.attack?.enabled && <span title="Attack">🔫</span>}
-                    {isLeaf && node.exit && <span title="Exit">🚪</span>}
+                    {first && <span title="First step">▶</span>}
+                    {action?.attack?.enabled && <span title="Attacks">🔫</span>}
+                    {action && !action.visible && <span title="Hidden">👻</span>}
                   </div>
 
                   {isSelected && (
                     <div className="shmup-enemy-node__controls">
-                      <button type="button" className="shmup-enemy-node__btn shmup-enemy-node__btn--move" title="Drag to move" onPointerDown={(e) => beginDrag(instance.id, node.id, node.pos, e)}>
+                      <button type="button" className="shmup-enemy-node__btn shmup-enemy-node__btn--move" title="Drag to move" onPointerDown={(e) => beginDrag(instance.id, step.id, step.pos, e)}>
                         ✥
                       </button>
-                      {isLeaf && (
+                      {last && (
                         <button
                           type="button"
                           className="shmup-enemy-node__btn shmup-enemy-node__btn--add"
-                          title="Add linked node"
+                          title="Add next step"
                           onClick={(e) => {
                             e.stopPropagation();
-                            addChild(instance.id, node.id);
+                            addNextStep(instance.id);
                           }}
                         >
                           +
@@ -335,10 +297,10 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
                       <button
                         type="button"
                         className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
-                        title={isEntrance ? "Remove this enemy from the encounter" : "Delete"}
+                        title={first ? "Remove this Unit from the encounter" : "Delete"}
                         onClick={(e) => {
                           e.stopPropagation();
-                          requestDeleteNode(instance.id, node.id);
+                          requestDeleteStep(instance.id, step.id);
                         }}
                       >
                         ✕
@@ -353,54 +315,41 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
       </div>
 
       <div className="shmup-btn-row">
-        <button type="button" className="shmup-btn" onClick={() => setAddingEnemy((v) => !v)}>
-          + Add Enemy
+        <button type="button" className="shmup-btn" onClick={() => setAddingUnit((v) => !v)}>
+          + Add Unit
         </button>
       </div>
-      {addingEnemy && (
+      {addingUnit && (
         <div className="shmup-tile-picker">
-          {enemies.length === 0 ? (
-            <p className="shmup-hint">No enemies in the library yet — create one first (Enemies menu).</p>
+          {units.length === 0 ? (
+            <p className="shmup-hint">No Units in the library yet — create one first (Units menu).</p>
           ) : (
-            enemies.map((en) => {
-              const url = resolveSpriteUrl(en.spriteId, en.customSprite);
+            units.map((u) => {
+              const url = resolveSpriteUrl(u.spriteId, u.customSprite);
               return (
-                <button key={en.id} type="button" className="shmup-tile-picker__option" onClick={() => addEnemyInstance(en.id)} title={en.name}>
+                <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addUnitInstance(u.id)} title={u.name}>
                   <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
-                    {!url && <span>{en.name}</span>}
+                    {!url && <span>{u.name}</span>}
                   </div>
                 </button>
               );
             })
           )}
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddingEnemy(false)}>
+          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddingUnit(false)}>
             Cancel
           </button>
         </div>
       )}
 
-      {selected && selected.kind === "node" && pendingDeleteKey === deleteKey(selected.instance.id, selected.node.id) && (
+      {selectedInstance && selectedStep && pendingDeleteKey === deleteKey(selectedInstance.id, selectedStep.id) && (
         <div className="shmup-panel shmup-panel--confirm">
           <p className="shmup-hint">
-            {selected.node.id === selected.instance.entranceNodeId
-              ? "Remove this enemy (and its whole path) from the encounter?"
-              : "Delete this node and everything after it in the chain?"}
+            {isFirstStep(selectedInstance, selectedStep.id)
+              ? "Remove this Unit (and its whole sequence) from the encounter?"
+              : "Delete this step and everything after it in the sequence?"}
           </p>
           <div className="shmup-btn-row">
-            <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => requestDeleteNode(selected.instance.id, selected.node.id)}>
-              Confirm
-            </button>
-            <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteKey(null)}>
-              Keep
-            </button>
-          </div>
-        </div>
-      )}
-      {selected && selected.kind === "edge" && pendingDeleteKey === deleteKey(selected.instance.id, selected.edge.id) && (
-        <div className="shmup-panel shmup-panel--confirm">
-          <p className="shmup-hint">Delete this link and everything after it in the chain?</p>
-          <div className="shmup-btn-row">
-            <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => requestDeleteEdge(selected.instance.id, selected.edge.id)}>
+            <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => requestDeleteStep(selectedInstance.id, selectedStep.id)}>
               Confirm
             </button>
             <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteKey(null)}>
@@ -410,11 +359,12 @@ export default function EncounterEditor({ tile, enemies, encounter, onSave, onCa
         </div>
       )}
 
-      {selected && selected.kind === "node" && pendingDeleteKey !== deleteKey(selected.instance.id, selected.node.id) && (
-        <NodePanel instance={selected.instance} node={selected.node} onChange={(next) => updateInstance(selected.instance.id, () => next)} />
-      )}
-      {selected && selected.kind === "edge" && pendingDeleteKey !== deleteKey(selected.instance.id, selected.edge.id) && (
-        <EdgePanel instance={selected.instance} edge={selected.edge} onChange={(next) => updateInstance(selected.instance.id, () => next)} />
+      {selectedInstance && selectedStep && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
+        <StepPanel
+          unit={selectedUnitDef}
+          step={selectedStep}
+          onChange={(patch) => updateInstance(selectedInstance.id, (i) => ({ ...i, steps: i.steps.map((s) => (s.id === selectedStep.id ? { ...s, ...patch } : s)) }))}
+        />
       )}
 
       {error && <p className="shmup-error">{error}</p>}

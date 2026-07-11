@@ -657,6 +657,11 @@
   border-color: #ff6b00;
   box-shadow: 0 0 0 2px #ff6b00;
 }
+/* Action.visible === false — Disappear/teleport-out/pop-down steps read as ghosted rather than fully solid. */
+.shmup-enemy-node--hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
 
 .shmup-enemy-node__badges {
   position: absolute;

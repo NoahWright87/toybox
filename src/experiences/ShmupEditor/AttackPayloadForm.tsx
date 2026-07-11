@@ -1,6 +1,6 @@
 import MovementForm from "./MovementForm";
 import SpritePicker from "./SpritePicker";
-import { createBlankAttackPayload, createBlankBullet, type AimMode, type AttackPayload, type AttackTrigger, type BulletDef, type PatternShape } from "./encounterTypes";
+import { createBlankAttackPayload, createBlankBullet, type AimMode, type AttackPayload, type AttackTrigger, type BulletDef, type PatternShape } from "./unitTypes";
 
 interface AttackPayloadFormProps {
   payload: AttackPayload | null;
@@ -33,8 +33,8 @@ function BulletForm({ bullet, onChange, depth }: { bullet: BulletDef; onChange: 
   return (
     <div className="shmup-bullet-form">
       <SpritePicker spriteId={bullet.spriteId} customSprite={bullet.customSprite} onChange={(spriteId, customSprite) => onChange({ ...bullet, spriteId, customSprite })} />
-      <p className="shmup-hint">Bullet movement (no teleport — a bullet's spawn/expire ARE its entrance/exit):</p>
-      <MovementForm movement={bullet.movement} allowTeleport={false} onChange={(movement) => onChange({ ...bullet, movement: movement as BulletDef["movement"] })} />
+      <p className="shmup-hint">Bullet movement:</p>
+      <MovementForm movement={bullet.movement} onChange={(movement) => onChange({ ...bullet, movement })} />
       {/* Free recursion (specs/games/shmup/enemies-and-bullets.spec.todo.md §7): a bullet's own payload can spawn another bullet, whose payload can spawn another, etc. */}
       <AttackPayloadForm payload={bullet.attack} onChange={(attack) => onChange({ ...bullet, attack })} label="This bullet also fires" depth={depth + 1} />
     </div>

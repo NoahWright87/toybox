@@ -6,37 +6,41 @@ import TileList from "./TileList";
 import TileEditorForm from "./TileEditorForm";
 import ConnectionViewer from "./ConnectionViewer";
 import TagGraph from "./TagGraph";
-import EnemyList from "./EnemyList";
-import EnemyStatsForm from "./EnemyStatsForm";
+import UnitList from "./UnitList";
+import UnitStatsForm from "./UnitStatsForm";
+import ActionEditor from "./ActionEditor";
 import EncounterEditor from "./EncounterEditor";
 import { loadTiles, saveTiles } from "./tileStore";
-import { clearEnemyDraft, clearTileSession, loadEnemies, loadEnemyDraft, loadTileSession, saveEnemies, saveEnemyDraft, saveTileSession } from "./enemyStore";
+import { clearTileSession, clearUnitDraft, loadTileSession, loadUnitDraft, loadUnits, saveTileSession, saveUnitDraft, saveUnits } from "./unitStore";
 import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
-import { createBlankEnemy, makeEnemyId, type EnemyDef } from "./enemyTypes";
+import { createBlankAction, createBlankUnit, makeActionId, makeUnitId, type ActionDef, type UnitDef } from "./unitTypes";
 import { createBlankEncounter, type EncounterDef } from "./encounterTypes";
 import "./ShmupEditor.css";
 
-type View = "list" | "edit" | "connections" | "graph" | "enemy-list" | "enemy-edit" | "encounter-edit";
+type View = "list" | "edit" | "connections" | "graph" | "unit-list" | "unit-edit" | "action-edit" | "encounter-edit";
 
 export default function ShmupEditor() {
   const [tiles, setTiles] = useState<TileDef[]>(() => loadTiles());
-  const [enemies, setEnemies] = useState<EnemyDef[]>(() => loadEnemies());
+  const [units, setUnits] = useState<UnitDef[]>(() => loadUnits());
 
   // Resume an interrupted editing session silently (root CLAUDE.md's
   // mandatory in-progress-session-survives-reload rule) — a half-built
-  // tile/encounter/enemy is a much bigger loss than E1's original tile-form
-  // draft gap. Enemy edits and tile edits (which can nest into an
-  // in-progress encounter) use separate session slots since they're
-  // mutually exclusive editing contexts.
-  const [editingEnemyDef, setEditingEnemyDef] = useState<EnemyDef | null>(() => loadEnemyDraft());
+  // tile/encounter/Unit/Action is a much bigger loss than E1's original
+  // tile-form draft gap. Unit edits (which can nest into an in-progress
+  // Action) and tile edits (which can nest into an in-progress encounter)
+  // use separate session slots since they're mutually exclusive contexts.
+  const [editingUnit, setEditingUnit] = useState<UnitDef | null>(() => loadUnitDraft()?.unit ?? null);
+  const [editingAction, setEditingAction] = useState<ActionDef | null>(() => loadUnitDraft()?.activeAction ?? null);
   const [editingTile, setEditingTile] = useState<TileDef | null>(() => loadTileSession()?.tile ?? null);
   const [editingEncounter, setEditingEncounter] = useState<EncounterDef | null>(() => loadTileSession()?.activeEncounter ?? null);
   const [view, setView] = useState<View>(() => {
-    if (loadEnemyDraft()) return "enemy-edit";
-    const session = loadTileSession();
-    if (session?.activeEncounter) return "encounter-edit";
-    if (session?.tile) return "edit";
+    const unitDraft = loadUnitDraft();
+    if (unitDraft?.activeAction) return "action-edit";
+    if (unitDraft?.unit) return "unit-edit";
+    const tileSession = loadTileSession();
+    if (tileSession?.activeEncounter) return "encounter-edit";
+    if (tileSession?.tile) return "edit";
     return "list";
   });
 
@@ -149,48 +153,108 @@ export default function ShmupEditor() {
     if (editingTile) saveTileSession({ tile: editingTile, activeEncounter: encounter });
   }
 
-  function persistEnemies(next: EnemyDef[]) {
-    setEnemies(next);
-    saveEnemies(next);
+  function persistUnits(next: UnitDef[]) {
+    setUnits(next);
+    saveUnits(next);
   }
 
-  function handleNewEnemy() {
-    setEditingEnemyDef(createBlankEnemy(enemies.length));
-    setView("enemy-edit");
+  function handleNewUnit() {
+    setEditingUnit(createBlankUnit(units.length));
+    setEditingAction(null);
+    setView("unit-edit");
   }
 
-  function handleEditEnemy(enemy: EnemyDef) {
-    setEditingEnemyDef(enemy);
-    setView("enemy-edit");
+  function handleEditUnit(unit: UnitDef) {
+    setEditingUnit(unit);
+    setEditingAction(null);
+    setView("unit-edit");
   }
 
-  function handleDuplicateEnemy(enemy: EnemyDef) {
+  function handleDuplicateUnit(unit: UnitDef) {
     const now = Date.now();
-    const copy: EnemyDef = { ...enemy, id: makeEnemyId(), name: `${enemy.name} copy`, createdAt: now, modifiedAt: now };
-    persistEnemies([...enemies, copy]);
+    const copy: UnitDef = {
+      ...unit,
+      id: makeUnitId(),
+      name: `${unit.name} copy`,
+      actions: unit.actions.map((a) => ({ ...a, id: makeActionId() })),
+      createdAt: now,
+      modifiedAt: now,
+    };
+    persistUnits([...units, copy]);
   }
 
-  function handleDeleteEnemy(enemy: EnemyDef) {
-    persistEnemies(enemies.filter((e) => e.id !== enemy.id));
+  function handleDeleteUnit(unit: UnitDef) {
+    persistUnits(units.filter((u) => u.id !== unit.id));
   }
 
-  function handleSaveEnemy(enemy: EnemyDef) {
-    const exists = enemies.some((e) => e.id === enemy.id);
-    persistEnemies(exists ? enemies.map((e) => (e.id === enemy.id ? enemy : e)) : [...enemies, enemy]);
-    setEditingEnemyDef(null);
-    clearEnemyDraft();
-    setView("enemy-list");
+  function handleSaveUnit(unit: UnitDef) {
+    const exists = units.some((u) => u.id === unit.id);
+    persistUnits(exists ? units.map((u) => (u.id === unit.id ? unit : u)) : [...units, unit]);
+    setEditingUnit(null);
+    setEditingAction(null);
+    clearUnitDraft();
+    setView("unit-list");
   }
 
-  function handleCancelEnemyEdit() {
-    setEditingEnemyDef(null);
-    clearEnemyDraft();
-    setView("enemy-list");
+  function handleCancelUnitEdit() {
+    setEditingUnit(null);
+    setEditingAction(null);
+    clearUnitDraft();
+    setView("unit-list");
   }
 
-  function handleEnemyDraftChange(enemy: EnemyDef) {
-    setEditingEnemyDef(enemy);
-    saveEnemyDraft(enemy);
+  function handleUnitDraftChange(unit: UnitDef) {
+    setEditingUnit(unit);
+    // Only fires while UnitStatsForm is mounted (view === "unit-edit"), so there's never an active Action draft at the same time.
+    saveUnitDraft({ unit, activeAction: null });
+  }
+
+  function handleNewAction() {
+    if (!editingUnit) return;
+    const action = createBlankAction(editingUnit.actions.length);
+    setEditingAction(action);
+    saveUnitDraft({ unit: editingUnit, activeAction: action });
+    setView("action-edit");
+  }
+
+  function handleEditAction(action: ActionDef) {
+    if (!editingUnit) return;
+    setEditingAction(action);
+    saveUnitDraft({ unit: editingUnit, activeAction: action });
+    setView("action-edit");
+  }
+
+  function handleDeleteAction(actionId: string) {
+    if (!editingUnit) return;
+    const next = { ...editingUnit, actions: editingUnit.actions.filter((a) => a.id !== actionId), modifiedAt: Date.now() };
+    setEditingUnit(next);
+    saveUnitDraft({ unit: next, activeAction: null });
+  }
+
+  function handleSaveAction(action: ActionDef) {
+    if (!editingUnit) return;
+    const exists = editingUnit.actions.some((a) => a.id === action.id);
+    const nextUnit: UnitDef = {
+      ...editingUnit,
+      actions: exists ? editingUnit.actions.map((a) => (a.id === action.id ? action : a)) : [...editingUnit.actions, action],
+      modifiedAt: Date.now(),
+    };
+    setEditingUnit(nextUnit);
+    setEditingAction(null);
+    saveUnitDraft({ unit: nextUnit, activeAction: null });
+    setView("unit-edit");
+  }
+
+  function handleCancelActionEdit() {
+    if (!editingUnit) return;
+    setEditingAction(null);
+    saveUnitDraft({ unit: editingUnit, activeAction: null });
+    setView("unit-edit");
+  }
+
+  function handleActionDraftChange(action: ActionDef) {
+    setEditingAction(action);
+    if (editingUnit) saveUnitDraft({ unit: editingUnit, activeAction: action });
   }
 
   const menus = useMemo<MenuBarMenu[]>(
@@ -206,15 +270,15 @@ export default function ShmupEditor() {
         ],
       },
       {
-        label: "Enemies",
+        label: "Units",
         items: [
-          { label: "New Enemy...", onClick: handleNewEnemy },
+          { label: "New Unit...", onClick: handleNewUnit },
           { separator: true },
-          { label: "Enemy List", onClick: () => setView("enemy-list") },
+          { label: "Unit List", onClick: () => setView("unit-list") },
         ],
       },
     ],
-    [tiles.length, enemies.length]
+    [tiles.length, units.length]
   );
   useWindowMenus(menus);
   // The Connection Viewer trims its own heading to save vertical space —
@@ -253,16 +317,32 @@ export default function ShmupEditor() {
             <TagGraph tiles={tiles} onEditTile={handleEditTile} />
           </>
         )}
-        {view === "enemy-list" && (
+        {view === "unit-list" && (
           <>
-            <h3 className="shmup-editor__heading">Enemy Library ({enemies.length})</h3>
-            <EnemyList enemies={enemies} onEdit={handleEditEnemy} onDuplicate={handleDuplicateEnemy} onDelete={handleDeleteEnemy} />
+            <h3 className="shmup-editor__heading">Unit Library ({units.length})</h3>
+            <UnitList units={units} onEdit={handleEditUnit} onDuplicate={handleDuplicateUnit} onDelete={handleDeleteUnit} />
           </>
         )}
-        {view === "enemy-edit" && editingEnemyDef && (
+        {view === "unit-edit" && editingUnit && (
           <>
-            <h3 className="shmup-editor__heading">{enemies.some((e) => e.id === editingEnemyDef.id) ? "Edit Enemy" : "New Enemy"}</h3>
-            <EnemyStatsForm enemy={editingEnemyDef} onSave={handleSaveEnemy} onCancel={handleCancelEnemyEdit} onDraftChange={handleEnemyDraftChange} />
+            <h3 className="shmup-editor__heading">{units.some((u) => u.id === editingUnit.id) ? "Edit Unit" : "New Unit"}</h3>
+            <UnitStatsForm
+              unit={editingUnit}
+              onSave={handleSaveUnit}
+              onCancel={handleCancelUnitEdit}
+              onDraftChange={handleUnitDraftChange}
+              onNewAction={handleNewAction}
+              onEditAction={handleEditAction}
+              onDeleteAction={handleDeleteAction}
+            />
+          </>
+        )}
+        {view === "action-edit" && editingUnit && editingAction && (
+          <>
+            <h3 className="shmup-editor__heading">
+              {editingUnit.actions.some((a) => a.id === editingAction.id) ? "Edit Action" : "New Action"} — {editingUnit.name}
+            </h3>
+            <ActionEditor action={editingAction} onSave={handleSaveAction} onCancel={handleCancelActionEdit} onDraftChange={handleActionDraftChange} />
           </>
         )}
         {view === "encounter-edit" && editingTile && editingEncounter && (
@@ -272,7 +352,7 @@ export default function ShmupEditor() {
             </h3>
             <EncounterEditor
               tile={editingTile}
-              enemies={enemies}
+              units={units}
               encounter={editingEncounter}
               onSave={handleSaveEncounter}
               onCancel={handleCancelEncounterEdit}

@@ -246,7 +246,7 @@ export default function TileEditorForm({
             {draft.encounters.map((enc) => (
               <li key={enc.id} className="shmup-encounter-list__row">
                 <span>
-                  {enc.name} — weight {enc.weight}, {enc.enemies.length} enem{enc.enemies.length === 1 ? "y" : "ies"}
+                  {enc.name} — weight {enc.weight}, {enc.units.length} unit{enc.units.length === 1 ? "" : "s"}
                 </span>
                 <div className="shmup-btn-row">
                   <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEditEncounter(enc)}>

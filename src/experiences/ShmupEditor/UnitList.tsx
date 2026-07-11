@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { resolveSpriteUrl } from "./enemySprites";
-import type { EnemyDef } from "./enemyTypes";
+import type { UnitDef } from "./unitTypes";
 
-interface EnemyListProps {
-  enemies: EnemyDef[];
-  onEdit: (enemy: EnemyDef) => void;
-  onDuplicate: (enemy: EnemyDef) => void;
-  onDelete: (enemy: EnemyDef) => void;
+interface UnitListProps {
+  units: UnitDef[];
+  onEdit: (unit: UnitDef) => void;
+  onDuplicate: (unit: UnitDef) => void;
+  onDelete: (unit: UnitDef) => void;
 }
 
-/** Visual-checker grid of enemy sprites, same pattern as TileList.tsx — actions behind a small "⋮" corner button instead of an always-visible row. */
-export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: EnemyListProps) {
+/** Visual-checker grid of Unit sprites, same pattern as TileList.tsx — actions behind a small "⋮" corner button instead of an always-visible row. */
+export default function UnitList({ units, onEdit, onDuplicate, onDelete }: UnitListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const menuCellRef = useRef<HTMLDivElement | null>(null);
@@ -27,8 +27,8 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedId]);
 
-  if (enemies.length === 0) {
-    return <p className="shmup-hint">No enemies yet — create one to get started.</p>;
+  if (units.length === 0) {
+    return <p className="shmup-hint">No Units yet — create one to get started.</p>;
   }
 
   function closeMenu() {
@@ -36,21 +36,21 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
     setPendingDeleteId(null);
   }
 
-  function toggleMenu(enemyId: string) {
-    if (expandedId === enemyId) {
+  function toggleMenu(unitId: string) {
+    if (expandedId === unitId) {
       closeMenu();
     } else {
-      setExpandedId(enemyId);
+      setExpandedId(unitId);
       setPendingDeleteId(null);
     }
   }
 
   return (
     <div className="shmup-tile-list__grid">
-      {enemies.map((enemy) => {
-        const spriteUrl = resolveSpriteUrl(enemy.spriteId, enemy.customSprite);
+      {units.map((unit) => {
+        const spriteUrl = resolveSpriteUrl(unit.spriteId, unit.customSprite);
         return (
-          <div key={enemy.id} className="shmup-tile-list__cell" ref={expandedId === enemy.id ? menuCellRef : undefined}>
+          <div key={unit.id} className="shmup-tile-list__cell" ref={expandedId === unit.id ? menuCellRef : undefined}>
             <div className={`shmup-tile-art shmup-tile-art--grid ${spriteUrl ? "" : "shmup-enemy-list__cell--empty"}`}>
               <div className="shmup-tile-art__row">
                 <div className={`shmup-tile-art__cell ${spriteUrl ? "" : "shmup-tile-art__cell--empty"}`}>
@@ -58,13 +58,13 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
                 </div>
               </div>
             </div>
-            <button type="button" className="shmup-tile-list__menu-btn" title={enemy.name} onClick={() => toggleMenu(enemy.id)}>
+            <button type="button" className="shmup-tile-list__menu-btn" title={unit.name} onClick={() => toggleMenu(unit.id)}>
               ⋮
             </button>
-            {expandedId === enemy.id && (
+            {expandedId === unit.id && (
               <div className="shmup-tile-list__menu">
                 <span className="shmup-tile-list__menu-name">
-                  {enemy.name} ({enemy.hp} HP)
+                  {unit.name} ({unit.hp} HP, {unit.actions.length} action{unit.actions.length === 1 ? "" : "s"})
                 </span>
                 <div className="shmup-btn-row">
                   <button
@@ -72,7 +72,7 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
                     className="shmup-btn shmup-btn--small"
                     onClick={() => {
                       closeMenu();
-                      onEdit(enemy);
+                      onEdit(unit);
                     }}
                   >
                     Edit
@@ -82,18 +82,18 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
                     className="shmup-btn shmup-btn--small"
                     onClick={() => {
                       closeMenu();
-                      onDuplicate(enemy);
+                      onDuplicate(unit);
                     }}
                   >
                     Duplicate
                   </button>
-                  {pendingDeleteId === enemy.id ? (
+                  {pendingDeleteId === unit.id ? (
                     <>
                       <button
                         type="button"
                         className="shmup-btn shmup-btn--small shmup-btn--danger"
                         onClick={() => {
-                          onDelete(enemy);
+                          onDelete(unit);
                           closeMenu();
                         }}
                       >
@@ -104,7 +104,7 @@ export default function EnemyList({ enemies, onEdit, onDuplicate, onDelete }: En
                       </button>
                     </>
                   ) : (
-                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteId(enemy.id)}>
+                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteId(unit.id)}>
                       Delete
                     </button>
                   )}
