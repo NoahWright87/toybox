@@ -43,15 +43,15 @@ describe("computeInstancePreview", () => {
     expect(preview?.pos.y).toBeCloseTo(100); // speed 100 * 1s, heading (0,1)
   });
 
-  it("a lone step with no neighbors defaults to heading straight down", () => {
+  it("a lone step with no next waypoint holds at its own position, even with a moving Action", () => {
     const unit = unitWithActions({ movement: { ...defaultStraightLine(), speed: 50, accel: 0, turnRate: 0 } });
     let inst: EncounterUnit = createEncounterUnit(unit.id);
     inst = addStep(inst, "action-0", { x: 5, y: 5 });
     const preview = computeInstancePreview(inst, unit, 2);
-    expect(preview?.pos).toEqual({ x: 5, y: 105 }); // 50*2 = 100 down from y=5
+    expect(preview?.pos).toEqual({ x: 5, y: 5 }); // no destination to head toward, so it never moves
   });
 
-  it("the last step continues the heading from the previous step", () => {
+  it("the last step holds at its own position instead of continuing the previous heading", () => {
     const unit = unitWithActions(
       { movement: { ...defaultStraightLine(), speed: 100, accel: 0, turnRate: 0 } },
       { movement: { ...defaultStraightLine(), speed: 50, accel: 0, turnRate: 0 } }
@@ -60,8 +60,7 @@ describe("computeInstancePreview", () => {
     inst = addStep(inst, "action-0", { x: 0, y: 0 }); // time 0
     inst = addStep(inst, "action-1", { x: 100, y: 0 }); // time 2, heading (1,0) from step 0->1
     const preview = computeInstancePreview(inst, unit, 3); // 1s into the last step
-    expect(preview?.pos.x).toBeCloseTo(150); // 100 + 50*1, continuing heading (1,0)
-    expect(preview?.pos.y).toBeCloseTo(0);
+    expect(preview?.pos).toEqual({ x: 100, y: 0 }); // frozen at its own waypoint, no further travel
   });
 
   it("wave oscillates perpendicular to the base heading", () => {
@@ -76,9 +75,10 @@ describe("computeInstancePreview", () => {
   });
 
   it("spiral orbits around a moving center", () => {
-    const unit = unitWithActions({ movement: { ...defaultSpiral(), speed: 0, radius: 20, angularSpeed: 90, radiusGrowth: 0 } });
+    const unit = unitWithActions({ movement: { ...defaultSpiral(), speed: 0, radius: 20, angularSpeed: 90, radiusGrowth: 0 } }, { movement: null });
     let inst: EncounterUnit = createEncounterUnit(unit.id);
     inst = addStep(inst, "action-0", { x: 0, y: 0 });
+    inst = addStep(inst, "action-1", { x: 1000, y: 1000 }); // just needs to exist so this isn't a terminal (frozen) step
     // angularSpeed 90 deg/sec, elapsed 1s -> 90 degrees -> cos(90)=0, sin(90)=1
     const preview = computeInstancePreview(inst, unit, 1);
     expect(preview?.pos.x).toBeCloseTo(0, 4);
@@ -106,24 +106,27 @@ describe("computeInstancePreview", () => {
     expect(preview?.pos.y).toBeCloseTo(0);
   });
 
-  it("holds position once past the last step's preview window instead of traveling forever", () => {
+  it("a fast unit never travels arbitrarily far past its last waypoint, no matter how far the scrub goes", () => {
+    // This is the exact bug report: a fast lone/terminal unit kept traveling
+    // long after "reaching" its final node — now it just never moves past it.
     const unit = unitWithActions({ movement: { ...defaultStraightLine(), speed: 300, accel: 0 } });
     let inst: EncounterUnit = createEncounterUnit(unit.id);
     inst = addStep(inst, "action-0", { x: 0, y: 0 });
-    const atWindowEdge = computeInstancePreview(inst, unit, 3); // LAST_STEP_PREVIEW_WINDOW
-    const wayPast = computeInstancePreview(inst, unit, 50);
-    expect(wayPast?.pos).toEqual(atWindowEdge?.pos);
-    expect(wayPast?.pos.y).toBeCloseTo(900); // 300px/s * 3s cap, not 300*50
+    const soonAfter = computeInstancePreview(inst, unit, 0.5);
+    const wayPast = computeInstancePreview(inst, unit, 500);
+    expect(soonAfter?.pos).toEqual({ x: 0, y: 0 });
+    expect(wayPast?.pos).toEqual({ x: 0, y: 0 });
   });
 
   it("speedMultiplier dilates elapsed time (2x runs the movement twice as far in the same wall-clock time)", () => {
-    const base = unitWithActions({ movement: { ...defaultStraightLine(), speed: 100, accel: 0 } });
-    let inst: EncounterUnit = createEncounterUnit(base.id);
+    const unit = unitWithActions({ movement: { ...defaultStraightLine(), speed: 100, accel: 0 } }, { movement: null });
+    let inst: EncounterUnit = createEncounterUnit(unit.id);
     inst = addStep(inst, "action-0", { x: 0, y: 0 });
-    const at1x = computeInstancePreview(inst, base, 1);
+    inst = addStep(inst, "action-1", { x: 0, y: 1000 }); // far enough away that neither run overshoots
+    const at1x = computeInstancePreview(inst, unit, 1);
 
     const doubled = updateStep(inst, inst.steps[0].id, { speedMultiplier: 2 });
-    const at2x = computeInstancePreview(doubled, base, 1);
+    const at2x = computeInstancePreview(doubled, unit, 1);
 
     expect(at2x?.pos.y).toBeCloseTo((at1x?.pos.y ?? 0) * 2);
   });

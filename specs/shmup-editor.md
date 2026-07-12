@@ -480,33 +480,35 @@ travels toward, not a place it teleports between** — this is the sense in
 which the preview is genuinely new capability, not just a retiming UI: you
 can now see whether an authored sequence actually reads as intended motion,
 not just guess from where the dots happen to sit. Direction for a segment
-comes from `pos → nextStep.pos`; the last step in a sequence continues the
-previous segment's heading (no "next" to aim at), and a lone step with no
-neighbors at all defaults to heading straight down (the usual "forward"
-for a vertical shmup). **`turnRate` (homing toward the player) is not
-simulated** — there's no live player position at authoring time, the same
-reason `playerPosition`/`onProximity` triggers were cut — so the preview
-uses a fixed heading and ignores it; documented in `movementPreview.ts`'s
-file header as a known approximation, not a bug. This preview is the
-editor's own approximation for authoring purposes — there's no shared
-runtime to match yet (`games/shmup` has no enemy-movement implementation),
-consistent with the editor's "no shared code with the game" stance
-elsewhere.
+comes from `pos → nextStep.pos`. **`turnRate` (homing toward the player)
+is not simulated** — there's no live player position at authoring time,
+the same reason `playerPosition`/`onProximity` triggers were cut — so the
+preview uses a fixed heading and ignores it; documented in
+`movementPreview.ts`'s file header as a known approximation, not a bug.
+This preview is the editor's own approximation for authoring purposes —
+there's no shared runtime to match yet (`games/shmup` has no enemy-movement
+implementation), consistent with the editor's "no shared code with the
+game" stance elsewhere.
 
-**Position is clamped to the destination, never extrapolated past it.**
-Between two steps, the effective elapsed time fed into the position
+**Position is clamped to the destination, never extrapolated past it —
+and a step with no next waypoint never moves in the preview at all.**
+Between two real steps, the effective elapsed time fed into the position
 formula is capped at "however long the base path takes to travel the
 straight-line distance to the next waypoint" (`baseElapsedFor`) — so the
 unit holds there once it arrives instead of sailing past it. This mostly
 matters for a *manually*-timed step whose authored gap is longer than the
 movement's natural travel time (a derived step's duration already matches
-by construction, so the clamp is a no-op there). Past the *last* step
-(no next waypoint to clamp against), elapsed is capped at
-`LAST_STEP_PREVIEW_WINDOW` (3 seconds) so scrubbing/playing past the end
-of a sequence holds position instead of running the unit off into
-infinity — this exact symptom (a unit visibly still traveling long after
-"reaching" its final waypoint) was the first thing that surfaced the
-whole derived-time bug.
+by construction, so the clamp is a no-op there). **The last step in a
+sequence — or a lone step with no neighbors at all — simply holds at its
+own `pos`, regardless of its Action's own movement or how far the scrub
+head travels past it.** An earlier version had it "continue the previous
+heading" (or guess "straight down" for a lone step) for a bounded few
+seconds before holding; that still read as broken with a genuinely fast
+unit, since even a couple of seconds is enough distance to look like
+runaway travel. There's no principled destination to head toward once a
+sequence ends, so the preview doesn't guess one anymore — freezing is the
+only outcome that can never look like the unit "keeps traveling after it
+reaches the final node," which is the exact bug report that drove this.
 
 ### Per-step overrides (`StepPanel.tsx`)
 

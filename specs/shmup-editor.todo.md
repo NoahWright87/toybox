@@ -181,14 +181,23 @@ current design; this entry describes what actually shipped.
   (`speedMultiplierForDuration`) — never the shared Action, preserving
   "encounters select pacing, they don't mutate the reusable buffet."
   `movementPreview.ts` also gained a proper clamp: a segment's preview
-  position holds at the destination once reached instead of overshooting,
-  and a final step's motion is capped to `LAST_STEP_PREVIEW_WINDOW` (3s)
-  past its own time instead of extrapolating indefinitely — this
-  unbounded-travel symptom (visibly still moving long after "reaching"
-  the last waypoint) was what surfaced the whole bug. `steps` arrays are
-  no longer kept sorted-by-time as a drag-reordering mechanism — array
-  index order is simply the authorial sequence order now, since a mostly-
-  derived `time` isn't something you'd drag past a neighbor to reorder.
+  position holds at the destination once reached instead of overshooting.
+  `steps` arrays are no longer kept sorted-by-time as a drag-reordering
+  mechanism — array index order is simply the authorial sequence order
+  now, since a mostly-derived `time` isn't something you'd drag past a
+  neighbor to reorder.
+- **Second follow-up fix, same day: a step with no next waypoint no
+  longer moves in the preview at all.** The first attempt at the above fix
+  capped a terminal step's continued motion (it inherited the previous
+  segment's heading) to a bounded `LAST_STEP_PREVIEW_WINDOW` — but that
+  still read as the identical bug with a genuinely fast unit, since even a
+  few seconds covers a lot of distance. There's no principled destination
+  to head toward once a sequence ends, so the preview stopped guessing one:
+  the last step in a sequence (or a lone step with no neighbors) now just
+  holds at its own `pos`, full stop, regardless of elapsed scrub time or
+  the Action's own movement. `LAST_STEP_PREVIEW_WINDOW` still exists but
+  is now purely a timeline-ruler sizing constant (how far past the last
+  step the ruler extends for layout), not a motion-preview cap.
 - Attack payloads (pattern shape x aim mode x trigger) and nested bullet
   payloads (a bullet is a minimal enemy per
   `enemies-and-bullets.spec.todo.md` §7) are otherwise unchanged in shape

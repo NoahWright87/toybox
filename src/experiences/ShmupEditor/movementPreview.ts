@@ -9,11 +9,19 @@
  * **A step's `pos` is a waypoint the unit travels toward, not a place it
  * teleports between.** Each movement kind's own doc comments already say
  * "along the base A→B path" — A is the active step's `pos`, B is the next
- * step's `pos` (direction only; speed/shape are the movement's own
- * params). The last step in a sequence has no B, so it continues the
- * heading from the previous step; a lone step with no neighbors at all
- * defaults to heading straight down (into the tile, the usual "forward"
- * for a vertical shmup).
+ * step's `pos` (direction only; speed/shape are the movement's own params).
+ *
+ * **A step with no next waypoint holds in place — it never moves in the
+ * preview, regardless of its Action's own movement.** An earlier version
+ * let a terminal step "continue the previous heading" (or, for a lone step,
+ * guess "straight down") for a bounded window before holding — this still
+ * read as broken in practice: a genuinely fast unit could travel very far
+ * within even a couple of preview seconds, so "the unit keeps traveling
+ * after it reaches the final node" kept happening. There's no principled
+ * destination to head toward once the sequence ends, so the preview simply
+ * doesn't guess one — freezing at the step's own `pos` is the only outcome
+ * that can never look like runaway motion. The Action's `attack`/
+ * `animationState`/`visible` still evaluate normally; only position freezes.
  *
  * **`turnRate` (homing toward the player) is not simulated.** There's no
  * live player position at authoring time — the same reason `playerPosition`
@@ -22,17 +30,14 @@
  * approximation, not a bug.
  *
  * **Position is clamped to the destination, not extrapolated past it.**
- * Between two steps, the effective elapsed time fed into the position
+ * Between two real steps, the effective elapsed time fed into the position
  * formula is capped at `baseElapsedFor(movement, distanceToNextWaypoint)`
  * (encounterTiming.ts) — "however long the base path takes to travel that
  * far" — so the unit holds at the next waypoint once it arrives instead of
  * sailing past it. This matters for a *manually*-timed step whose authored
  * gap is longer than the movement's natural travel time; a *derived* step's
  * duration already matches the travel time by construction, so the clamp
- * is a no-op there. Past the last step (no next waypoint to clamp against),
- * elapsed is capped at `LAST_STEP_PREVIEW_WINDOW` seconds so
- * scrubbing/playing doesn't run a unit off into infinity — this was a real
- * bug (unbounded travel past the final waypoint) before this cap existed.
+ * is a no-op there.
  */
 import { baseElapsedFor, distanceBetween } from "./encounterTiming";
 import { activeStepAt } from "./encounterSteps";
@@ -45,7 +50,7 @@ export interface InstancePreview {
   step: EncounterStep;
 }
 
-/** How many seconds past the last step's time its movement keeps visibly playing before the preview holds position — there's no "next" waypoint to derive a natural stopping point from. */
+/** How far past the last step's time the timeline ruler extends, purely for layout (so the final diamond isn't flush against the edge) — not used for motion preview, which holds terminal steps in place. See file header. */
 export const LAST_STEP_PREVIEW_WINDOW = 3;
 
 function sub(a: Vec2, b: Vec2): Vec2 {
@@ -120,13 +125,13 @@ export function computeInstancePreview(instance: EncounterUnit, unitDef: UnitDef
   const idx = instance.steps.findIndex((s) => s.id === step.id);
   const heading = headingFor(instance.steps, idx);
   const next = instance.steps[idx + 1];
-  const rawElapsed = Math.max(0, t - step.time);
-  let effectiveElapsed = rawElapsed * step.speedMultiplier;
+  // No next waypoint means no destination to head toward — hold in place
+  // rather than guess a heading and coast (see file header).
+  let effectiveElapsed = 0;
   if (next && action.movement) {
+    const rawElapsed = Math.max(0, t - step.time);
     const targetDistance = distanceBetween(step.pos, next.pos);
-    effectiveElapsed = Math.min(effectiveElapsed, baseElapsedFor(action.movement, targetDistance));
-  } else if (!next) {
-    effectiveElapsed = Math.min(effectiveElapsed, LAST_STEP_PREVIEW_WINDOW * step.speedMultiplier);
+    effectiveElapsed = Math.min(rawElapsed * step.speedMultiplier, baseElapsedFor(action.movement, targetDistance));
   }
   const pos = positionFor(action.movement, step.pos, heading, effectiveElapsed);
   return { pos, action, step };
