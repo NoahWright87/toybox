@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
+import { activeStepAt, addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
 import { createEncounterUnit, type EncounterUnit } from "./encounterTypes";
 
 function instance(): EncounterUnit {
@@ -26,11 +26,19 @@ describe("addStep", () => {
     expect(e.steps[0].pos).toEqual({ x: 0, y: 0 });
   });
 
-  it("gives every new step a default 'always' trigger and no overrides", () => {
+  it("defaults the first step's time to 0 and no overrides", () => {
     const e = addStep(instance(), "a");
-    expect(e.steps[0].trigger).toEqual({ kind: "always", value: 0 });
+    expect(e.steps[0].time).toBe(0);
     expect(e.steps[0].aimAngleOverride).toBeNull();
     expect(e.steps[0].speedMultiplier).toBe(1);
+  });
+
+  it("defaults each new step's time to after the previous step", () => {
+    let e = addStep(instance(), "a");
+    e = addStep(e, "b");
+    e = addStep(e, "c");
+    expect(e.steps[1].time).toBeGreaterThan(e.steps[0].time);
+    expect(e.steps[2].time).toBeGreaterThan(e.steps[1].time);
   });
 });
 
@@ -91,5 +99,43 @@ describe("moveStep / updateStep", () => {
     expect(updated.steps[1].actionId).toBe("c");
     expect(updated.steps[1].speedMultiplier).toBe(0.5);
     expect(updated.steps[0].actionId).toBe("a");
+  });
+
+  it("updateStep clamps a negative time to 0", () => {
+    const e = addStep(instance(), "a");
+    const updated = updateStep(e, e.steps[0].id, { time: -5 });
+    expect(updated.steps[0].time).toBe(0);
+  });
+
+  it("updateStep re-sorts the array when a retime crosses a neighbor", () => {
+    let e = addStep(instance(), "a"); // time 0
+    e = addStep(e, "b"); // time 2
+    e = addStep(e, "c"); // time 4
+    const retimed = updateStep(e, e.steps[2].id, { time: 1 }); // "c" jumps before "b"
+    expect(retimed.steps.map((s) => s.actionId)).toEqual(["a", "c", "b"]);
+    // first/last tracking follows the new time order, not original insertion order
+    expect(isFirstStep(retimed, retimed.steps[0].id)).toBe(true);
+    expect(isLastStep(retimed, retimed.steps[2].id)).toBe(true);
+  });
+});
+
+describe("activeStepAt", () => {
+  it("returns null before the instance's first step", () => {
+    const e = addStep(instance(), "a"); // time 0
+    expect(activeStepAt(e, -1)).toBeNull();
+  });
+
+  it("returns null for an instance with no steps", () => {
+    expect(activeStepAt(instance(), 0)).toBeNull();
+  });
+
+  it("returns the latest step whose time has been reached", () => {
+    let e = addStep(instance(), "a"); // time 0
+    e = addStep(e, "b"); // time 2
+    e = addStep(e, "c"); // time 4
+    expect(activeStepAt(e, 0)?.actionId).toBe("a");
+    expect(activeStepAt(e, 1.9)?.actionId).toBe("a");
+    expect(activeStepAt(e, 2)?.actionId).toBe("b");
+    expect(activeStepAt(e, 100)?.actionId).toBe("c");
   });
 });

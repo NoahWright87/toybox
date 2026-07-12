@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import EncounterTileFrame from "./EncounterTileFrame";
+import EncounterTimeline from "./EncounterTimeline";
 import StepPanel from "./StepPanel";
 import { resolveSpriteUrl } from "./enemySprites";
-import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep } from "./encounterSteps";
+import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
 import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
+import { computeInstancePreview } from "./movementPreview";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
 
@@ -21,6 +23,9 @@ type Selection = { instanceId: string; stepId: string } | null;
 
 const NODE_DIAMETER = 56;
 const NODE_RADIUS = NODE_DIAMETER / 2;
+/** The live-preview marker (see movementPreview.ts) is smaller than a waypoint node so it visually reads as secondary, not another authored step. */
+const PREVIEW_DIAMETER = 36;
+const PREVIEW_RADIUS = PREVIEW_DIAMETER / 2;
 const PADDING = 60;
 /** Reference-frame sizing: matches encounterSteps.ts's default next-step offset, so a freshly grown sequence reads at a similar scale to the tile itself. */
 const TILE_UNIT = 130;
@@ -40,12 +45,16 @@ function deleteKey(instanceId: string, stepId: string): string {
  * (each referencing a UnitDef for sprite/stats/Action buffet) and, for
  * each, a flat ordered STEP sequence (specs/shmup-editor.md's Encounter
  * editor section). No graph, no separately-configured edges — a step is
- * `{ position, trigger, action }`, and the action (movement/attack/
+ * `{ position, time, action }`, and the action (movement/attack/
  * animation) is looked up on the referenced Unit, not authored here. The
  * tile's real footprint/edges render as a fixed reference frame
  * (EncounterTileFrame) so placement is meaningful relative to the tile's
- * actual neighbors. Tap a step to move/extend/delete it and edit its
- * trigger + which Action it uses.
+ * actual neighbors. Tap a step to move/extend/delete it and edit which
+ * Action it uses; `EncounterTimeline` below the canvas is the primary way
+ * to set *when* it happens (drag on a shared ruler) and doubles as a live
+ * motion preview — scrubbing or hitting Play interpolates each instance's
+ * actual position via `movementPreview.ts` and renders it as a small
+ * ghost marker on top of the authored waypoints.
  */
 export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
   const [draft, setDraft] = useState<EncounterDef>(encounter);
@@ -53,8 +62,33 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [addingUnit, setAddingUnit] = useState(false);
+  const [scrubTime, setScrubTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const error = validate(draft);
+
+  // Ephemeral preview state (scrub position, play/pause) is intentionally
+  // NOT part of `draft`/onDraftChange — it's a viewing aid, not authored
+  // content, so it doesn't need to survive a reload like the actual steps do.
+  const allStepTimes = draft.units.flatMap((u) => u.steps.map((s) => s.time));
+  const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + 3 : 10;
+
+  useEffect(() => {
+    if (!playing) return;
+    let raf: number;
+    let last = performance.now();
+    function tick(now: number) {
+      const dt = (now - last) / 1000;
+      last = now;
+      setScrubTime((t) => {
+        const next = t + dt;
+        return next > maxTime ? 0 : next;
+      });
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, maxTime]);
 
   function updateDraft(next: EncounterDef) {
     setDraft(next);
@@ -73,7 +107,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // Encounter editor section (collapsing the panel on pointerdown shifted layout
       // under an in-flight click and silently ate the Save action).
       if (target?.closest("button")) return;
-      if (!target?.closest(".shmup-enemy-canvas-stage") && !target?.closest(".shmup-panel")) {
+      if (!target?.closest(".shmup-enemy-canvas-stage") && !target?.closest(".shmup-panel") && !target?.closest(".shmup-timeline")) {
         setSelection(null);
         setPendingDeleteKey(null);
       }
@@ -214,7 +248,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
       <p className="shmup-hint">
         Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition. The dashed box is this tile's
-        real footprint/edges, for reference.
+        real footprint/edges, for reference. Use the timeline below to set when each step happens, and Play/scrub to preview motion (teal marker).
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -311,8 +345,37 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               );
             });
           })}
+
+          {draft.units.map((instance) => {
+            const unitDef = units.find((u) => u.id === instance.unitDefId);
+            const preview = computeInstancePreview(instance, unitDef, scrubTime);
+            if (!preview || !preview.action.visible) return null;
+            const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+            const pos = toStage(preview.pos);
+            return (
+              <div
+                key={`preview-${instance.id}`}
+                className="shmup-enemy-preview-dot"
+                style={{ left: pos.x - PREVIEW_RADIUS, top: pos.y - PREVIEW_RADIUS, backgroundImage: spriteUrl ? `url(${spriteUrl})` : undefined }}
+                title={`${unitDef?.name ?? "?"} @ ${scrubTime.toFixed(1)}s`}
+              />
+            );
+          })}
         </div>
       </div>
+
+      <EncounterTimeline
+        units={draft.units}
+        unitDefs={units}
+        maxTime={maxTime}
+        scrubTime={scrubTime}
+        onScrub={setScrubTime}
+        playing={playing}
+        onTogglePlay={() => setPlaying((v) => !v)}
+        selection={selection}
+        onSelectStep={selectStep}
+        onRetimeStep={(instanceId, stepId, time) => updateInstance(instanceId, (i) => updateStep(i, stepId, { time }))}
+      />
 
       <div className="shmup-btn-row">
         <button type="button" className="shmup-btn" onClick={() => setAddingUnit((v) => !v)}>
@@ -360,11 +423,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       )}
 
       {selectedInstance && selectedStep && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
-        <StepPanel
-          unit={selectedUnitDef}
-          step={selectedStep}
-          onChange={(patch) => updateInstance(selectedInstance.id, (i) => ({ ...i, steps: i.steps.map((s) => (s.id === selectedStep.id ? { ...s, ...patch } : s)) }))}
-        />
+        <StepPanel unit={selectedUnitDef} step={selectedStep} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))} />
       )}
 
       {error && <p className="shmup-error">{error}</p>}

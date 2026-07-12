@@ -15,7 +15,11 @@ import type { EdgeSlot, TileDef } from "./types";
 // `customImage` (added later) does NOT bump this further — it's a purely
 // additive optional field, so a v2 save missing it is still valid;
 // normalizeTile() below backfills the default instead.
-const SAVE_VERSION = 2;
+// v3: embedded EncounterStep shape changed (Trigger -> time, timeline
+// scrubber pass) — bumping so a pre-v3 save's encounters (old trigger
+// shape) reset via isValidEncounter rather than silently carrying a shape
+// that no longer parses meaningfully.
+const SAVE_VERSION = 3;
 
 interface SavedLibrary {
   version: number;

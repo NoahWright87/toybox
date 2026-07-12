@@ -2,11 +2,11 @@
 
 > Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
 > partially shipped, see `shmup-editor.md`), **E2 #192** (Unit +
-> Encounter editor — shipped minus the timeline scrubber, layers, Parts/
-> attack-tracks, and the Scaling system, see `shmup-editor.md`), **E3
-> #193** (spawn node editor), **E4 #194** (preview/playtest), **E5 #195**
-> (export/import pipeline). Source: design handoff docs (Claude Chat →
-> Claude Code), 2026-07-04 and 2026-07-11.
+> Encounter editor — shipped minus layers, Parts/attack-tracks, and the
+> Scaling system, see `shmup-editor.md`), **E3 #193** (spawn node editor),
+> **E4 #194** (preview/playtest), **E5 #195** (export/import pipeline).
+> Source: design handoff docs (Claude Chat → Claude Code), 2026-07-04 and
+> 2026-07-11.
 
 ## What this is
 
@@ -106,15 +106,17 @@ to visualize instead.
   never renders two *different* tiles touching except in the Connection
   Viewer's single-column stack.
 
-### E2 — Unit + Encounter editor (#192) — shipped, minus scrubber/scaling/layers
+### E2 — Unit + Encounter editor (#192) — shipped, minus scaling/layers
 
-**Revised twice.** The first pass put a full movement/dwell/attack
+**Revised three times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition. That didn't match the
 intended content model, so it was corrected to enemy-is-stats-only with
 the graph moved onto the encounter. A second design pass (external
 design-handoff doc, 2026-07) went further: enemies were renamed **Units**,
 each owning a reusable buffet of named **Actions**, and encounters became a
-**flat ordered step list** instead of a node/edge graph. See
+**flat ordered step list** instead of a node/edge graph. A third pass added
+the **timeline scrubber** and cut the step-level Trigger system in favor of
+a plain `time` field once a real timeline existed to preview against. See
 `shmup-editor.md`'s "Unit + Encounter editor (E2)" section for the full
 current design; this entry describes what actually shipped.
 
@@ -130,13 +132,14 @@ current design; this entry describes what actually shipped.
   `TileEditorForm.tsx`, New/Edit/Delete). Editing one opens
   `EncounterEditor.tsx`: a tap-driven canvas that can host multiple
   independent Unit instances (`EncounterUnit`), each walking a **flat
-  ordered `steps: EncounterStep[]` list** — `{ pos, actionId, trigger,
+  ordered `steps: EncounterStep[]` list** — `{ pos, actionId, time,
   aimAngleOverride?, speedMultiplier? }` — instead of a node/edge graph.
   `encounterSteps.ts` replaces the old graph-CRUD module with plain array
-  operations (`addStep`/`updateStep`/`moveStep`/`deleteStepsFrom`). The
-  tile's real footprint/edges still render as a read-only reference frame
-  (`EncounterTileFrame.tsx`, unchanged) so step placement is meaningful
-  relative to where the tile actually connects to its neighbors.
+  operations (`addStep`/`updateStep`/`moveStep`/`deleteStepsFrom`/
+  `activeStepAt`). The tile's real footprint/edges still render as a
+  read-only reference frame (`EncounterTileFrame.tsx`, unchanged) so step
+  placement is meaningful relative to where the tile actually connects to
+  its neighbors.
 - **Dwell, Entrance/Exit, and Teleport all dissolved** into ordinary
   Actions/steps rather than surviving as dedicated types: dwell is an
   Action with `movement: null`; entrance/exit are just the first/last step
@@ -144,17 +147,31 @@ current design; this entry describes what actually shipped.
   followed by a differently-positioned `visible: true` Action (Reappear).
   `DwellForm.tsx`/`EntranceForm.tsx`/`ExitForm.tsx` and the `Teleport`
   movement primitive were deleted, not kept around unused.
-- **Triggers**: a shared vocabulary (`"always"|"unitPosition"|
-  "playerPosition"|"time"`) replaces per-node/per-edge param forms for
-  "when does this happen" — `StepPanel.tsx` renders one dropdown plus a
-  conditional value field. Proximity-to-player as a trigger kind was
-  considered and explicitly cut for determinism (a future preview/replay
-  mode needs identical playback given identical inputs).
+- **Timeline scrubber + live motion preview** (`EncounterTimeline.tsx`,
+  `movementPreview.ts`): the step-level `Trigger` system (four kinds:
+  always/unitPosition/playerPosition/time) was cut entirely in favor of a
+  plain `time: number` per step, once a real timeline scrubber existed to
+  make the indirection pointless — `"always"` was just "whenever the
+  previous step ends," and `"playerPosition"` was never actually
+  previewable (depends on the live player, which doesn't exist at
+  authoring time). Every unit instance's steps share **one clock for the
+  whole encounter**, not a clock per instance, so units can be
+  choreographed against each other. The timeline is a horizontal ruler,
+  one track per instance, drag-to-retime; Play/scrubbing also runs a live
+  position preview on the canvas (a teal marker distinct from the
+  authored orange waypoints), computed by re-deriving each movement
+  primitive's formula over elapsed time — a step's `pos` is now a waypoint
+  a unit travels *toward*, not a place it teleports between. `turnRate`
+  (homing toward the player) isn't simulated in preview for the same
+  no-live-player reason as the `playerPosition` cut — documented as a
+  known approximation. `AttackPayload`'s `"onProximity"` trigger kind and
+  `proximityRadius` field were cut in the same pass for the identical
+  reason (a proximity-gated attack can't be previewed either).
 - Attack payloads (pattern shape x aim mode x trigger) and nested bullet
   payloads (a bullet is a minimal enemy per
-  `enemies-and-bullets.spec.todo.md` §7) are unchanged in shape from both
-  earlier passes, just relocated onto each Action instead of each node/edge.
-  A narrow per-step override whitelist (`aimAngleOverride`,
+  `enemies-and-bullets.spec.todo.md` §7) are otherwise unchanged in shape
+  from earlier passes, just relocated onto each Action instead of each
+  node/edge. A narrow per-step override whitelist (`aimAngleOverride`,
   `speedMultiplier`) lets one step nudge its Action's behavior without
   re-authoring the whole Action.
 - Saves as part of the owning tile in `TILES.DAT`; the in-progress
@@ -162,15 +179,12 @@ current design; this entry describes what actually shipped.
   and the unit-plus-action session via `UNIT-DRAFT.DAT`, per root
   `CLAUDE.md`'s mandatory rule — resumed silently on mount into whichever
   of the four views (unit-edit, action-edit, tile-edit, encounter-edit) the
-  session was left in.
+  session was left in. The scrubber's playhead/play-state is deliberately
+  NOT part of any saved draft (a viewing aid, not authored content).
 
 **Scope decisions**:
 - **Branch conditions remain cut entirely** — no conditional jump exists
   anywhere in the step list.
-- **The visual timeline scrubber is deferred to a following pass** — steps
-  are authored and edited directly on the canvas/step-panel today; a
-  dedicated scrubber UI for previewing/scrubbing through a step sequence
-  over time is planned next but not built yet.
 - **Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
   time-locked) are deferred** — every step today is a plain canvas
   position with no layer or frame-of-reference concept.
@@ -209,10 +223,6 @@ current design; this entry describes what actually shipped.
   than block E2 on it.
 - Unit variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
-- The visual timeline scrubber (see Scope decisions above) is next up
-  after this pass, per explicit instruction — steps are functionally
-  complete but only editable via the canvas/step-panel, not a dedicated
-  time-based scrubbing UI.
 
 ### E3 — Spawn node editor (#193)
 

@@ -26,7 +26,6 @@ const TRIGGERS: { value: AttackTrigger; label: string }[] = [
   { value: "continuous", label: "Continuous" },
   { value: "onDeath", label: "On death" },
   { value: "onTrigger", label: "On trigger (telegraphed)" },
-  { value: "onProximity", label: "On proximity" },
 ];
 
 function BulletForm({ bullet, onChange, depth }: { bullet: BulletDef; onChange: (b: BulletDef) => void; depth: number }) {
@@ -137,17 +136,6 @@ export default function AttackPayloadForm({ payload, onChange, label, depth = 0 
               <label className="shmup-field shmup-field--inline">
                 <span>Telegraph (ms)</span>
                 <input type="number" className="shmup-input shmup-input--small" value={payload.telegraphMs} onChange={(e) => onChange({ ...payload, telegraphMs: Number(e.target.value) })} />
-              </label>
-            )}
-            {payload.trigger === "onProximity" && (
-              <label className="shmup-field shmup-field--inline">
-                <span>Proximity radius</span>
-                <input
-                  type="number"
-                  className="shmup-input shmup-input--small"
-                  value={payload.proximityRadius}
-                  onChange={(e) => onChange({ ...payload, proximityRadius: Number(e.target.value) })}
-                />
               </label>
             )}
           </div>

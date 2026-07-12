@@ -12,21 +12,13 @@
  * unitTypes.ts's ActionDef, validated there instead) — no more recursive
  * graph/payload validation needed here.
  */
-import type { EncounterDef, EncounterStep, EncounterUnit, Trigger, TriggerKind } from "./encounterTypes";
+import type { EncounterDef, EncounterStep, EncounterUnit } from "./encounterTypes";
 
 function isNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 function isVec2(v: unknown): v is { x: number; y: number } {
   return typeof v === "object" && v !== null && isNumber((v as Record<string, unknown>).x) && isNumber((v as Record<string, unknown>).y);
-}
-
-const TRIGGER_KINDS: TriggerKind[] = ["always", "unitPosition", "playerPosition", "time"];
-
-function isTrigger(v: unknown): v is Trigger {
-  if (typeof v !== "object" || v === null) return false;
-  const t = v as Record<string, unknown>;
-  return typeof t.kind === "string" && (TRIGGER_KINDS as string[]).includes(t.kind) && isNumber(t.value);
 }
 
 function isEncounterStep(v: unknown): v is EncounterStep {
@@ -36,7 +28,7 @@ function isEncounterStep(v: unknown): v is EncounterStep {
     typeof s.id === "string" &&
     isVec2(s.pos) &&
     typeof s.actionId === "string" &&
-    isTrigger(s.trigger) &&
+    isNumber(s.time) &&
     (s.aimAngleOverride === null || isNumber(s.aimAngleOverride)) &&
     isNumber(s.speedMultiplier)
   );

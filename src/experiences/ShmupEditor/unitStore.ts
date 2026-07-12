@@ -25,7 +25,13 @@ import type {
 } from "./unitTypes";
 import type { TileDef } from "./types";
 
-const SAVE_VERSION = 3;
+// v4: EncounterStep's step-list shape isn't validated here, but AttackPayload
+// is — dropped "onProximity"/proximityRadius (timeline scrubber pass, cut
+// alongside the encounter-step Trigger system for the same
+// can't-preview-live-player-position reason). Bumping so a pre-v4 save
+// with an onProximity attack fails validation and resets rather than
+// silently carrying a stale, now-invalid trigger kind.
+const SAVE_VERSION = 4;
 
 interface SavedLibrary {
   version: number;
@@ -82,14 +88,13 @@ function isAttackPayload(v: unknown, depth: number): v is AttackPayload {
     typeof a.enabled === "boolean" &&
     (a.shape === "single" || a.shape === "arc" || a.shape === "radialBurst" || a.shape === "beam") &&
     (a.aim === "fixed" || a.aim === "aimed" || a.aim === "rotating") &&
-    (a.trigger === "continuous" || a.trigger === "onDeath" || a.trigger === "onTrigger" || a.trigger === "onProximity") &&
+    (a.trigger === "continuous" || a.trigger === "onDeath" || a.trigger === "onTrigger") &&
     isNumber(a.projectileCount) &&
     isNumber(a.arcSpreadDeg) &&
     isNumber(a.fixedAngleDeg) &&
     isNumber(a.rotationSpeedDeg) &&
     isNumber(a.intervalMs) &&
     isNumber(a.telegraphMs) &&
-    isNumber(a.proximityRadius) &&
     isBullet(a.bullet, depth + 1)
   );
 }
@@ -178,7 +183,10 @@ export function clearUnitDraft(): void {
 
 // ── Tile-editing session (tile fields + encounters + mid-edit encounter) ──
 
-const TILE_SESSION_VERSION = 1;
+// v2: EncounterStep's shape changed (Trigger -> time, timeline scrubber
+// pass) — bumping so a pre-v2 session with the old trigger shape resets
+// instead of failing isValidEncounter's step check silently.
+const TILE_SESSION_VERSION = 2;
 
 export interface TileEditSession {
   tile: TileDef;

@@ -1,5 +1,4 @@
 import type { EncounterStep } from "./encounterTypes";
-import type { TriggerKind } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
 interface StepPanelProps {
@@ -8,21 +7,17 @@ interface StepPanelProps {
   onChange: (patch: Partial<EncounterStep>) => void;
 }
 
-const TRIGGER_KINDS: { value: TriggerKind; label: string }[] = [
-  { value: "always", label: "Always (immediate)" },
-  { value: "unitPosition", label: "Unit position %" },
-  { value: "playerPosition", label: "Player position %" },
-  { value: "time", label: "Time (seconds)" },
-];
-
 /**
  * Below-canvas settings for a selected step (specs/shmup-editor.md's
  * Encounter editor section) — replaces the old NodePanel/EdgePanel tab
  * pair: an encounter no longer authors movement/dwell/attack params
  * directly, it just picks an Action from the referenced Unit's buffet and
- * sets a trigger for when it activates. The two narrow per-placement
- * overrides (firing angle, speed multiplier) only appear when the
- * selected action actually has something for them to apply to.
+ * says when it activates. "When" used to be a Trigger object (always/
+ * unitPosition/playerPosition/time) but is now just a plain `time` field —
+ * the timeline scrubber (EncounterTimeline.tsx) is the primary way to set
+ * it by dragging, this numeric field is here for precision. The two narrow
+ * per-placement overrides (firing angle, speed multiplier) only appear
+ * when the selected action actually has something for them to apply to.
  */
 export default function StepPanel({ unit, step, onChange }: StepPanelProps) {
   const action = unit?.actions.find((a) => a.id === step.actionId);
@@ -32,28 +27,16 @@ export default function StepPanel({ unit, step, onChange }: StepPanelProps) {
   return (
     <div className="shmup-panel">
       <label className="shmup-field shmup-field--inline">
-        <span>Trigger</span>
-        <select className="shmup-input" value={step.trigger.kind} onChange={(e) => onChange({ trigger: { kind: e.target.value as TriggerKind, value: step.trigger.value } })}>
-          {TRIGGER_KINDS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+        <span>Time (sec)</span>
+        <input
+          type="number"
+          min={0}
+          step={0.1}
+          className="shmup-input shmup-input--small"
+          value={step.time}
+          onChange={(e) => onChange({ time: Number(e.target.value) })}
+        />
       </label>
-      {step.trigger.kind !== "always" && (
-        <label className="shmup-field shmup-field--inline">
-          <span>{step.trigger.kind === "time" ? "Seconds" : "Percent"}</span>
-          <input
-            type="number"
-            min={0}
-            max={step.trigger.kind === "time" ? undefined : 100}
-            className="shmup-input shmup-input--small"
-            value={step.trigger.value}
-            onChange={(e) => onChange({ trigger: { kind: step.trigger.kind, value: Number(e.target.value) } })}
-          />
-        </label>
-      )}
 
       <label className="shmup-field shmup-field--inline">
         <span>Action</span>

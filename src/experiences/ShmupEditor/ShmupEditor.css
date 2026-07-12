@@ -726,6 +726,22 @@
   pointer-events: none;
 }
 
+/* Live scrub/play preview marker (movementPreview.ts) — smaller and a
+   different color than an authored waypoint node so it reads as "where the
+   unit actually is right now," not another step to tap. */
+.shmup-enemy-preview-dot {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #22bbaa;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #66ffee;
+  box-shadow: 0 0 8px #22bbaa;
+  pointer-events: none;
+}
+
 /* ── Encounter editor's tile reference frame ──────────────────────────
    A read-only silhouette of the tile's real footprint/edges, so an
    enemy's entrance/exit can be placed meaningfully against where the
@@ -804,6 +820,133 @@
   margin-top: 6px;
   padding: 8px;
   background: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Encounter timeline scrubber (EncounterTimeline.tsx) ──────────────
+   One shared ruler for the whole encounter, one track per Unit instance.
+   Step markers are diamonds positioned by `time`; a drag handle appears
+   only when a step is selected, mirroring the canvas's own move-handle
+   pattern. Dragging/tapping the ruler background scrubs the playhead. */
+
+.shmup-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shmup-timeline__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shmup-timeline__readout {
+  font-size: 10px;
+  color: #ffcc88;
+}
+
+.shmup-timeline__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.shmup-timeline__stage {
+  position: relative;
+  padding: 20px 10px 12px;
+  touch-action: none;
+}
+
+.shmup-timeline__ruler {
+  position: relative;
+  height: 16px;
+}
+
+.shmup-timeline__tick {
+  position: absolute;
+  top: 0;
+  height: 16px;
+  border-left: 1px solid #444;
+  padding-left: 3px;
+  font-size: 8px;
+  color: #999;
+  white-space: nowrap;
+}
+
+.shmup-timeline__track {
+  position: relative;
+  padding-top: 6px;
+}
+
+.shmup-timeline__track-label {
+  font-size: 8px;
+  color: #ffcc88;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.shmup-timeline__lane {
+  position: relative;
+  height: 28px;
+}
+
+.shmup-timeline__lane-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.shmup-timeline__step-wrap {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+}
+
+.shmup-timeline__step {
+  width: 18px;
+  height: 18px;
+  transform: rotate(45deg);
+  background-color: #cc4400;
+  border: 2px solid #ffcc88;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-timeline__step--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+.shmup-timeline__step--hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.shmup-timeline__step-handle {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.shmup-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff3333;
+  pointer-events: none;
 }
 
 /* ── Tag graph ─────────────────────────────────────────────────────── */

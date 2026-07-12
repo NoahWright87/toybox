@@ -316,7 +316,7 @@ shows a plain heading for whichever view is active.
 
 ## Unit + Encounter editor (E2)
 
-**Revised twice.** The first pass put a full movement/dwell/attack
+**Revised three times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition, matching
 [`enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md)'s
 literal wording ("an enemy is a node graph"). That didn't match the
@@ -327,8 +327,10 @@ design-handoff doc, 2026-07) went further: **enemies were renamed Units**,
 each owning a reusable **buffet of named Actions** authored once, and
 encounters stopped being a node/edge graph entirely — an encounter now
 places units along a **flat ordered list of steps**, each step just
-referencing one of the unit's Actions by id. See git history for both
-earlier shapes if useful.
+referencing one of the unit's Actions by id. A third pass added the
+**timeline scrubber** and, with a real timeline to preview against, cut the
+step-level `Trigger` system entirely in favor of a plain numeric `time` —
+see "Timing" below. See git history for all three earlier shapes if useful.
 
 The mental model: **a Unit owns a buffet of Actions; an encounter places
 Units and walks each one through an ordered list of steps, each step
@@ -357,13 +359,13 @@ picking one Action off that Unit's buffet.**
   New/Edit/Delete, switching to a dedicated `EncounterEditor.tsx` view and
   back). Each **`EncounterUnit`** instance references a `UnitDef` by id and
   owns its own `steps: EncounterStep[]` — a plain array, not a graph. Each
-  `EncounterStep` is `{ id, pos, actionId, trigger, aimAngleOverride?,
+  `EncounterStep` is `{ id, pos, actionId, time, aimAngleOverride?,
   speedMultiplier? }`: a position on the canvas, which of the unit's
-  Actions plays there, and a `Trigger` (see below) deciding when to
-  advance to it. The same "Skull Buggy" Unit can be walked through a
-  straight-line-then-spiral step sequence in one tile's encounter and a
-  single stationary step in another's — behavior sequencing belongs to the
-  placement, not the Unit's identity.
+  Actions plays there, and a `time` (see "Timing" below) saying when. The
+  same "Skull Buggy" Unit can be walked through a straight-line-then-spiral
+  step sequence in one tile's encounter and a single stationary step in
+  another's — behavior sequencing belongs to the placement, not the Unit's
+  identity.
 
 **Three dedicated concepts dissolved into ordinary Actions/steps** rather
 than surviving as their own types, once behavior stopped living on a
@@ -386,19 +388,71 @@ graph:
 pass) — no conditional jump exists anywhere in the step list; steps play
 in the fixed order they're authored in.
 
-### Triggers (`encounterTypes.ts`)
+### Timing (`encounterTypes.ts`, `EncounterTimeline.tsx`)
 
-A step's `Trigger` decides when the previous step hands off to it —
-`TriggerKind = "always" | "unitPosition" | "playerPosition" | "time"`.
-`"always"` fires immediately once the prior step's Action would otherwise
-be considered complete; the other three carry a numeric `value` (percent
-along the canvas for position-based triggers, seconds for `"time"`).
-**Proximity-to-player as a trigger was explicitly cut** (it appeared in
-earlier discussion but was dropped in the design-handoff doc for
-determinism — a proximity-gated step wouldn't replay identically twice
-with the same inputs, which matters for `E4`'s future preview/playtest
-mode). `StepPanel.tsx` renders the trigger kind dropdown plus the
-conditional value field (hidden entirely for `"always"`).
+**There is no `Trigger` type anymore — every step just has a `time`.** The
+original design had a `TriggerKind = "always" | "unitPosition" |
+"playerPosition" | "time"` union; once the encounter editor grew a real
+timeline scrubber (below), that indirection stopped earning its keep —
+`"always"` just meant "whatever time the previous action happens to end,"
+which a scrubber can show directly, and `"playerPosition"` was never
+actually previewable (it depends on where the live player is, which
+doesn't exist at authoring time — the same reasoning that, in this same
+pass, also cut `AttackPayload`'s `"onProximity"` trigger kind (fires when
+the player enters a radius) and its `proximityRadius` field from
+`unitTypes.ts` — `AttackTrigger` is now just `"continuous" | "onDeath" |
+"onTrigger"`, all either already time-based or a genuine runtime event
+unrelated to timing). `time` is **one shared clock for the whole encounter** — every
+unit instance's steps are timed against the same origin, not relative to
+that instance's own start, so multiple units can be choreographed against
+each other (two turrets alternating fire, a second wave arriving 3s after
+the first) instead of each running on an island. A unit instance's first
+step can have `time > 0` for a delayed/staggered spawn — there's no
+separate "delay" mechanic, it falls out of the shared clock for free.
+
+Every instance's `steps` array is kept sorted by `time` ascending as an
+invariant — `encounterSteps.ts`'s `updateStep` re-sorts after every patch
+(a no-op resort when `time` wasn't touched), so "first/last in the array"
+and "first/last chronologically" are always the same step; dragging a step
+earlier than its neighbor on the timeline just re-sorts live, the same way
+reordering clips in a video editor would.
+
+**`EncounterTimeline.tsx`** renders this shared clock as a horizontal
+ruler with one track per unit instance, below the canvas. Each step is a
+small diamond positioned at `time * PX_PER_SEC`; tapping one selects it
+(same selection as the canvas), and a drag handle (⟷) appears only when
+selected — mirroring the canvas's own move-handle pattern rather than
+making every marker draggable at all times. Dragging the handle retimes
+the step; tapping/dragging the ruler background scrubs a playhead.
+`StepPanel.tsx` still has a plain numeric "Time (sec)" field for
+precision, wired through the same `updateStep` path as the drag handle.
+
+**Play/scrub doubles as a live motion preview.** A Play button runs the
+playhead forward in real time (looping back to 0 at the end) via
+`requestAnimationFrame`; scrubbing manually does the same thing without
+autoplay. At the current scrub time, `movementPreview.ts` computes each
+visible unit instance's *actual* interpolated position — not just which
+step is active, but where the unit is *between* steps, using each
+movement kind's own formula (speed/accel/turnRate for straightLine,
+base-path-plus-oscillation for wave, orbiting-center for spiral) — and
+renders it as a small teal marker on the canvas, distinct from the
+authored orange waypoint nodes. **A step's `pos` is a waypoint the unit
+travels toward, not a place it teleports between** — this is the sense in
+which the preview is genuinely new capability, not just a retiming UI: you
+can now see whether an authored sequence actually reads as intended motion,
+not just guess from where the dots happen to sit. Direction for a segment
+comes from `pos → nextStep.pos`; the last step in a sequence continues the
+previous segment's heading (no "next" to aim at), and a lone step with no
+neighbors at all defaults to heading straight down (the usual "forward"
+for a vertical shmup). **`turnRate` (homing toward the player) is not
+simulated** — there's no live player position at authoring time, the same
+reason `playerPosition`/`onProximity` triggers were cut — so the preview
+uses a fixed heading and ignores it; documented in `movementPreview.ts`'s
+file header as a known approximation, not a bug. This preview is the
+editor's own approximation for authoring purposes — there's no shared
+runtime to match yet (`games/shmup` has no enemy-movement implementation),
+consistent with the editor's "no shared code with the game" stance
+elsewhere.
 
 ### Per-step overrides (`StepPanel.tsx`)
 
@@ -433,8 +487,9 @@ to tap or delete on the connector itself.
   no graph-traversal test helpers needed.
 - **"+ Add Unit"** opens a picker of the Unit library (sprite thumbnails);
   picking one adds a new `EncounterUnit` instance seeded with one step
-  using the unit's first Action, staggered diagonally from any existing
-  instances.
+  (time 0) using the unit's first Action, staggered diagonally from any
+  existing instances — position is staggered by default, time isn't; stagger
+  a later instance's start time manually on the timeline if wanted.
 - Each instance renders its own sprite (looked up by `unitDefId`) on every
   step, with the unit's name labeled under its first step. Step badges:
   ▶ marks the first step, 🔫 marks a step whose Action has an enabled
@@ -484,6 +539,19 @@ Actions now: `loadUnits`/`saveUnits` validate `actions[]` recursively
 (`isMovement`/`isAttackPayload`/`isBullet`/`isActionDef`/`isValidUnitDef`,
 same generous-nesting-depth-cap reasoning as before) before trusting a
 saved library. There's no separate encounter library or file.
+
+The timeline scrubber pass changed `EncounterStep`'s shape (`trigger` →
+`time`) and `AttackPayload`'s (dropped `onProximity`/`proximityRadius`) —
+both non-additive changes, so `tileStore.ts`'s `SAVE_VERSION` (2→3),
+`unitStore.ts`'s `SAVE_VERSION` (3→4), and `unitStore.ts`'s
+`TILE_SESSION_VERSION` (1→2) all bumped, so a pre-scrubber save/session
+resets to empty on load rather than silently carrying the old shape (same
+"corrupt or stale-shape save falls back to a safe default" pattern as
+everywhere else in this app — no migration code needed, the version
+mismatch alone triggers the existing fallback). The scrub head position
+and play/pause state are **not** part of any saved draft — they're a
+viewing aid, not authored content, so a reload resets the playhead to 0
+rather than needing to survive it (unlike the actual steps, which do).
 
 Two more fsStore files alongside `TILES.DAT`/`UNITS.DAT`, same folder
 (`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory

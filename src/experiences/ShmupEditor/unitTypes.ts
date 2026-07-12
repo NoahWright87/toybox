@@ -87,7 +87,16 @@ export function defaultMovement(): MovementBehavior {
 
 export type PatternShape = "single" | "arc" | "radialBurst" | "beam";
 export type AimMode = "fixed" | "aimed" | "rotating";
-export type AttackTrigger = "continuous" | "onDeath" | "onTrigger" | "onProximity";
+/**
+ * "onProximity" (fired when the player enters a radius) was cut alongside
+ * the encounter-step Trigger system — same problem: it depends on live
+ * player position, which doesn't exist at authoring time, so it could
+ * never be shown accurately by the timeline scrubber's preview. The
+ * remaining three are all either fully time-based already (continuous,
+ * onTrigger's telegraph-then-fire-once-at-action-start) or a genuine
+ * runtime event unrelated to timing (onDeath).
+ */
+export type AttackTrigger = "continuous" | "onDeath" | "onTrigger";
 
 export interface AttackPayload {
   enabled: boolean;
@@ -106,8 +115,6 @@ export interface AttackPayload {
   intervalMs: number;
   /** Telegraph/wind-up duration, "onTrigger" trigger or "beam" shape. */
   telegraphMs: number;
-  /** Radius, "onProximity" trigger only. */
-  proximityRadius: number;
   /** The bullet this payload spawns — bullets are minimal Units (spec §7), enabling free recursion. */
   bullet: BulletDef;
 }
@@ -141,7 +148,6 @@ export function createBlankAttackPayload(): AttackPayload {
     rotationSpeedDeg: 60,
     intervalMs: 1000,
     telegraphMs: 400,
-    proximityRadius: 150,
     bullet: createBlankBullet(),
   };
 }
