@@ -108,7 +108,7 @@ to visualize instead.
 
 ### E2 — Unit + Encounter editor (#192) — shipped, minus scaling/layers
 
-**Revised three times.** The first pass put a full movement/dwell/attack
+**Revised four times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition. That didn't match the
 intended content model, so it was corrected to enemy-is-stats-only with
 the graph moved onto the encounter. A second design pass (external
@@ -116,9 +116,12 @@ design-handoff doc, 2026-07) went further: enemies were renamed **Units**,
 each owning a reusable buffet of named **Actions**, and encounters became a
 **flat ordered step list** instead of a node/edge graph. A third pass added
 the **timeline scrubber** and cut the step-level Trigger system in favor of
-a plain `time` field once a real timeline existed to preview against. See
-`shmup-editor.md`'s "Unit + Encounter editor (E2)" section for the full
-current design; this entry describes what actually shipped.
+a plain `time` field once a real timeline existed to preview against. A
+fourth pass replaced per-Action movement kinds (straightLine/wave/spiral)
+with a single **bezier-curve** model driven by two plain Unit stats
+(`speed`/`turnRate`) — see below. See `shmup-editor.md`'s "Unit + Encounter
+editor (E2)" section for the full current design; this entry describes
+what actually shipped.
 
 **Done**:
 - **Units** are sprite + stats (HP, contact damage, score value, base
@@ -205,6 +208,36 @@ current design; this entry describes what actually shipped.
   node/edge. A narrow per-step override whitelist (`aimAngleOverride`,
   `speedMultiplier`) lets one step nudge its Action's behavior without
   re-authoring the whole Action.
+- **Movement is no longer an Action concept — it's bezier curves plus two
+  Unit stats** (`bezier.ts`, `unitTypes.ts`). `ActionDef` dropped
+  `movement` entirely: straightLine/wave/spiral as a per-Action choice is
+  gone, replaced by `UnitDef.speed`/`turnRate` (renamed from the
+  previously-unused `baseSpeed`) driving a single cubic bezier curve per
+  segment. Each `EncounterStep` gained `handleIn`/`handleOut: Vec2 | null`
+  — offsets from `pos`, editable as draggable teal handle dots on the
+  canvas (in+out independent, shown only on the selected step, skipped on
+  whichever end has no adjacent segment) — defaulting to a straight-line-
+  equivalent placement when null, so an un-dragged sequence looks and
+  behaves exactly like the old straight-line default. `turnRate` caps a
+  handle's length as a multiple of its segment's straight-line length,
+  enforced at *read* time (`resolveHandleIn`/`resolveHandleOut`) so
+  lowering it after curves were authored tightens them consistently
+  instead of leaving stale over-limit data. **Dwelling is simply a step at
+  the same position as its predecessor** — no flag, since a zero-length
+  segment has nothing to curve along; `encounterTiming.ts`'s
+  derived-vs-manual `time` split now branches on that instead of "does the
+  predecessor's Action have movement." Segment duration is arc length
+  (numerically integrated, `cubicBezierLength`) ÷ effective speed — since
+  duration is now *always* consistent with the curve's actual length for
+  a moving segment (manual time only survives for dwelling, where there's
+  no travel to overshoot), `movementPreview.ts`'s old distance-based
+  overshoot clamp collapsed into a plain `u = elapsed/duration` clamped to
+  `[0, 1]` — meaningfully simpler than the old per-movement-kind dispatch.
+  `turnRate`'s old meaning (homing toward the player, never actually
+  simulated) is gone along with it — no more approximation caveat needed
+  there. **Bullets are unaffected** — `BulletDef.movement` keeps the
+  original straightLine/wave/spiral system unchanged, since a fired bullet
+  has no waypoints to curve between.
 - Saves as part of the owning tile in `TILES.DAT`; the in-progress
   tile-plus-encounter session survives reload/rotation via `TILE-DRAFT.DAT`
   and the unit-plus-action session via `UNIT-DRAFT.DAT`, per root
@@ -254,6 +287,35 @@ current design; this entry describes what actually shipped.
   than block E2 on it.
 - Unit variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
+- **Deferred: per-Unit "constant motion" (secondary offset movement) —
+  the eventual home for wave/spiral/wobble.** Cutting straightLine/wave/
+  spiral as per-Action movement kinds in favor of the bezier-curve model
+  above (see Done, this section) means a Unit can no longer author "orbit
+  in place" or "wobble side to side" directly — those effects came from
+  the old `WaveMovement`/`SpiralMovement` primitives, which are now
+  bullet-only (`BulletDef.movement`, unchanged). The eventual goal (not
+  built, no data model exists yet) is a **Unit-level property** — a
+  secondary offset the sprite/hitbox continuously orbits or oscillates
+  around its *primary* bezier-path position, independent of the bezier
+  curve itself and independent of `speed`/`turnRate`. Concretely: the
+  Unit's rendered position would become `bezierPosition(t) +
+  constantMotionOffset(t)` rather than just `bezierPosition(t)` — the
+  encounter/bezier system stays exactly as shipped, this is purely
+  additive. Use cases: a boat bobbing up and down while otherwise
+  following a straight patrol path, a swarm of small enemies spiraling
+  around a shared anchor point that itself moves along a bezier curve, a
+  helicopter swaying side-to-side while hovering in place (a bezier
+  segment with `pos` == predecessor's `pos`, i.e. dwelling, plus a nonzero
+  constant-motion sway). Most Units won't need this at all, which is why
+  it's a deferred opt-in property rather than something forced into the
+  core movement model now. Open questions for whenever this is picked up:
+  whether it's one more MovementBehavior-like kind-choice (reusing
+  `WaveMovement`/`SpiralMovement`'s existing shape, now on `UnitDef`
+  instead of `BulletDef`) or a more general parametric offset function;
+  whether `movementPreview.ts`'s scrubber preview should visualize it
+  (likely yes, for the same "see if the authored motion actually reads
+  right" reason the bezier preview exists); and whether it needs its own
+  per-Action or per-step override (e.g. "don't wobble while attacking").
 
 ### E3 — Spawn node editor (#193)
 

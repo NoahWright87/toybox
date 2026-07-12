@@ -6,29 +6,33 @@ interface StepPanelProps {
   step: EncounterStep;
   /** True when this step's `time` is computed from distance/speed rather than freely authored — see encounterTiming.ts. */
   timeDerived: boolean;
+  /** True when a next step exists at a different position — i.e. this step's Speed Multiplier actually affects something (the segment leaving here). Distinct from timeDerived, which is about the segment *arriving* here. */
+  hasOutgoingSegment: boolean;
   onChange: (patch: Partial<EncounterStep>) => void;
 }
 
 /**
  * Below-canvas settings for a selected step (specs/shmup-editor.md's
- * Encounter editor section) — replaces the old NodePanel/EdgePanel tab
- * pair: an encounter no longer authors movement/dwell/attack params
- * directly, it just picks an Action from the referenced Unit's buffet and
- * says when it activates.
+ * Timing section) — replaces the old NodePanel/EdgePanel tab pair: an
+ * encounter no longer authors movement/dwell/attack params directly, it
+ * just picks an Action from the referenced Unit's buffet and says when it
+ * activates. Movement itself (bezier handles) is edited on the canvas, not
+ * here — see EncounterEditor.tsx.
  *
- * **"When" is usually computed, not typed in.** A step whose *preceding*
- * step's Action moves gets its `time` derived from distance and speed
- * (encounterTiming.ts) — the Time field goes read-only in that case, with
- * a hint pointing at the timeline (drag to retime) or this step's own
- * Speed Multiplier (which governs how long the *next* step takes to
- * arrive) as the actual controls. It's only freely editable for a step
- * with no preceding movement to derive from — the first step of an
- * instance, or one whose predecessor just dwells in place.
+ * **"When" is usually computed, not typed in.** A step whose position
+ * differs from its predecessor's gets its `time` derived from the bezier
+ * segment's arc length and the owning Unit's `speed` (encounterTiming.ts)
+ * — the Time field goes read-only in that case, with a hint pointing at
+ * the timeline (drag to retime) or this step's own Speed Multiplier (which
+ * governs how long the *next* step takes to arrive) as the actual
+ * controls. It's only freely editable for a step with nothing to derive
+ * from — the first step of an instance, or one dwelling at the same
+ * position as its predecessor.
  */
-export default function StepPanel({ unit, step, timeDerived, onChange }: StepPanelProps) {
+export default function StepPanel({ unit, step, timeDerived, hasOutgoingSegment, onChange }: StepPanelProps) {
   const action = unit?.actions.find((a) => a.id === step.actionId);
   const showAimOverride = action?.attack?.enabled && action.attack.aim === "fixed";
-  const showSpeedOverride = action?.movement != null;
+  const showSpeedOverride = hasOutgoingSegment;
 
   return (
     <div className="shmup-panel">

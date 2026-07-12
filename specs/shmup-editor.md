@@ -316,7 +316,7 @@ shows a plain heading for whichever view is active.
 
 ## Unit + Encounter editor (E2)
 
-**Revised three times.** The first pass put a full movement/dwell/attack
+**Revised four times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition, matching
 [`enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md)'s
 literal wording ("an enemy is a node graph"). That didn't match the
@@ -330,29 +330,34 @@ places units along a **flat ordered list of steps**, each step just
 referencing one of the unit's Actions by id. A third pass added the
 **timeline scrubber** and, with a real timeline to preview against, cut the
 step-level `Trigger` system entirely in favor of a plain numeric `time` —
-see "Timing" below. See git history for all three earlier shapes if useful.
+see "Timing" below. A fourth pass replaced per-Action movement kinds
+(straightLine/wave/spiral) with a single **bezier curve** per segment,
+driven by two plain Unit stats instead of an Action-level choice — see
+"Movement" below. See git history for all four earlier shapes if useful.
 
-The mental model: **a Unit owns a buffet of Actions; an encounter places
-Units and walks each one through an ordered list of steps, each step
-picking one Action off that Unit's buffet.**
+The mental model: **a Unit owns a buffet of Actions (attack/animation, no
+movement) plus two movement stats (speed/turnRate); an encounter places
+Units and walks each one along a curved path through an ordered list of
+steps, each step picking one Action off that Unit's buffet for what
+happens there.**
 
 - A **Unit** (`UnitDef`, `unitTypes.ts`) is a sprite + stats — HP, contact
-  damage, score value, base speed, hitbox size — **plus** `actions:
-  ActionDef[]`, a reusable list of named behaviors authored once and
-  referenced (not re-authored) from any encounter step. A small **Units**
-  menu (alongside **Tiles**) manages the library via `UnitStatsForm.tsx`
-  (stats fields plus an Actions section — list with New/Edit/Delete,
-  mirroring the tile editor's Encounters section); `UnitList.tsx` is the
-  same visual-checker sprite grid as the tile list.
+  damage, score value, `speed`, `turnRate`, hitbox size — **plus**
+  `actions: ActionDef[]`, a reusable list of named behaviors authored once
+  and referenced (not re-authored) from any encounter step. A small
+  **Units** menu (alongside **Tiles**) manages the library via
+  `UnitStatsForm.tsx` (stats fields plus an Actions section — list with
+  New/Edit/Delete, mirroring the tile editor's Encounters section);
+  `UnitList.tsx` is the same visual-checker sprite grid as the tile list.
 - An **`ActionDef`** (`unitTypes.ts`) bundles everything one moment of
-  behavior needs: an optional `movement` (straightLine/wave/spiral — see
-  below), an optional `attack` (`AttackPayload`, unchanged shape from the
-  original pass), an `animationState` (`idle`/`moving`/`attacking`/
-  `dying`), and a `visible` flag. `createIdleAction()` builds the
-  mandatory baseline every new Unit is seeded with — movement `null`
-  (stationary), attack `null`, `visible: true` — so a Unit is never
-  saved with zero Actions (`UnitStatsForm`'s Delete button disables at 1
-  remaining action, tooltip "A Unit needs at least one Action").
+  *non-movement* behavior needs: an optional `attack` (`AttackPayload`,
+  unchanged shape from the original pass), an `animationState` (`idle`/
+  `moving`/`attacking`/`dying`), and a `visible` flag. No movement field —
+  see "Movement" below for why. `createIdleAction()` builds the mandatory
+  baseline every new Unit is seeded with — attack `null`, `visible: true`
+  — so a Unit is never saved with zero Actions (`UnitStatsForm`'s Delete
+  button disables at 1 remaining action, tooltip "A Unit needs at least
+  one Action").
 - An **encounter** (`EncounterDef`, `encounterTypes.ts`) still belongs to
   one specific tile (`TileDef.encounters`) and is still authored **inside
   the tile editor** (Encounters section on `TileEditorForm.tsx`,
@@ -360,18 +365,21 @@ picking one Action off that Unit's buffet.**
   back). Each **`EncounterUnit`** instance references a `UnitDef` by id and
   owns its own `steps: EncounterStep[]` — a plain array, not a graph. Each
   `EncounterStep` is `{ id, pos, actionId, time, aimAngleOverride?,
-  speedMultiplier? }`: a position on the canvas, which of the unit's
-  Actions plays there, and a `time` (see "Timing" below) saying when. The
-  same "Skull Buggy" Unit can be walked through a straight-line-then-spiral
-  step sequence in one tile's encounter and a single stationary step in
-  another's — behavior sequencing belongs to the placement, not the Unit's
-  identity.
+  speedMultiplier?, handleIn?, handleOut? }`: a position on the canvas,
+  which of the unit's Actions plays there, a `time` (see "Timing" below)
+  saying when, and bezier handles shaping the curve on either side (see
+  "Movement" below). The same "Skull Buggy" Unit can be walked through a
+  sharply-curving step sequence in one tile's encounter and a single
+  stationary step in another's — path shape belongs to the placement, not
+  the Unit's identity; only *speed*/*turnRate* travel with the Unit.
 
 **Three dedicated concepts dissolved into ordinary Actions/steps** rather
 than surviving as their own types, once behavior stopped living on a
 graph:
-- **Dwell** — an Action with `movement: null` *is* dwell-in-place; there's
-  no separate `DwellBehavior` type or dwell-specific form anymore.
+- **Dwell** — a step at the *same position* as its predecessor *is*
+  dwell-in-place; there's no separate `DwellBehavior` type, dwell-specific
+  form, or per-Action flag anymore (a zero-length bezier segment has
+  nothing to travel along).
 - **Entrance/Exit** — the first and last step in an instance's step list
   are just ordinary steps using ordinary Actions; there's no dedicated
   `EntranceAppearance`/`ExitConfig` type, and no enable/disable logic for
@@ -381,12 +389,89 @@ graph:
   `visible: false` (still called "Disappear" in the UI) followed by a
   later step at a different position using a `visible: true` Action
   ("Reappear") composes to the same visible effect without a special case
-  in the movement vocabulary. `MovementForm.tsx` only offers Straight
-  Line/Wave/Spiral now.
+  in the movement vocabulary.
 
 **Branch conditions remain cut entirely** (unchanged from the prior
 pass) — no conditional jump exists anywhere in the step list; steps play
 in the fixed order they're authored in.
+
+### Movement (`bezier.ts`, `unitTypes.ts`)
+
+**Movement stopped being an Action-level choice (straightLine/wave/
+spiral) and became a single cubic bezier curve per segment, driven by two
+plain Unit stats.** The original per-Action movement vocabulary was
+dropped in favor of: every segment between two of a Unit instance's steps
+is one cubic bezier curve, shaped by each step's own `handleIn`/
+`handleOut` offsets and paced by the owning Unit's `speed` (px/sec).
+`UnitDef.turnRate` caps how far a handle can extend, **as a multiple of
+that segment's straight-line length** — `turnRate: 1` allows a handle up
+to 100% of the segment length (a fairly pronounced bend); a stiffer/
+slower-turning Unit gets a lower `turnRate` and can only author gentler
+curves. This is a purely geometric constraint, not a physics simulation,
+and it's enforced wherever a handle is *read* (`resolveHandleOut`/
+`resolveHandleIn`), not just where it's written — lowering a Unit's
+`turnRate` after curves were authored at a higher one tightens every
+curve consistently rather than leaving stale, now-invalid handle data
+sitting around unused.
+
+**A null handle defaults to the straight-line-equivalent position** — a
+fresh step (or one whose handle was never dragged) behaves exactly like a
+straight line (P1/P2 placed at 1/3 and 2/3 along the straight path), so
+authoring a sequence without touching handles at all matches the old
+straight-line default with zero extra effort. Only once a handle is
+actually dragged does the segment curve.
+
+**Editing handles is a canvas interaction, not a form field.** Selecting
+a step (same tap-to-select as everything else on the canvas) reveals up
+to two small draggable teal (⬦) handle dots, connected to the step by a
+dashed stalk: one shaping the curve *leaving* it (skipped on the last
+step of a sequence — no outgoing segment), one shaping the curve
+*arriving* at it (skipped on the first step — no incoming segment).
+Dragging either bends the connector, which renders as an SVG `<path>`
+cubic-bezier command instead of a straight `<line>`. The drag itself
+computes a raw offset from the pointer position, clamps it by `turnRate`
+immediately (so the dot visually "sticks" once you drag past the limit
+rather than floating past it), and stores the clamped value — the stored
+data always reflects exactly what the curve actually uses, never an
+unenforced excess. (Implementation note: the canvas SVG has a blanket
+`pointer-events: none` so the connector paths stay click-through — the
+handle `<circle>` elements need an explicit `pointer-events: all`
+override, or they're invisible to clicks despite rendering on top.)
+
+**Segment duration is the curve's arc length ÷ effective speed.**
+`bezier.ts`'s `cubicBezierLength` numerically integrates the curve (no
+closed-form solution exists for a general cubic bezier) by sampling it as
+a 32-segment polyline and summing distances — plenty of precision for a
+game-authoring tool, not a CAD-grade tolerance. Since a *moving* segment's
+duration is now *always* exactly consistent with its curve's real length
+by construction (manually-authored time only survives for *dwelling*
+segments, which have no travel to overshoot), `movementPreview.ts`'s old
+distance-based overshoot clamp collapsed into a plain `u =
+elapsed/duration` clamped to `[0, 1]`, evaluated via `cubicBezierPoint` —
+meaningfully simpler than the old per-movement-kind dispatch (straightLine
+needed a quadratic solve for `accel`; wave/spiral needed their own
+oscillation formulas). See "Timing" below for how `time` derivation
+itself works.
+
+**`turnRate`'s old meaning (homing toward the live player, degrees/sec)
+is gone along with the movement-kind system** — it was never actually
+simulated in the preview anyway (no live player exists at authoring
+time), so the "known approximation, not a bug" caveat that used to cover
+it no longer applies to anything.
+
+**Bullets are unaffected.** A `BulletDef` has no waypoints/steps to curve
+between — it's fired and just flies in whatever direction — so
+`MovementBehavior` (straightLine/wave/spiral, `unitTypes.ts`) is still
+exactly what it was for bullets; only `ActionDef` lost its `movement`
+field. `MovementForm.tsx` still exists, just only reachable from
+`AttackPayloadForm.tsx`'s bullet section now, not from `ActionEditor.tsx`.
+
+**Wave/spiral/wobble for Units aren't gone, they're deferred** — see
+`shmup-editor.todo.md`'s Remaining list for the planned per-Unit
+"constant motion" property (a secondary offset the sprite/hitbox orbits
+or oscillates around its primary bezier-path position, independent of
+`speed`/`turnRate`) that will eventually cover what those movement kinds
+used to.
 
 ### Timing (`encounterTypes.ts`, `encounterTiming.ts`, `EncounterTimeline.tsx`)
 
@@ -410,33 +495,28 @@ the first) instead of each running on an island. A unit instance's first
 step can have `time > 0` for a delayed/staggered spawn — there's no
 separate "delay" mechanic, it falls out of the shared clock for free.
 
-**Revised again almost immediately: a step's `time` is now mostly
-*derived*, not freely authored.** The first cut of this feature let `time`
-be any number you typed in, completely independent of the referenced
-Action's movement speed or how far away the next waypoint actually was —
-which read as an obvious bug in practice: a fast unit would sail straight
-past its next waypoint (or the last one, forever) long before or after the
-timeline said it should, because nothing tied the two together. Fixed per
-explicit feedback ("the unit's speed should affect how fast it travels; if
-the destination is closer, the timeline should reflect that it'll take
-less time to finish") — see `encounterTiming.ts`:
+**A step's `time` is mostly *derived*, not freely authored** (an early cut
+of this feature let `time` be fully independent of movement speed, which
+read as an obvious bug — see "Movement" above for the full story of why
+that changed) — see `encounterTiming.ts`:
 
-- **A step's `time` is derived whenever its *preceding* step's Action has
-  movement** — there's a real destination (the next `pos`) and a real
-  speed to compute a duration from: `time = precedingStep.time +
-  distance ÷ effectiveSpeed`. `recomputeStepTimes` does this in one
-  forward pass over an instance's `steps` array, called by
-  `EncounterEditor.tsx`'s `updateInstance` wrapper after *every* mutation
-  (position drag, action swap, speedMultiplier change) so a derived time
-  never goes stale — you don't have to remember to "re-derive" anything.
-  Move a waypoint closer and its arrival time visibly shrinks; that's not
-  a special case, it falls straight out of the distance term.
+- **A step's `time` is derived whenever its position differs from its
+  *predecessor's*** — there's a real curve (`bezier.ts`) and a real speed
+  (the owning Unit's) to compute a duration from: `time =
+  precedingStep.time + arcLength ÷ effectiveSpeed`. `recomputeStepTimes`
+  does this in one forward pass over an instance's `steps` array, called
+  by `EncounterEditor.tsx`'s `updateInstance` wrapper after *every*
+  mutation (position drag, handle drag, action swap, speedMultiplier
+  change) so a derived time never goes stale — you don't have to remember
+  to "re-derive" anything. Move a waypoint closer, or straighten a curve
+  back out, and its arrival time visibly shrinks; that's not a special
+  case, it falls straight out of the arc-length term.
 - **A step's `time` stays manually authored when there's nothing to
   derive it from** — the first step of an instance (this is *when the
-  unit spawns*, not a destination-arrival) or a step whose predecessor is
-  stationary (dwelling has no destination). `StepPanel.tsx`'s Time field
-  is disabled with an explanatory hint for a derived step; it's a normal
-  editable number for a manual one.
+  unit spawns*, not a destination-arrival) or a step *dwelling at the
+  same position* as its predecessor (no destination, nothing to derive).
+  `StepPanel.tsx`'s Time field is disabled with an explanatory hint for a
+  derived step; it's a normal editable number for a manual one.
 - **`speedMultiplier` (see Per-step overrides below) is what actually
   controls a derived step's pacing.** Dragging a *derived* step on
   `EncounterTimeline.tsx` doesn't set `time` directly — `EncounterEditor`'s
@@ -444,14 +524,12 @@ less time to finish") — see `encounterTiming.ts`:
   `speedMultiplierForDuration` for whatever multiplier would make the
   preceding step arrive exactly where you dropped it, and writes that onto
   the *preceding* step's `EncounterStep.speedMultiplier` — never onto the
-  shared `ActionDef`, since Actions are a reusable buffet (unitTypes.ts)
-  and silently changing one encounter's pacing shouldn't touch every other
-  encounter that reuses the same Action. `baseElapsedFor` (the same
-  distance→duration math, solved for `t` given `speed`/`accel`, including
-  the quadratic case for nonzero `accel`) backs both directions.
+  shared `UnitDef`, since a Unit's `speed` is shared across every encounter
+  that reuses it, and silently changing one encounter's pacing shouldn't
+  touch every other one.
 - **Array index order is the authorial sequence order — steps are no
-  longer reordered by dragging.** The original design kept `steps` sorted
-  by `time` as an invariant so dragging past a neighbor could reorder the
+  longer reordered by dragging.** An earlier design kept `steps` sorted by
+  `time` as an invariant so dragging past a neighbor could reorder the
   sequence; once `time` is mostly computed rather than freely draggable,
   that stopped making sense (there was never a UI gesture to reorder
   steps any other way — array order was always the true authored
@@ -471,44 +549,26 @@ playhead forward in real time (looping back to 0 at the end) via
 `requestAnimationFrame`; scrubbing manually does the same thing without
 autoplay. At the current scrub time, `movementPreview.ts` computes each
 visible unit instance's *actual* interpolated position — not just which
-step is active, but where the unit is *between* steps, using each
-movement kind's own formula (speed/accel/turnRate for straightLine,
-base-path-plus-oscillation for wave, orbiting-center for spiral) — and
-renders it as a small teal marker on the canvas, distinct from the
+step is active, but where the unit is *between* steps, evaluating the
+segment's bezier curve at `u = elapsed/duration` (see "Movement" above) —
+and renders it as a small teal marker on the canvas, distinct from the
 authored orange waypoint nodes. **A step's `pos` is a waypoint the unit
-travels toward, not a place it teleports between** — this is the sense in
-which the preview is genuinely new capability, not just a retiming UI: you
-can now see whether an authored sequence actually reads as intended motion,
-not just guess from where the dots happen to sit. Direction for a segment
-comes from `pos → nextStep.pos`. **`turnRate` (homing toward the player)
-is not simulated** — there's no live player position at authoring time,
-the same reason `playerPosition`/`onProximity` triggers were cut — so the
-preview uses a fixed heading and ignores it; documented in
-`movementPreview.ts`'s file header as a known approximation, not a bug.
+travels toward along a curve, not a place it teleports between** — this
+is the sense in which the preview is genuinely new capability, not just a
+retiming UI: you can now see whether an authored sequence actually reads
+as intended motion, not just guess from where the dots happen to sit.
 This preview is the editor's own approximation for authoring purposes —
 there's no shared runtime to match yet (`games/shmup` has no enemy-movement
 implementation), consistent with the editor's "no shared code with the
 game" stance elsewhere.
 
-**Position is clamped to the destination, never extrapolated past it —
-and a step with no next waypoint never moves in the preview at all.**
-Between two real steps, the effective elapsed time fed into the position
-formula is capped at "however long the base path takes to travel the
-straight-line distance to the next waypoint" (`baseElapsedFor`) — so the
-unit holds there once it arrives instead of sailing past it. This mostly
-matters for a *manually*-timed step whose authored gap is longer than the
-movement's natural travel time (a derived step's duration already matches
-by construction, so the clamp is a no-op there). **The last step in a
-sequence — or a lone step with no neighbors at all — simply holds at its
-own `pos`, regardless of its Action's own movement or how far the scrub
-head travels past it.** An earlier version had it "continue the previous
-heading" (or guess "straight down" for a lone step) for a bounded few
-seconds before holding; that still read as broken with a genuinely fast
-unit, since even a couple of seconds is enough distance to look like
-runaway travel. There's no principled destination to head toward once a
-sequence ends, so the preview doesn't guess one anymore — freezing is the
-only outcome that can never look like the unit "keeps traveling after it
-reaches the final node," which is the exact bug report that drove this.
+**A step at the same position as its predecessor (dwelling), or a step
+with no next waypoint at all, holds in place — it never moves in the
+preview.** There's no principled destination to head toward in either
+case, so the preview doesn't guess one; freezing is the only outcome that
+can never look like the unit "keeps traveling after it reaches the final
+node," which is the exact bug report that drove several iterations of
+this feature (see "Movement" above).
 
 ### Per-step overrides (`StepPanel.tsx`)
 
@@ -517,24 +577,39 @@ whatever its chosen Action already specifies — not a general "edit the
 Action's params here" escape hatch:
 - **`aimAngleOverride`** — shown only when the selected Action's
   `attack?.aim === "fixed"`.
-- **`speedMultiplier`** — shown only when the selected Action has a
-  non-null `movement`. Started as a purely cosmetic per-placement pacing
-  tweak; now it's the actual mechanism for controlling a *derived* step's
-  duration (see Timing above) — dragging the *next* step on the timeline
-  writes to *this* step's `speedMultiplier` rather than to a raw time
-  value. 1 = the Action's own authored speed, 2 = twice as fast (half the
-  travel time to the next waypoint), etc.
+- **`speedMultiplier`** — shown only when there's a next step at a
+  different position (`hasOutgoingSegment`, computed by `EncounterEditor`
+  the same way `encounterTiming.ts` decides whether a step's time is
+  derived — a step whose successor dwells at the same position has no
+  segment for a multiplier to affect). Started as a purely cosmetic
+  per-placement pacing tweak; now it's the actual mechanism for
+  controlling a *derived* step's duration (see Timing above) — dragging
+  the *next* step on the timeline writes to *this* step's
+  `speedMultiplier` rather than to a raw time value. 1 = the owning Unit's
+  own authored `speed`, 2 = twice as fast (half the travel time to the
+  next waypoint), etc.
 
 Both are optional; omitted means "use the Action's own value unmodified."
 
 ### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterSteps.ts`)
 
-Same tap-driven interaction model as both earlier passes (tap a node to
-select it, overlay quick-action buttons, below-canvas settings panel for
-the real fields), simplified by the graph-to-array collapse: consecutive
-steps within one instance render as a plain non-interactive SVG `<line>`
-— there's no separately-configured transition anymore, so there's nothing
-to tap or delete on the connector itself.
+Same tap-driven interaction model as earlier passes (tap a node to select
+it, overlay quick-action buttons, below-canvas settings panel for the real
+fields), simplified by the graph-to-array collapse: consecutive steps
+within one instance render as an SVG `<path>` cubic-bezier command
+(`resolveSegment`, `bezier.ts`) instead of a graph edge — there's nothing
+to tap or delete on the connector itself, only its two endpoints' handles
+to drag (see "Movement" above).
+
+- **The connector paths and handle stalks are click-through
+  (`pointer-events: none` on the whole SVG), but the handle `<circle>`
+  drag targets need it explicitly re-enabled** (`pointer-events: all`) —
+  a real bug this pass hit directly: the handle dots were rendered
+  correctly but completely unclickable until that CSS rule was added,
+  since they'd silently inherited the SVG's blanket `none` with no
+  override (unlike `<line>`, which already had one for an older, unrelated
+  reason). `elementFromPoint` at the dot's exact center returning the
+  dashed stalk `<line>` underneath it was what surfaced this.
 
 - **`EncounterTileFrame.tsx`** is unchanged from the graph-based pass — a
   read-only dashed rectangle sized to the tile's real footprint, labeled
@@ -619,6 +694,14 @@ The follow-up pass that made `time` mostly derived (Timing, above) did
 `speedMultiplier` kept the exact same field names and types (`number`);
 only what *computes* them changed, which is pure runtime behavior, not a
 save-file shape change.
+
+The bezier-curve movement pass (Movement, above) **did** need version
+bumps, being genuinely non-additive: `UnitDef.baseSpeed` was renamed
+`speed` (plus a new `turnRate`), `ActionDef` lost its `movement` field
+entirely, and `EncounterStep` gained `handleIn`/`handleOut`. `unitStore.ts`'s
+`SAVE_VERSION` (4→5) and `TILE_SESSION_VERSION` (2→3), plus `tileStore.ts`'s
+`SAVE_VERSION` (3→4), all bumped for the same "reset rather than silently
+carry a mismatched shape" reason as every prior bump.
 
 Two more fsStore files alongside `TILES.DAT`/`UNITS.DAT`, same folder
 (`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory

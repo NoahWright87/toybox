@@ -22,19 +22,20 @@ function validate(unit: UnitDef): string | null {
 
 function actionSummary(action: ActionDef): string {
   const parts: string[] = [];
-  parts.push(action.movement ? action.movement.kind : "stationary");
   if (action.attack?.enabled) parts.push("attacks");
   if (!action.visible) parts.push("hidden");
-  return parts.join(", ");
+  return parts.length > 0 ? parts.join(", ") : "no attack";
 }
 
 /**
- * Stats form + reusable Action buffet — a Unit is sprite + stats + a
- * named, reusable set of Actions (movement/attack/animation bundles),
- * authored once here and *selected* repeatedly across encounters (see
- * EncounterEditor.tsx). Same toolbar-then-fields shape as
- * TileEditorForm.tsx; the Actions section mirrors that form's Encounters
- * section (list + New/Edit/Delete, editing navigates to a dedicated view).
+ * Stats form + reusable Action buffet — a Unit is sprite + stats
+ * (including `speed`/`turnRate`, which drive movement between encounter
+ * waypoints — see unitTypes.ts) + a named, reusable set of Actions
+ * (attack/animation bundles, no movement), authored once here and
+ * *selected* repeatedly across encounters (see EncounterEditor.tsx). Same
+ * toolbar-then-fields shape as TileEditorForm.tsx; the Actions section
+ * mirrors that form's Encounters section (list + New/Edit/Delete, editing
+ * navigates to a dedicated view).
  */
 export default function UnitStatsForm({ unit, onSave, onCancel, onDraftChange, onNewAction, onEditAction, onDeleteAction }: UnitStatsFormProps) {
   const [draft, setDraft] = useState<UnitDef>(unit);
@@ -77,18 +78,26 @@ export default function UnitStatsForm({ unit, onSave, onCancel, onDraftChange, o
       </div>
       <div className="shmup-field-row">
         <label className="shmup-field shmup-field--inline">
-          <span>Base speed</span>
-          <input type="number" min={0} className="shmup-input shmup-input--small" value={draft.baseSpeed} onChange={(e) => update({ baseSpeed: Number(e.target.value) })} />
+          <span>Speed</span>
+          <input type="number" min={0} className="shmup-input shmup-input--small" value={draft.speed} onChange={(e) => update({ speed: Number(e.target.value) })} />
+        </label>
+        <label className="shmup-field shmup-field--inline">
+          <span>Turn rate</span>
+          <input type="number" min={0} step={0.1} className="shmup-input shmup-input--small" value={draft.turnRate} onChange={(e) => update({ turnRate: Number(e.target.value) })} />
         </label>
         <label className="shmup-field shmup-field--inline">
           <span>Hitbox size</span>
           <input type="number" min={1} className="shmup-input shmup-input--small" value={draft.size} onChange={(e) => update({ size: Number(e.target.value) })} />
         </label>
       </div>
+      <p className="shmup-hint">
+        Speed and turn rate drive how this Unit travels between an encounter's waypoints (px/sec, and how sharply it can curve — a multiple of
+        each segment's straight-line length). There's no per-Action movement anymore.
+      </p>
 
       <div className="shmup-field">
         <span>Actions ({draft.actions.length})</span>
-        <p className="shmup-hint">Authored once, selected per placement in any encounter — a movement, an optional attack, and an animation state.</p>
+        <p className="shmup-hint">Authored once, selected per placement in any encounter — an optional attack and an animation state.</p>
         <ul className="shmup-encounter-list">
           {draft.actions.map((action) => (
             <li key={action.id} className="shmup-encounter-list__row">

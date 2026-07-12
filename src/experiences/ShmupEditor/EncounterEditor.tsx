@@ -3,8 +3,9 @@ import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
 import StepPanel from "./StepPanel";
 import { resolveSpriteUrl } from "./enemySprites";
+import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
-import { distanceBetween, isStepTimeDerived, recomputeStepTimes, speedMultiplierForDuration } from "./encounterTiming";
+import { isStepTimeDerived, recomputeStepTimes, segmentArcLength, speedMultiplierForDuration } from "./encounterTiming";
 import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
 import type { TileDef } from "./types";
@@ -21,12 +22,14 @@ interface EncounterEditorProps {
 }
 
 type Selection = { instanceId: string; stepId: string } | null;
+type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
 
 const NODE_DIAMETER = 56;
 const NODE_RADIUS = NODE_DIAMETER / 2;
 /** The live-preview marker (see movementPreview.ts) is smaller than a waypoint node so it visually reads as secondary, not another authored step. */
 const PREVIEW_DIAMETER = 36;
 const PREVIEW_RADIUS = PREVIEW_DIAMETER / 2;
+const HANDLE_RADIUS = 6;
 const PADDING = 60;
 /** Reference-frame sizing: matches encounterSteps.ts's default next-step offset, so a freshly grown sequence reads at a similar scale to the tile itself. */
 const TILE_UNIT = 130;
@@ -46,22 +49,25 @@ function deleteKey(instanceId: string, stepId: string): string {
  * (each referencing a UnitDef for sprite/stats/Action buffet) and, for
  * each, a flat ordered STEP sequence (specs/shmup-editor.md's Encounter
  * editor section). No graph, no separately-configured edges — a step is
- * `{ position, time, action }`, and the action (movement/attack/
- * animation) is looked up on the referenced Unit, not authored here. The
- * tile's real footprint/edges render as a fixed reference frame
- * (EncounterTileFrame) so placement is meaningful relative to the tile's
- * actual neighbors. Tap a step to move/extend/delete it and edit which
- * Action it uses; `EncounterTimeline` below the canvas shows *when* it
- * happens and doubles as a live motion preview — scrubbing or hitting Play
- * interpolates each instance's actual position via `movementPreview.ts`
- * and renders it as a small ghost marker on top of the authored waypoints.
+ * `{ position, time, action, handles }`, and the action (attack/animation
+ * — no movement, see unitTypes.ts) is looked up on the referenced Unit,
+ * not authored here. The tile's real footprint/edges render as a fixed
+ * reference frame (EncounterTileFrame) so placement is meaningful relative
+ * to the tile's actual neighbors. Tap a step to move/extend/delete it and
+ * edit which Action it uses; `EncounterTimeline` below the canvas shows
+ * *when* it happens and doubles as a live motion preview.
+ *
+ * **Every segment between two steps is a cubic bezier curve** (`bezier.ts`),
+ * rendered as an SVG path instead of a straight line. Selecting a step
+ * shows up to two small draggable handle dots (⬦, teal) connected to it by
+ * a dashed stalk — one shaping the curve leaving it (skipped on the last
+ * step), one shaping the curve arriving at it (skipped on the first step)
+ * — dragging either bends the curve, clamped by the owning Unit's
+ * `turnRate` relative to that segment's straight-line length.
  *
  * **Most steps' `time` is derived, not typed in.** `encounterTiming.ts`
- * computes it from the distance to the waypoint and the preceding step's
- * Action's speed — see that file's header for the full reasoning (a step's
- * timeline position used to be totally disconnected from how long its
- * movement actually took to get there, which read as a bug: a fast unit
- * would sail right past its next waypoint). `updateInstance` below
+ * computes it from the segment's arc length and the owning Unit's `speed`
+ * — see that file's header for the full reasoning. `updateInstance` below
  * recomputes derived times after every mutation so this stays in sync
  * automatically; `handleRetimeStep` is what makes dragging a derived step
  * on the timeline still feel like "set the time" even though under the
@@ -71,6 +77,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [draft, setDraft] = useState<EncounterDef>(encounter);
   const [selection, setSelection] = useState<Selection>(null);
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
+  const [dragHandle, setDragHandle] = useState<HandleDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [addingUnit, setAddingUnit] = useState(false);
   const [scrubTime, setScrubTime] = useState(0);
@@ -108,10 +115,11 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   // Every mutation to an instance's steps runs through here so derived
   // times (encounterTiming.ts) always stay in sync with whatever changed —
-  // a position drag, an action swap, a speedMultiplier tweak all affect
-  // some step's distance/speed math, so recomputing after every change
-  // (rather than only at specific call sites) is what keeps a moving
-  // step's `time` honest without having to remember to do it everywhere.
+  // a position drag, a handle drag, an action swap, a speedMultiplier
+  // tweak all affect some step's arc-length/speed math, so recomputing
+  // after every change (rather than only at specific call sites) is what
+  // keeps a moving step's `time` honest without having to remember to do
+  // it everywhere.
   function updateInstance(instanceId: string, updater: (instance: EncounterUnit) => EncounterUnit) {
     updateDraft({
       ...draft,
@@ -125,26 +133,27 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   /**
-   * Dragging a step on the timeline. For a manually-timed step (first step,
-   * or its predecessor is stationary) this just sets `time` directly, same
-   * as always. For a *derived* step (predecessor's Action moves), dragging
+   * Dragging a step on the timeline. For a manually-timed step (first
+   * step, or dwelling at the same position as its predecessor) this just
+   * sets `time` directly, same as always. For a *derived* step, dragging
    * instead solves for the `speedMultiplier` the predecessor would need to
    * arrive exactly there (encounterTiming.ts's `speedMultiplierForDuration`)
    * and writes that onto the *predecessor* step — never onto the shared
-   * Action — so pacing is tunable per-placement without mutating the
-   * Unit's reusable Action buffet. `updateInstance`'s recompute then turns
-   * that multiplier back into the step's actual `time`.
+   * Unit — so pacing is tunable per-placement without mutating the Unit's
+   * reusable stats. `updateInstance`'s recompute then turns that
+   * multiplier back into the step's actual `time`.
    */
   function handleRetimeStep(instanceId: string, stepId: string, draggedTime: number) {
     updateInstance(instanceId, (instance) => {
       const idx = instance.steps.findIndex((s) => s.id === stepId);
-      if (idx <= 0) return updateStep(instance, stepId, { time: draggedTime });
-      const prev = instance.steps[idx - 1];
       const unitDef = units.find((u) => u.id === instance.unitDefId);
-      const prevAction = unitDef?.actions.find((a) => a.id === prev.actionId);
-      if (!prevAction?.movement) return updateStep(instance, stepId, { time: draggedTime });
-      const dist = distanceBetween(prev.pos, instance.steps[idx].pos);
-      const multiplier = speedMultiplierForDuration(prevAction.movement, dist, draggedTime - prev.time);
+      if (idx <= 0 || !unitDef || !isStepTimeDerived(instance, stepId, unitDef)) {
+        return updateStep(instance, stepId, { time: draggedTime });
+      }
+      const prev = instance.steps[idx - 1];
+      const cur = instance.steps[idx];
+      const arcLength = segmentArcLength(prev, cur, unitDef);
+      const multiplier = speedMultiplierForDuration(arcLength, unitDef.speed, draggedTime - prev.time);
       return updateStep(instance, prev.id, { speedMultiplier: multiplier });
     });
   }
@@ -166,8 +175,13 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [selection]);
 
-  function stepPos(instanceId: string, step: { id: string; pos: Vec2 }): Vec2 {
-    return dragPos && dragPos.instanceId === instanceId && dragPos.stepId === step.id ? dragPos.pos : step.pos;
+  /** The step with position/handle overrides applied while a drag is in progress — used for rendering only, never written to `draft` until the drag ends. */
+  function effectiveStep(instanceId: string, step: EncounterStep): EncounterStep {
+    const pos = dragPos && dragPos.instanceId === instanceId && dragPos.stepId === step.id ? dragPos.pos : step.pos;
+    const draggingThisHandle = dragHandle && dragHandle.instanceId === instanceId && dragHandle.stepId === step.id;
+    const handleOut = draggingThisHandle && dragHandle.which === "out" ? dragHandle.offset : step.handleOut;
+    const handleIn = draggingThisHandle && dragHandle.which === "in" ? dragHandle.offset : step.handleIn;
+    return { ...step, pos, handleOut, handleIn };
   }
 
   function handleSave() {
@@ -242,22 +256,68 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     (e.target as Element).setPointerCapture(e.pointerId);
     setDragPos({ instanceId, stepId, pos });
   }
-  function onDragMove(e: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragPos || !stageRef.current) return;
-    const rect = stageRef.current.getBoundingClientRect();
-    setDragPos({ ...dragPos, pos: { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING } });
-  }
   function endDrag() {
     if (!dragPos) return;
     updateInstance(dragPos.instanceId, (i) => moveStep(i, dragPos.stepId, dragPos.pos));
     setDragPos(null);
   }
 
+  /** Begins dragging `which` handle of `stepId`, seeding the drag from its current resolved (possibly-defaulted, turnRate-clamped) absolute position so the dot doesn't jump when you first touch it. */
+  function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<SVGCircleElement>) {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const instance = draft.units.find((u) => u.id === instanceId);
+    const idx = instance?.steps.findIndex((s) => s.id === stepId) ?? -1;
+    if (!instance || idx === -1) return;
+    const step = instance.steps[idx];
+    const other = which === "out" ? instance.steps[idx + 1] : instance.steps[idx - 1];
+    if (!other) return;
+    const unitDef = units.find((u) => u.id === instance.unitDefId);
+    const turnRate = unitDef?.turnRate ?? 1;
+    const currentAbsolute = which === "out" ? resolveHandleOut(step, other.pos, turnRate) : resolveHandleIn(step, other.pos, turnRate);
+    setDragHandle({ instanceId, stepId, which, offset: { x: currentAbsolute.x - step.pos.x, y: currentAbsolute.y - step.pos.y } });
+  }
+  function endHandleDrag() {
+    if (!dragHandle) return;
+    updateInstance(dragHandle.instanceId, (i) =>
+      updateStep(i, dragHandle.stepId, dragHandle.which === "out" ? { handleOut: dragHandle.offset } : { handleIn: dragHandle.offset })
+    );
+    setDragHandle(null);
+  }
+
+  function onStagePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!stageRef.current) return;
+    const rect = stageRef.current.getBoundingClientRect();
+    const worldPos: Vec2 = { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING };
+    if (dragPos) {
+      setDragPos({ ...dragPos, pos: worldPos });
+    }
+    if (dragHandle) {
+      const instance = draft.units.find((u) => u.id === dragHandle.instanceId);
+      const idx = instance?.steps.findIndex((s) => s.id === dragHandle.stepId) ?? -1;
+      if (instance && idx !== -1) {
+        const step = instance.steps[idx];
+        const other = dragHandle.which === "out" ? instance.steps[idx + 1] : instance.steps[idx - 1];
+        if (other) {
+          const unitDef = units.find((u) => u.id === instance.unitDefId);
+          const turnRate = unitDef?.turnRate ?? 1;
+          const segmentLength = distanceBetween(step.pos, other.pos);
+          const rawOffset: Vec2 = { x: worldPos.x - step.pos.x, y: worldPos.y - step.pos.y };
+          setDragHandle({ ...dragHandle, offset: clampHandleOffset(rawOffset, turnRate * segmentLength) });
+        }
+      }
+    }
+  }
+  function onStagePointerUp() {
+    endDrag();
+    endHandleDrag();
+  }
+
   // Bounding box spans every instance's every step PLUS the tile reference frame itself, so the frame is always visible even before any Unit is placed.
   const allPositions: Vec2[] = [
     { x: 0, y: 0 },
     { x: tile.footprint * TILE_UNIT, y: TILE_UNIT },
-    ...draft.units.flatMap((inst) => inst.steps.map((s) => stepPos(inst.id, s))),
+    ...draft.units.flatMap((inst) => inst.steps.map((s) => effectiveStep(inst.id, s).pos)),
   ];
   const minX = Math.min(...allPositions.map((p) => p.x));
   const minY = Math.min(...allPositions.map((p) => p.y));
@@ -273,6 +333,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
   const selectedStep: EncounterStep | undefined = selectedInstance?.steps.find((s) => s.id === selection?.stepId);
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
+  const selectedIdx = selectedInstance && selectedStep ? selectedInstance.steps.findIndex((s) => s.id === selectedStep.id) : -1;
+  const selectedNextStep = selectedInstance && selectedIdx >= 0 ? selectedInstance.steps[selectedIdx + 1] : undefined;
+  const hasOutgoingSegment = selectedInstance && selectedNextStep ? isStepTimeDerived(selectedInstance, selectedNextStep.id, selectedUnitDef) : false;
 
   const framePos = toStage({ x: 0, y: 0 });
 
@@ -297,9 +360,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       </div>
 
       <p className="shmup-hint">
-        Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition. The dashed box is this tile's
-        real footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below still lets
-        you drag to adjust pacing, and Play/scrub previews motion (teal marker).
+        Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition, or the teal ⬦ handles to bend
+        the curve leaving/arriving at it. The dashed box is this tile's real footprint/edges, for reference. Most steps' timing is automatic —
+        based on distance and speed — but the timeline below still lets you drag to adjust pacing, and Play/scrub previews motion (teal marker).
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -307,9 +370,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           className="shmup-enemy-canvas-stage"
           ref={stageRef}
           style={{ width, height }}
-          onPointerMove={onDragMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          onPointerMove={onStagePointerMove}
+          onPointerUp={onStagePointerUp}
+          onPointerCancel={onStagePointerUp}
         >
           <div style={{ position: "absolute", left: framePos.x, top: framePos.y }}>
             <EncounterTileFrame tile={tile} widthPx={tile.footprint * TILE_UNIT} heightPx={TILE_UNIT} />
@@ -321,21 +384,69 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 <path d="M0,0 L10,5 L0,10 z" fill="#ffcc88" />
               </marker>
             </defs>
-            {draft.units.flatMap((instance) =>
-              instance.steps.slice(1).map((step, i) => {
-                const prev = instance.steps[i];
-                const a = toStage(stepPos(instance.id, prev));
-                const b = toStage(stepPos(instance.id, step));
-                return <line key={step.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffcc88" strokeWidth={2} markerEnd="url(#shmup-arrow)" />;
-              })
-            )}
+            {draft.units.flatMap((instance) => {
+              const unitDef = units.find((u) => u.id === instance.unitDefId);
+              const turnRate = unitDef?.turnRate ?? 1;
+              return instance.steps.slice(1).map((step, i) => {
+                const prev = effectiveStep(instance.id, instance.steps[i]);
+                const cur = effectiveStep(instance.id, step);
+                const { p0, p1, p2, p3 } = resolveSegment(prev, cur, turnRate);
+                const a = toStage(p0);
+                const b = toStage(p1);
+                const c = toStage(p2);
+                const d = toStage(p3);
+                return (
+                  <path
+                    key={step.id}
+                    d={`M ${a.x},${a.y} C ${b.x},${b.y} ${c.x},${c.y} ${d.x},${d.y}`}
+                    fill="none"
+                    stroke="#ffcc88"
+                    strokeWidth={2}
+                    markerEnd="url(#shmup-arrow)"
+                  />
+                );
+              });
+            })}
+
+            {selectedInstance &&
+              selectedStep &&
+              (() => {
+                const turnRate = selectedUnitDef?.turnRate ?? 1;
+                const effSelected = effectiveStep(selectedInstance.id, selectedStep);
+                const nodeStage = toStage(effSelected.pos);
+                const dots: { which: "in" | "out"; abs: Vec2 }[] = [];
+                const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
+                if (prevStep) dots.push({ which: "in", abs: resolveHandleIn(effSelected, prevStep.pos, turnRate) });
+                if (selectedNextStep) {
+                  const effNext = effectiveStep(selectedInstance.id, selectedNextStep);
+                  dots.push({ which: "out", abs: resolveHandleOut(effSelected, effNext.pos, turnRate) });
+                }
+                return dots.map(({ which, abs }) => {
+                  const stage = toStage(abs);
+                  return (
+                    <g key={which}>
+                      <line x1={nodeStage.x} y1={nodeStage.y} x2={stage.x} y2={stage.y} stroke="#66ffee" strokeWidth={1.5} strokeDasharray="3,3" />
+                      <circle
+                        cx={stage.x}
+                        cy={stage.y}
+                        r={HANDLE_RADIUS}
+                        fill="#66ffee"
+                        stroke="#0a3330"
+                        strokeWidth={1.5}
+                        style={{ cursor: "grab", touchAction: "none" }}
+                        onPointerDown={(e) => beginHandleDrag(selectedInstance.id, selectedStep.id, which, e)}
+                      />
+                    </g>
+                  );
+                });
+              })()}
           </svg>
 
           {draft.units.flatMap((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
             const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
             return instance.steps.map((step) => {
-              const pos = toStage(stepPos(instance.id, step));
+              const pos = toStage(effectiveStep(instance.id, step).pos);
               const first = isFirstStep(instance, step.id);
               const last = isLastStep(instance, step.id);
               const action = unitDef?.actions.find((a) => a.id === step.actionId);
@@ -478,6 +589,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           unit={selectedUnitDef}
           step={selectedStep}
           timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
+          hasOutgoingSegment={hasOutgoingSegment}
           onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))}
         />
       )}

@@ -19,7 +19,9 @@ import type { EdgeSlot, TileDef } from "./types";
 // scrubber pass) — bumping so a pre-v3 save's encounters (old trigger
 // shape) reset via isValidEncounter rather than silently carrying a shape
 // that no longer parses meaningfully.
-const SAVE_VERSION = 3;
+// v4: embedded EncounterStep gained handleIn/handleOut (bezier-curve
+// movement pass) — bumping for the same reason.
+const SAVE_VERSION = 4;
 
 interface SavedLibrary {
   version: number;

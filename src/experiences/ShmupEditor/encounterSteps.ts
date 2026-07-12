@@ -10,11 +10,12 @@
  * **Array index order IS the authorial sequence order — steps are not
  * reordered by dragging.** `time` is mostly a *derived* value now
  * (`encounterTiming.ts`'s `recomputeStepTimes`, called after every mutation
- * by `EncounterEditor.tsx`): a step whose predecessor's Action moves gets
- * its `time` computed from distance and speed, so it isn't something you'd
- * want to drag past a neighbor anyway. `updateStep` only floors a `time`
- * patch at 0 — `recomputeStepTimes` is what keeps every step chronologically
- * after its predecessor.
+ * by `EncounterEditor.tsx`): a step whose position differs from its
+ * predecessor's gets its `time` computed from the bezier curve's arc length
+ * and the owning Unit's speed, so it isn't something you'd want to drag
+ * past a neighbor anyway. `updateStep` only floors a `time` patch at 0 —
+ * `recomputeStepTimes` is what keeps every step chronologically after its
+ * predecessor.
  */
 import { makeStepId, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 
@@ -27,7 +28,7 @@ export function addStep(instance: EncounterUnit, actionId: string, pos?: Vec2): 
   const last = instance.steps[instance.steps.length - 1];
   const stepPos = pos ?? (last ? { x: last.pos.x + DEFAULT_NEXT_OFFSET.x, y: last.pos.y + DEFAULT_NEXT_OFFSET.y } : { x: 0, y: 0 });
   const time = last ? last.time + DEFAULT_STEP_DURATION : 0;
-  const step: EncounterStep = { id: makeStepId(), pos: stepPos, actionId, time, aimAngleOverride: null, speedMultiplier: 1 };
+  const step: EncounterStep = { id: makeStepId(), pos: stepPos, actionId, time, aimAngleOverride: null, speedMultiplier: 1, handleIn: null, handleOut: null };
   return { ...instance, steps: [...instance.steps, step] };
 }
 

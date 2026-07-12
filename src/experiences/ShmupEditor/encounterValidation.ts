@@ -30,7 +30,9 @@ function isEncounterStep(v: unknown): v is EncounterStep {
     typeof s.actionId === "string" &&
     isNumber(s.time) &&
     (s.aimAngleOverride === null || isNumber(s.aimAngleOverride)) &&
-    isNumber(s.speedMultiplier)
+    isNumber(s.speedMultiplier) &&
+    (s.handleOut === null || isVec2(s.handleOut)) &&
+    (s.handleIn === null || isVec2(s.handleIn))
   );
 }
 

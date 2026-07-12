@@ -634,6 +634,10 @@
 .shmup-enemy-canvas-svg line {
   pointer-events: stroke;
 }
+/* Bezier handle drag targets (EncounterEditor.tsx) — need real pointer events, unlike the plain connector paths/stalk lines which stay click-through. */
+.shmup-enemy-canvas-svg circle {
+  pointer-events: all;
+}
 
 .shmup-enemy-node-wrap {
   position: absolute;

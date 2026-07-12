@@ -1,34 +1,51 @@
 /**
  * Unit data model for the Shmup Editor (specs/shmup-editor.todo.md, E2 #192
  * — reworked per the "Design Handoff v2" doc after real usability friction
- * with the encounter-owns-everything version). Deliberately self-contained
- * — not imported from games/shmup/src/.
+ * with the encounter-owns-everything version, then reworked again for the
+ * bezier-curve movement pass). Deliberately self-contained — not imported
+ * from games/shmup/src/.
  *
  * A Unit (renamed from Enemy — also covers non-combatant doodads/loot) is
  * sprite + stats + a reusable **buffet of Actions**, authored once and
- * selected repeatedly across encounters. This replaces the previous
- * design where behavior lived entirely on the encounter: attacks are very
- * enemy-specific in practice (a helicopter with missile pods always has
- * missile pods, wherever it appears), so authoring them once per Unit and
- * *selecting* them per placement removes the repetition tax the old
- * design had — an encounter no longer hand-rolls every field for every
- * placement, it just picks from the buffet and sets a trigger.
+ * selected repeatedly across encounters. Attacks are very enemy-specific
+ * in practice (a helicopter with missile pods always has missile pods,
+ * wherever it appears), so authoring them once per Unit and *selecting*
+ * them per placement removes the repetition tax an encounter-owns-
+ * everything design had.
  *
- * **Dwell dissolves into `movement: null`** — a step whose action has no
- * movement just holds its current position; there's no separate
- * wait/orbit distinction anymore (orbit-in-place is just a `spiral`
- * movement whose net displacement happens to be small).
+ * **Movement is no longer an Action concept at all — it's two plain Unit
+ * stats, `speed` and `turnRate`.** Actions used to each carry their own
+ * `movement: MovementBehavior | null` (straightLine/wave/spiral, or
+ * stationary); that's gone. Every segment between two of a Unit's
+ * encounter steps is now a single cubic bezier curve (`bezier.ts`), shaped
+ * by each step's own `handleIn`/`handleOut` (encounterTypes.ts) and paced
+ * by the Unit's `speed`. `turnRate` caps how far a handle can bend the
+ * curve, relative to the segment's straight-line length — a stiff,
+ * slow-turning Unit can only author gentle curves. **Dwelling is simply a
+ * step whose position matches its predecessor's** — no explicit flag
+ * needed, since a zero-length segment has nothing to travel along.
+ *
+ * **Wave/spiral/wobble aren't gone, they're deferred.** The eventual goal
+ * (see `shmup-editor.todo.md`'s Remaining list) is a per-Unit "constant
+ * motion" — a secondary offset the sprite/hitbox orbits or oscillates
+ * around its primary bezier-path position, independent of `speed`/
+ * `turnRate` (bobbing boats, spiraling swarms, swaying helicopters). Not
+ * built yet; most Units won't need it.
+ *
+ * **Bullets keep the old movement system, unchanged.** A `BulletDef` has
+ * no waypoints/steps to curve between — it's fired and just flies — so
+ * `MovementBehavior` (straightLine/wave/spiral) below is still exactly
+ * what it was; only `ActionDef` lost its `movement` field.
  *
  * **Entrance/exit are not special action categories** — "Pop Up" and
  * "Pop Down" are ordinary Actions, distinguished only by being the first
  * or last step in an encounter's sequence (see encounterTypes.ts). An
  * Action's `visible` flag (false = hidden + hitbox disabled) is what
  * expresses "disappear," which composes with a later differently-positioned
- * step to produce teleporting — so there's no dedicated Teleport movement
- * kind anymore either.
+ * step to produce teleporting.
  */
 
-// ── Movement behaviors ───────────────────────────────────────────────────
+// ── Movement behaviors (bullets only — see file header) ──────────────────
 
 export type Waveform = "smooth" | "triangle" | "square";
 
@@ -160,8 +177,6 @@ export const ANIMATION_STATES: AnimationState[] = ["idle", "moving", "attacking"
 export interface ActionDef {
   id: string;
   name: string;
-  /** null = stationary (no movement component) — see file header. */
-  movement: MovementBehavior | null;
   attack: AttackPayload | null;
   animationState: AnimationState;
   /** false = hidden + hitbox disabled — what "Disappear"/teleport-out/pop-down are made of. */
@@ -174,11 +189,11 @@ export function makeActionId(): string {
 
 /** The mandatory baseline every Unit is seeded with, so an encounter's action picker is never empty for a freshly authored Unit. */
 export function createIdleAction(): ActionDef {
-  return { id: makeActionId(), name: "Idle", movement: null, attack: null, animationState: "idle", visible: true };
+  return { id: makeActionId(), name: "Idle", attack: null, animationState: "idle", visible: true };
 }
 
 export function createBlankAction(existingCount: number): ActionDef {
-  return { id: makeActionId(), name: `Action ${existingCount + 1}`, movement: null, attack: null, animationState: "idle", visible: true };
+  return { id: makeActionId(), name: `Action ${existingCount + 1}`, attack: null, animationState: "idle", visible: true };
 }
 
 // ── Unit ───────────────────────────────────────────────────────────────────
@@ -191,7 +206,10 @@ export interface UnitDef {
   hp: number;
   contactDamage: number;
   scoreValue: number;
-  baseSpeed: number;
+  /** Travel speed along its encounter steps' bezier curves, px/sec — see file header. */
+  speed: number;
+  /** Caps how far a step's bezier handle can extend, as a multiple of that segment's straight-line length (1 = up to 100%). Higher = tighter/sharper turns allowed. */
+  turnRate: number;
   /** Hitbox radius, px. */
   size: number;
   actions: ActionDef[];
@@ -213,7 +231,8 @@ export function createBlankUnit(existingCount: number): UnitDef {
     hp: 10,
     contactDamage: 1,
     scoreValue: 100,
-    baseSpeed: 120,
+    speed: 120,
+    turnRate: 1,
     size: 16,
     actions: [createIdleAction()],
     createdAt: now,

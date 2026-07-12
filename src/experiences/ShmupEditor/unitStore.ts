@@ -25,13 +25,13 @@ import type {
 } from "./unitTypes";
 import type { TileDef } from "./types";
 
-// v4: EncounterStep's step-list shape isn't validated here, but AttackPayload
-// is — dropped "onProximity"/proximityRadius (timeline scrubber pass, cut
-// alongside the encounter-step Trigger system for the same
-// can't-preview-live-player-position reason). Bumping so a pre-v4 save
-// with an onProximity attack fails validation and resets rather than
-// silently carrying a stale, now-invalid trigger kind.
-const SAVE_VERSION = 4;
+// v5: UnitDef's `baseSpeed` became `speed` plus a new `turnRate`, and
+// ActionDef dropped `movement` entirely (bezier-curve movement pass —
+// movement is now two plain Unit stats, not an Action-level choice; see
+// unitTypes.ts). Bumping so a pre-v5 save (missing speed/turnRate, or an
+// Action still carrying the old movement field) resets rather than
+// silently mismatching the new shape.
+const SAVE_VERSION = 5;
 
 interface SavedLibrary {
   version: number;
@@ -113,7 +113,6 @@ function isActionDef(v: unknown): v is ActionDef {
   return (
     typeof a.id === "string" &&
     typeof a.name === "string" &&
-    (a.movement === null || isMovement(a.movement)) &&
     (a.attack === null || isAttackPayload(a.attack, 0)) &&
     (ANIMATION_STATES as string[]).includes(a.animationState as string) &&
     typeof a.visible === "boolean"
@@ -132,7 +131,8 @@ function isValidUnitDef(v: unknown): v is UnitDef {
     typeof u.hp === "number" &&
     typeof u.contactDamage === "number" &&
     typeof u.scoreValue === "number" &&
-    typeof u.baseSpeed === "number" &&
+    typeof u.speed === "number" &&
+    typeof u.turnRate === "number" &&
     typeof u.size === "number" &&
     Array.isArray(u.actions) &&
     u.actions.every(isActionDef)
@@ -186,7 +186,9 @@ export function clearUnitDraft(): void {
 // v2: EncounterStep's shape changed (Trigger -> time, timeline scrubber
 // pass) — bumping so a pre-v2 session with the old trigger shape resets
 // instead of failing isValidEncounter's step check silently.
-const TILE_SESSION_VERSION = 2;
+// v3: EncounterStep gained handleIn/handleOut (bezier-curve movement
+// pass) — bumping for the same reason.
+const TILE_SESSION_VERSION = 3;
 
 export interface TileEditSession {
   tile: TileDef;

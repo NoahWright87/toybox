@@ -1,17 +1,17 @@
 /**
  * Encounter data model for the Shmup Editor (specs/shmup-editor.todo.md,
- * E2 #192 — reworked per the "Design Handoff v2" doc, then again for the
- * timeline scrubber pass). An `EncounterDef` belongs to a `TileDef`
- * (types.ts's `encounters` field): "each tile can have multiple
- * encounters; a random one (weighted) is picked when the tile spawns in a
- * level." Each encounter places one or more `EncounterUnit` instances,
- * each referencing a `UnitDef` by id.
+ * E2 #192 — reworked several times: the "Design Handoff v2" doc, the
+ * timeline scrubber pass, then the bezier-curve movement pass). An
+ * `EncounterDef` belongs to a `TileDef` (types.ts's `encounters` field):
+ * "each tile can have multiple encounters; a random one (weighted) is
+ * picked when the tile spawns in a level." Each encounter places one or
+ * more `EncounterUnit` instances, each referencing a `UnitDef` by id.
  *
  * **The graph is gone — it's a flat ordered list of steps.** Nothing in
  * practice ever needed node/edge graph structure: every real case was a
- * straight sequence. A step is `{ position, time, action }`; the *action*
- * (movement/attack/animation) is looked up on the referencing Unit by id
- * (see unitTypes.ts's `ActionDef`) rather than authored inline — an
+ * straight sequence. A step is `{ position, time, action, handles }`; the
+ * *action* (attack/animation — no movement anymore, see unitTypes.ts) is
+ * looked up on the referencing Unit by id rather than authored inline — an
  * encounter selects and sequences behavior, it doesn't author it. The
  * first step is the entrance (its time gates when the instance begins
  * existing at all — can be > 0 for a delayed/staggered spawn), the last is
@@ -32,11 +32,19 @@
  * each other (two turrets alternating fire, a wave arriving 3s after the
  * first) instead of each running on an island.
  *
- * Every instance's `steps` array is kept sorted by `time` ascending as an
- * invariant (`encounterSteps.ts`'s `updateStep` re-sorts after every
- * patch) — "first/last in the array" and "first/last chronologically"
- * are the same thing, so `isFirstStep`/`isLastStep`/`deleteStepsFrom`
- * didn't need to change shape, just gained that invariant.
+ * **Movement between two steps is a cubic bezier curve, not a choice of
+ * movement kind.** `handleIn`/`handleOut` (below) shape the curve leaving/
+ * arriving at a step; see `bezier.ts` for the math and `unitTypes.ts` for
+ * why movement kinds (straightLine/wave/spiral) went away for Units in
+ * favor of this. **Dwelling in place is just a step at the same `pos` as
+ * its predecessor** — no flag for it, a zero-length segment has nothing to
+ * curve along.
+ *
+ * Array index order is the authorial sequence order (steps are not
+ * reordered by dragging — see `encounterSteps.ts`); `time` is mostly
+ * *derived* from distance and the owning Unit's speed
+ * (`encounterTiming.ts`), so `isFirstStep`/`isLastStep`/`deleteStepsFrom`
+ * operate on plain array index throughout.
  */
 
 export interface Vec2 {
@@ -55,8 +63,12 @@ export interface EncounterStep {
   time: number;
   /** Narrow per-placement override of the referenced action's fixed firing angle — null = use the action's own value. Spatial, not behavioral, so it's the one exception to "encounters select, they don't author." */
   aimAngleOverride: number | null;
-  /** Narrow per-placement speed multiplier on the referenced action's movement (1 = unchanged). Same spatial/pacing exception as aimAngleOverride. */
+  /** Narrow per-placement speed multiplier on the owning Unit's `speed` for the segment leaving this step (1 = unchanged). Same spatial/pacing exception as aimAngleOverride. */
   speedMultiplier: number;
+  /** Offset from `pos` for the outgoing bezier handle (toward the next step) — null = default straight-line-equivalent placement. See bezier.ts. Unused on the last step of a sequence (no outgoing segment). */
+  handleOut: Vec2 | null;
+  /** Offset from `pos` for the incoming bezier handle (from the previous step) — null = default straight-line-equivalent placement. See bezier.ts. Unused on the first step of a sequence (no incoming segment). */
+  handleIn: Vec2 | null;
 }
 
 /** One Unit's placement + step sequence within a single encounter. */
