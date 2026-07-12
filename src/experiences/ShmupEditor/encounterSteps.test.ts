@@ -107,15 +107,13 @@ describe("moveStep / updateStep", () => {
     expect(updated.steps[0].time).toBe(0);
   });
 
-  it("updateStep re-sorts the array when a retime crosses a neighbor", () => {
+  it("updateStep does not reorder the array — array index order is the authorial order", () => {
     let e = addStep(instance(), "a"); // time 0
     e = addStep(e, "b"); // time 2
     e = addStep(e, "c"); // time 4
-    const retimed = updateStep(e, e.steps[2].id, { time: 1 }); // "c" jumps before "b"
-    expect(retimed.steps.map((s) => s.actionId)).toEqual(["a", "c", "b"]);
-    // first/last tracking follows the new time order, not original insertion order
-    expect(isFirstStep(retimed, retimed.steps[0].id)).toBe(true);
-    expect(isLastStep(retimed, retimed.steps[2].id)).toBe(true);
+    const retimed = updateStep(e, e.steps[2].id, { time: 1 });
+    expect(retimed.steps.map((s) => s.actionId)).toEqual(["a", "b", "c"]);
+    expect(retimed.steps[2].time).toBe(1);
   });
 });
 

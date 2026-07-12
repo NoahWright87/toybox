@@ -94,4 +94,37 @@ describe("computeInstancePreview", () => {
     expect(preview?.action.id).toBe("action-1");
     expect(preview?.pos).toEqual({ x: 50, y: 50 });
   });
+
+  it("holds at the next waypoint instead of overshooting when the authored gap is longer than the natural travel time", () => {
+    const unit = unitWithActions({ movement: { ...defaultStraightLine(), speed: 100, accel: 0 } }, { movement: null });
+    let inst: EncounterUnit = createEncounterUnit(unit.id);
+    inst = addStep(inst, "action-0", { x: 0, y: 0 }); // time 0
+    inst = addStep(inst, "action-1", { x: 100, y: 0 }); // default time 2, but 100px @ 100px/s only takes 1s
+    // Well past the natural 1s arrival, still within the authored 2s gap.
+    const preview = computeInstancePreview(inst, unit, 1.9);
+    expect(preview?.pos.x).toBeCloseTo(100); // held at the waypoint, not overshot to 190
+    expect(preview?.pos.y).toBeCloseTo(0);
+  });
+
+  it("holds position once past the last step's preview window instead of traveling forever", () => {
+    const unit = unitWithActions({ movement: { ...defaultStraightLine(), speed: 300, accel: 0 } });
+    let inst: EncounterUnit = createEncounterUnit(unit.id);
+    inst = addStep(inst, "action-0", { x: 0, y: 0 });
+    const atWindowEdge = computeInstancePreview(inst, unit, 3); // LAST_STEP_PREVIEW_WINDOW
+    const wayPast = computeInstancePreview(inst, unit, 50);
+    expect(wayPast?.pos).toEqual(atWindowEdge?.pos);
+    expect(wayPast?.pos.y).toBeCloseTo(900); // 300px/s * 3s cap, not 300*50
+  });
+
+  it("speedMultiplier dilates elapsed time (2x runs the movement twice as far in the same wall-clock time)", () => {
+    const base = unitWithActions({ movement: { ...defaultStraightLine(), speed: 100, accel: 0 } });
+    let inst: EncounterUnit = createEncounterUnit(base.id);
+    inst = addStep(inst, "action-0", { x: 0, y: 0 });
+    const at1x = computeInstancePreview(inst, base, 1);
+
+    const doubled = updateStep(inst, inst.steps[0].id, { speedMultiplier: 2 });
+    const at2x = computeInstancePreview(doubled, base, 1);
+
+    expect(at2x?.pos.y).toBeCloseTo((at1x?.pos.y ?? 0) * 2);
+  });
 });

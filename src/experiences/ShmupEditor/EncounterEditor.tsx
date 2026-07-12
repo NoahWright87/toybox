@@ -4,8 +4,9 @@ import EncounterTimeline from "./EncounterTimeline";
 import StepPanel from "./StepPanel";
 import { resolveSpriteUrl } from "./enemySprites";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
+import { distanceBetween, isStepTimeDerived, recomputeStepTimes, speedMultiplierForDuration } from "./encounterTiming";
 import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
-import { computeInstancePreview } from "./movementPreview";
+import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
 
@@ -50,11 +51,21 @@ function deleteKey(instanceId: string, stepId: string): string {
  * tile's real footprint/edges render as a fixed reference frame
  * (EncounterTileFrame) so placement is meaningful relative to the tile's
  * actual neighbors. Tap a step to move/extend/delete it and edit which
- * Action it uses; `EncounterTimeline` below the canvas is the primary way
- * to set *when* it happens (drag on a shared ruler) and doubles as a live
- * motion preview — scrubbing or hitting Play interpolates each instance's
- * actual position via `movementPreview.ts` and renders it as a small
- * ghost marker on top of the authored waypoints.
+ * Action it uses; `EncounterTimeline` below the canvas shows *when* it
+ * happens and doubles as a live motion preview — scrubbing or hitting Play
+ * interpolates each instance's actual position via `movementPreview.ts`
+ * and renders it as a small ghost marker on top of the authored waypoints.
+ *
+ * **Most steps' `time` is derived, not typed in.** `encounterTiming.ts`
+ * computes it from the distance to the waypoint and the preceding step's
+ * Action's speed — see that file's header for the full reasoning (a step's
+ * timeline position used to be totally disconnected from how long its
+ * movement actually took to get there, which read as a bug: a fast unit
+ * would sail right past its next waypoint). `updateInstance` below
+ * recomputes derived times after every mutation so this stays in sync
+ * automatically; `handleRetimeStep` is what makes dragging a derived step
+ * on the timeline still feel like "set the time" even though under the
+ * hood it's solving for a speed adjustment instead.
  */
 export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
   const [draft, setDraft] = useState<EncounterDef>(encounter);
@@ -71,7 +82,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // NOT part of `draft`/onDraftChange — it's a viewing aid, not authored
   // content, so it doesn't need to survive a reload like the actual steps do.
   const allStepTimes = draft.units.flatMap((u) => u.steps.map((s) => s.time));
-  const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + 3 : 10;
+  const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + LAST_STEP_PREVIEW_WINDOW : 10;
 
   useEffect(() => {
     if (!playing) return;
@@ -95,8 +106,47 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     onDraftChange(next);
   }
 
+  // Every mutation to an instance's steps runs through here so derived
+  // times (encounterTiming.ts) always stay in sync with whatever changed —
+  // a position drag, an action swap, a speedMultiplier tweak all affect
+  // some step's distance/speed math, so recomputing after every change
+  // (rather than only at specific call sites) is what keeps a moving
+  // step's `time` honest without having to remember to do it everywhere.
   function updateInstance(instanceId: string, updater: (instance: EncounterUnit) => EncounterUnit) {
-    updateDraft({ ...draft, units: draft.units.map((u) => (u.id === instanceId ? updater(u) : u)) });
+    updateDraft({
+      ...draft,
+      units: draft.units.map((u) => {
+        if (u.id !== instanceId) return u;
+        const updated = updater(u);
+        const unitDef = units.find((ud) => ud.id === updated.unitDefId);
+        return recomputeStepTimes(updated, unitDef);
+      }),
+    });
+  }
+
+  /**
+   * Dragging a step on the timeline. For a manually-timed step (first step,
+   * or its predecessor is stationary) this just sets `time` directly, same
+   * as always. For a *derived* step (predecessor's Action moves), dragging
+   * instead solves for the `speedMultiplier` the predecessor would need to
+   * arrive exactly there (encounterTiming.ts's `speedMultiplierForDuration`)
+   * and writes that onto the *predecessor* step — never onto the shared
+   * Action — so pacing is tunable per-placement without mutating the
+   * Unit's reusable Action buffet. `updateInstance`'s recompute then turns
+   * that multiplier back into the step's actual `time`.
+   */
+  function handleRetimeStep(instanceId: string, stepId: string, draggedTime: number) {
+    updateInstance(instanceId, (instance) => {
+      const idx = instance.steps.findIndex((s) => s.id === stepId);
+      if (idx <= 0) return updateStep(instance, stepId, { time: draggedTime });
+      const prev = instance.steps[idx - 1];
+      const unitDef = units.find((u) => u.id === instance.unitDefId);
+      const prevAction = unitDef?.actions.find((a) => a.id === prev.actionId);
+      if (!prevAction?.movement) return updateStep(instance, stepId, { time: draggedTime });
+      const dist = distanceBetween(prev.pos, instance.steps[idx].pos);
+      const multiplier = speedMultiplierForDuration(prevAction.movement, dist, draggedTime - prev.time);
+      return updateStep(instance, prev.id, { speedMultiplier: multiplier });
+    });
   }
 
   useEffect(() => {
@@ -248,7 +298,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
       <p className="shmup-hint">
         Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition. The dashed box is this tile's
-        real footprint/edges, for reference. Use the timeline below to set when each step happens, and Play/scrub to preview motion (teal marker).
+        real footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below still lets
+        you drag to adjust pacing, and Play/scrub previews motion (teal marker).
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -374,7 +425,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         onTogglePlay={() => setPlaying((v) => !v)}
         selection={selection}
         onSelectStep={selectStep}
-        onRetimeStep={(instanceId, stepId, time) => updateInstance(instanceId, (i) => updateStep(i, stepId, { time }))}
+        onRetimeStep={handleRetimeStep}
       />
 
       <div className="shmup-btn-row">
@@ -423,7 +474,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       )}
 
       {selectedInstance && selectedStep && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
-        <StepPanel unit={selectedUnitDef} step={selectedStep} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))} />
+        <StepPanel
+          unit={selectedUnitDef}
+          step={selectedStep}
+          timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
+          onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))}
+        />
       )}
 
       {error && <p className="shmup-error">{error}</p>}

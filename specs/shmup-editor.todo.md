@@ -156,17 +156,39 @@ current design; this entry describes what actually shipped.
   previewable (depends on the live player, which doesn't exist at
   authoring time). Every unit instance's steps share **one clock for the
   whole encounter**, not a clock per instance, so units can be
-  choreographed against each other. The timeline is a horizontal ruler,
-  one track per instance, drag-to-retime; Play/scrubbing also runs a live
-  position preview on the canvas (a teal marker distinct from the
-  authored orange waypoints), computed by re-deriving each movement
-  primitive's formula over elapsed time — a step's `pos` is now a waypoint
-  a unit travels *toward*, not a place it teleports between. `turnRate`
-  (homing toward the player) isn't simulated in preview for the same
-  no-live-player reason as the `playerPosition` cut — documented as a
-  known approximation. `AttackPayload`'s `"onProximity"` trigger kind and
+  choreographed against each other. Play/scrubbing runs a live position
+  preview on the canvas (a teal marker distinct from the authored orange
+  waypoints), computed by re-deriving each movement primitive's formula
+  over elapsed time — a step's `pos` is now a waypoint a unit travels
+  *toward*, not a place it teleports between. `turnRate` (homing toward
+  the player) isn't simulated in preview for the same no-live-player
+  reason as the `playerPosition` cut — documented as a known
+  approximation. `AttackPayload`'s `"onProximity"` trigger kind and
   `proximityRadius` field were cut in the same pass for the identical
   reason (a proximity-gated attack can't be previewed either).
+- **Follow-up fix, same day: `time` is now mostly *derived*, not typed
+  in** (`encounterTiming.ts`). The first cut of the scrubber let `time` be
+  fully independent of the referenced Action's movement speed — a real bug
+  once tested with a fast unit: it would sail straight past its next
+  waypoint (or run forever past the last one) with no relationship to what
+  the timeline showed. Now a step whose *predecessor's* Action moves gets
+  its `time` computed from distance ÷ effective speed
+  (`recomputeStepTimes`, re-run after every mutation); it's still
+  manually authored for the first step of an instance (spawn delay) or a
+  step following a stationary predecessor (no destination to derive from).
+  Dragging a *derived* step on the timeline now solves for the
+  *preceding* step's `speedMultiplier` instead of setting a raw time
+  (`speedMultiplierForDuration`) — never the shared Action, preserving
+  "encounters select pacing, they don't mutate the reusable buffet."
+  `movementPreview.ts` also gained a proper clamp: a segment's preview
+  position holds at the destination once reached instead of overshooting,
+  and a final step's motion is capped to `LAST_STEP_PREVIEW_WINDOW` (3s)
+  past its own time instead of extrapolating indefinitely — this
+  unbounded-travel symptom (visibly still moving long after "reaching"
+  the last waypoint) was what surfaced the whole bug. `steps` arrays are
+  no longer kept sorted-by-time as a drag-reordering mechanism — array
+  index order is simply the authorial sequence order now, since a mostly-
+  derived `time` isn't something you'd drag past a neighbor to reorder.
 - Attack payloads (pattern shape x aim mode x trigger) and nested bullet
   payloads (a bullet is a minimal enemy per
   `enemies-and-bullets.spec.todo.md` §7) are otherwise unchanged in shape

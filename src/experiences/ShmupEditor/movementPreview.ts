@@ -20,7 +20,21 @@
  * triggers and `onProximity` attack triggers were both cut. The preview
  * uses a fixed heading and ignores turnRate; this is a known, documented
  * approximation, not a bug.
+ *
+ * **Position is clamped to the destination, not extrapolated past it.**
+ * Between two steps, the effective elapsed time fed into the position
+ * formula is capped at `baseElapsedFor(movement, distanceToNextWaypoint)`
+ * (encounterTiming.ts) — "however long the base path takes to travel that
+ * far" — so the unit holds at the next waypoint once it arrives instead of
+ * sailing past it. This matters for a *manually*-timed step whose authored
+ * gap is longer than the movement's natural travel time; a *derived* step's
+ * duration already matches the travel time by construction, so the clamp
+ * is a no-op there. Past the last step (no next waypoint to clamp against),
+ * elapsed is capped at `LAST_STEP_PREVIEW_WINDOW` seconds so
+ * scrubbing/playing doesn't run a unit off into infinity — this was a real
+ * bug (unbounded travel past the final waypoint) before this cap existed.
  */
+import { baseElapsedFor, distanceBetween } from "./encounterTiming";
 import { activeStepAt } from "./encounterSteps";
 import type { EncounterStep, EncounterUnit, Vec2 } from "./encounterTypes";
 import type { ActionDef, MovementBehavior, UnitDef, Waveform } from "./unitTypes";
@@ -30,6 +44,9 @@ export interface InstancePreview {
   action: ActionDef;
   step: EncounterStep;
 }
+
+/** How many seconds past the last step's time its movement keeps visibly playing before the preview holds position — there's no "next" waypoint to derive a natural stopping point from. */
+export const LAST_STEP_PREVIEW_WINDOW = 3;
 
 function sub(a: Vec2, b: Vec2): Vec2 {
   return { x: a.x - b.x, y: a.y - b.y };
@@ -102,7 +119,15 @@ export function computeInstancePreview(instance: EncounterUnit, unitDef: UnitDef
   if (!action) return null;
   const idx = instance.steps.findIndex((s) => s.id === step.id);
   const heading = headingFor(instance.steps, idx);
-  const elapsed = t - step.time;
-  const pos = positionFor(action.movement, step.pos, heading, elapsed);
+  const next = instance.steps[idx + 1];
+  const rawElapsed = Math.max(0, t - step.time);
+  let effectiveElapsed = rawElapsed * step.speedMultiplier;
+  if (next && action.movement) {
+    const targetDistance = distanceBetween(step.pos, next.pos);
+    effectiveElapsed = Math.min(effectiveElapsed, baseElapsedFor(action.movement, targetDistance));
+  } else if (!next) {
+    effectiveElapsed = Math.min(effectiveElapsed, LAST_STEP_PREVIEW_WINDOW * step.speedMultiplier);
+  }
+  const pos = positionFor(action.movement, step.pos, heading, effectiveElapsed);
   return { pos, action, step };
 }

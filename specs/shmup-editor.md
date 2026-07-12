@@ -388,7 +388,7 @@ graph:
 pass) — no conditional jump exists anywhere in the step list; steps play
 in the fixed order they're authored in.
 
-### Timing (`encounterTypes.ts`, `EncounterTimeline.tsx`)
+### Timing (`encounterTypes.ts`, `encounterTiming.ts`, `EncounterTimeline.tsx`)
 
 **There is no `Trigger` type anymore — every step just has a `time`.** The
 original design had a `TriggerKind = "always" | "unitPosition" |
@@ -410,22 +410,61 @@ the first) instead of each running on an island. A unit instance's first
 step can have `time > 0` for a delayed/staggered spawn — there's no
 separate "delay" mechanic, it falls out of the shared clock for free.
 
-Every instance's `steps` array is kept sorted by `time` ascending as an
-invariant — `encounterSteps.ts`'s `updateStep` re-sorts after every patch
-(a no-op resort when `time` wasn't touched), so "first/last in the array"
-and "first/last chronologically" are always the same step; dragging a step
-earlier than its neighbor on the timeline just re-sorts live, the same way
-reordering clips in a video editor would.
+**Revised again almost immediately: a step's `time` is now mostly
+*derived*, not freely authored.** The first cut of this feature let `time`
+be any number you typed in, completely independent of the referenced
+Action's movement speed or how far away the next waypoint actually was —
+which read as an obvious bug in practice: a fast unit would sail straight
+past its next waypoint (or the last one, forever) long before or after the
+timeline said it should, because nothing tied the two together. Fixed per
+explicit feedback ("the unit's speed should affect how fast it travels; if
+the destination is closer, the timeline should reflect that it'll take
+less time to finish") — see `encounterTiming.ts`:
 
-**`EncounterTimeline.tsx`** renders this shared clock as a horizontal
-ruler with one track per unit instance, below the canvas. Each step is a
-small diamond positioned at `time * PX_PER_SEC`; tapping one selects it
-(same selection as the canvas), and a drag handle (⟷) appears only when
-selected — mirroring the canvas's own move-handle pattern rather than
-making every marker draggable at all times. Dragging the handle retimes
-the step; tapping/dragging the ruler background scrubs a playhead.
-`StepPanel.tsx` still has a plain numeric "Time (sec)" field for
-precision, wired through the same `updateStep` path as the drag handle.
+- **A step's `time` is derived whenever its *preceding* step's Action has
+  movement** — there's a real destination (the next `pos`) and a real
+  speed to compute a duration from: `time = precedingStep.time +
+  distance ÷ effectiveSpeed`. `recomputeStepTimes` does this in one
+  forward pass over an instance's `steps` array, called by
+  `EncounterEditor.tsx`'s `updateInstance` wrapper after *every* mutation
+  (position drag, action swap, speedMultiplier change) so a derived time
+  never goes stale — you don't have to remember to "re-derive" anything.
+  Move a waypoint closer and its arrival time visibly shrinks; that's not
+  a special case, it falls straight out of the distance term.
+- **A step's `time` stays manually authored when there's nothing to
+  derive it from** — the first step of an instance (this is *when the
+  unit spawns*, not a destination-arrival) or a step whose predecessor is
+  stationary (dwelling has no destination). `StepPanel.tsx`'s Time field
+  is disabled with an explanatory hint for a derived step; it's a normal
+  editable number for a manual one.
+- **`speedMultiplier` (see Per-step overrides below) is what actually
+  controls a derived step's pacing.** Dragging a *derived* step on
+  `EncounterTimeline.tsx` doesn't set `time` directly — `EncounterEditor`'s
+  `handleRetimeStep` solves `encounterTiming.ts`'s
+  `speedMultiplierForDuration` for whatever multiplier would make the
+  preceding step arrive exactly where you dropped it, and writes that onto
+  the *preceding* step's `EncounterStep.speedMultiplier` — never onto the
+  shared `ActionDef`, since Actions are a reusable buffet (unitTypes.ts)
+  and silently changing one encounter's pacing shouldn't touch every other
+  encounter that reuses the same Action. `baseElapsedFor` (the same
+  distance→duration math, solved for `t` given `speed`/`accel`, including
+  the quadratic case for nonzero `accel`) backs both directions.
+- **Array index order is the authorial sequence order — steps are no
+  longer reordered by dragging.** The original design kept `steps` sorted
+  by `time` as an invariant so dragging past a neighbor could reorder the
+  sequence; once `time` is mostly computed rather than freely draggable,
+  that stopped making sense (there was never a UI gesture to reorder
+  steps any other way — array order was always the true authored
+  sequence). `encounterSteps.ts`'s `updateStep` just floors a manual
+  `time` patch at 0 now; `recomputeStepTimes` is what keeps every step
+  chronologically after its predecessor.
+
+**`EncounterTimeline.tsx`** renders the shared clock as a horizontal ruler
+with one track per unit instance, below the canvas. Each step is a small
+diamond positioned at `time * PX_PER_SEC`; tapping one selects it (same
+selection as the canvas), and a drag handle (⟷) appears only when selected
+— mirroring the canvas's own move-handle pattern rather than making every
+marker draggable at all times.
 
 **Play/scrub doubles as a live motion preview.** A Play button runs the
 playhead forward in real time (looping back to 0 at the end) via
@@ -454,6 +493,21 @@ runtime to match yet (`games/shmup` has no enemy-movement implementation),
 consistent with the editor's "no shared code with the game" stance
 elsewhere.
 
+**Position is clamped to the destination, never extrapolated past it.**
+Between two steps, the effective elapsed time fed into the position
+formula is capped at "however long the base path takes to travel the
+straight-line distance to the next waypoint" (`baseElapsedFor`) — so the
+unit holds there once it arrives instead of sailing past it. This mostly
+matters for a *manually*-timed step whose authored gap is longer than the
+movement's natural travel time (a derived step's duration already matches
+by construction, so the clamp is a no-op there). Past the *last* step
+(no next waypoint to clamp against), elapsed is capped at
+`LAST_STEP_PREVIEW_WINDOW` (3 seconds) so scrubbing/playing past the end
+of a sequence holds position instead of running the unit off into
+infinity — this exact symptom (a unit visibly still traveling long after
+"reaching" its final waypoint) was the first thing that surfaced the
+whole derived-time bug.
+
 ### Per-step overrides (`StepPanel.tsx`)
 
 A narrow, explicit whitelist of fields a step can override on top of
@@ -462,7 +516,12 @@ Action's params here" escape hatch:
 - **`aimAngleOverride`** — shown only when the selected Action's
   `attack?.aim === "fixed"`.
 - **`speedMultiplier`** — shown only when the selected Action has a
-  non-null `movement`.
+  non-null `movement`. Started as a purely cosmetic per-placement pacing
+  tweak; now it's the actual mechanism for controlling a *derived* step's
+  duration (see Timing above) — dragging the *next* step on the timeline
+  writes to *this* step's `speedMultiplier` rather than to a raw time
+  value. 1 = the Action's own authored speed, 2 = twice as fast (half the
+  travel time to the next waypoint), etc.
 
 Both are optional; omitted means "use the Action's own value unmodified."
 
@@ -552,6 +611,12 @@ mismatch alone triggers the existing fallback). The scrub head position
 and play/pause state are **not** part of any saved draft — they're a
 viewing aid, not authored content, so a reload resets the playhead to 0
 rather than needing to survive it (unlike the actual steps, which do).
+
+The follow-up pass that made `time` mostly derived (Timing, above) did
+**not** need another version bump — `EncounterStep.time` and
+`speedMultiplier` kept the exact same field names and types (`number`);
+only what *computes* them changed, which is pure runtime behavior, not a
+save-file shape change.
 
 Two more fsStore files alongside `TILES.DAT`/`UNITS.DAT`, same folder
 (`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory

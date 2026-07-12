@@ -4,15 +4,17 @@
  * graph CRUD (`encounterGraph.ts`) — since the graph turned out to always
  * be a flat sequence in practice, this is now just array operations, no
  * traversal/cascade logic needed. Kept independent of any rendering/React
- * code so it can be unit tested directly.
+ * code so it can be unit tested directly — in particular, it has no idea
+ * what a `UnitDef`/`ActionDef` is, unlike `encounterTiming.ts`.
  *
- * **Invariant: `steps` is always sorted by `time` ascending.** `updateStep`
- * re-sorts after every patch (not just ones that touch `time` — sorting an
- * already-sorted array is a cheap no-op), so array order and chronological
- * order never diverge. This is what lets `isFirstStep`/`isLastStep`/
- * `deleteStepsFrom` keep working on plain array index after the timeline
- * scrubber pass added an explicit `time` field — "first in the array" and
- * "first in time" are guaranteed to be the same step.
+ * **Array index order IS the authorial sequence order — steps are not
+ * reordered by dragging.** `time` is mostly a *derived* value now
+ * (`encounterTiming.ts`'s `recomputeStepTimes`, called after every mutation
+ * by `EncounterEditor.tsx`): a step whose predecessor's Action moves gets
+ * its `time` computed from distance and speed, so it isn't something you'd
+ * want to drag past a neighbor anyway. `updateStep` only floors a `time`
+ * patch at 0 — `recomputeStepTimes` is what keeps every step chronologically
+ * after its predecessor.
  */
 import { makeStepId, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 
@@ -29,12 +31,10 @@ export function addStep(instance: EncounterUnit, actionId: string, pos?: Vec2): 
   return { ...instance, steps: [...instance.steps, step] };
 }
 
-/** Patches arbitrary fields on one step, clamping `time` to >= 0 and re-sorting to maintain the sorted-by-time invariant (a no-op resort when `time` wasn't touched). */
+/** Patches arbitrary fields on one step, flooring `time` at 0 if touched. Does not reorder the array — see file header; `encounterTiming.ts`'s `recomputeStepTimes` is what keeps chronological order consistent with array order after this. */
 export function updateStep(instance: EncounterUnit, stepId: string, patch: Partial<EncounterStep>): EncounterUnit {
   const clean = patch.time !== undefined ? { ...patch, time: Math.max(0, patch.time) } : patch;
-  const steps = instance.steps.map((s) => (s.id === stepId ? { ...s, ...clean } : s));
-  steps.sort((a, b) => a.time - b.time);
-  return { ...instance, steps };
+  return { ...instance, steps: instance.steps.map((s) => (s.id === stepId ? { ...s, ...clean } : s)) };
 }
 
 export function moveStep(instance: EncounterUnit, stepId: string, pos: Vec2): EncounterUnit {
@@ -69,8 +69,8 @@ export function deleteStepsFrom(instance: EncounterUnit, stepId: string): Encoun
 /**
  * The step active at encounter-time `t` — the latest step whose `time` is
  * <= t, or null if `t` is before this instance's first step (it hasn't
- * spawned yet) or the instance has no steps at all. Steps are kept sorted
- * by time (see file header), so a single forward scan suffices.
+ * spawned yet) or the instance has no steps at all. Array order tracks
+ * chronological order (see file header), so a single forward scan suffices.
  */
 export function activeStepAt(instance: EncounterUnit, t: number): EncounterStep | null {
   let active: EncounterStep | null = null;
