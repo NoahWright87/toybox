@@ -601,15 +601,31 @@ within one instance render as an SVG `<path>` cubic-bezier command
 to tap or delete on the connector itself, only its two endpoints' handles
 to drag (see "Movement" above).
 
-- **The connector paths and handle stalks are click-through
-  (`pointer-events: none` on the whole SVG), but the handle `<circle>`
-  drag targets need it explicitly re-enabled** (`pointer-events: all`) —
-  a real bug this pass hit directly: the handle dots were rendered
-  correctly but completely unclickable until that CSS rule was added,
-  since they'd silently inherited the SVG's blanket `none` with no
-  override (unlike `<line>`, which already had one for an older, unrelated
-  reason). `elementFromPoint` at the dot's exact center returning the
-  dashed stalk `<line>` underneath it was what surfaced this.
+- **Handle drag targets are real HTML `<button>` elements**
+  (`.shmup-handle-btn`, 22px), not SVG shapes — mirroring the ✥/+/✕
+  node-control buttons (`.shmup-enemy-node__btn`) rather than the earlier
+  SVG `<circle>` approach. SVG circles were unreliable to hit-test on
+  mobile: the canvas SVG has a blanket `pointer-events: none` and only
+  `<line>` had an override, so newly-added `<circle>` drag targets
+  silently inherited `none` and were completely unclickable until a
+  `pointer-events: all` override was added by hand. Rather than keep
+  patching that pattern, handles were converted to HTML buttons —
+  consistent with the rest of the canvas's tap-driven controls and a
+  legitimate touch target on mobile. The SVG now only renders the dashed
+  stalk `<line>`s connecting a selected step to its handle buttons.
+- **Coordinate bug found and fixed while verifying the button
+  conversion**: the screen→world pointer conversion (`onStagePointerMove`,
+  used for both position-dragging a step and dragging a bezier handle)
+  was missing the bounding box's `minX`/`minY` offset — it only inverted
+  `PADDING`, not the `- minX + PADDING` / `- minY + PADDING` that
+  `toStage()` actually applies. `minX`/`minY` are nonzero whenever
+  anything in the instance's step layout sits left of or above the tile
+  frame's own origin, which is the default case for a freshly-added Unit
+  instance (staggered above the frame with negative Y). The bug silently
+  corrupted drag targeting by exactly `minX`/`minY` and predates this
+  pass — it also affected the pre-existing step position-drag handle, not
+  just the new bezier handles. Fixed by a `toWorld(clientX, clientY)`
+  helper that correctly inverts `toStage()`.
 
 - **`EncounterTileFrame.tsx`** is unchanged from the graph-based pass — a
   read-only dashed rectangle sized to the tile's real footprint, labeled

@@ -634,15 +634,29 @@
 .shmup-enemy-canvas-svg line {
   pointer-events: stroke;
 }
-/* Bezier handle drag targets (EncounterEditor.tsx) — need real pointer events, unlike the plain connector paths/stalk lines which stay click-through. */
-.shmup-enemy-canvas-svg circle {
-  pointer-events: all;
-}
 
 .shmup-enemy-node-wrap {
   position: absolute;
   width: 56px;
   height: 56px;
+}
+
+/* Bezier handle drag target (EncounterEditor.tsx) — a real HTML button
+   (not an SVG shape) positioned directly on the canvas stage, same
+   coordinate space as .shmup-enemy-node-wrap. Smaller than the 28px
+   move/add/delete node controls, but still a real touch target — an
+   earlier SVG-circle version was both too small (~12px) and unreliable
+   to hit on mobile. */
+.shmup-handle-btn {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #66ffee;
+  border: 2px solid #0a3330;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
 }
 
 .shmup-enemy-node {

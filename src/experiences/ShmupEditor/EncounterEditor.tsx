@@ -29,7 +29,9 @@ const NODE_RADIUS = NODE_DIAMETER / 2;
 /** The live-preview marker (see movementPreview.ts) is smaller than a waypoint node so it visually reads as secondary, not another authored step. */
 const PREVIEW_DIAMETER = 36;
 const PREVIEW_RADIUS = PREVIEW_DIAMETER / 2;
-const HANDLE_RADIUS = 6;
+/** Real HTML button now (not an SVG circle) — smaller than the 28px move/add/delete node controls, but still a legitimate touch target, unlike the ~12px SVG dot this replaced. */
+const HANDLE_DIAMETER = 22;
+const HANDLE_RADIUS = HANDLE_DIAMETER / 2;
 const PADDING = 60;
 /** Reference-frame sizing: matches encounterSteps.ts's default next-step offset, so a freshly grown sequence reads at a similar scale to the tile itself. */
 const TILE_UNIT = 130;
@@ -263,7 +265,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   /** Begins dragging `which` handle of `stepId`, seeding the drag from its current resolved (possibly-defaulted, turnRate-clamped) absolute position so the dot doesn't jump when you first touch it. */
-  function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<SVGCircleElement>) {
+  function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<HTMLButtonElement>) {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     const instance = draft.units.find((u) => u.id === instanceId);
@@ -285,10 +287,25 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragHandle(null);
   }
 
-  function onStagePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    if (!stageRef.current) return;
+  // Inverse of toStage() (defined below, after the bounding box it depends
+  // on) — screen/pointer coords back to world coords. minX/minY matter
+  // here: they're nonzero whenever anything in the bounding box sits left
+  // of or above the tile frame's own (0,0) corner, which is the *default*
+  // case for a freshly-added Unit instance (staggered above the frame with
+  // negative Y). Omitting them was a real bug — dragging (a step's
+  // position, or now a bezier handle) landed at the wrong world position
+  // by exactly minX/minY whenever the canvas's bounding box didn't happen
+  // to start at the origin, which a Playwright test with a non-numeric
+  // assertion (visual-only) would never have caught.
+  function toWorld(clientX: number, clientY: number): Vec2 | null {
+    if (!stageRef.current) return null;
     const rect = stageRef.current.getBoundingClientRect();
-    const worldPos: Vec2 = { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING };
+    return { x: clientX - rect.left - PADDING + minX, y: clientY - rect.top - PADDING + minY };
+  }
+
+  function onStagePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const worldPos = toWorld(e.clientX, e.clientY);
+    if (!worldPos) return;
     if (dragPos) {
       setDragPos({ ...dragPos, pos: worldPos });
     }
@@ -336,6 +353,22 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const selectedIdx = selectedInstance && selectedStep ? selectedInstance.steps.findIndex((s) => s.id === selectedStep.id) : -1;
   const selectedNextStep = selectedInstance && selectedIdx >= 0 ? selectedInstance.steps[selectedIdx + 1] : undefined;
   const hasOutgoingSegment = selectedInstance && selectedNextStep ? isStepTimeDerived(selectedInstance, selectedNextStep.id, selectedUnitDef) : false;
+
+  // Computed once, used both for the SVG stalk lines (visual only) and the
+  // HTML drag-target buttons below (real touch targets — see file header:
+  // raw SVG circles were both too small and too fiddly to hit on mobile).
+  const handleDots: { which: "in" | "out"; stage: Vec2 }[] = [];
+  if (selectedInstance && selectedStep) {
+    const turnRate = selectedUnitDef?.turnRate ?? 1;
+    const effSelected = effectiveStep(selectedInstance.id, selectedStep);
+    const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
+    if (prevStep) handleDots.push({ which: "in", stage: toStage(resolveHandleIn(effSelected, prevStep.pos, turnRate)) });
+    if (selectedNextStep) {
+      const effNext = effectiveStep(selectedInstance.id, selectedNextStep);
+      handleDots.push({ which: "out", stage: toStage(resolveHandleOut(effSelected, effNext.pos, turnRate)) });
+    }
+  }
+  const selectedNodeStage = selectedInstance && selectedStep ? toStage(effectiveStep(selectedInstance.id, selectedStep).pos) : null;
 
   const framePos = toStage({ x: 0, y: 0 });
 
@@ -408,39 +441,34 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               });
             })}
 
-            {selectedInstance &&
-              selectedStep &&
-              (() => {
-                const turnRate = selectedUnitDef?.turnRate ?? 1;
-                const effSelected = effectiveStep(selectedInstance.id, selectedStep);
-                const nodeStage = toStage(effSelected.pos);
-                const dots: { which: "in" | "out"; abs: Vec2 }[] = [];
-                const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
-                if (prevStep) dots.push({ which: "in", abs: resolveHandleIn(effSelected, prevStep.pos, turnRate) });
-                if (selectedNextStep) {
-                  const effNext = effectiveStep(selectedInstance.id, selectedNextStep);
-                  dots.push({ which: "out", abs: resolveHandleOut(effSelected, effNext.pos, turnRate) });
-                }
-                return dots.map(({ which, abs }) => {
-                  const stage = toStage(abs);
-                  return (
-                    <g key={which}>
-                      <line x1={nodeStage.x} y1={nodeStage.y} x2={stage.x} y2={stage.y} stroke="#66ffee" strokeWidth={1.5} strokeDasharray="3,3" />
-                      <circle
-                        cx={stage.x}
-                        cy={stage.y}
-                        r={HANDLE_RADIUS}
-                        fill="#66ffee"
-                        stroke="#0a3330"
-                        strokeWidth={1.5}
-                        style={{ cursor: "grab", touchAction: "none" }}
-                        onPointerDown={(e) => beginHandleDrag(selectedInstance.id, selectedStep.id, which, e)}
-                      />
-                    </g>
-                  );
-                });
-              })()}
+            {selectedNodeStage &&
+              handleDots.map(({ which, stage }) => (
+                <line
+                  key={which}
+                  x1={selectedNodeStage.x}
+                  y1={selectedNodeStage.y}
+                  x2={stage.x}
+                  y2={stage.y}
+                  stroke="#66ffee"
+                  strokeWidth={1.5}
+                  strokeDasharray="3,3"
+                />
+              ))}
           </svg>
+
+          {/* Bezier handle drag targets — real HTML buttons (not SVG shapes) so they're actually hittable on mobile, same reasoning as the ✥/+/✕ node controls below. */}
+          {selectedInstance &&
+            selectedStep &&
+            handleDots.map(({ which, stage }) => (
+              <button
+                key={which}
+                type="button"
+                className="shmup-handle-btn"
+                title={which === "out" ? "Drag to bend the curve leaving this step" : "Drag to bend the curve arriving at this step"}
+                style={{ left: stage.x - HANDLE_RADIUS, top: stage.y - HANDLE_RADIUS }}
+                onPointerDown={(e) => beginHandleDrag(selectedInstance.id, selectedStep.id, which, e)}
+              />
+            ))}
 
           {draft.units.flatMap((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
