@@ -33,6 +33,11 @@ export const BUILTIN_SPRITES: SpriteOption[] = [
   { id: "skull-technical", label: "Skull Technical", url: "/shmup-editor/enemies/skull-technical.png" },
   { id: "skull-motorcycle", label: "Skull Motorcycle", url: "/shmup-editor/enemies/skull-motorcycle.png" },
   { id: "skull-helicopter", label: "Skull Helicopter", url: "/shmup-editor/enemies/skull-helicopter.png" },
+  // Parts-demo set — a body split from its turret, for testing UnitPart (see enemies/README.md). Not a matched idle/move/attack/die family like skull-*.
+  { id: "armored-truck-body", label: "Armored Truck (body)", url: "/shmup-editor/enemies/armored-truck-body.png" },
+  { id: "armored-truck-turret", label: "Armored Truck (turret)", url: "/shmup-editor/enemies/armored-truck-turret.png" },
+  { id: "battle-tank-body", label: "Battle Tank (body)", url: "/shmup-editor/enemies/battle-tank-body.png" },
+  { id: "battle-tank-turret", label: "Battle Tank (turret)", url: "/shmup-editor/enemies/battle-tank-turret.png" },
 ];
 
 export function spriteById(id: string): SpriteOption {
