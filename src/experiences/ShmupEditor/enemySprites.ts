@@ -38,6 +38,7 @@ export const BUILTIN_SPRITES: SpriteOption[] = [
   { id: "armored-truck-turret", label: "Armored Truck (turret)", url: "/shmup-editor/enemies/armored-truck-turret.png" },
   { id: "battle-tank-body", label: "Battle Tank (body)", url: "/shmup-editor/enemies/battle-tank-body.png" },
   { id: "battle-tank-turret", label: "Battle Tank (turret)", url: "/shmup-editor/enemies/battle-tank-turret.png" },
+  { id: "bullet-basic", label: "Bullet (basic)", url: "/shmup-editor/enemies/bullet-basic.png" },
 ];
 
 export function spriteById(id: string): SpriteOption {

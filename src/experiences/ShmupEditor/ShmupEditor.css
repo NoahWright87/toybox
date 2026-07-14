@@ -198,6 +198,76 @@
   border-top: 1px dashed #808080;
 }
 
+/* ── Weapon pattern preview (WeaponPreview.tsx) ───────────────────────
+   A live animated canvas, not a static number readout — shmup bullet
+   patterns are hard to picture from arc/count/spacing fields alone. */
+.shmup-weapon-preview {
+  display: block;
+  margin: 0 auto 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  image-rendering: pixelated;
+}
+
+/* ── Part position editor (PartPositionEditor.tsx) ────────────────────
+   Dimmed body sprite as a reference frame, the Part's own sprite
+   draggable on top, plus arrow-nudge buttons for pixel-precise placement
+   without needing a steady thumb on mobile. */
+.shmup-part-position {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.shmup-part-position__stage {
+  position: relative;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  touch-action: none;
+}
+.shmup-part-position__body {
+  position: absolute;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.45;
+  filter: grayscale(0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24px;
+  pointer-events: none;
+}
+.shmup-part-position__crosshair {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px dashed #66ffee;
+  pointer-events: none;
+}
+.shmup-part-position__part {
+  position: absolute;
+  background-color: rgba(123, 61, 190, 0.35);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 2px solid #7b3dbe;
+  border-radius: 50%;
+  color: #fff;
+  cursor: grab;
+  touch-action: none;
+}
+.shmup-part-position__nudge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .shmup-image-picker {
   display: flex;
   gap: 8px;
@@ -820,7 +890,9 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(153, 0, 0, 0.85);
+  background-color: rgba(153, 0, 0, 0.85);
+  background-size: cover;
+  background-position: center;
   border: 2px solid #ff8844;
   color: #fff;
   font-size: 14px;

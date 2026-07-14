@@ -286,6 +286,24 @@ what actually shipped.
   encounter-edit) the session was left in. The scrubber's playhead/
   play-state is deliberately NOT part of any saved draft (a viewing aid,
   not authored content).
+- **Visual authoring pass** (`PartPositionEditor.tsx`, `WeaponPreview.tsx`,
+  `weaponPreview.ts` — Noah's feedback that the editor was "a lot of
+  numbers, zero defaults, nothing visual"). Three fixes: (1) a default
+  "Bullet" Unit (`createDefaultBulletUnit`, a supplied glow sprite) now
+  seeds automatically into any brand-new or reset library
+  (`unitStore.ts`'s `loadUnits`), and a brand-new Weapon defaults to
+  spawning it rather than `null`, so the editor is never a totally blank
+  slate; (2) `UnitPart` gained its own `spriteId`/`customSprite`, set and
+  positioned via a small draggable canvas (dimmed body sprite as a
+  reference frame, drag the Part's sprite directly, or arrow-nudge) rather
+  than typing raw offset numbers blind — the encounter canvas's attack
+  markers switched from a generic 🔫 icon to the Part's actual sprite too;
+  (3) `WeaponForm.tsx` gained a live animated bullet-pattern preview
+  (shooter marker, sweeping arc boundaries, telegraph glow, bullet dots
+  using the spawned Unit's real sprite) at the top of the form, split into
+  pure/testable simulation functions (`weaponPreview.ts`) plus a
+  `<canvas>`/`requestAnimationFrame` renderer, same architectural split as
+  `movementPreview.ts`/`EncounterEditor.tsx`.
 
 **Scope decisions**:
 - **Branch conditions remain cut entirely** — no conditional jump exists
@@ -293,11 +311,17 @@ what actually shipped.
 - **Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
   time-locked) are deferred** — every step today is a plain canvas
   position with no layer or frame-of-reference concept.
-- **Rendered/rotating Part sprites are deferred** — a Part is a purely
-  logical anchor point + Weapon buffet today, not a separately-rendered
-  sub-sprite. The design doc's §5.4 facing modes (`fixedToBody`/
-  `facePlayer`/`faceMovement`/`faceAttackTarget` — e.g. a tank's turret
-  visually tracking its aim) aren't built; see Remaining below.
+- **Rendered Part sprites shipped in a follow-up UX pass (Noah's "a lot
+  of numbers, zero defaults, nothing visual" feedback) — rotating/
+  facing-mode Part sprites are still deferred.** A Part now has its own
+  `spriteId`/`customSprite`, positioned visually (`PartPositionEditor.tsx`
+  — drag over a dimmed reference of the Unit's body, or arrow-nudge) and
+  rendered as its actual sprite on the encounter canvas's attack markers.
+  What's still not built is the design doc's §5.4 **facing modes**
+  (`fixedToBody`/`facePlayer`/`faceMovement`/`faceAttackTarget` — e.g. a
+  tank's turret visually *rotating* to track its aim at runtime) — a
+  Part's sprite renders statically at its authored offset, no rotation
+  transform; see Remaining below.
 - **The recursive conserved-budget scaling system (§4.2) is deferred** —
   `WeaponDef.spawnScale` is a plain flat multiplier, not budget-derived;
   no Scaling panel, no count-range/power-split/spawn-delay/positioning-
@@ -331,16 +355,14 @@ what actually shipped.
   than block E2 on it.
 - Unit variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
-- **Deferred: rendered/rotating Part sprites (turret facing).** A Part is
-  a logical anchor point today — a position offset and a Weapon buffet,
-  no sprite of its own, so a tank's turret doesn't visually track its aim
-  direction; the whole Unit still renders as one flat, non-rotating
-  sprite. Noah flagged this as a likely-needed follow-up when requesting
-  the Parts system ("not sure if we need to tackle that while we do this
-  or afterwards") and it was deliberately deferred to keep the
-  attack-track pass scoped to data model + timeline UI. The design doc's
-  §5.4 gives a concrete shape to build toward when this is picked up: a
-  Part gets its own sub-sprite plus a facing mode (`fixedToBody` — rotates
+- **Deferred: rotating/facing Part sprites (turret tracking its aim at
+  runtime).** A Part now has its own sprite and a visually-authored
+  position (shipped in the "visual authoring pass" follow-up — see
+  `shmup-editor.md`'s section of that name) — what's still missing is
+  *rotation*: a Part's sprite always renders at a fixed orientation, it
+  doesn't turn to visually track its own Weapon's current aim direction
+  the way a tank turret would. The design doc's §5.4 gives a concrete
+  shape to build toward: a facing mode per Part (`fixedToBody` — rotates
   with the base sprite; `facePlayer` — a turret always oriented at the
   live player; `faceMovement` — oriented toward current travel direction;
   `faceAttackTarget` — oriented toward wherever its own Weapon is

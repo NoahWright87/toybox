@@ -695,18 +695,20 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               if (!anchorWorld) return null;
               const pos = toStage(anchorWorld);
               const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
+              const partSpriteUrl = part ? resolveSpriteUrl(part.spriteId, part.customSprite) : null;
               return (
                 <div key={attack.id} className="shmup-attack-marker-wrap" style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}>
                   <button
                     type="button"
                     className={`shmup-attack-marker ${isSelected ? "shmup-attack-marker--selected" : ""}`}
+                    style={partSpriteUrl ? { backgroundImage: `url(${partSpriteUrl})` } : undefined}
                     onClick={(e) => {
                       e.stopPropagation();
                       selectAttack(instance.id, attack.id);
                     }}
                     title={`${part?.name ?? "?"}: ${weapon?.name ?? "(missing Weapon)"} @ ${attack.time.toFixed(1)}s`}
                   >
-                    🔫
+                    {!partSpriteUrl && "🔫"}
                   </button>
                   {isSelected && (
                     <div className="shmup-enemy-node__controls">

@@ -573,6 +573,67 @@ than one Part, a small picker (mirrors "+ Add Unit"'s picker) asks which
 Part. Disabled with a hint if the Unit has no Weapons authored anywhere
 yet — nothing to reference.
 
+### Visual authoring pass (`PartPositionEditor.tsx`, `WeaponPreview.tsx`, `weaponPreview.ts`)
+
+The Parts/weapon-track pass above shipped as pure data-entry — no
+defaults, no way to see a Part's position or a Weapon's pattern except by
+reading numbers. Noah's follow-up feedback ("a lot of numbers, zero
+defaults, nothing visual... emphasis on the G") drove three fixes:
+
+- **`UnitPart` gained its own `spriteId`/`customSprite`** — a Part can
+  now render/reposition visually, not just anchor a Weapon buffet
+  logically. `unitStore.ts`'s `SAVE_VERSION` bumped (6→7) for the new
+  required fields.
+- **`PartPositionEditor.tsx`**: a small fixed-size canvas embedded in
+  `PartEditor.tsx`, above the (still-present, still typeable) numeric
+  Offset X/Y fields. Renders the owning Unit's body sprite dimmed
+  (opacity 0.45 + a slight grayscale, same "ghosted reference" language
+  `.shmup-enemy-node--hidden` already uses) and the Part's own sprite on
+  top at its current offset — drag the Part sprite directly, or nudge it
+  with four arrow buttons (`NUDGE_STEP` px per tap). Flat 1:1 px-per-
+  offset-unit mapping centered on the canvas; no bounding-box/PADDING math
+  needed like `EncounterEditor.tsx`'s world canvas, since this is a small
+  fixed-size widget, not a scrolling world space. The encounter canvas's
+  attack markers also switched from a generic 🔫 icon to the firing Part's
+  actual sprite when one is set (falls back to 🔫 for a spriteless Part).
+- **`WeaponPreview.tsx`/`weaponPreview.ts`**: a live animated canvas at
+  the top of `WeaponForm.tsx` (deliberately first, not an afterthought)
+  showing what the Weapon actually fires — a shooter marker, the current
+  arc boundaries (sweeping live if `sweepSpeedDeg` is nonzero), a
+  telegraph glow during wind-up, and bullet dots (the spawned Unit's own
+  sprite, resolved via `spawnUnitId`, falling back to a plain dot) flying
+  outward along each shot's angle. Split the same way `movementPreview.ts`
+  is: pure, declarative functions in `weaponPreview.ts`
+  (`computePreviewBullets`/`shotAngleOffsets`/`sweepOffsetDeg`/
+  `isTelegraphing`/`burstPeriodMs`, unit tested directly) recomputing
+  bullet positions from scratch at any elapsed time — no simulation state
+  to reset when a field changes mid-preview — driven by a `<canvas>` +
+  `requestAnimationFrame` loop in the component itself. Explicitly a
+  *representative* visualization, not a physics match for the eventual
+  game runtime (doesn't exist yet): a fixed preview bullet speed, not
+  whatever the spawned Unit's own stats would imply; a single-burst
+  Weapon (`fireIntervalMs === 0`) still loops every
+  `PREVIEW_LOOP_FALLBACK_MS` so it keeps demonstrating the pattern instead
+  of firing once and going static; `aimMode: "player"` aims at a fixed
+  reference point standing in for the player (same no-live-player-at-
+  authoring-time approximation the rest of the editor already accepts);
+  ping-pong sweep oscillates within a fixed `SWEEP_PINGPONG_AMPLITUDE_DEG`
+  (90°) since `WeaponDef` has no separate amplitude field to derive one
+  from — a documented preview simplification, not authored data.
+- **A default "Bullet" Unit is now seeded automatically.** `unitTypes.ts`'s
+  `createDefaultBulletUnit()`/`createDefaultUnitLibrary()` build a
+  ready-to-use generic projectile (a supplied glow sprite,
+  `bullet-basic.png`, low HP, small hitbox, sensible speed) with a stable
+  id (`DEFAULT_BULLET_UNIT_ID`, not random) so reseeding never
+  duplicates it. `unitStore.ts`'s `loadUnits` seeds-and-persists this
+  library the moment it would otherwise return empty — a brand-new
+  install, or any save that fails the version/shape check (the same
+  fallback every prior version bump already used, now landing on one
+  Unit instead of a truly blank library). `createBlankWeapon` also
+  defaults `spawnUnitId` to this Bullet rather than `null`, so a
+  brand-new Weapon does something visible immediately instead of firing
+  nothing.
+
 ### Timing (`encounterTypes.ts`, `encounterTiming.ts`, `EncounterTimeline.tsx`)
 
 **There is no `Trigger` type anymore — every step just has a `time`.** The

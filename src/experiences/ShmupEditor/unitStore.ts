@@ -17,7 +17,7 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_UNITS_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import type { EncounterDef } from "./encounterTypes";
-import type { ActionDef, AnimationState, UnitDef, UnitPart, WeaponDef } from "./unitTypes";
+import { createDefaultUnitLibrary, type ActionDef, type AnimationState, type UnitDef, type UnitPart, type WeaponDef } from "./unitTypes";
 import type { TileDef } from "./types";
 
 // v6: Attacks moved off ActionDef entirely and onto a Unit's Parts
@@ -27,7 +27,11 @@ import type { TileDef } from "./types";
 // an inline bullet struct; see unitTypes.ts). Bumping so a pre-v6 save
 // (missing `parts`, or an Action still carrying the old `attack` field)
 // resets rather than silently mismatching the new shape.
-const SAVE_VERSION = 6;
+// v7: UnitPart gained `spriteId`/`customSprite` (visual Part-position
+// editor pass) — bumping for the same reason. This version also
+// introduces default-library seeding (see `loadUnits` below), so a v6->v7
+// reset now lands on one ready-to-use "Bullet" Unit instead of truly empty.
+const SAVE_VERSION = 7;
 
 interface SavedLibrary {
   version: number;
@@ -95,7 +99,15 @@ function isWeaponDef(v: unknown): v is WeaponDef {
 function isUnitPart(v: unknown): v is UnitPart {
   if (typeof v !== "object" || v === null) return false;
   const p = v as Record<string, unknown>;
-  return typeof p.id === "string" && typeof p.name === "string" && isVec2(p.offset) && Array.isArray(p.weapons) && p.weapons.every(isWeaponDef);
+  return (
+    typeof p.id === "string" &&
+    typeof p.name === "string" &&
+    isVec2(p.offset) &&
+    typeof p.spriteId === "string" &&
+    (p.customSprite === null || typeof p.customSprite === "string") &&
+    Array.isArray(p.weapons) &&
+    p.weapons.every(isWeaponDef)
+  );
 }
 
 /** Defensive shape check (same spirit as tileStore.ts's isValidTileDef) — a corrupt or stale-shape save falls back to an empty/null result rather than crashing. */
@@ -120,15 +132,29 @@ function isValidUnitDef(v: unknown): v is UnitDef {
   );
 }
 
+/**
+ * A brand-new install (`content` empty) or a version-mismatched/corrupt
+ * save (same fallback every prior version bump already used) both land
+ * here — seeded with the default Unit library rather than a truly empty
+ * one, so the editor never opens to a totally blank Unit picker. The seed
+ * is saved immediately so it's a real, editable/deletable library entry
+ * from the next load onward, not silently regenerated every time.
+ */
+function seedAndPersistDefaultLibrary(): UnitDef[] {
+  const units = createDefaultUnitLibrary();
+  saveUnits(units);
+  return units;
+}
+
 export function loadUnits(): UnitDef[] {
   const content = fsStore.getFile(SHMUP_EDITOR_UNITS_ID)?.content;
-  if (!content) return [];
+  if (!content) return seedAndPersistDefaultLibrary();
   try {
     const parsed = JSON.parse(content) as SavedLibrary;
-    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.units)) return [];
+    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.units)) return seedAndPersistDefaultLibrary();
     return parsed.units.filter(isValidUnitDef);
   } catch {
-    return [];
+    return seedAndPersistDefaultLibrary();
   }
 }
 

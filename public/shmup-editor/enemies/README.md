@@ -20,6 +20,7 @@ stays visible without cutting off any of it.
 | `armored-truck-turret.png` | `2edda25066eaa9ad649ae446a6db0a3d408a97e7aafa69c737ceb47c066d4a6e` | Armored truck's roof-mounted MG turret (Parts-demo) |
 | `battle-tank-body.png` | `3b364ea2a6653229c35668758c5211a9aee055d9944f737d32b213741b2a544d` | Tank hull (Parts-demo, no turret) |
 | `battle-tank-turret.png` | `18962898bfb5e6793137c59f3a26bf4672dd777a29decb1c0f1e5853cb6e7482` | Tank's rotating cannon turret (Parts-demo) |
+| `bullet-basic.png` | `c2361b8193580dcc15fcb6b34afd2e09fc8767853d771546e19abe89f9ea5606` | Generic glowing projectile — used by the default seeded "Bullet" Unit |
 
 The `skull-*` sprites are derived from Mad-Max-style sheets Noah supplied
 (ChatGPT-generated) — see
@@ -38,6 +39,15 @@ see `scripts/assets/parts-demo-sprites-source/README.md` for the raw
 These aren't part of a matched vehicle family the way `skull-*` is (no
 idle/move/attack/die animation states) — they're reference art for
 exercising Parts, not a polished built-in enemy set.
+
+`bullet-basic.png` is a single ChatGPT-generated glow sprite Noah
+supplied directly (`scripts/assets/bullet-basic-source.png`, SHA-256
+`69cb8f09b6eb8f241993b63ae6433f59f50b2dece6c7aab514998a61d3c4b8b1`),
+processed by `scripts/prepare-bullet-sprite.mjs` (same magenta chroma-key
+pipeline, resized smaller since a bullet renders as a small icon, not a
+full enemy sprite). It's what `unitTypes.ts`'s `createDefaultBulletUnit`
+uses to seed a ready-to-use "Bullet" Unit — see that file and
+`unitStore.ts`'s `loadUnits` for how the seed is applied.
 
 Per root `CLAUDE.md`'s dependency policy, document the source and SHA-256 of
 every file added here (`sha256sum <file>`), same as `../tiles/README.md`.

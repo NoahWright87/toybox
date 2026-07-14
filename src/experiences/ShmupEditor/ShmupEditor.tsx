@@ -411,6 +411,7 @@ export default function ShmupEditor() {
             </h3>
             <PartEditor
               part={editingPart}
+              unit={editingUnit}
               units={units}
               excludeUnitId={editingUnit.id}
               onSave={handleSavePart}

@@ -102,6 +102,7 @@ export function makeWeaponId(): string {
   return `weapon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Defaults to spawning the seeded default Bullet Unit (below) rather than `null` — a brand-new Weapon does something visible/testable immediately instead of silently firing nothing, same "reduce zero-default friction" motivation as the seeded Bullet Unit itself. */
 export function createBlankWeapon(existingCount: number): WeaponDef {
   return {
     id: makeWeaponId(),
@@ -118,7 +119,7 @@ export function createBlankWeapon(existingCount: number): WeaponDef {
     pingPong: false,
     fireIntervalMs: 1000,
     telegraphMs: 0,
-    spawnUnitId: null,
+    spawnUnitId: DEFAULT_BULLET_UNIT_ID,
     spawnScale: 1,
   };
 }
@@ -130,6 +131,9 @@ export interface UnitPart {
   name: string;
   /** Position offset from the Unit's own origin — anchors this part's weapons and their aim handle, e.g. a turret mounted forward of a battleship's center. */
   offset: Vec2;
+  /** Optional sprite so a Part can render/reposition visually (PartEditor.tsx's position editor) — "none" = invisible, just a logical anchor for its Weapons. */
+  spriteId: string;
+  customSprite: string | null;
   weapons: WeaponDef[];
 }
 
@@ -139,11 +143,11 @@ export function makePartId(): string {
 
 /** The mandatory baseline every Unit is seeded with, so a fresh Unit has somewhere to hang a Weapon without extra authoring for the common single-weapon-system case. */
 export function createDefaultPart(): UnitPart {
-  return { id: makePartId(), name: "Main", offset: { x: 0, y: 0 }, weapons: [] };
+  return { id: makePartId(), name: "Main", offset: { x: 0, y: 0 }, spriteId: "none", customSprite: null, weapons: [] };
 }
 
 export function createBlankPart(existingCount: number): UnitPart {
-  return { id: makePartId(), name: `Part ${existingCount + 1}`, offset: { x: 0, y: 0 }, weapons: [] };
+  return { id: makePartId(), name: `Part ${existingCount + 1}`, offset: { x: 0, y: 0 }, spriteId: "none", customSprite: null, weapons: [] };
 }
 
 // ── Actions (movement/animation buffet — no attack field, see file header) ─
@@ -216,4 +220,39 @@ export function createBlankUnit(existingCount: number): UnitDef {
     createdAt: now,
     modifiedAt: now,
   };
+}
+
+/** Stable (not random) id — the default library reseeds against this exact id, see unitStore.ts, so a fresh install and a version-bump reset both land on the same Bullet rather than accumulating duplicates. */
+export const DEFAULT_BULLET_UNIT_ID = "unit-default-bullet";
+
+/**
+ * A ready-to-use "Bullet" Unit, seeded into a brand-new/reset library
+ * (unitStore.ts's `loadUnits`) so the editor never starts from a totally
+ * blank Unit picker — the single most common thing a Weapon spawns is
+ * some kind of generic projectile, and authoring one from scratch before
+ * you can test *anything* about attacks was real friction.
+ */
+export function createDefaultBulletUnit(): UnitDef {
+  const now = Date.now();
+  return {
+    id: DEFAULT_BULLET_UNIT_ID,
+    name: "Bullet",
+    spriteId: "bullet-basic",
+    customSprite: null,
+    hp: 1,
+    contactDamage: 1,
+    scoreValue: 0,
+    speed: 300,
+    turnRate: 1,
+    size: 6,
+    actions: [createIdleAction()],
+    parts: [createDefaultPart()],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
+/** The full default Unit library a brand-new/reset session starts with. */
+export function createDefaultUnitLibrary(): UnitDef[] {
+  return [createDefaultBulletUnit()];
 }

@@ -1,3 +1,4 @@
+import WeaponPreview from "./WeaponPreview";
 import { type UnitDef, type WeaponAimMode, type WeaponDef, type WeaponSpacing } from "./unitTypes";
 
 interface WeaponFormProps {
@@ -17,12 +18,19 @@ interface WeaponFormProps {
  * a firing interval, and what Unit it spawns. Everything is time-based —
  * there's no trigger kind to pick, since the encounter timeline placement
  * (EncounterEditor.tsx's attack track) already says *when* this fires.
+ *
+ * The live `WeaponPreview` up top is deliberately the first thing shown,
+ * not an afterthought at the bottom — a shmup's whole appeal is the bullet
+ * pattern actually reading well, which a wall of number fields alone can't
+ * communicate (Noah's request).
  */
 export default function WeaponForm({ weapon, onChange, units, excludeUnitId }: WeaponFormProps) {
   const spawnCandidates = units.filter((u) => u.id !== excludeUnitId);
 
   return (
     <div className="shmup-weapon-form">
+      <WeaponPreview weapon={weapon} units={units} />
+
       <label className="shmup-field shmup-field--inline">
         <span>Name</span>
         <input type="text" className="shmup-input" value={weapon.name} onChange={(e) => onChange({ ...weapon, name: e.target.value })} />
