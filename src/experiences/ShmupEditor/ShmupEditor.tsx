@@ -9,16 +9,17 @@ import TagGraph from "./TagGraph";
 import UnitList from "./UnitList";
 import UnitStatsForm from "./UnitStatsForm";
 import ActionEditor from "./ActionEditor";
+import PartEditor from "./PartEditor";
 import EncounterEditor from "./EncounterEditor";
 import { loadTiles, saveTiles } from "./tileStore";
 import { clearTileSession, clearUnitDraft, loadTileSession, loadUnitDraft, loadUnits, saveTileSession, saveUnitDraft, saveUnits } from "./unitStore";
 import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
-import { createBlankAction, createBlankUnit, makeActionId, makeUnitId, type ActionDef, type UnitDef } from "./unitTypes";
+import { createBlankAction, createBlankPart, createBlankUnit, makeActionId, makePartId, makeUnitId, makeWeaponId, type ActionDef, type UnitDef, type UnitPart } from "./unitTypes";
 import { createBlankEncounter, type EncounterDef } from "./encounterTypes";
 import "./ShmupEditor.css";
 
-type View = "list" | "edit" | "connections" | "graph" | "unit-list" | "unit-edit" | "action-edit" | "encounter-edit";
+type View = "list" | "edit" | "connections" | "graph" | "unit-list" | "unit-edit" | "action-edit" | "part-edit" | "encounter-edit";
 
 export default function ShmupEditor() {
   const [tiles, setTiles] = useState<TileDef[]>(() => loadTiles());
@@ -32,11 +33,13 @@ export default function ShmupEditor() {
   // use separate session slots since they're mutually exclusive contexts.
   const [editingUnit, setEditingUnit] = useState<UnitDef | null>(() => loadUnitDraft()?.unit ?? null);
   const [editingAction, setEditingAction] = useState<ActionDef | null>(() => loadUnitDraft()?.activeAction ?? null);
+  const [editingPart, setEditingPart] = useState<UnitPart | null>(() => loadUnitDraft()?.activePart ?? null);
   const [editingTile, setEditingTile] = useState<TileDef | null>(() => loadTileSession()?.tile ?? null);
   const [editingEncounter, setEditingEncounter] = useState<EncounterDef | null>(() => loadTileSession()?.activeEncounter ?? null);
   const [view, setView] = useState<View>(() => {
     const unitDraft = loadUnitDraft();
     if (unitDraft?.activeAction) return "action-edit";
+    if (unitDraft?.activePart) return "part-edit";
     if (unitDraft?.unit) return "unit-edit";
     const tileSession = loadTileSession();
     if (tileSession?.activeEncounter) return "encounter-edit";
@@ -161,12 +164,14 @@ export default function ShmupEditor() {
   function handleNewUnit() {
     setEditingUnit(createBlankUnit(units.length));
     setEditingAction(null);
+    setEditingPart(null);
     setView("unit-edit");
   }
 
   function handleEditUnit(unit: UnitDef) {
     setEditingUnit(unit);
     setEditingAction(null);
+    setEditingPart(null);
     setView("unit-edit");
   }
 
@@ -177,6 +182,7 @@ export default function ShmupEditor() {
       id: makeUnitId(),
       name: `${unit.name} copy`,
       actions: unit.actions.map((a) => ({ ...a, id: makeActionId() })),
+      parts: unit.parts.map((p) => ({ ...p, id: makePartId(), weapons: p.weapons.map((w) => ({ ...w, id: makeWeaponId() })) })),
       createdAt: now,
       modifiedAt: now,
     };
@@ -192,6 +198,7 @@ export default function ShmupEditor() {
     persistUnits(exists ? units.map((u) => (u.id === unit.id ? unit : u)) : [...units, unit]);
     setEditingUnit(null);
     setEditingAction(null);
+    setEditingPart(null);
     clearUnitDraft();
     setView("unit-list");
   }
@@ -199,28 +206,29 @@ export default function ShmupEditor() {
   function handleCancelUnitEdit() {
     setEditingUnit(null);
     setEditingAction(null);
+    setEditingPart(null);
     clearUnitDraft();
     setView("unit-list");
   }
 
   function handleUnitDraftChange(unit: UnitDef) {
     setEditingUnit(unit);
-    // Only fires while UnitStatsForm is mounted (view === "unit-edit"), so there's never an active Action draft at the same time.
-    saveUnitDraft({ unit, activeAction: null });
+    // Only fires while UnitStatsForm is mounted (view === "unit-edit"), so there's never an active Action/Part draft at the same time.
+    saveUnitDraft({ unit, activeAction: null, activePart: null });
   }
 
   function handleNewAction() {
     if (!editingUnit) return;
     const action = createBlankAction(editingUnit.actions.length);
     setEditingAction(action);
-    saveUnitDraft({ unit: editingUnit, activeAction: action });
+    saveUnitDraft({ unit: editingUnit, activeAction: action, activePart: null });
     setView("action-edit");
   }
 
   function handleEditAction(action: ActionDef) {
     if (!editingUnit) return;
     setEditingAction(action);
-    saveUnitDraft({ unit: editingUnit, activeAction: action });
+    saveUnitDraft({ unit: editingUnit, activeAction: action, activePart: null });
     setView("action-edit");
   }
 
@@ -228,7 +236,7 @@ export default function ShmupEditor() {
     if (!editingUnit) return;
     const next = { ...editingUnit, actions: editingUnit.actions.filter((a) => a.id !== actionId), modifiedAt: Date.now() };
     setEditingUnit(next);
-    saveUnitDraft({ unit: next, activeAction: null });
+    saveUnitDraft({ unit: next, activeAction: null, activePart: null });
   }
 
   function handleSaveAction(action: ActionDef) {
@@ -241,20 +249,68 @@ export default function ShmupEditor() {
     };
     setEditingUnit(nextUnit);
     setEditingAction(null);
-    saveUnitDraft({ unit: nextUnit, activeAction: null });
+    saveUnitDraft({ unit: nextUnit, activeAction: null, activePart: null });
     setView("unit-edit");
   }
 
   function handleCancelActionEdit() {
     if (!editingUnit) return;
     setEditingAction(null);
-    saveUnitDraft({ unit: editingUnit, activeAction: null });
+    saveUnitDraft({ unit: editingUnit, activeAction: null, activePart: null });
     setView("unit-edit");
   }
 
   function handleActionDraftChange(action: ActionDef) {
     setEditingAction(action);
-    if (editingUnit) saveUnitDraft({ unit: editingUnit, activeAction: action });
+    if (editingUnit) saveUnitDraft({ unit: editingUnit, activeAction: action, activePart: null });
+  }
+
+  function handleNewPart() {
+    if (!editingUnit) return;
+    const part = createBlankPart(editingUnit.parts.length);
+    setEditingPart(part);
+    saveUnitDraft({ unit: editingUnit, activeAction: null, activePart: part });
+    setView("part-edit");
+  }
+
+  function handleEditPart(part: UnitPart) {
+    if (!editingUnit) return;
+    setEditingPart(part);
+    saveUnitDraft({ unit: editingUnit, activeAction: null, activePart: part });
+    setView("part-edit");
+  }
+
+  function handleDeletePart(partId: string) {
+    if (!editingUnit) return;
+    const next = { ...editingUnit, parts: editingUnit.parts.filter((p) => p.id !== partId), modifiedAt: Date.now() };
+    setEditingUnit(next);
+    saveUnitDraft({ unit: next, activeAction: null, activePart: null });
+  }
+
+  function handleSavePart(part: UnitPart) {
+    if (!editingUnit) return;
+    const exists = editingUnit.parts.some((p) => p.id === part.id);
+    const nextUnit: UnitDef = {
+      ...editingUnit,
+      parts: exists ? editingUnit.parts.map((p) => (p.id === part.id ? part : p)) : [...editingUnit.parts, part],
+      modifiedAt: Date.now(),
+    };
+    setEditingUnit(nextUnit);
+    setEditingPart(null);
+    saveUnitDraft({ unit: nextUnit, activeAction: null, activePart: null });
+    setView("unit-edit");
+  }
+
+  function handleCancelPartEdit() {
+    if (!editingUnit) return;
+    setEditingPart(null);
+    saveUnitDraft({ unit: editingUnit, activeAction: null, activePart: null });
+    setView("unit-edit");
+  }
+
+  function handlePartDraftChange(part: UnitPart) {
+    setEditingPart(part);
+    if (editingUnit) saveUnitDraft({ unit: editingUnit, activeAction: null, activePart: part });
   }
 
   const menus = useMemo<MenuBarMenu[]>(
@@ -334,6 +390,9 @@ export default function ShmupEditor() {
               onNewAction={handleNewAction}
               onEditAction={handleEditAction}
               onDeleteAction={handleDeleteAction}
+              onNewPart={handleNewPart}
+              onEditPart={handleEditPart}
+              onDeletePart={handleDeletePart}
             />
           </>
         )}
@@ -343,6 +402,21 @@ export default function ShmupEditor() {
               {editingUnit.actions.some((a) => a.id === editingAction.id) ? "Edit Action" : "New Action"} — {editingUnit.name}
             </h3>
             <ActionEditor action={editingAction} onSave={handleSaveAction} onCancel={handleCancelActionEdit} onDraftChange={handleActionDraftChange} />
+          </>
+        )}
+        {view === "part-edit" && editingUnit && editingPart && (
+          <>
+            <h3 className="shmup-editor__heading">
+              {editingUnit.parts.some((p) => p.id === editingPart.id) ? "Edit Part" : "New Part"} — {editingUnit.name}
+            </h3>
+            <PartEditor
+              part={editingPart}
+              units={units}
+              excludeUnitId={editingUnit.id}
+              onSave={handleSavePart}
+              onCancel={handleCancelPartEdit}
+              onDraftChange={handlePartDraftChange}
+            />
           </>
         )}
         {view === "encounter-edit" && editingTile && editingEncounter && (

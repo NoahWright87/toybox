@@ -1,6 +1,9 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { attacksForPart } from "./encounterAttacks";
 import type { EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
+
+type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
 
 interface EncounterTimelineProps {
   units: EncounterUnit[];
@@ -10,8 +13,9 @@ interface EncounterTimelineProps {
   onScrub: (t: number) => void;
   playing: boolean;
   onTogglePlay: () => void;
-  selection: { instanceId: string; stepId: string } | null;
+  selection: Selection;
   onSelectStep: (instanceId: string, stepId: string) => void;
+  onSelectAttack: (instanceId: string, attackId: string) => void;
   onRetimeStep: (instanceId: string, stepId: string, time: number) => void;
 }
 
@@ -40,6 +44,7 @@ export default function EncounterTimeline({
   onTogglePlay,
   selection,
   onSelectStep,
+  onSelectAttack,
   onRetimeStep,
 }: EncounterTimelineProps) {
   const [dragTime, setDragTime] = useState<{ instanceId: string; stepId: string; time: number } | null>(null);
@@ -124,7 +129,7 @@ export default function EncounterTimeline({
                   </svg>
                   {instance.steps.map((step) => {
                     const unitDefAction = unitDef?.actions.find((a) => a.id === step.actionId);
-                    const isSelected = selection?.instanceId === instance.id && selection.stepId === step.id;
+                    const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
                     const left = stepTime(instance.id, step) * PX_PER_SEC + STAGE_PADDING_LEFT;
                     return (
                       <div key={step.id} className="shmup-timeline__step-wrap" style={{ left }}>
@@ -152,6 +157,34 @@ export default function EncounterTimeline({
                     );
                   })}
                 </div>
+
+                {/* One extra lane per Part that has at least one placed attack — independent per-part tracks, so a battleship's three turrets show up as three separate rows, not merged into one. */}
+                {unitDef?.parts
+                  .filter((part) => attacksForPart(instance, part.id).length > 0)
+                  .map((part) => (
+                    <div key={part.id} className="shmup-timeline__lane shmup-timeline__lane--attack">
+                      <div className="shmup-timeline__track-sublabel">{part.name}</div>
+                      {attacksForPart(instance, part.id).map((attack) => {
+                        const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
+                        const weapon = part.weapons.find((w) => w.id === attack.weaponId);
+                        const left = attack.time * PX_PER_SEC + STAGE_PADDING_LEFT;
+                        return (
+                          <button
+                            key={attack.id}
+                            type="button"
+                            className={`shmup-timeline__attack ${isSelected ? "shmup-timeline__attack--selected" : ""}`}
+                            style={{ left }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectAttack(instance.id, attack.id);
+                            }}
+                            title={weapon?.name ?? "(missing Weapon)"}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
               </div>
             );
           })}

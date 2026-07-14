@@ -21,7 +21,9 @@ import type { EdgeSlot, TileDef } from "./types";
 // that no longer parses meaningfully.
 // v4: embedded EncounterStep gained handleIn/handleOut (bezier-curve
 // movement pass) — bumping for the same reason.
-const SAVE_VERSION = 4;
+// v5: embedded EncounterUnit gained `attacks: EncounterAttack[]`
+// (Parts/weapon-track pass) — bumping for the same reason.
+const SAVE_VERSION = 5;
 
 interface SavedLibrary {
   version: number;

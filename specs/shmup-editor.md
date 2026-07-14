@@ -335,36 +335,41 @@ see "Timing" below. A fourth pass replaced per-Action movement kinds
 driven by two plain Unit stats instead of an Action-level choice — see
 "Movement" below. See git history for all four earlier shapes if useful.
 
-The mental model: **a Unit owns a buffet of Actions (attack/animation, no
-movement) plus two movement stats (speed/turnRate); an encounter places
-Units and walks each one along a curved path through an ordered list of
-steps, each step picking one Action off that Unit's buffet for what
-happens there.**
+The mental model: **a Unit owns a buffet of Actions (animation, no attack,
+no movement) plus two movement stats (speed/turnRate) plus a set of Parts,
+each owning its own reusable Weapon buffet; an encounter places Units and
+walks each one along a curved path through an ordered list of steps while
+independently placing attack events on each Part's own timeline track.**
 
 - A **Unit** (`UnitDef`, `unitTypes.ts`) is a sprite + stats — HP, contact
   damage, score value, `speed`, `turnRate`, hitbox size — **plus**
-  `actions: ActionDef[]`, a reusable list of named behaviors authored once
-  and referenced (not re-authored) from any encounter step. A small
-  **Units** menu (alongside **Tiles**) manages the library via
-  `UnitStatsForm.tsx` (stats fields plus an Actions section — list with
-  New/Edit/Delete, mirroring the tile editor's Encounters section);
-  `UnitList.tsx` is the same visual-checker sprite grid as the tile list.
+  `actions: ActionDef[]` (movement/animation buffet) **plus**
+  `parts: UnitPart[]` (attack buffet), both authored once and referenced
+  (not re-authored) from any encounter placement. A small **Units** menu
+  (alongside **Tiles**) manages the library via `UnitStatsForm.tsx` (stats
+  fields plus Actions *and* Parts sections — both list + New/Edit/Delete,
+  mirroring the tile editor's Encounters section); `UnitList.tsx` is the
+  same visual-checker sprite grid as the tile list.
 - An **`ActionDef`** (`unitTypes.ts`) bundles everything one moment of
-  *non-movement* behavior needs: an optional `attack` (`AttackPayload`,
-  unchanged shape from the original pass), an `animationState` (`idle`/
-  `moving`/`attacking`/`dying`), and a `visible` flag. No movement field —
-  see "Movement" below for why. `createIdleAction()` builds the mandatory
-  baseline every new Unit is seeded with — attack `null`, `visible: true`
-  — so a Unit is never saved with zero Actions (`UnitStatsForm`'s Delete
-  button disables at 1 remaining action, tooltip "A Unit needs at least
-  one Action").
+  movement/animation behavior needs: an `animationState` (`idle`/
+  `moving`/`attacking`/`dying`) and a `visible` flag. No movement field —
+  see "Movement" below for why — and no attack field either — see
+  "Attacks" below. `createIdleAction()` builds the mandatory baseline
+  every new Unit is seeded with — `visible: true` — so a Unit is never
+  saved with zero Actions (`UnitStatsForm`'s Delete button disables at 1
+  remaining action, tooltip "A Unit needs at least one Action").
+- A **`UnitPart`** (`unitTypes.ts`) is `{id, name, offset, weapons:
+  WeaponDef[]}` — see "Attacks" below for the full model. Every Unit is
+  seeded with one default "Main" part, same mandatory-baseline pattern as
+  the Idle Action.
 - An **encounter** (`EncounterDef`, `encounterTypes.ts`) still belongs to
   one specific tile (`TileDef.encounters`) and is still authored **inside
   the tile editor** (Encounters section on `TileEditorForm.tsx`,
   New/Edit/Delete, switching to a dedicated `EncounterEditor.tsx` view and
   back). Each **`EncounterUnit`** instance references a `UnitDef` by id and
-  owns its own `steps: EncounterStep[]` — a plain array, not a graph. Each
-  `EncounterStep` is `{ id, pos, actionId, time, aimAngleOverride?,
+  owns both a `steps: EncounterStep[]` movement track and an
+  `attacks: EncounterAttack[]` set of attack-track placements — plain
+  arrays, not a graph. Each `EncounterStep` is `{ id, pos, actionId, time,
   speedMultiplier?, handleIn?, handleOut? }`: a position on the canvas,
   which of the unit's Actions plays there, a `time` (see "Timing" below)
   saying when, and bezier handles shaping the curve on either side (see
@@ -433,10 +438,9 @@ computes a raw offset from the pointer position, clamps it by `turnRate`
 immediately (so the dot visually "sticks" once you drag past the limit
 rather than floating past it), and stores the clamped value — the stored
 data always reflects exactly what the curve actually uses, never an
-unenforced excess. (Implementation note: the canvas SVG has a blanket
-`pointer-events: none` so the connector paths stay click-through — the
-handle `<circle>` elements need an explicit `pointer-events: all`
-override, or they're invisible to clicks despite rendering on top.)
+unenforced excess. **The handle drag targets are real HTML `<button>`
+elements** (`.shmup-handle-btn`), not SVG shapes — see "Canvas" below for
+why (mobile hit-testing).
 
 **Segment duration is the curve's arc length ÷ effective speed.**
 `bezier.ts`'s `cubicBezierLength` numerically integrates the curve (no
@@ -459,12 +463,13 @@ simulated in the preview anyway (no live player exists at authoring
 time), so the "known approximation, not a bug" caveat that used to cover
 it no longer applies to anything.
 
-**Bullets are unaffected.** A `BulletDef` has no waypoints/steps to curve
-between — it's fired and just flies in whatever direction — so
-`MovementBehavior` (straightLine/wave/spiral, `unitTypes.ts`) is still
-exactly what it was for bullets; only `ActionDef` lost its `movement`
-field. `MovementForm.tsx` still exists, just only reachable from
-`AttackPayloadForm.tsx`'s bullet section now, not from `ActionEditor.tsx`.
+**Bullets are no longer a separate type — see "Attacks" below.** An
+earlier pass kept a dedicated `BulletDef`/`MovementBehavior`
+(straightLine/wave/spiral) system for fired projectiles, reasoning that a
+bullet "has no waypoints to curve between." The Parts/Weapon-track pass
+replaced that entirely: a Weapon spawns an actual `UnitDef` by id, and
+`MovementBehavior`/`BulletDef`/`MovementForm.tsx` were deleted outright,
+not kept around for a use case that no longer exists.
 
 **Wave/spiral/wobble for Units aren't gone, they're deferred** — see
 `shmup-editor.todo.md`'s Remaining list for the planned per-Unit
@@ -472,6 +477,101 @@ field. `MovementForm.tsx` still exists, just only reachable from
 or oscillates around its primary bezier-path position, independent of
 `speed`/`turnRate`) that will eventually cover what those movement kinds
 used to.
+
+### Attacks (`unitTypes.ts`, `encounterAttacks.ts`, `WeaponForm.tsx`, `PartEditor.tsx`, `AttackPanel.tsx`)
+
+**Attacks live on their own timeline tracks, independent of movement
+steps — "added anywhere on the timeline" per the request that drove this
+pass.** Attacking used to ride along with a movement waypoint's Action
+(`ActionDef.attack`); it doesn't anymore. `ActionDef` is now purely
+movement/animation (`{name, animationState, visible}`, no attack field at
+all).
+
+**A Unit has one or more Parts, each owning its own reusable Weapon
+buffet.** `UnitPart` (`unitTypes.ts`) is `{id, name, offset, weapons}` —
+`offset` is a position relative to the Unit's own origin, so a turret
+mounted forward of a ship's center anchors its fire from the right spot.
+Every Unit is seeded with one default "Main" part (mirrors the mandatory
+Idle Action), so the common single-weapon-system case needs zero extra
+authoring; a battleship with three independently-scheduled turrets is
+just three Parts, each with its own attack-track placements — this is
+what makes independent per-part tracks fall out for free instead of
+needing a dedicated multi-entity system.
+
+**The weapon model is one flat, orthogonal set of fields, not a shape ×
+aim × trigger matrix.** `WeaponDef` replaced the original three-axis
+`AttackPayload` (`shape`: single/arc/radialBurst/beam, `aim`:
+fixed/aimed/rotating, `trigger`: continuous/onDeath/onTrigger) per a
+re-read of the original "Design Handoff v2" doc's §5.6 weapon model:
+
+- **Aim**: `fixed` (a base angle) or `player` (tracked continuously or
+  snapshotted once at fire time — not simulated in the live preview, same
+  no-live-player-at-authoring-time approximation `turnRate` already
+  accepted).
+- **Arc range** (`arcStartDeg`/`arcEndDeg`, relative to the aim) + **shot
+  count** + **spacing** (even/random) + **per-shot delay** (time between
+  shots *within* one burst, distinct from `fireIntervalMs`, the time
+  *between* bursts). One primitive covers what used to be three separate
+  shapes: a narrow arc with few shots is a fan, `0°/360°` is a full
+  radial burst, and a range like `5°/355°` is new territory the old
+  matrix couldn't express at all — a burst with a deliberate gap at the
+  aim direction (a safe lane).
+- **Sweep** (`sweepSpeedDeg`, `pingPong`): a nonzero sweep speed rotates
+  the whole arc over time — this **is** what "rotating" aim used to be,
+  not a separate aim mode.
+- **No trigger kind at all.** An attack-track placement's own `time` (see
+  below) already says *when* it fires — the old `onTrigger` collapsed
+  into that. A repeating burst is just a nonzero `fireIntervalMs`
+  (`continuous`'s replacement). `onDeath` was cut outright rather than
+  ported, since "everything is time-based" (the explicit design decision
+  behind this pass) leaves no time-based home for a death-triggered
+  event; a future pass could reintroduce it as an orthogonal flag if
+  needed.
+- **Beam was cut, not ported** — a sustained damage line doesn't fit the
+  arc/count primitive, and can be faked with a rapid-fire long/thin
+  projectile in the meantime.
+- **`spawnUnitId`/`spawnScale`**: a Weapon spawns an actual `UnitDef` by
+  id (any Unit in the library, including one with its own Parts/Weapons —
+  recursive/splitting fire is free, no nested-payload shape needed) with
+  a simple flat size multiplier. Replaces the old inline `BulletDef`
+  entirely — see "Movement" above. `spawnScale` is deliberately simple;
+  see `shmup-editor.todo.md` for the deferred difficulty-scaling-curve
+  system this is *not* attempting to be.
+
+**`EncounterAttack`** (`encounterTypes.ts`) is the placement: `{partId,
+weaponId, time, durationMs, aimAngleOverride}`. `time` is the same shared
+clock as steps but is **always manually authored** — unlike a step, there's
+no position/distance to derive it from, since an attack has no position of
+its own. It fires from wherever the instance's bezier path (plus the
+Part's `offset`) puts it at that moment — `attackAnchorWorld()` in
+`EncounterEditor.tsx` reuses `movementPreview.ts`'s
+`computeInstancePreview` for this, falling back to the instance's first
+step if the attack's time is before the instance has technically spawned.
+`durationMs` keeps a repeating Weapon (`fireIntervalMs > 0`) firing past
+`time`; 0 is a single burst. `aimAngleOverride` is a narrow per-placement
+override of the Weapon's `fixedAngleDeg` (only meaningful for a
+`fixed`-aim Weapon) — same "encounters select pacing/aim, they don't
+author identity" carve-out steps' `speedMultiplier` already uses.
+`encounterAttacks.ts` is **unordered** array CRUD (`addAttack`/
+`updateAttack`/`deleteAttack`/`attacksForPart`) — unlike steps, attacks
+have no chronology invariant to maintain, so deleting one never cascades
+to any other.
+
+**A fixed-aim attack gets a draggable aim handle on canvas**, reusing the
+same `.shmup-handle-btn` pattern as bezier handles, but simpler: since the
+attack's anchor itself moves along the bezier path over time, there's
+nothing to store but the angle. Dragging computes `atan2` from the
+anchor to the pointer and writes straight into `aimAngleOverride` in
+degrees; the handle renders at a fixed visual distance
+(`AIM_HANDLE_LENGTH`) from the anchor at that angle. A `player`-aimed
+Weapon gets no handle — nothing fixed to drag.
+
+**Adding an attack**: tapping the 🔫+ button on a selected step (next to
+✥/+/✕) adds an attack event at that step's time. If the Unit has exactly
+one Part, it's added directly (to that Part's first Weapon); with more
+than one Part, a small picker (mirrors "+ Add Unit"'s picker) asks which
+Part. Disabled with a hint if the Unit has no Weapons authored anywhere
+yet — nothing to reference.
 
 ### Timing (`encounterTypes.ts`, `encounterTiming.ts`, `EncounterTimeline.tsx`)
 
@@ -570,26 +670,31 @@ can never look like the unit "keeps traveling after it reaches the final
 node," which is the exact bug report that drove several iterations of
 this feature (see "Movement" above).
 
-### Per-step overrides (`StepPanel.tsx`)
+### Per-placement overrides (`StepPanel.tsx`, `AttackPanel.tsx`)
 
-A narrow, explicit whitelist of fields a step can override on top of
-whatever its chosen Action already specifies — not a general "edit the
-Action's params here" escape hatch:
-- **`aimAngleOverride`** — shown only when the selected Action's
-  `attack?.aim === "fixed"`.
-- **`speedMultiplier`** — shown only when there's a next step at a
-  different position (`hasOutgoingSegment`, computed by `EncounterEditor`
-  the same way `encounterTiming.ts` decides whether a step's time is
-  derived — a step whose successor dwells at the same position has no
-  segment for a multiplier to affect). Started as a purely cosmetic
-  per-placement pacing tweak; now it's the actual mechanism for
-  controlling a *derived* step's duration (see Timing above) — dragging
-  the *next* step on the timeline writes to *this* step's
-  `speedMultiplier` rather than to a raw time value. 1 = the owning Unit's
-  own authored `speed`, 2 = twice as fast (half the travel time to the
-  next waypoint), etc.
+A narrow, explicit whitelist of fields a *placement* can override on top
+of whatever it references — not a general "edit the definition's params
+here" escape hatch. Split across two panels now that attacks aren't step
+fields anymore:
 
-Both are optional; omitted means "use the Action's own value unmodified."
+- **`EncounterStep.speedMultiplier`** (`StepPanel.tsx`) — shown only when
+  there's a next step at a different position (`hasOutgoingSegment`,
+  computed by `EncounterEditor` the same way `encounterTiming.ts` decides
+  whether a step's time is derived — a step whose successor dwells at the
+  same position has no segment for a multiplier to affect). Started as a
+  purely cosmetic per-placement pacing tweak; now it's the actual
+  mechanism for controlling a *derived* step's duration (see Timing
+  above) — dragging the *next* step on the timeline writes to *this*
+  step's `speedMultiplier` rather than to a raw time value. 1 = the owning
+  Unit's own authored `speed`, 2 = twice as fast (half the travel time to
+  the next waypoint), etc.
+- **`EncounterAttack.aimAngleOverride`** (`AttackPanel.tsx`) — shown only
+  when the selected attack's Weapon has `aimMode === "fixed"`; also has a
+  draggable canvas handle (see "Attacks" above) that writes the same
+  field.
+
+Both are optional; omitted means "use the referenced definition's own
+value unmodified."
 
 ### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterSteps.ts`)
 
@@ -644,10 +749,19 @@ to drag (see "Movement" above).
   a later instance's start time manually on the timeline if wanted.
 - Each instance renders its own sprite (looked up by `unitDefId`) on every
   step, with the unit's name labeled under its first step. Step badges:
-  ▶ marks the first step, 🔫 marks a step whose Action has an enabled
-  attack, 👻 marks a step whose Action is `visible: false` (rendered with
-  `.shmup-enemy-node--hidden` — dashed border, reduced opacity — so a
-  Disappear/teleport-out step reads as ghosted at a glance).
+  ▶ marks the first step, 👻 marks a step whose Action is `visible: false`
+  (rendered with `.shmup-enemy-node--hidden` — dashed border, reduced
+  opacity — so a Disappear/teleport-out step reads as ghosted at a
+  glance). No attack badge on steps anymore — attacks render as their own
+  markers, below.
+- **Attack-track placements render as separate 🔫 markers**
+  (`.shmup-attack-marker`, smaller and differently colored than a
+  movement waypoint — same "reads as secondary" reasoning as the live
+  preview dot), positioned via `attackAnchorWorld()` at wherever the
+  instance's bezier path puts it at the attack's own time. Selecting one
+  shows a ✕ delete control and, for a fixed-aim Weapon, the aim handle
+  (see "Attacks" above). A selected step's control cluster gains a 🔫+
+  button (next to ✥/+/✕) to add one there.
 - **Deleting the first step removes the whole instance** from the
   encounter (confirm-then-`removeInstance`) — same reasoning as the prior
   pass's entrance-node special case, just phrased in step-list terms.
@@ -682,15 +796,20 @@ frames per skull sheet (idle/move/attack/die preview) is deferred — see
 
 An encounter is saved as part of its owning tile — `TileDef.encounters` is
 a plain field inside `TILES.DAT` (`tileStore.ts`). `encounterValidation.ts`
-got much smaller in this pass: since an `EncounterStep` only carries an
-`actionId` string reference (not the nested movement/attack/bullet data
-itself anymore), `isValidEncounter()` just checks the step-list shape —
-no more recursive movement/attack/bullet validation. That recursive
-validation moved to `unitStore.ts` instead, since Units are what own
-Actions now: `loadUnits`/`saveUnits` validate `actions[]` recursively
-(`isMovement`/`isAttackPayload`/`isBullet`/`isActionDef`/`isValidUnitDef`,
-same generous-nesting-depth-cap reasoning as before) before trusting a
-saved library. There's no separate encounter library or file.
+validates the placement shapes an encounter actually saves —
+`isEncounterStep`/`isEncounterAttack`/`isEncounterUnit`/`isValidEncounter`
+— which are just string references (`actionId`/`partId`/`weaponId`) plus
+plain numbers/`Vec2`s, no nested definition data. The Unit-owned
+*definitions* those references point at (`ActionDef`/`UnitPart`/
+`WeaponDef`) validate in `unitStore.ts` instead, since Units are what own
+Actions and Parts now: `loadUnits`/`saveUnits` validate `actions[]`/
+`parts[]` (`isActionDef`/`isUnitPart`/`isWeaponDef`/`isValidUnitDef`)
+before trusting a saved library — no recursion needed anymore either,
+since `WeaponDef.spawnUnitId` is a plain string reference rather than a
+nested `BulletDef`/`AttackPayload` structure (the old
+`isMovement`/`isAttackPayload`/`isBullet`/`MAX_PAYLOAD_DEPTH` recursive
+validators were deleted along with the types they validated). There's no
+separate encounter library or file.
 
 The timeline scrubber pass changed `EncounterStep`'s shape (`trigger` →
 `time`) and `AttackPayload`'s (dropped `onProximity`/`proximityRadius`) —
@@ -719,6 +838,17 @@ entirely, and `EncounterStep` gained `handleIn`/`handleOut`. `unitStore.ts`'s
 `SAVE_VERSION` (3→4), all bumped for the same "reset rather than silently
 carry a mismatched shape" reason as every prior bump.
 
+The Parts/Weapon-track pass (Attacks, above) bumped every version again
+for the same reason, being the most non-additive change yet: `ActionDef`
+lost `attack` entirely, `UnitDef` gained `parts: UnitPart[]`,
+`EncounterStep` lost `aimAngleOverride` (moved to `EncounterAttack`), and
+`EncounterUnit` gained `attacks: EncounterAttack[]`. `unitStore.ts`'s
+`SAVE_VERSION` (5→6) and `TILE_SESSION_VERSION` (3→4), plus
+`tileStore.ts`'s `SAVE_VERSION` (4→5), all bumped. `UnitEditSession` also
+gained `activePart: UnitPart | null`, mirroring `activeAction` one level
+down (see the `PART-EDIT`/Weapon note below) — the same version bump
+covers this, since it's the same file/shape.
+
 Two more fsStore files alongside `TILES.DAT`/`UNITS.DAT`, same folder
 (`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory
 in-progress-session-survives-reload rule — a half-built tile/encounter or
@@ -726,13 +856,19 @@ unit/action is a much bigger loss on an accidental mobile reload/rotation
 than E1's original tile-form draft gap:
 
 - **`UNIT-DRAFT.DAT`** (`unitStore.ts`'s `loadUnitDraft`/`saveUnitDraft`) —
-  a `UnitEditSession { unit, activeAction }`: the Unit stats form currently
-  being edited, plus whichever single Action is mid-edit (if any), mirroring
-  the tile/encounter session shape one level down. `UnitStatsForm` and
-  `ActionEditor` both bubble every field change up via `onDraftChange`
-  (a `useEffect([draft])` in each), so navigating from the Unit form to the
-  Action editor and back doesn't lose in-progress edits on either side —
-  each form unmounts while the other view is showing.
+  a `UnitEditSession { unit, activeAction, activePart }`: the Unit stats
+  form currently being edited, plus whichever single Action *or* Part is
+  mid-edit (if any — never both at once), mirroring the tile/encounter
+  session shape one level down. `UnitStatsForm`, `ActionEditor`, and
+  `PartEditor` all bubble every field change up via `onDraftChange` (a
+  `useEffect([draft])` in each), so navigating from the Unit form to the
+  Action/Part editor and back doesn't lose in-progress edits on either
+  side — each form unmounts while another view is showing. **A Part's own
+  Weapons don't get a session slot of their own** — `PartEditor` edits
+  them inline (expand-in-place via `WeaponForm`, live two-way bound into
+  the Part's own draft state), the same "no separate Save/Cancel flow"
+  shape the original inline `AttackPayloadForm` always had, just now
+  organized as a list instead of one checkbox-gated block.
 - **`TILE-DRAFT.DAT`** (`loadTileSession`/`saveTileSession`) — the *whole*
   tile-editing session: the tile currently being edited (name, edges,
   image, and its `encounters` list as saved-so-far) **plus** whichever
@@ -745,8 +881,9 @@ than E1's original tile-form draft gap:
   while a different view is showing, so anything not yet bubbled up would
   otherwise be lost. On mount, `ShmupEditor.tsx` checks for a saved
   session (checking `UNIT-DRAFT.DAT` first, then `TILE-DRAFT.DAT`) and
-  resumes silently into whichever of the four views (unit-edit,
-  action-edit, tile-edit, encounter-edit) the session was left in.
+  resumes silently into whichever of the five views (unit-edit,
+  action-edit, part-edit, tile-edit, encounter-edit) the session was left
+  in.
   Position drags on the Encounter canvas are the one exception to "write
   on every change" — a drag updates only local component state, committed
   to the session once on release, not on every pointer-move frame.

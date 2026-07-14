@@ -3,7 +3,7 @@ import { clampHandleOffset, cubicBezierLength, cubicBezierPoint, resolveHandleIn
 import type { EncounterStep } from "./encounterTypes";
 
 function step(pos: { x: number; y: number }, overrides: Partial<EncounterStep> = {}): EncounterStep {
-  return { id: "s", pos, actionId: "a", time: 0, aimAngleOverride: null, speedMultiplier: 1, handleIn: null, handleOut: null, ...overrides };
+  return { id: "s", pos, actionId: "a", time: 0, speedMultiplier: 1, handleIn: null, handleOut: null, ...overrides };
 }
 
 describe("cubicBezierPoint", () => {

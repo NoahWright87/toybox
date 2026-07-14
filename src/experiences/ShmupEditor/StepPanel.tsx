@@ -30,8 +30,6 @@ interface StepPanelProps {
  * position as its predecessor.
  */
 export default function StepPanel({ unit, step, timeDerived, hasOutgoingSegment, onChange }: StepPanelProps) {
-  const action = unit?.actions.find((a) => a.id === step.actionId);
-  const showAimOverride = action?.attack?.enabled && action.attack.aim === "fixed";
   const showSpeedOverride = hasOutgoingSegment;
 
   return (
@@ -70,18 +68,6 @@ export default function StepPanel({ unit, step, timeDerived, hasOutgoingSegment,
         )}
       </label>
 
-      {showAimOverride && (
-        <label className="shmup-field shmup-field--inline">
-          <span>Aim angle override (deg)</span>
-          <input
-            type="number"
-            className="shmup-input shmup-input--small"
-            placeholder={String(action!.attack!.fixedAngleDeg)}
-            value={step.aimAngleOverride ?? ""}
-            onChange={(e) => onChange({ aimAngleOverride: e.target.value === "" ? null : Number(e.target.value) })}
-          />
-        </label>
-      )}
       {showSpeedOverride && (
         <>
           <label className="shmup-field shmup-field--inline">

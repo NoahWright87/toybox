@@ -28,7 +28,7 @@ export function addStep(instance: EncounterUnit, actionId: string, pos?: Vec2): 
   const last = instance.steps[instance.steps.length - 1];
   const stepPos = pos ?? (last ? { x: last.pos.x + DEFAULT_NEXT_OFFSET.x, y: last.pos.y + DEFAULT_NEXT_OFFSET.y } : { x: 0, y: 0 });
   const time = last ? last.time + DEFAULT_STEP_DURATION : 0;
-  const step: EncounterStep = { id: makeStepId(), pos: stepPos, actionId, time, aimAngleOverride: null, speedMultiplier: 1, handleIn: null, handleOut: null };
+  const step: EncounterStep = { id: makeStepId(), pos: stepPos, actionId, time, speedMultiplier: 1, handleIn: null, handleOut: null };
   return { ...instance, steps: [...instance.steps, step] };
 }
 

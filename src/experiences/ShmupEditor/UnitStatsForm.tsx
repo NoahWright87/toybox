@@ -1,6 +1,6 @@
 import { useState } from "react";
 import SpritePicker from "./SpritePicker";
-import type { ActionDef, UnitDef } from "./unitTypes";
+import type { ActionDef, UnitDef, UnitPart } from "./unitTypes";
 
 interface UnitStatsFormProps {
   unit: UnitDef;
@@ -11,35 +11,43 @@ interface UnitStatsFormProps {
   onNewAction: () => void;
   onEditAction: (action: ActionDef) => void;
   onDeleteAction: (actionId: string) => void;
+  onNewPart: () => void;
+  onEditPart: (part: UnitPart) => void;
+  onDeletePart: (partId: string) => void;
 }
 
 function validate(unit: UnitDef): string | null {
   if (!unit.name.trim()) return "Name is required.";
   if (unit.hp <= 0) return "HP must be positive.";
   if (unit.actions.length === 0) return "A Unit needs at least one Action.";
+  if (unit.parts.length === 0) return "A Unit needs at least one Part.";
   return null;
 }
 
 function actionSummary(action: ActionDef): string {
-  const parts: string[] = [];
-  if (action.attack?.enabled) parts.push("attacks");
-  if (!action.visible) parts.push("hidden");
-  return parts.length > 0 ? parts.join(", ") : "no attack";
+  return action.visible ? action.animationState : `${action.animationState}, hidden`;
+}
+
+function partSummary(part: UnitPart): string {
+  return part.weapons.length === 1 ? "1 weapon" : `${part.weapons.length} weapons`;
 }
 
 /**
- * Stats form + reusable Action buffet — a Unit is sprite + stats
+ * Stats form + reusable Action/Part buffets — a Unit is sprite + stats
  * (including `speed`/`turnRate`, which drive movement between encounter
  * waypoints — see unitTypes.ts) + a named, reusable set of Actions
- * (attack/animation bundles, no movement), authored once here and
- * *selected* repeatedly across encounters (see EncounterEditor.tsx). Same
- * toolbar-then-fields shape as TileEditorForm.tsx; the Actions section
- * mirrors that form's Encounters section (list + New/Edit/Delete, editing
- * navigates to a dedicated view).
+ * (animation/visibility, no attack, no movement) + a set of Parts, each
+ * owning its own reusable Weapon buffet (attacks — see PartEditor.tsx),
+ * authored once here and selected/placed repeatedly across encounters
+ * (see EncounterEditor.tsx). Same toolbar-then-fields shape as
+ * TileEditorForm.tsx; the Actions/Parts sections mirror that form's
+ * Encounters section (list + New/Edit/Delete, editing navigates to a
+ * dedicated view).
  */
-export default function UnitStatsForm({ unit, onSave, onCancel, onDraftChange, onNewAction, onEditAction, onDeleteAction }: UnitStatsFormProps) {
+export default function UnitStatsForm({ unit, onSave, onCancel, onDraftChange, onNewAction, onEditAction, onDeleteAction, onNewPart, onEditPart, onDeletePart }: UnitStatsFormProps) {
   const [draft, setDraft] = useState<UnitDef>(unit);
   const [pendingDeleteActionId, setPendingDeleteActionId] = useState<string | null>(null);
+  const [pendingDeletePartId, setPendingDeletePartId] = useState<string | null>(null);
   const error = validate(draft);
 
   function update(patch: Partial<UnitDef>) {
@@ -97,7 +105,7 @@ export default function UnitStatsForm({ unit, onSave, onCancel, onDraftChange, o
 
       <div className="shmup-field">
         <span>Actions ({draft.actions.length})</span>
-        <p className="shmup-hint">Authored once, selected per placement in any encounter — an optional attack and an animation state.</p>
+        <p className="shmup-hint">Authored once, selected per placement in any encounter — an animation state and visibility. No attack here — see Parts below.</p>
         <ul className="shmup-encounter-list">
           {draft.actions.map((action) => (
             <li key={action.id} className="shmup-encounter-list__row">
@@ -142,6 +150,60 @@ export default function UnitStatsForm({ unit, onSave, onCancel, onDraftChange, o
         <div className="shmup-btn-row">
           <button type="button" className="shmup-btn shmup-btn--small" onClick={onNewAction}>
             + New Action
+          </button>
+        </div>
+      </div>
+
+      <div className="shmup-field">
+        <span>Parts ({draft.parts.length})</span>
+        <p className="shmup-hint">
+          Named anchor points, each with its own reusable Weapons buffet and its own independent attack track per encounter placement — a
+          battleship's three turrets are three Parts. Most Units just need the default "Main" part.
+        </p>
+        <ul className="shmup-encounter-list">
+          {draft.parts.map((part) => (
+            <li key={part.id} className="shmup-encounter-list__row">
+              <span>
+                {part.name} — {partSummary(part)}
+              </span>
+              <div className="shmup-btn-row">
+                <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEditPart(part)}>
+                  Edit
+                </button>
+                {pendingDeletePartId === part.id ? (
+                  <>
+                    <button
+                      type="button"
+                      className="shmup-btn shmup-btn--small shmup-btn--danger"
+                      onClick={() => {
+                        onDeletePart(part.id);
+                        setPendingDeletePartId(null);
+                      }}
+                    >
+                      Confirm
+                    </button>
+                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeletePartId(null)}>
+                      Keep
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="shmup-btn shmup-btn--small"
+                    disabled={draft.parts.length <= 1}
+                    title={draft.parts.length <= 1 ? "A Unit needs at least one Part" : undefined}
+                    onClick={() => setPendingDeletePartId(part.id)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="shmup-btn-row">
+          <button type="button" className="shmup-btn shmup-btn--small" onClick={onNewPart}>
+            + New Part
           </button>
         </div>
       </div>

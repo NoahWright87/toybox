@@ -1,5 +1,4 @@
 import { useState } from "react";
-import AttackPayloadForm from "./AttackPayloadForm";
 import { type ActionDef, type AnimationState, ANIMATION_STATES } from "./unitTypes";
 
 interface ActionEditorProps {
@@ -16,12 +15,14 @@ function validate(action: ActionDef): string | null {
 }
 
 /**
- * One reusable Action: an optional attack, an animation state, and a
- * visibility flag (false = hidden + hitbox disabled — what Disappear/
- * teleport-out/pop-down are made of, see unitTypes.ts). No movement here
- * anymore — that's two plain stats on the owning Unit (`speed`/`turnRate`,
- * see UnitStatsForm.tsx) plus each encounter step's bezier handles
- * (EncounterEditor.tsx), not something authored per-Action.
+ * One reusable Action: an animation state and a visibility flag (false =
+ * hidden + hitbox disabled — what Disappear/teleport-out/pop-down are made
+ * of, see unitTypes.ts). No movement here — that's two plain stats on the
+ * owning Unit (`speed`/`turnRate`, see UnitStatsForm.tsx) plus each
+ * encounter step's bezier handles (EncounterEditor.tsx). No attack here
+ * either — attacks live on the Unit's Parts (`PartEditor.tsx`,
+ * `WeaponForm.tsx`), placed on their own independent timeline tracks
+ * rather than riding along with a movement Action.
  */
 export default function ActionEditor({ action, onSave, onCancel, onDraftChange }: ActionEditorProps) {
   const [draft, setDraft] = useState<ActionDef>(action);
@@ -61,8 +62,6 @@ export default function ActionEditor({ action, onSave, onCancel, onDraftChange }
           Visible (uncheck for Disappear/teleport-out/pop-down)
         </label>
       </div>
-
-      <AttackPayloadForm payload={draft.attack} onChange={(attack) => update({ attack })} label="Attacks during this Action" />
 
       {error && <p className="shmup-error">{error}</p>}
       <div className="shmup-btn-row">

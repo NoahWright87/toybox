@@ -2,11 +2,13 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
 import StepPanel from "./StepPanel";
+import AttackPanel from "./AttackPanel";
 import { resolveSpriteUrl } from "./enemySprites";
 import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
+import { addAttack, deleteAttack, updateAttack } from "./encounterAttacks";
 import { isStepTimeDerived, recomputeStepTimes, segmentArcLength, speedMultiplierForDuration } from "./encounterTiming";
-import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
+import { createEncounterUnit, type EncounterAttack, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
@@ -21,8 +23,10 @@ interface EncounterEditorProps {
   onDraftChange: (encounter: EncounterDef) => void;
 }
 
-type Selection = { instanceId: string; stepId: string } | null;
+type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
 type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
+/** Dragging an attack's aim handle — unlike bezier handles (an offset from a fixed step position), an attack's anchor itself moves along the bezier path over time, so the only thing worth persisting is the angle, not a position offset. */
+type AimDrag = { instanceId: string; attackId: string; angleDeg: number } | null;
 
 const NODE_DIAMETER = 56;
 const NODE_RADIUS = NODE_DIAMETER / 2;
@@ -35,6 +39,11 @@ const HANDLE_RADIUS = HANDLE_DIAMETER / 2;
 const PADDING = 60;
 /** Reference-frame sizing: matches encounterSteps.ts's default next-step offset, so a freshly grown sequence reads at a similar scale to the tile itself. */
 const TILE_UNIT = 130;
+/** Attack-track markers are smaller than a movement waypoint node — secondary to the path, same "reads as another layer, not another waypoint" reasoning as PREVIEW_DIAMETER. */
+const ATTACK_MARKER_DIAMETER = 32;
+const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
+/** Purely visual length of the aim-direction indicator/handle from an attack's anchor position — not a stored value, just how far out the drag target renders. */
+const AIM_HANDLE_LENGTH = 55;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -44,6 +53,16 @@ function validate(encounter: EncounterDef): string | null {
 
 function deleteKey(instanceId: string, stepId: string): string {
   return `${instanceId}:${stepId}`;
+}
+
+/** An attack's anchor position in world space — wherever the instance's bezier path (via computeInstancePreview) puts it at the attack's own time, plus the firing Part's offset. Falls back to the instance's first step (still positionally meaningful, even before the instance has technically "spawned") rather than nothing. */
+function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: EncounterAttack): Vec2 | null {
+  if (!unitDef) return null;
+  const part = unitDef.parts.find((p) => p.id === attack.partId);
+  if (!part) return null;
+  const basePos = computeInstancePreview(instance, unitDef, attack.time)?.pos ?? instance.steps[0]?.pos;
+  if (!basePos) return null;
+  return { x: basePos.x + part.offset.x, y: basePos.y + part.offset.y };
 }
 
 /**
@@ -80,8 +99,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [selection, setSelection] = useState<Selection>(null);
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
   const [dragHandle, setDragHandle] = useState<HandleDrag>(null);
+  const [dragAim, setDragAim] = useState<AimDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [addingUnit, setAddingUnit] = useState(false);
+  const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -193,7 +214,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   function selectStep(instanceId: string, stepId: string) {
     setPendingDeleteKey(null);
-    setSelection({ instanceId, stepId });
+    setPickingAttackPartFor(null);
+    setSelection({ instanceId, kind: "step", stepId });
+  }
+
+  function selectAttack(instanceId: string, attackId: string) {
+    setPendingDeleteKey(null);
+    setPickingAttackPartFor(null);
+    setSelection({ instanceId, kind: "attack", attackId });
   }
 
   function addUnitInstance(unitDefId: string) {
@@ -228,6 +256,35 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     updateInstance(instanceId, () => after);
     const added = after.steps[after.steps.length - 1];
     if (added) selectStep(instanceId, added.id);
+  }
+
+  /** Adds an attack-track placement for `partId`, defaulting `time` to `atTime` and the weapon to that Part's first — a no-op if the Part has no Weapons yet (nothing to reference). */
+  function addAttackToPart(instanceId: string, partId: string, atTime: number) {
+    const before = draft.units.find((u) => u.id === instanceId);
+    const unitDef = units.find((u) => u.id === before?.unitDefId);
+    const part = unitDef?.parts.find((p) => p.id === partId);
+    const weaponId = part?.weapons[0]?.id;
+    if (!before || !weaponId) return;
+    const after = addAttack(before, partId, weaponId, atTime);
+    updateInstance(instanceId, () => after);
+    setPickingAttackPartFor(null);
+    const added = after.attacks[after.attacks.length - 1];
+    if (added) selectAttack(instanceId, added.id);
+  }
+
+  /** Tapping "+ Attack" on a selected step: if the Unit has exactly one Part, add directly to it; otherwise show a small Part picker (mirrors "+ Add Unit"'s picker pattern). */
+  function requestAddAttack(instanceId: string, unitDef: UnitDef | undefined, atTime: number) {
+    if (!unitDef || unitDef.parts.length === 0) return;
+    if (unitDef.parts.length === 1) {
+      addAttackToPart(instanceId, unitDef.parts[0].id, atTime);
+      return;
+    }
+    setPickingAttackPartFor(instanceId);
+  }
+
+  function deleteAttackEvent(instanceId: string, attackId: string) {
+    updateInstance(instanceId, (i) => deleteAttack(i, attackId));
+    setSelection(null);
   }
 
   /** Deleting an instance's first step removes the whole instance from the encounter — an empty, step-less instance stub has no purpose. */
@@ -287,6 +344,24 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragHandle(null);
   }
 
+  /** Seeds the drag from the attack's current (possibly-overridden) angle, same "don't jump on first touch" reasoning as beginHandleDrag. */
+  function beginAimDrag(instanceId: string, attackId: string, e: ReactPointerEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const instance = draft.units.find((u) => u.id === instanceId);
+    const attack = instance?.attacks.find((a) => a.id === attackId);
+    if (!instance || !attack) return;
+    const unitDef = units.find((u) => u.id === instance.unitDefId);
+    const part = unitDef?.parts.find((p) => p.id === attack.partId);
+    const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
+    setDragAim({ instanceId, attackId, angleDeg: attack.aimAngleOverride ?? weapon?.fixedAngleDeg ?? 0 });
+  }
+  function endAimDrag() {
+    if (!dragAim) return;
+    updateInstance(dragAim.instanceId, (i) => updateAttack(i, dragAim.attackId, { aimAngleOverride: dragAim.angleDeg }));
+    setDragAim(null);
+  }
+
   // Inverse of toStage() (defined below, after the bounding box it depends
   // on) — screen/pointer coords back to world coords. minX/minY matter
   // here: they're nonzero whenever anything in the bounding box sits left
@@ -324,10 +399,21 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         }
       }
     }
+    if (dragAim) {
+      const instance = draft.units.find((u) => u.id === dragAim.instanceId);
+      const attack = instance?.attacks.find((a) => a.id === dragAim.attackId);
+      const unitDef = units.find((u) => u.id === instance?.unitDefId);
+      const anchor = instance && attack ? attackAnchorWorld(instance, unitDef, attack) : null;
+      if (anchor) {
+        const angleDeg = (Math.atan2(worldPos.y - anchor.y, worldPos.x - anchor.x) * 180) / Math.PI;
+        setDragAim({ ...dragAim, angleDeg });
+      }
+    }
   }
   function onStagePointerUp() {
     endDrag();
     endHandleDrag();
+    endAimDrag();
   }
 
   // Bounding box spans every instance's every step PLUS the tile reference frame itself, so the frame is always visible even before any Unit is placed.
@@ -348,11 +434,28 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
-  const selectedStep: EncounterStep | undefined = selectedInstance?.steps.find((s) => s.id === selection?.stepId);
+  const selectedStep: EncounterStep | undefined = selection?.kind === "step" ? selectedInstance?.steps.find((s) => s.id === selection.stepId) : undefined;
+  const selectedAttack: EncounterAttack | undefined = selection?.kind === "attack" ? selectedInstance?.attacks.find((a) => a.id === selection.attackId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
   const selectedIdx = selectedInstance && selectedStep ? selectedInstance.steps.findIndex((s) => s.id === selectedStep.id) : -1;
   const selectedNextStep = selectedInstance && selectedIdx >= 0 ? selectedInstance.steps[selectedIdx + 1] : undefined;
   const hasOutgoingSegment = selectedInstance && selectedNextStep ? isStepTimeDerived(selectedInstance, selectedNextStep.id, selectedUnitDef) : false;
+
+  // Aim-handle geometry for a selected attack — only rendered for a
+  // "fixed"-aim weapon, since "player"-aimed weapons have no fixed angle to
+  // drag (they track/snapshot the player at runtime instead).
+  const selectedAttackPart = selectedAttack ? selectedUnitDef?.parts.find((p) => p.id === selectedAttack.partId) : undefined;
+  const selectedAttackWeapon = selectedAttackPart ? selectedAttackPart.weapons.find((w) => w.id === selectedAttack?.weaponId) : undefined;
+  const selectedAttackAnchor = selectedInstance && selectedAttack ? attackAnchorWorld(selectedInstance, selectedUnitDef, selectedAttack) : null;
+  const draggingThisAim = dragAim && selectedAttack && dragAim.attackId === selectedAttack.id;
+  const selectedAimAngleDeg = draggingThisAim ? dragAim.angleDeg : (selectedAttack?.aimAngleOverride ?? selectedAttackWeapon?.fixedAngleDeg ?? 0);
+  const aimHandleStage =
+    selectedAttackAnchor && selectedAttackWeapon?.aimMode === "fixed"
+      ? toStage({
+          x: selectedAttackAnchor.x + AIM_HANDLE_LENGTH * Math.cos((selectedAimAngleDeg * Math.PI) / 180),
+          y: selectedAttackAnchor.y + AIM_HANDLE_LENGTH * Math.sin((selectedAimAngleDeg * Math.PI) / 180),
+        })
+      : null;
 
   // Computed once, used both for the SVG stalk lines (visual only) and the
   // HTML drag-target buttons below (real touch targets — see file header:
@@ -394,8 +497,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
       <p className="shmup-hint">
         Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition, or the teal ⬦ handles to bend
-        the curve leaving/arriving at it. The dashed box is this tile's real footprint/edges, for reference. Most steps' timing is automatic —
-        based on distance and speed — but the timeline below still lets you drag to adjust pacing, and Play/scrub previews motion (teal marker).
+        the curve leaving/arriving at it. Tap 🔫+ to add an attack anywhere on that Unit's timeline — it fires from wherever its path puts it at
+        that time, not tied to a movement waypoint; a fixed-aim attack gets its own draggable handle. The dashed box is this tile's real
+        footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below still lets you
+        drag to adjust pacing, and Play/scrub previews motion (teal marker).
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -470,6 +575,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               />
             ))}
 
+          {/* An attack's aim handle — same real-HTML-button pattern, one per selected fixed-aim attack, drag to set its firing angle. */}
+          {selectedInstance && selectedAttack && aimHandleStage && (
+            <button
+              type="button"
+              className="shmup-handle-btn"
+              title="Drag to aim"
+              style={{ left: aimHandleStage.x - HANDLE_RADIUS, top: aimHandleStage.y - HANDLE_RADIUS }}
+              onPointerDown={(e) => beginAimDrag(selectedInstance.id, selectedAttack.id, e)}
+            />
+          )}
+
           {draft.units.flatMap((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
             const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
@@ -478,7 +594,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               const first = isFirstStep(instance, step.id);
               const last = isLastStep(instance, step.id);
               const action = unitDef?.actions.find((a) => a.id === step.actionId);
-              const isSelected = selection?.instanceId === instance.id && selection.stepId === step.id;
+              const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
               return (
                 <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
                   <button
@@ -496,7 +612,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   {first && <div className="shmup-enemy-node__label">{unitDef?.name ?? "?"}</div>}
                   <div className="shmup-enemy-node__badges">
                     {first && <span title="First step">▶</span>}
-                    {action?.attack?.enabled && <span title="Attacks">🔫</span>}
                     {action && !action.visible && <span title="Hidden">👻</span>}
                   </div>
 
@@ -520,11 +635,88 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                       )}
                       <button
                         type="button"
+                        className="shmup-enemy-node__btn shmup-enemy-node__btn--attack"
+                        title={unitDef && unitDef.parts.some((p) => p.weapons.length > 0) ? "Add an attack at this step's time" : "Add a Weapon to this Unit's Parts first (Units menu)"}
+                        disabled={!unitDef || !unitDef.parts.some((p) => p.weapons.length > 0)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestAddAttack(instance.id, unitDef, step.time);
+                        }}
+                      >
+                        🔫+
+                      </button>
+                      <button
+                        type="button"
                         className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
                         title={first ? "Remove this Unit from the encounter" : "Delete"}
                         onClick={(e) => {
                           e.stopPropagation();
                           requestDeleteStep(instance.id, step.id);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  {pickingAttackPartFor === instance.id && isSelected && unitDef && (
+                    <div className="shmup-tile-picker shmup-part-picker">
+                      {unitDef.parts.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="shmup-btn shmup-btn--small"
+                          disabled={p.weapons.length === 0}
+                          title={p.weapons.length === 0 ? "This Part has no Weapons yet" : undefined}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addAttackToPart(instance.id, p.id, step.time);
+                          }}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPickingAttackPartFor(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })}
+
+          {draft.units.flatMap((instance) => {
+            const unitDef = units.find((u) => u.id === instance.unitDefId);
+            if (!unitDef) return [];
+            return instance.attacks.map((attack) => {
+              const part = unitDef.parts.find((p) => p.id === attack.partId);
+              const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
+              const anchorWorld = attackAnchorWorld(instance, unitDef, attack);
+              if (!anchorWorld) return null;
+              const pos = toStage(anchorWorld);
+              const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
+              return (
+                <div key={attack.id} className="shmup-attack-marker-wrap" style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}>
+                  <button
+                    type="button"
+                    className={`shmup-attack-marker ${isSelected ? "shmup-attack-marker--selected" : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectAttack(instance.id, attack.id);
+                    }}
+                    title={`${part?.name ?? "?"}: ${weapon?.name ?? "(missing Weapon)"} @ ${attack.time.toFixed(1)}s`}
+                  >
+                    🔫
+                  </button>
+                  {isSelected && (
+                    <div className="shmup-enemy-node__controls">
+                      <button
+                        type="button"
+                        className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteAttackEvent(instance.id, attack.id);
                         }}
                       >
                         ✕
@@ -564,6 +756,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         onTogglePlay={() => setPlaying((v) => !v)}
         selection={selection}
         onSelectStep={selectStep}
+        onSelectAttack={selectAttack}
         onRetimeStep={handleRetimeStep}
       />
 
@@ -619,6 +812,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
           hasOutgoingSegment={hasOutgoingSegment}
           onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))}
+        />
+      )}
+
+      {selectedInstance && selectedAttack && (
+        <AttackPanel
+          unit={selectedUnitDef}
+          attack={selectedAttack}
+          onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateAttack(i, selectedAttack.id, patch))}
         />
       )}
 

@@ -45,6 +45,20 @@
  * *derived* from distance and the owning Unit's speed
  * (`encounterTiming.ts`), so `isFirstStep`/`isLastStep`/`deleteStepsFrom`
  * operate on plain array index throughout.
+ *
+ * **Attacks are a separate, parallel set of tracks — not steps.** Per
+ * "Design Handoff v2" §5.5 and unitTypes.ts's Part/Weapon model, an
+ * `EncounterAttack` places one of the owning Unit's Weapons (via its
+ * `partId`/`weaponId`) at a `time` on the same shared clock steps use, with
+ * no position of its own — it fires from wherever that instance's bezier
+ * path (plus the Part's `offset`) puts it at that moment
+ * (`movementPreview.ts`'s `computeInstancePreview` already computes this).
+ * This is what makes independent per-part attack tracks fall out for free
+ * (a battleship's three turrets are three Parts, each with its own
+ * `EncounterAttack` placements on independent schedules) without needing
+ * attacks to compete with the step sequence's "only the last step gets a
+ * +" ordering rule — an attack can be placed anywhere on the timeline,
+ * `encounterAttacks.ts` is unordered array CRUD, no chronology invariant.
  */
 
 export interface Vec2 {
@@ -61,9 +75,7 @@ export interface EncounterStep {
   actionId: string;
   /** Seconds from encounter start — one shared clock across every unit instance in this encounter, not relative to this instance's own start. */
   time: number;
-  /** Narrow per-placement override of the referenced action's fixed firing angle — null = use the action's own value. Spatial, not behavioral, so it's the one exception to "encounters select, they don't author." */
-  aimAngleOverride: number | null;
-  /** Narrow per-placement speed multiplier on the owning Unit's `speed` for the segment leaving this step (1 = unchanged). Same spatial/pacing exception as aimAngleOverride. */
+  /** Narrow per-placement speed multiplier on the owning Unit's `speed` for the segment leaving this step (1 = unchanged) — the one exception to "encounters select, they don't author." Aim-angle override lives on EncounterAttack now, not here — attacks aren't tied to steps anymore. */
   speedMultiplier: number;
   /** Offset from `pos` for the outgoing bezier handle (toward the next step) — null = default straight-line-equivalent placement. See bezier.ts. Unused on the last step of a sequence (no outgoing segment). */
   handleOut: Vec2 | null;
@@ -71,11 +83,28 @@ export interface EncounterStep {
   handleIn: Vec2 | null;
 }
 
-/** One Unit's placement + step sequence within a single encounter. */
+// ── Attacks ────────────────────────────────────────────────────────────────
+
+export interface EncounterAttack {
+  id: string;
+  /** References a UnitPart.id on the owning EncounterUnit's UnitDef. */
+  partId: string;
+  /** References a WeaponDef.id within that Part's weapon buffet. */
+  weaponId: string;
+  /** Seconds from encounter start — same shared clock as steps. Always manually authored; unlike a step's time, there's no position/distance to derive it from. */
+  time: number;
+  /** How long this attack keeps firing at its weapon's fireIntervalMs cadence after `time`; 0 = a single burst only. */
+  durationMs: number;
+  /** Per-placement override of the weapon's fixedAngleDeg, in degrees — null = use the weapon's own value. Written by dragging the aim handle on canvas; only meaningful when the referenced weapon's aimMode is "fixed". */
+  aimAngleOverride: number | null;
+}
+
+/** One Unit's placement + step sequence + attack-track placements within a single encounter. */
 export interface EncounterUnit {
   id: string;
   unitDefId: string;
   steps: EncounterStep[];
+  attacks: EncounterAttack[];
 }
 
 export interface EncounterDef {
@@ -97,6 +126,9 @@ export function makeEncounterUnitId(): string {
 export function makeStepId(): string {
   return `step-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+export function makeAttackId(): string {
+  return `atk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export function createBlankEncounter(existingCount: number): EncounterDef {
   const now = Date.now();
@@ -111,5 +143,5 @@ export function createBlankEncounter(existingCount: number): EncounterDef {
 }
 
 export function createEncounterUnit(unitDefId: string): EncounterUnit {
-  return { id: makeEncounterUnitId(), unitDefId, steps: [] };
+  return { id: makeEncounterUnitId(), unitDefId, steps: [], attacks: [] };
 }

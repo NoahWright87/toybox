@@ -173,6 +173,30 @@
   padding: 6px 8px;
   font-size: 8px;
 }
+/* A row that can expand to show inline fields below it (e.g. a Part's
+   Weapon list, WeaponForm expanded in place) rather than navigating away —
+   stacks its header row above the expanded content instead of the header's
+   own flex layout trying to wrap around it. */
+.shmup-encounter-list__row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.shmup-encounter-list__row-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shmup-weapon-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #808080;
+}
 
 .shmup-image-picker {
   display: flex;
@@ -725,10 +749,32 @@
   right: 0;
   background: rgba(34, 136, 51, 0.75);
 }
+.shmup-enemy-node__btn--attack {
+  bottom: 0;
+  left: 0;
+  background: rgba(204, 68, 0, 0.75);
+  font-size: 11px;
+}
+.shmup-enemy-node__btn--attack:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .shmup-enemy-node__btn--delete {
   bottom: 0;
   right: 0;
   background: rgba(153, 0, 0, 0.75);
+}
+
+/* Small Part picker shown under a step's node when adding an attack to a
+   multi-Part Unit (mirrors the "+ Add Unit" picker's look, but anchored to
+   the node instead of the toolbar since it's a per-step action). */
+.shmup-part-picker {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: 220px;
 }
 
 .shmup-enemy-node__label {
@@ -758,6 +804,31 @@
   border: 3px solid #66ffee;
   box-shadow: 0 0 8px #22bbaa;
   pointer-events: none;
+}
+
+/* Attack-track placement marker — an independent event on the timeline,
+   not a movement waypoint, so it's deliberately smaller/differently
+   colored than .shmup-enemy-node (same "reads as secondary" reasoning as
+   the preview dot above) and anchored wherever the unit's bezier path
+   puts it at the attack's own time (EncounterEditor.tsx's attackAnchorWorld). */
+.shmup-attack-marker-wrap {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+}
+.shmup-attack-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(153, 0, 0, 0.85);
+  border: 2px solid #ff8844;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.shmup-attack-marker--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
 }
 
 /* ── Encounter editor's tile reference frame ──────────────────────────
@@ -956,6 +1027,41 @@
   font-size: 10px;
   cursor: ew-resize;
   touch-action: none;
+}
+
+/* One extra lane per Part with placed attacks, below the movement lane —
+   independent per-part tracks so a multi-turret Unit's schedules are
+   visually separate rows, not merged markers on one lane. */
+.shmup-timeline__lane--attack {
+  position: relative;
+  height: 20px;
+  margin-top: 2px;
+  padding-left: 3px;
+}
+.shmup-timeline__track-sublabel {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  font-size: 6px;
+  color: #ff8844;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.shmup-timeline__attack {
+  position: absolute;
+  top: 8px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: rgba(153, 0, 0, 0.85);
+  border: 2px solid #ff8844;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-timeline__attack--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
 }
 
 .shmup-timeline__playhead {

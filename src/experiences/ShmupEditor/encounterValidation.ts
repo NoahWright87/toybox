@@ -12,7 +12,7 @@
  * unitTypes.ts's ActionDef, validated there instead) — no more recursive
  * graph/payload validation needed here.
  */
-import type { EncounterDef, EncounterStep, EncounterUnit } from "./encounterTypes";
+import type { EncounterAttack, EncounterDef, EncounterStep, EncounterUnit } from "./encounterTypes";
 
 function isNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
@@ -29,17 +29,36 @@ function isEncounterStep(v: unknown): v is EncounterStep {
     isVec2(s.pos) &&
     typeof s.actionId === "string" &&
     isNumber(s.time) &&
-    (s.aimAngleOverride === null || isNumber(s.aimAngleOverride)) &&
     isNumber(s.speedMultiplier) &&
     (s.handleOut === null || isVec2(s.handleOut)) &&
     (s.handleIn === null || isVec2(s.handleIn))
   );
 }
 
+function isEncounterAttack(v: unknown): v is EncounterAttack {
+  if (typeof v !== "object" || v === null) return false;
+  const a = v as Record<string, unknown>;
+  return (
+    typeof a.id === "string" &&
+    typeof a.partId === "string" &&
+    typeof a.weaponId === "string" &&
+    isNumber(a.time) &&
+    isNumber(a.durationMs) &&
+    (a.aimAngleOverride === null || isNumber(a.aimAngleOverride))
+  );
+}
+
 function isEncounterUnit(v: unknown): v is EncounterUnit {
   if (typeof v !== "object" || v === null) return false;
   const u = v as Record<string, unknown>;
-  return typeof u.id === "string" && typeof u.unitDefId === "string" && Array.isArray(u.steps) && u.steps.every(isEncounterStep);
+  return (
+    typeof u.id === "string" &&
+    typeof u.unitDefId === "string" &&
+    Array.isArray(u.steps) &&
+    u.steps.every(isEncounterStep) &&
+    Array.isArray(u.attacks) &&
+    u.attacks.every(isEncounterAttack)
+  );
 }
 
 export function isValidEncounter(v: unknown): v is EncounterDef {

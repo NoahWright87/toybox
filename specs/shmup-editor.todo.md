@@ -202,12 +202,10 @@ what actually shipped.
   is now purely a timeline-ruler sizing constant (how far past the last
   step the ruler extends for layout), not a motion-preview cap.
 - Attack payloads (pattern shape x aim mode x trigger) and nested bullet
-  payloads (a bullet is a minimal enemy per
-  `enemies-and-bullets.spec.todo.md` §7) are otherwise unchanged in shape
-  from earlier passes, just relocated onto each Action instead of each
-  node/edge. A narrow per-step override whitelist (`aimAngleOverride`,
-  `speedMultiplier`) lets one step nudge its Action's behavior without
-  re-authoring the whole Action.
+  payloads were, at this point in the project's history, unchanged in
+  shape from earlier passes, just relocated onto each Action instead of
+  each node/edge — **superseded by the Parts/weapon-track pass below**,
+  which replaced this entirely.
 - **Movement is no longer an Action concept — it's bezier curves plus two
   Unit stats** (`bezier.ts`, `unitTypes.ts`). `ActionDef` dropped
   `movement` entirely: straightLine/wave/spiral as a per-Action choice is
@@ -235,16 +233,59 @@ what actually shipped.
   `[0, 1]` — meaningfully simpler than the old per-movement-kind dispatch.
   `turnRate`'s old meaning (homing toward the player, never actually
   simulated) is gone along with it — no more approximation caveat needed
-  there. **Bullets are unaffected** — `BulletDef.movement` keeps the
-  original straightLine/wave/spiral system unchanged, since a fired bullet
-  has no waypoints to curve between.
+  there. Bullets were unaffected *at the time of this pass* —
+  `BulletDef.movement` kept the original straightLine/wave/spiral system,
+  since a fired bullet had no waypoints to curve between — but the
+  Parts/weapon-track pass below deleted `BulletDef` entirely, so this is
+  now historical.
+- **Parts, independent per-part attack tracks, and a unified arc-range
+  weapon model** (`unitTypes.ts`, `encounterAttacks.ts`, `WeaponForm.tsx`,
+  `PartEditor.tsx`, `AttackPanel.tsx` — Noah's request, prompted by a
+  re-read of the original "Design Handoff v2" doc's §5.5/§5.6 after noting
+  a battleship-with-three-turrets use case). Attacks stopped being
+  attributes of a movement Action: `ActionDef` dropped `attack` entirely
+  (now purely `{name, animationState, visible}`), and `UnitDef` gained
+  `parts: UnitPart[]` — named anchor points (`{id, name, offset,
+  weapons}`) each owning their own reusable `WeaponDef[]` buffet, every
+  Unit seeded with one default "Main" part so the common single-weapon
+  case needs no extra authoring. `AttackPayload`'s three-axis
+  shape×aim×trigger matrix was replaced by `WeaponDef`'s flat, orthogonal
+  field set per the design doc: an aim (fixed angle, or the player —
+  tracked or snapshotted), an arc range relative to that aim (subsumes
+  fan/radial-burst/and a new gap-at-aim pattern the old matrix couldn't
+  express), shot count/spacing/per-shot delay, an optional sweep (a
+  nonzero sweep speed is what "rotating" aim reduces to now, not a
+  separate mode), a fire interval, and what it spawns. **No trigger kind
+  survives at all** — an attack-track placement's own `time` already says
+  when it fires (the same "Trigger enum → explicit time" collapse the step
+  system went through earlier), a repeating burst is just a nonzero fire
+  interval, `onDeath` was cut outright (no time-based home for it under
+  "everything is time-based"), and `beam` was cut too (fakeable with a
+  rapid-fire long/thin projectile). **`BulletDef`/`MovementBehavior`
+  deleted outright** — `WeaponDef.spawnUnitId` references a real `UnitDef`
+  by id instead of an inline bullet struct (any Unit, including one with
+  its own Parts/Weapons, so recursive/splitting fire is free with no
+  nested-payload shape needed), plus a deliberately simple `spawnScale`
+  flat multiplier. `EncounterUnit` gained a flat, **unordered**
+  `attacks: EncounterAttack[]` (`{partId, weaponId, time, durationMs,
+  aimAngleOverride}`, `encounterAttacks.ts`'s CRUD has no chronology
+  invariant to maintain, unlike steps) — placed via a 🔫+ button on a
+  selected step's control cluster (adds at that step's time; a small Part
+  picker appears if the Unit has more than one Part), rendered as its own
+  marker on canvas (anchored wherever the instance's bezier path puts it
+  at the attack's own time, reusing `movementPreview.ts`'s
+  `computeInstancePreview`) and its own lane on the timeline, one per Part
+  with placed attacks. A fixed-aim attack gets a draggable aim handle
+  (same `.shmup-handle-btn` pattern as bezier handles, but storing just an
+  angle rather than a position offset, since the anchor itself moves).
 - Saves as part of the owning tile in `TILES.DAT`; the in-progress
   tile-plus-encounter session survives reload/rotation via `TILE-DRAFT.DAT`
-  and the unit-plus-action session via `UNIT-DRAFT.DAT`, per root
+  and the unit-plus-action-plus-part session via `UNIT-DRAFT.DAT`, per root
   `CLAUDE.md`'s mandatory rule — resumed silently on mount into whichever
-  of the four views (unit-edit, action-edit, tile-edit, encounter-edit) the
-  session was left in. The scrubber's playhead/play-state is deliberately
-  NOT part of any saved draft (a viewing aid, not authored content).
+  of the five views (unit-edit, action-edit, part-edit, tile-edit,
+  encounter-edit) the session was left in. The scrubber's playhead/
+  play-state is deliberately NOT part of any saved draft (a viewing aid,
+  not authored content).
 
 **Scope decisions**:
 - **Branch conditions remain cut entirely** — no conditional jump exists
@@ -252,12 +293,15 @@ what actually shipped.
 - **Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
   time-locked) are deferred** — every step today is a plain canvas
   position with no layer or frame-of-reference concept.
-- **Visual Parts, independent attack tracks, and the unified arc-range
-  weapon model (fan/spread/radial/gap/spiral) are deferred** — attack
-  payloads stay in their original single-payload-per-Action shape from the
-  first pass rather than being decomposed into parts/tracks.
-- **The Scaling system is deferred** — no conserved-difficulty-budget
-  system or scaling panel exists; Weight is still a plain flat number.
+- **Rendered/rotating Part sprites are deferred** — a Part is a purely
+  logical anchor point + Weapon buffet today, not a separately-rendered
+  sub-sprite. The design doc's §5.4 facing modes (`fixedToBody`/
+  `facePlayer`/`faceMovement`/`faceAttackTarget` — e.g. a tank's turret
+  visually tracking its aim) aren't built; see Remaining below.
+- **The recursive conserved-budget scaling system (§4.2) is deferred** —
+  `WeaponDef.spawnScale` is a plain flat multiplier, not budget-derived;
+  no Scaling panel, no count-range/power-split/spawn-delay/positioning-
+  shape UI exists. Weight is still a plain flat number.
 
 **Remaining:**
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —
@@ -287,6 +331,22 @@ what actually shipped.
   than block E2 on it.
 - Unit variants aren't attachable to a tile yet — still blocked on E3's
   spawn-node editor (same dependency E1's tile-variant gap already notes).
+- **Deferred: rendered/rotating Part sprites (turret facing).** A Part is
+  a logical anchor point today — a position offset and a Weapon buffet,
+  no sprite of its own, so a tank's turret doesn't visually track its aim
+  direction; the whole Unit still renders as one flat, non-rotating
+  sprite. Noah flagged this as a likely-needed follow-up when requesting
+  the Parts system ("not sure if we need to tackle that while we do this
+  or afterwards") and it was deliberately deferred to keep the
+  attack-track pass scoped to data model + timeline UI. The design doc's
+  §5.4 gives a concrete shape to build toward when this is picked up: a
+  Part gets its own sub-sprite plus a facing mode (`fixedToBody` — rotates
+  with the base sprite; `facePlayer` — a turret always oriented at the
+  live player; `faceMovement` — oriented toward current travel direction;
+  `faceAttackTarget` — oriented toward wherever its own Weapon is
+  currently aiming, for a fixed/sweeping attack rather than an
+  aimed-at-player one). Rendering-only — no independent HP/hitbox per
+  Part, that stays reserved for genuine hand-coded boss decomposition.
 - **Deferred: per-Unit "constant motion" (secondary offset movement) —
   the eventual home for wave/spiral/wobble.** Cutting straightLine/wave/
   spiral as per-Action movement kinds in favor of the bezier-curve model

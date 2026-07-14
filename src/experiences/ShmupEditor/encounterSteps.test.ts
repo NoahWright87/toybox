@@ -29,7 +29,6 @@ describe("addStep", () => {
   it("defaults the first step's time to 0 and no overrides", () => {
     const e = addStep(instance(), "a");
     expect(e.steps[0].time).toBe(0);
-    expect(e.steps[0].aimAngleOverride).toBeNull();
     expect(e.steps[0].speedMultiplier).toBe(1);
   });
 
