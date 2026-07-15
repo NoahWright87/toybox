@@ -316,7 +316,7 @@ shows a plain heading for whichever view is active.
 
 ## Unit + Encounter editor (E2)
 
-**Revised four times.** The first pass put a full movement/dwell/attack
+**Revised five times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition, matching
 [`enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md)'s
 literal wording ("an enemy is a node graph"). That didn't match the
@@ -333,35 +333,44 @@ step-level `Trigger` system entirely in favor of a plain numeric `time` —
 see "Timing" below. A fourth pass replaced per-Action movement kinds
 (straightLine/wave/spiral) with a single **bezier curve** per segment,
 driven by two plain Unit stats instead of an Action-level choice — see
-"Movement" below. See git history for all four earlier shapes if useful.
+"Movement" below. **A fifth pass cut Actions entirely** — see immediately
+below. See git history for all five earlier shapes if useful.
 
-The mental model: **a Unit owns a buffet of Actions (animation, no attack,
-no movement) plus two movement stats (speed/turnRate) plus a set of Parts,
-each owning its own reusable Weapon buffet; an encounter places Units and
-walks each one along a curved path through an ordered list of steps while
-independently placing attack events on each Part's own timeline track.**
+**There is no Action buffet anymore.** `ActionDef` used to bundle an
+`animationState` (idle/moving/attacking/dying) and a `visible` flag,
+authored once per Unit and referenced per step. Noah's read: "is there a
+point to Actions anymore? You can pick an animation, but it's not like
+you can actually choose frames." Correct — `animationState` was fully
+inert, since the editor only ever renders a static idle sprite (real
+multi-frame animation is a separate, unbuilt future feature that will
+need its own data-model decision anyway, tied to however frame sets end
+up attaching to a sprite — not a slot pre-guessed now). `visible` is the
+only field that ever did anything, and a plain boolean has no reuse value
+worth a whole named, buffet-and-select indirection — every placement's
+visibility need is independent and trivial to set directly. So
+`EncounterStep` just carries its own `visible: boolean` now — no Action,
+no `actionId`, no Actions section/editor/session slot anywhere in the
+Unit-authoring UI. `ActionEditor.tsx` was deleted outright, not kept
+around unused.
+
+The mental model: **a Unit owns two movement stats (speed/turnRate) plus a
+set of Parts, each owning its own reusable Weapon buffet; an encounter
+places Units and walks each one along a curved path through an ordered
+list of steps (each carrying its own visibility) while independently
+placing attack events on each Part's own timeline track.**
 
 - A **Unit** (`UnitDef`, `unitTypes.ts`) is a sprite + stats — HP, contact
   damage, score value, `speed`, `turnRate`, hitbox size — **plus**
-  `actions: ActionDef[]` (movement/animation buffet) **plus**
-  `parts: UnitPart[]` (attack buffet), both authored once and referenced
-  (not re-authored) from any encounter placement. A small **Units** menu
+  `parts: UnitPart[]` (attack buffet), authored once and referenced (not
+  re-authored) from any encounter placement. A small **Units** menu
   (alongside **Tiles**) manages the library via `UnitStatsForm.tsx` (stats
-  fields plus Actions *and* Parts sections — both list + New/Edit/Delete,
-  mirroring the tile editor's Encounters section); `UnitList.tsx` is the
-  same visual-checker sprite grid as the tile list.
-- An **`ActionDef`** (`unitTypes.ts`) bundles everything one moment of
-  movement/animation behavior needs: an `animationState` (`idle`/
-  `moving`/`attacking`/`dying`) and a `visible` flag. No movement field —
-  see "Movement" below for why — and no attack field either — see
-  "Attacks" below. `createIdleAction()` builds the mandatory baseline
-  every new Unit is seeded with — `visible: true` — so a Unit is never
-  saved with zero Actions (`UnitStatsForm`'s Delete button disables at 1
-  remaining action, tooltip "A Unit needs at least one Action").
-- A **`UnitPart`** (`unitTypes.ts`) is `{id, name, offset, weapons:
-  WeaponDef[]}` — see "Attacks" below for the full model. Every Unit is
-  seeded with one default "Main" part, same mandatory-baseline pattern as
-  the Idle Action.
+  fields plus a Parts section — list + New/Edit/Delete, mirroring the tile
+  editor's Encounters section); `UnitList.tsx` is the same visual-checker
+  sprite grid as the tile list.
+- A **`UnitPart`** (`unitTypes.ts`) is `{id, name, offset, spriteId,
+  customSprite, weapons: WeaponDef[]}` — see "Attacks" below for the full
+  model. Every Unit is seeded with one default "Main" part, so the common
+  single-weapon-system case needs no extra authoring.
 - An **encounter** (`EncounterDef`, `encounterTypes.ts`) still belongs to
   one specific tile (`TileDef.encounters`) and is still authored **inside
   the tile editor** (Encounters section on `TileEditorForm.tsx`,
@@ -369,32 +378,32 @@ independently placing attack events on each Part's own timeline track.**
   back). Each **`EncounterUnit`** instance references a `UnitDef` by id and
   owns both a `steps: EncounterStep[]` movement track and an
   `attacks: EncounterAttack[]` set of attack-track placements — plain
-  arrays, not a graph. Each `EncounterStep` is `{ id, pos, actionId, time,
+  arrays, not a graph. Each `EncounterStep` is `{ id, pos, visible, time,
   speedMultiplier?, handleIn?, handleOut? }`: a position on the canvas,
-  which of the unit's Actions plays there, a `time` (see "Timing" below)
-  saying when, and bezier handles shaping the curve on either side (see
+  whether the Unit is visible there, a `time` (see "Timing" below) saying
+  when, and bezier handles shaping the curve on either side (see
   "Movement" below). The same "Skull Buggy" Unit can be walked through a
   sharply-curving step sequence in one tile's encounter and a single
   stationary step in another's — path shape belongs to the placement, not
   the Unit's identity; only *speed*/*turnRate* travel with the Unit.
 
-**Three dedicated concepts dissolved into ordinary Actions/steps** rather
+**Three dedicated concepts dissolved into ordinary steps** rather
 than surviving as their own types, once behavior stopped living on a
-graph:
+graph (and, later, once Actions stopped existing at all):
 - **Dwell** — a step at the *same position* as its predecessor *is*
-  dwell-in-place; there's no separate `DwellBehavior` type, dwell-specific
-  form, or per-Action flag anymore (a zero-length bezier segment has
-  nothing to travel along).
+  dwell-in-place; there's no separate `DwellBehavior` type or
+  dwell-specific form (a zero-length bezier segment has nothing to travel
+  along).
 - **Entrance/Exit** — the first and last step in an instance's step list
-  are just ordinary steps using ordinary Actions; there's no dedicated
-  `EntranceAppearance`/`ExitConfig` type, and no enable/disable logic for
-  "can this step have an exit" — the "+ Add next step" button is always
-  available on the last step, full stop.
-- **Teleport** — no dedicated `TeleportMovement` primitive. An Action with
+  are just ordinary steps; there's no dedicated `EntranceAppearance`/
+  `ExitConfig` type, and no enable/disable logic for "can this step have
+  an exit" — the "+ Add next step" button is always available on the last
+  step, full stop.
+- **Teleport** — no dedicated `TeleportMovement` primitive. A step with
   `visible: false` (still called "Disappear" in the UI) followed by a
-  later step at a different position using a `visible: true` Action
-  ("Reappear") composes to the same visible effect without a special case
-  in the movement vocabulary.
+  later step at a different position with `visible: true` ("Reappear")
+  composes to the same visible effect without a special case in the
+  movement vocabulary.
 
 **Branch conditions remain cut entirely** (unchanged from the prior
 pass) — no conditional jump exists anywhere in the step list; steps play
@@ -483,17 +492,17 @@ used to.
 **Attacks live on their own timeline tracks, independent of movement
 steps — "added anywhere on the timeline" per the request that drove this
 pass.** Attacking used to ride along with a movement waypoint's Action
-(`ActionDef.attack`); it doesn't anymore. `ActionDef` is now purely
-movement/animation (`{name, animationState, visible}`, no attack field at
-all).
+(`ActionDef.attack`) — it never did after this pass, and `ActionDef`
+itself is gone entirely as of a later pass (see the top of this section).
 
 **A Unit has one or more Parts, each owning its own reusable Weapon
-buffet.** `UnitPart` (`unitTypes.ts`) is `{id, name, offset, weapons}` —
-`offset` is a position relative to the Unit's own origin, so a turret
-mounted forward of a ship's center anchors its fire from the right spot.
-Every Unit is seeded with one default "Main" part (mirrors the mandatory
-Idle Action), so the common single-weapon-system case needs zero extra
-authoring; a battleship with three independently-scheduled turrets is
+buffet.** `UnitPart` (`unitTypes.ts`) is `{id, name, offset, spriteId,
+customSprite, weapons}` — `offset` is a position relative to the Unit's
+own origin, so a turret mounted forward of a ship's center anchors its
+fire from the right spot (`spriteId`/`customSprite` shipped in a later
+pass, see "Visual authoring pass" below). Every Unit is seeded with one
+default "Main" part, so the common single-weapon-system case needs zero
+extra authoring; a battleship with three independently-scheduled turrets is
 just three Parts, each with its own attack-track placements — this is
 what makes independent per-part tracks fall out for free instead of
 needing a dedicated multi-entity system.
@@ -810,7 +819,7 @@ to drag (see "Movement" above).
   a later instance's start time manually on the timeline if wanted.
 - Each instance renders its own sprite (looked up by `unitDefId`) on every
   step, with the unit's name labeled under its first step. Step badges:
-  ▶ marks the first step, 👻 marks a step whose Action is `visible: false`
+  ▶ marks the first step, 👻 marks a step whose own `visible` is `false`
   (rendered with `.shmup-enemy-node--hidden` — dashed border, reduced
   opacity — so a Disappear/teleport-out step reads as ghosted at a
   glance). No attack badge on steps anymore — attacks render as their own
@@ -859,17 +868,17 @@ An encounter is saved as part of its owning tile — `TileDef.encounters` is
 a plain field inside `TILES.DAT` (`tileStore.ts`). `encounterValidation.ts`
 validates the placement shapes an encounter actually saves —
 `isEncounterStep`/`isEncounterAttack`/`isEncounterUnit`/`isValidEncounter`
-— which are just string references (`actionId`/`partId`/`weaponId`) plus
-plain numbers/`Vec2`s, no nested definition data. The Unit-owned
-*definitions* those references point at (`ActionDef`/`UnitPart`/
-`WeaponDef`) validate in `unitStore.ts` instead, since Units are what own
-Actions and Parts now: `loadUnits`/`saveUnits` validate `actions[]`/
-`parts[]` (`isActionDef`/`isUnitPart`/`isWeaponDef`/`isValidUnitDef`)
-before trusting a saved library — no recursion needed anymore either,
-since `WeaponDef.spawnUnitId` is a plain string reference rather than a
-nested `BulletDef`/`AttackPayload` structure (the old
-`isMovement`/`isAttackPayload`/`isBullet`/`MAX_PAYLOAD_DEPTH` recursive
-validators were deleted along with the types they validated). There's no
+— which are just a `visible` boolean plus string references
+(`partId`/`weaponId`) plus plain numbers/`Vec2`s, no nested definition
+data. The Unit-owned *definitions* those references point at
+(`UnitPart`/`WeaponDef`) validate in `unitStore.ts` instead, since Units
+are what own Parts now: `loadUnits`/`saveUnits` validate `parts[]`
+(`isUnitPart`/`isWeaponDef`/`isValidUnitDef`) before trusting a saved
+library — no recursion needed either, since `WeaponDef.spawnUnitId` is a
+plain string reference rather than a nested `BulletDef`/`AttackPayload`
+structure (the old `isMovement`/`isAttackPayload`/`isBullet`/
+`MAX_PAYLOAD_DEPTH` recursive validators, and later `isActionDef` itself,
+were all deleted along with the types they validated). There's no
 separate encounter library or file.
 
 The timeline scrubber pass changed `EncounterStep`'s shape (`trigger` →
@@ -910,26 +919,37 @@ gained `activePart: UnitPart | null`, mirroring `activeAction` one level
 down (see the `PART-EDIT`/Weapon note below) — the same version bump
 covers this, since it's the same file/shape.
 
+The visual authoring pass (below) bumped `unitStore.ts`'s `SAVE_VERSION`
+again (7→8, for `UnitPart`'s new `spriteId`/`customSprite`), and cutting
+Actions entirely bumped every version one more time: `UnitDef` lost
+`actions: ActionDef[]`, `EncounterStep` lost `actionId` and gained
+`visible: boolean`, and `UnitEditSession` lost `activeAction` entirely
+(a Unit's session now only tracks `activePart`). `unitStore.ts`'s
+`SAVE_VERSION` (7→8) and `TILE_SESSION_VERSION` (4→5), plus
+`tileStore.ts`'s `SAVE_VERSION` (5→6), all bumped for the usual "reset
+rather than silently carry a mismatched shape" reason.
+
 Two more fsStore files alongside `TILES.DAT`/`UNITS.DAT`, same folder
 (`C:\Programs\Accessories\Shmup Editor\`), for root `CLAUDE.md`'s mandatory
 in-progress-session-survives-reload rule — a half-built tile/encounter or
-unit/action is a much bigger loss on an accidental mobile reload/rotation
+unit/part is a much bigger loss on an accidental mobile reload/rotation
 than E1's original tile-form draft gap:
 
 - **`UNIT-DRAFT.DAT`** (`unitStore.ts`'s `loadUnitDraft`/`saveUnitDraft`) —
-  a `UnitEditSession { unit, activeAction, activePart }`: the Unit stats
-  form currently being edited, plus whichever single Action *or* Part is
-  mid-edit (if any — never both at once), mirroring the tile/encounter
-  session shape one level down. `UnitStatsForm`, `ActionEditor`, and
-  `PartEditor` all bubble every field change up via `onDraftChange` (a
+  a `UnitEditSession { unit, activePart }`: the Unit stats form currently
+  being edited, plus whichever single Part is mid-edit (if any), mirroring
+  the tile/encounter session shape one level down. `UnitStatsForm` and
+  `PartEditor` both bubble every field change up via `onDraftChange` (a
   `useEffect([draft])` in each), so navigating from the Unit form to the
-  Action/Part editor and back doesn't lose in-progress edits on either
-  side — each form unmounts while another view is showing. **A Part's own
+  Part editor and back doesn't lose in-progress edits on either side —
+  each form unmounts while the other view is showing. **A Part's own
   Weapons don't get a session slot of their own** — `PartEditor` edits
   them inline (expand-in-place via `WeaponForm`, live two-way bound into
   the Part's own draft state), the same "no separate Save/Cancel flow"
   shape the original inline `AttackPayloadForm` always had, just now
-  organized as a list instead of one checkbox-gated block.
+  organized as a list instead of one checkbox-gated block. There's no
+  `activeAction` anymore — Actions were cut entirely, see the top of this
+  section.
 - **`TILE-DRAFT.DAT`** (`loadTileSession`/`saveTileSession`) — the *whole*
   tile-editing session: the tile currently being edited (name, edges,
   image, and its `encounters` list as saved-so-far) **plus** whichever
@@ -942,9 +962,8 @@ than E1's original tile-form draft gap:
   while a different view is showing, so anything not yet bubbled up would
   otherwise be lost. On mount, `ShmupEditor.tsx` checks for a saved
   session (checking `UNIT-DRAFT.DAT` first, then `TILE-DRAFT.DAT`) and
-  resumes silently into whichever of the five views (unit-edit,
-  action-edit, part-edit, tile-edit, encounter-edit) the session was left
-  in.
+  resumes silently into whichever of the four views (unit-edit, part-edit,
+  tile-edit, encounter-edit) the session was left in.
   Position drags on the Encounter canvas are the one exception to "write
   on every change" — a drag updates only local component state, committed
   to the session once on release, not on every pointer-move frame.
@@ -980,5 +999,5 @@ hackable/discoverable in the file browser.
 - [`shmup-editor.todo.md`](shmup-editor.todo.md) — remaining work (E1's
   art import, E2's deferred scaling curves, E3-E5)
 - [`games/shmup/levels-and-tiles.spec.todo.md`](games/shmup/levels-and-tiles.spec.todo.md) — the data model this editor's tile export shape matches
-- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the bullet/attack-payload shape this editor still matches; its enemy-is-a-node-graph section is superseded by this editor's Unit+Action+flat-step-list model (see "Unit + Encounter editor (E2)" above) and needs a future update to stay in sync
+- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the bullet/attack-payload shape this editor's weapon model draws from; its enemy-is-a-node-graph section is superseded by this editor's Unit+Parts+flat-step-list model (see "Unit + Encounter editor (E2)" above) and needs a future update to stay in sync
 - [`ns-doors-97.md`](ns-doors-97.md) — the filesystem this tool persists through

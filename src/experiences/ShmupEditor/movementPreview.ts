@@ -22,17 +22,15 @@
  * case, so the preview doesn't guess one; freezing is the only outcome
  * that can never look like the unit "keeps traveling after it reaches the
  * final node" (a real bug this editor hit before this behavior existed).
- * The Action's `attack`/`animationState`/`visible` still evaluate
- * normally; only position freezes.
+ * The step's own `visible` still evaluates normally; only position freezes.
  */
 import { cubicBezierPoint, distanceBetween, resolveSegment } from "./bezier";
 import { activeStepAt } from "./encounterSteps";
 import type { EncounterStep, EncounterUnit, Vec2 } from "./encounterTypes";
-import type { ActionDef, UnitDef } from "./unitTypes";
+import type { UnitDef } from "./unitTypes";
 
 export interface InstancePreview {
   pos: Vec2;
-  action: ActionDef;
   step: EncounterStep;
 }
 
@@ -41,23 +39,21 @@ export const LAST_STEP_PREVIEW_WINDOW = 3;
 
 const POSITION_EPSILON = 0.5;
 
-/** The instance's interpolated position/action at encounter-time `t`, or null if it hasn't spawned yet (t before its first step) or its Unit/Action can't be resolved. */
+/** The instance's interpolated position at encounter-time `t`, or null if it hasn't spawned yet (t before its first step) or its Unit can't be resolved. */
 export function computeInstancePreview(instance: EncounterUnit, unitDef: UnitDef | undefined, t: number): InstancePreview | null {
   if (!unitDef) return null;
   const step = activeStepAt(instance, t);
   if (!step) return null;
-  const action = unitDef.actions.find((a) => a.id === step.actionId);
-  if (!action) return null;
 
   const idx = instance.steps.findIndex((s) => s.id === step.id);
   const next = instance.steps[idx + 1];
   if (!next || distanceBetween(step.pos, next.pos) <= POSITION_EPSILON) {
-    return { pos: step.pos, action, step }; // no destination to head toward — hold in place
+    return { pos: step.pos, step }; // no destination to head toward — hold in place
   }
 
   const duration = next.time - step.time;
   const u = duration > 0 ? Math.min(1, Math.max(0, (t - step.time) / duration)) : 0;
   const { p0, p1, p2, p3 } = resolveSegment(step, next, unitDef.turnRate);
   const pos = cubicBezierPoint(p0, p1, p2, p3, u);
-  return { pos, action, step };
+  return { pos, step };
 }

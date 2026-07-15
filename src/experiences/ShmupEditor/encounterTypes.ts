@@ -9,14 +9,13 @@
  *
  * **The graph is gone — it's a flat ordered list of steps.** Nothing in
  * practice ever needed node/edge graph structure: every real case was a
- * straight sequence. A step is `{ position, time, action, handles }`; the
- * *action* (attack/animation — no movement anymore, see unitTypes.ts) is
- * looked up on the referencing Unit by id rather than authored inline — an
- * encounter selects and sequences behavior, it doesn't author it. The
- * first step is the entrance (its time gates when the instance begins
- * existing at all — can be > 0 for a delayed/staggered spawn), the last is
- * however it disappears; neither is a special category, they're just
- * first/last by time.
+ * straight sequence. A step is `{ position, time, visible, handles }` — no
+ * Action reference at all (see unitTypes.ts for why the Action buffet was
+ * cut entirely: its only functional field, `visible`, lives directly on
+ * the step now). The first step is the entrance (its time gates when the
+ * instance begins existing at all — can be > 0 for a delayed/staggered
+ * spawn), the last is however it disappears; neither is a special
+ * category, they're just first/last by time.
  *
  * **Trigger kinds are gone — every step just has a `time`.** The old
  * `Trigger` union (always/unitPosition/playerPosition/time) added a layer
@@ -71,8 +70,8 @@ export interface Vec2 {
 export interface EncounterStep {
   id: string;
   pos: Vec2;
-  /** References an ActionDef.id on the owning EncounterUnit's UnitDef. */
-  actionId: string;
+  /** false = hidden + hitbox disabled — what "Disappear"/teleport-out/pop-down are made of, composing with a later differently-positioned visible step to produce teleporting. */
+  visible: boolean;
   /** Seconds from encounter start — one shared clock across every unit instance in this encounter, not relative to this instance's own start. */
   time: number;
   /** Narrow per-placement speed multiplier on the owning Unit's `speed` for the segment leaving this step (1 = unchanged) — the one exception to "encounters select, they don't author." Aim-angle override lives on EncounterAttack now, not here — attacks aren't tied to steps anymore. */

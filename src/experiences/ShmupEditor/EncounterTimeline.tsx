@@ -128,20 +128,19 @@ export default function EncounterTimeline({
                     })}
                   </svg>
                   {instance.steps.map((step) => {
-                    const unitDefAction = unitDef?.actions.find((a) => a.id === step.actionId);
                     const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
                     const left = stepTime(instance.id, step) * PX_PER_SEC + STAGE_PADDING_LEFT;
                     return (
                       <div key={step.id} className="shmup-timeline__step-wrap" style={{ left }}>
                         <button
                           type="button"
-                          className={`shmup-timeline__step ${isSelected ? "shmup-timeline__step--selected" : ""} ${unitDefAction && !unitDefAction.visible ? "shmup-timeline__step--hidden" : ""}`}
+                          className={`shmup-timeline__step ${isSelected ? "shmup-timeline__step--selected" : ""} ${!step.visible ? "shmup-timeline__step--hidden" : ""}`}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectStep(instance.id, step.id);
                           }}
-                          title={unitDefAction?.name ?? "(missing Action)"}
+                          title={step.visible ? undefined : "Hidden"}
                         />
                         {isSelected && (
                           <button

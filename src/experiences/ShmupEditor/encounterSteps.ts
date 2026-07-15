@@ -5,7 +5,7 @@
  * be a flat sequence in practice, this is now just array operations, no
  * traversal/cascade logic needed. Kept independent of any rendering/React
  * code so it can be unit tested directly — in particular, it has no idea
- * what a `UnitDef`/`ActionDef` is, unlike `encounterTiming.ts`.
+ * what a `UnitDef` is, unlike `encounterTiming.ts`.
  *
  * **Array index order IS the authorial sequence order — steps are not
  * reordered by dragging.** `time` is mostly a *derived* value now
@@ -23,12 +23,12 @@ const DEFAULT_NEXT_OFFSET: Vec2 = { x: 130, y: 0 };
 /** Default gap (seconds) between a newly appended step and the one before it. */
 const DEFAULT_STEP_DURATION = 2;
 
-/** Appends a new step referencing `actionId`, defaulting its position to an offset from the last step (or the given `pos` if this is the first step) and its time to `DEFAULT_STEP_DURATION` after the last step (or 0). */
-export function addStep(instance: EncounterUnit, actionId: string, pos?: Vec2): EncounterUnit {
+/** Appends a new visible step, defaulting its position to an offset from the last step (or the given `pos` if this is the first step) and its time to `DEFAULT_STEP_DURATION` after the last step (or 0). */
+export function addStep(instance: EncounterUnit, pos?: Vec2): EncounterUnit {
   const last = instance.steps[instance.steps.length - 1];
   const stepPos = pos ?? (last ? { x: last.pos.x + DEFAULT_NEXT_OFFSET.x, y: last.pos.y + DEFAULT_NEXT_OFFSET.y } : { x: 0, y: 0 });
   const time = last ? last.time + DEFAULT_STEP_DURATION : 0;
-  const step: EncounterStep = { id: makeStepId(), pos: stepPos, actionId, time, speedMultiplier: 1, handleIn: null, handleOut: null };
+  const step: EncounterStep = { id: makeStepId(), pos: stepPos, visible: true, time, speedMultiplier: 1, handleIn: null, handleOut: null };
   return { ...instance, steps: [...instance.steps, step] };
 }
 

@@ -23,7 +23,9 @@ import type { EdgeSlot, TileDef } from "./types";
 // movement pass) — bumping for the same reason.
 // v5: embedded EncounterUnit gained `attacks: EncounterAttack[]`
 // (Parts/weapon-track pass) — bumping for the same reason.
-const SAVE_VERSION = 5;
+// v6: embedded EncounterStep's `actionId` was replaced by a plain
+// `visible: boolean` (Actions cut entirely) — bumping for the same reason.
+const SAVE_VERSION = 6;
 
 interface SavedLibrary {
   version: number;

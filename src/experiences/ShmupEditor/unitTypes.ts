@@ -2,13 +2,27 @@
  * Unit data model for the Shmup Editor (specs/shmup-editor.todo.md, E2 #192
  * — reworked per the "Design Handoff v2" doc after real usability friction,
  * then reworked again for the bezier-curve movement pass, then again for
- * the Parts/weapon-track pass). Deliberately self-contained apart from
- * `Vec2` — not imported from games/shmup/src/.
+ * the Parts/weapon-track pass, then again to cut Actions entirely).
+ * Deliberately self-contained apart from `Vec2` — not imported from
+ * games/shmup/src/.
  *
  * A Unit (renamed from Enemy — also covers non-combatant doodads/loot) is
- * sprite + stats + a reusable **buffet of Actions** (movement/animation
- * only, see below) + a set of **Parts**, each owning its own reusable
- * buffet of **Weapons**.
+ * sprite + stats + a set of **Parts**, each owning its own reusable buffet
+ * of **Weapons**.
+ *
+ * **There is no `ActionDef`/"Action buffet" anymore.** It used to bundle
+ * an `animationState` (idle/moving/attacking/dying) and a `visible` flag,
+ * authored once and referenced per step. `animationState` was fully
+ * inert — nothing ever read it, since the editor only ever renders a
+ * static idle sprite (multi-frame animation is a separate, unbuilt future
+ * feature; when it lands, it'll need its own data-model decision tied to
+ * however frame sets attach to a sprite, not a slot pre-guessed now). A
+ * single boolean (`visible`) has no reuse value worth a whole named,
+ * buffet-and-select indirection — every placement's visibility need is
+ * independent and trivial to set directly. So `EncounterStep` just has
+ * its own `visible: boolean` now (encounterTypes.ts) — no Action, no
+ * `actionId` reference, no Actions section/editor/session slot anywhere
+ * in the Unit-authoring UI.
  *
  * **Movement is two plain Unit stats, `speed`/`turnRate` — not an Action
  * concept.** Every segment between two of a Unit's encounter steps is a
@@ -54,12 +68,12 @@
  * now — see shmup-editor.todo.md for the deferred difficulty-scaling-curve
  * system this is *not* attempting to be.
  *
- * **Entrance/exit are not special action categories** — "Pop Up" and
- * "Pop Down" are ordinary Actions, distinguished only by being the first
- * or last step in an encounter's sequence (see encounterTypes.ts). An
- * Action's `visible` flag (false = hidden + hitbox disabled) is what
- * expresses "disappear," which composes with a later differently-positioned
- * step to produce teleporting.
+ * **Entrance/exit are not special step categories** — "Pop Up" and
+ * "Pop Down" are ordinary steps, distinguished only by being the first or
+ * last in an encounter's sequence (see encounterTypes.ts). A step's own
+ * `visible` flag (false = hidden + hitbox disabled) is what expresses
+ * "disappear," which composes with a later differently-positioned step to
+ * produce teleporting.
  */
 import type { Vec2 } from "./encounterTypes";
 
@@ -150,32 +164,6 @@ export function createBlankPart(existingCount: number): UnitPart {
   return { id: makePartId(), name: `Part ${existingCount + 1}`, offset: { x: 0, y: 0 }, spriteId: "none", customSprite: null, weapons: [] };
 }
 
-// ── Actions (movement/animation buffet — no attack field, see file header) ─
-
-export type AnimationState = "idle" | "moving" | "attacking" | "dying";
-export const ANIMATION_STATES: AnimationState[] = ["idle", "moving", "attacking", "dying"];
-
-export interface ActionDef {
-  id: string;
-  name: string;
-  animationState: AnimationState;
-  /** false = hidden + hitbox disabled — what "Disappear"/teleport-out/pop-down are made of. */
-  visible: boolean;
-}
-
-export function makeActionId(): string {
-  return `action-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-/** The mandatory baseline every Unit is seeded with, so an encounter's action picker is never empty for a freshly authored Unit. */
-export function createIdleAction(): ActionDef {
-  return { id: makeActionId(), name: "Idle", animationState: "idle", visible: true };
-}
-
-export function createBlankAction(existingCount: number): ActionDef {
-  return { id: makeActionId(), name: `Action ${existingCount + 1}`, animationState: "idle", visible: true };
-}
-
 // ── Unit ───────────────────────────────────────────────────────────────────
 
 export interface UnitDef {
@@ -192,7 +180,6 @@ export interface UnitDef {
   turnRate: number;
   /** Hitbox radius, px. */
   size: number;
-  actions: ActionDef[];
   parts: UnitPart[];
   createdAt: number;
   modifiedAt: number;
@@ -215,7 +202,6 @@ export function createBlankUnit(existingCount: number): UnitDef {
     speed: 120,
     turnRate: 1,
     size: 16,
-    actions: [createIdleAction()],
     parts: [createDefaultPart()],
     createdAt: now,
     modifiedAt: now,
@@ -245,7 +231,6 @@ export function createDefaultBulletUnit(): UnitDef {
     speed: 300,
     turnRate: 1,
     size: 6,
-    actions: [createIdleAction()],
     parts: [createDefaultPart()],
     createdAt: now,
     modifiedAt: now,

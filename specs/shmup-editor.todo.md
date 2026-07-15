@@ -304,6 +304,26 @@ what actually shipped.
   pure/testable simulation functions (`weaponPreview.ts`) plus a
   `<canvas>`/`requestAnimationFrame` renderer, same architectural split as
   `movementPreview.ts`/`EncounterEditor.tsx`.
+- **Actions cut entirely** (Noah's read: "is there a point to Actions
+  anymore? You can pick an animation, but it's not like you can actually
+  choose frames... I think we can scrap it"). Correct — `animationState`
+  was fully inert (nothing ever read it, since the editor only ever
+  renders a static idle sprite; real multi-frame animation is a separate,
+  unbuilt future feature that'll need its own data-model decision anyway
+  once frame sets have a home). `visible` was the only field that ever
+  did anything, and a plain boolean has no reuse value worth a whole
+  named, buffet-and-select indirection. `ActionDef`/`ActionEditor.tsx`/
+  the Actions section of `UnitStatsForm.tsx`/the `action-edit` view/the
+  `UnitEditSession.activeAction` session slot were all deleted outright.
+  `EncounterStep` lost `actionId` and gained `visible: boolean` directly
+  — the same field, just no longer behind an indirection. Every
+  consumer that resolved a step's Action just to read `visible` now
+  reads `step.visible` directly instead (`EncounterEditor.tsx`'s node/
+  preview-dot rendering, `EncounterTimeline.tsx`'s hidden-step styling,
+  `movementPreview.ts`'s `InstancePreview`). `unitStore.ts`'s
+  `SAVE_VERSION` (7→8) and `TILE_SESSION_VERSION` (4→5), plus
+  `tileStore.ts`'s `SAVE_VERSION` (5→6), all bumped — the usual "reset
+  rather than silently carry a mismatched shape" reason.
 
 **Scope decisions**:
 - **Branch conditions remain cut entirely** — no conditional jump exists

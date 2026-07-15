@@ -64,7 +64,7 @@ export default function UnitList({ units, onEdit, onDuplicate, onDelete }: UnitL
             {expandedId === unit.id && (
               <div className="shmup-tile-list__menu">
                 <span className="shmup-tile-list__menu-name">
-                  {unit.name} ({unit.hp} HP, {unit.actions.length} action{unit.actions.length === 1 ? "" : "s"})
+                  {unit.name} ({unit.hp} HP, {unit.parts.length} part{unit.parts.length === 1 ? "" : "s"})
                 </span>
                 <div className="shmup-btn-row">
                   <button

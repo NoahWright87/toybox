@@ -5,19 +5,18 @@
  * `CLAUDE.md`'s mandatory rule: anything that saves data uses the virtual
  * filesystem, never raw localStorage — mirrors tileStore.ts's pattern.
  *
- * A Unit now owns its own behavior — a buffet of Actions (movement/
- * animation) plus a set of Parts, each owning its own buffet of Weapons
- * (see unitTypes.ts) — so that validation lives here, against
- * `UnitDef.actions`/`UnitDef.parts`, not in encounterValidation.ts (which
- * only validates the much simpler step-list/attack-track *placement*
- * shape encounters actually save — a partId/weaponId string reference,
- * not the Part/Weapon definitions themselves).
+ * A Unit now owns its own behavior — a set of Parts, each owning its own
+ * buffet of Weapons (see unitTypes.ts) — so that validation lives here,
+ * against `UnitDef.parts`, not in encounterValidation.ts (which only
+ * validates the much simpler step-list/attack-track *placement* shape
+ * encounters actually save — a partId/weaponId string reference, not the
+ * Part/Weapon definitions themselves).
  */
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_UNITS_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import type { EncounterDef } from "./encounterTypes";
-import { createDefaultUnitLibrary, type ActionDef, type AnimationState, type UnitDef, type UnitPart, type WeaponDef } from "./unitTypes";
+import { createDefaultUnitLibrary, type UnitDef, type UnitPart, type WeaponDef } from "./unitTypes";
 import type { TileDef } from "./types";
 
 // v6: Attacks moved off ActionDef entirely and onto a Unit's Parts
@@ -31,7 +30,10 @@ import type { TileDef } from "./types";
 // editor pass) — bumping for the same reason. This version also
 // introduces default-library seeding (see `loadUnits` below), so a v6->v7
 // reset now lands on one ready-to-use "Bullet" Unit instead of truly empty.
-const SAVE_VERSION = 7;
+// v8: ActionDef/UnitDef.actions cut entirely — the only functional field,
+// `visible`, moved directly onto EncounterStep (see encounterTypes.ts).
+// Bumping for the same reason.
+const SAVE_VERSION = 8;
 
 interface SavedLibrary {
   version: number;
@@ -44,17 +46,15 @@ interface SavedUnitDraft {
 }
 
 /**
- * The in-progress Unit editing session: the Unit itself (stats + actions +
- * parts saved-so-far) plus whichever single Action or Part is mid-edit, if
- * any — mirrors TileEditSession's shape below. A Part's own Weapons are
- * edited inline within the Part view (PartEditor.tsx) rather than getting
- * their own dedicated view/session slot, unlike Action — a Weapon's field
- * count is comparable to the old inline AttackPayloadForm, which never
- * needed one either.
+ * The in-progress Unit editing session: the Unit itself (stats + parts
+ * saved-so-far) plus whichever single Part is mid-edit, if any — mirrors
+ * TileEditSession's shape below. A Part's own Weapons are edited inline
+ * within the Part view (PartEditor.tsx) rather than getting their own
+ * dedicated view/session slot — a Weapon's field count is comparable to
+ * the old inline AttackPayloadForm, which never needed one either.
  */
 export interface UnitEditSession {
   unit: UnitDef;
-  activeAction: ActionDef | null;
   activePart: UnitPart | null;
 }
 
@@ -63,14 +63,6 @@ function isNumber(v: unknown): v is number {
 }
 function isVec2(v: unknown): v is { x: number; y: number } {
   return typeof v === "object" && v !== null && isNumber((v as Record<string, unknown>).x) && isNumber((v as Record<string, unknown>).y);
-}
-
-const ANIMATION_STATES: AnimationState[] = ["idle", "moving", "attacking", "dying"];
-
-function isActionDef(v: unknown): v is ActionDef {
-  if (typeof v !== "object" || v === null) return false;
-  const a = v as Record<string, unknown>;
-  return typeof a.id === "string" && typeof a.name === "string" && (ANIMATION_STATES as string[]).includes(a.animationState as string) && typeof a.visible === "boolean";
 }
 
 function isWeaponDef(v: unknown): v is WeaponDef {
@@ -125,8 +117,6 @@ function isValidUnitDef(v: unknown): v is UnitDef {
     typeof u.speed === "number" &&
     typeof u.turnRate === "number" &&
     typeof u.size === "number" &&
-    Array.isArray(u.actions) &&
-    u.actions.every(isActionDef) &&
     Array.isArray(u.parts) &&
     u.parts.every(isUnitPart)
   );
@@ -170,11 +160,10 @@ export function loadUnitDraft(): UnitEditSession | null {
   try {
     const parsed = JSON.parse(content) as SavedUnitDraft;
     if (parsed.version !== SAVE_VERSION || !parsed.session) return null;
-    const { unit, activeAction, activePart } = parsed.session;
+    const { unit, activePart } = parsed.session;
     if (!isValidUnitDef(unit)) return null;
-    if (activeAction !== null && !isActionDef(activeAction)) return null;
     if (activePart !== null && !isUnitPart(activePart)) return null;
-    return { unit, activeAction, activePart };
+    return { unit, activePart };
   } catch {
     return null;
   }
@@ -198,7 +187,9 @@ export function clearUnitDraft(): void {
 // pass) — bumping for the same reason.
 // v4: EncounterUnit gained `attacks: EncounterAttack[]` (Parts/weapon-track
 // pass) — bumping for the same reason.
-const TILE_SESSION_VERSION = 4;
+// v5: EncounterStep's `actionId` was replaced by a plain `visible: boolean`
+// (Actions cut entirely) — bumping for the same reason.
+const TILE_SESSION_VERSION = 5;
 
 export interface TileEditSession {
   tile: TileDef;

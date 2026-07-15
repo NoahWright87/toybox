@@ -225,15 +225,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   function addUnitInstance(unitDefId: string) {
-    const unitDef = units.find((u) => u.id === unitDefId);
-    const firstActionId = unitDef?.actions[0]?.id;
-    if (!firstActionId) return;
     const index = draft.units.length;
     // Staggered diagonally (not just horizontally) so each new instance's
     // label doesn't render directly on top of the previous one's — still
     // just a default, since the move handle can reposition either.
     const startPos: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
-    const instance = addStep(createEncounterUnit(unitDefId), firstActionId, startPos);
+    const instance = addStep(createEncounterUnit(unitDefId), startPos);
     updateDraft({ ...draft, units: [...draft.units, instance] });
     setAddingUnit(false);
     const added = instance.steps[0];
@@ -249,10 +246,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function addNextStep(instanceId: string) {
     const before = draft.units.find((u) => u.id === instanceId);
     if (!before) return;
-    const unitDef = units.find((u) => u.id === before.unitDefId);
-    const firstActionId = unitDef?.actions[0]?.id;
-    if (!firstActionId) return;
-    const after = addStep(before, firstActionId);
+    const after = addStep(before);
     updateInstance(instanceId, () => after);
     const added = after.steps[after.steps.length - 1];
     if (added) selectStep(instanceId, added.id);
@@ -593,13 +587,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               const pos = toStage(effectiveStep(instance.id, step).pos);
               const first = isFirstStep(instance, step.id);
               const last = isLastStep(instance, step.id);
-              const action = unitDef?.actions.find((a) => a.id === step.actionId);
               const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
               return (
                 <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
                   <button
                     type="button"
-                    className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${action && !action.visible ? "shmup-enemy-node--hidden" : ""}`}
+                    className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${!step.visible ? "shmup-enemy-node--hidden" : ""}`}
                     style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -612,7 +605,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   {first && <div className="shmup-enemy-node__label">{unitDef?.name ?? "?"}</div>}
                   <div className="shmup-enemy-node__badges">
                     {first && <span title="First step">▶</span>}
-                    {action && !action.visible && <span title="Hidden">👻</span>}
+                    {!step.visible && <span title="Hidden">👻</span>}
                   </div>
 
                   {isSelected && (
@@ -733,7 +726,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           {draft.units.map((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
             const preview = computeInstancePreview(instance, unitDef, scrubTime);
-            if (!preview || !preview.action.visible) return null;
+            if (!preview || !preview.step.visible) return null;
             const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
             const pos = toStage(preview.pos);
             return (
@@ -809,7 +802,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
       {selectedInstance && selectedStep && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
         <StepPanel
-          unit={selectedUnitDef}
           step={selectedStep}
           timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
           hasOutgoingSegment={hasOutgoingSegment}

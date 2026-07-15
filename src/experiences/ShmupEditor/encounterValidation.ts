@@ -7,10 +7,10 @@
  * which this hackable app explicitly permits per root CLAUDE.md) is
  * rejected rather than crashing.
  *
- * Much smaller than the previous version: an encounter step only
- * references an actionId string now (movement/attack/bullet all moved to
- * unitTypes.ts's ActionDef, validated there instead) — no more recursive
- * graph/payload validation needed here.
+ * Much smaller than early versions: a step is just a position/time/
+ * visibility/handles record now — no Action reference at all (the Action
+ * buffet was cut entirely, see unitTypes.ts), no recursive graph/payload
+ * validation needed here.
  */
 import type { EncounterAttack, EncounterDef, EncounterStep, EncounterUnit } from "./encounterTypes";
 
@@ -27,7 +27,7 @@ function isEncounterStep(v: unknown): v is EncounterStep {
   return (
     typeof s.id === "string" &&
     isVec2(s.pos) &&
-    typeof s.actionId === "string" &&
+    typeof s.visible === "boolean" &&
     isNumber(s.time) &&
     isNumber(s.speedMultiplier) &&
     (s.handleOut === null || isVec2(s.handleOut)) &&

@@ -1,8 +1,6 @@
 import type { EncounterStep } from "./encounterTypes";
-import type { UnitDef } from "./unitTypes";
 
 interface StepPanelProps {
-  unit: UnitDef | undefined;
   step: EncounterStep;
   /** True when this step's `time` is computed from distance/speed rather than freely authored — see encounterTiming.ts. */
   timeDerived: boolean;
@@ -13,10 +11,10 @@ interface StepPanelProps {
 
 /**
  * Below-canvas settings for a selected step (specs/shmup-editor.md's
- * Timing section) — replaces the old NodePanel/EdgePanel tab pair: an
- * encounter no longer authors movement/dwell/attack params directly, it
- * just picks an Action from the referenced Unit's buffet and says when it
- * activates. Movement itself (bezier handles) is edited on the canvas, not
+ * Timing section) — replaces the old NodePanel/EdgePanel tab pair. A step
+ * is just a position + time + visibility + bezier handles now; there's no
+ * Action to pick anymore (see unitTypes.ts for why the Action buffet was
+ * cut). Movement itself (bezier handles) is edited on the canvas, not
  * here — see EncounterEditor.tsx.
  *
  * **"When" is usually computed, not typed in.** A step whose position
@@ -29,7 +27,7 @@ interface StepPanelProps {
  * from — the first step of an instance, or one dwelling at the same
  * position as its predecessor.
  */
-export default function StepPanel({ unit, step, timeDerived, hasOutgoingSegment, onChange }: StepPanelProps) {
+export default function StepPanel({ step, timeDerived, hasOutgoingSegment, onChange }: StepPanelProps) {
   const showSpeedOverride = hasOutgoingSegment;
 
   return (
@@ -48,24 +46,14 @@ export default function StepPanel({ unit, step, timeDerived, hasOutgoingSegment,
       </label>
       {timeDerived && (
         <p className="shmup-hint">
-          Auto — based on the distance from the previous step and its Action's speed. Drag this step on the timeline (or adjust the previous
-          step's Speed Multiplier) to change pacing.
+          Auto — based on the distance from the previous step and the owning Unit's speed. Drag this step on the timeline (or adjust the
+          previous step's Speed Multiplier) to change pacing.
         </p>
       )}
 
-      <label className="shmup-field shmup-field--inline">
-        <span>Action</span>
-        {unit ? (
-          <select className="shmup-input" value={step.actionId} onChange={(e) => onChange({ actionId: e.target.value })}>
-            {unit.actions.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="shmup-error">(missing Unit)</span>
-        )}
+      <label className="shmup-checkbox">
+        <input type="checkbox" checked={step.visible} onChange={(e) => onChange({ visible: e.target.checked })} />
+        Visible (uncheck for Disappear/teleport-out/pop-down)
       </label>
 
       {showSpeedOverride && (
