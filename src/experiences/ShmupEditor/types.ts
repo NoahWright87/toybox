@@ -7,6 +7,7 @@
  * (specs/games/shmup/levels-and-tiles.spec.todo.md), not the code.
  */
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID, tileImageById } from "./tileImages";
+import type { EncounterDef } from "./encounterTypes";
 
 export type EdgeTag = string;
 
@@ -54,6 +55,8 @@ export interface TileDef {
   imageId: string;
   /** User-uploaded art (downscaled square PNG data URL) for this tile, or null when using a built-in image. Only rendered when imageId === CUSTOM_IMAGE_ID. */
   customImage: string | null;
+  /** Encounters a level generator can spawn on this tile — a random one (weighted) is picked when the tile appears in a level. See encounterTypes.ts. */
+  encounters: EncounterDef[];
   createdAt: number;
   modifiedAt: number;
 }
@@ -82,6 +85,7 @@ export function createBlankTile(existingCount: number): TileDef {
     weight: 1,
     imageId: NONE_IMAGE_ID,
     customImage: null,
+    encounters: [],
     createdAt: now,
     modifiedAt: now,
   };

@@ -6,6 +6,7 @@
  */
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
+import { isValidEncounter } from "./encounterValidation";
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID } from "./tileImages";
 import type { EdgeSlot, TileDef } from "./types";
 
@@ -14,7 +15,17 @@ import type { EdgeSlot, TileDef } from "./types";
 // `customImage` (added later) does NOT bump this further — it's a purely
 // additive optional field, so a v2 save missing it is still valid;
 // normalizeTile() below backfills the default instead.
-const SAVE_VERSION = 2;
+// v3: embedded EncounterStep shape changed (Trigger -> time, timeline
+// scrubber pass) — bumping so a pre-v3 save's encounters (old trigger
+// shape) reset via isValidEncounter rather than silently carrying a shape
+// that no longer parses meaningfully.
+// v4: embedded EncounterStep gained handleIn/handleOut (bezier-curve
+// movement pass) — bumping for the same reason.
+// v5: embedded EncounterUnit gained `attacks: EncounterAttack[]`
+// (Parts/weapon-track pass) — bumping for the same reason.
+// v6: embedded EncounterStep's `actionId` was replaced by a plain
+// `visible: boolean` (Actions cut entirely) — bumping for the same reason.
+const SAVE_VERSION = 6;
 
 interface SavedLibrary {
   version: number;
@@ -49,18 +60,20 @@ function isValidTileDef(value: unknown): value is TileDef {
   );
 }
 
-// `customImage` was added after v2 shipped as a purely additive, optional
-// field, so its shape is deliberately NOT part of isValidTileDef above —
-// a save missing or malformed on it (including a hand-edited TILES.DAT,
-// which this hackable app explicitly permits per root CLAUDE.md) gets it
-// reset to its default here rather than the whole tile being discarded.
+// `customImage` and `encounters` were both added after v2 shipped as
+// purely additive, optional fields, so their shape is deliberately NOT
+// part of isValidTileDef above — a save missing or malformed on either
+// (including a hand-edited TILES.DAT, which this hackable app explicitly
+// permits per root CLAUDE.md) gets it reset to a safe default here rather
+// than the whole tile being discarded.
 function normalizeTile(tile: TileDef): TileDef {
   const customImage = typeof tile.customImage === "string" && tile.customImage ? tile.customImage : null;
   // A tile can't be left pointing imageId at a custom image that doesn't exist.
   const imageId = tile.imageId === CUSTOM_IMAGE_ID && !customImage ? NONE_IMAGE_ID : tile.imageId;
+  const encounters = Array.isArray(tile.encounters) ? tile.encounters.filter(isValidEncounter) : [];
   // Strip a stale `biome` key left over from a removed feature — not part
   // of TileDef anymore, so a load shouldn't resurrect/re-persist it.
-  const clean: TileDef & { biome?: unknown } = { ...tile, imageId, customImage };
+  const clean: TileDef & { biome?: unknown } = { ...tile, imageId, customImage, encounters };
   delete clean.biome;
   return clean;
 }

@@ -107,6 +107,10 @@
 .shmup-field-row {
   display: flex;
   gap: 16px;
+  /* Movement/attack-payload forms (E2 #192) pack several fields into one
+     row -- without wrap, a phone-width viewport clips the trailing fields
+     off the right edge instead of stacking them. */
+  flex-wrap: wrap;
 }
 
 .shmup-checkbox {
@@ -146,6 +150,122 @@
 }
 .shmup-field--inline {
   margin-bottom: 0;
+}
+
+/* ── Encounters list (inside the tile form) ───────────────────────────── */
+.shmup-encounter-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-encounter-list__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px 8px;
+  font-size: 8px;
+}
+/* A row that can expand to show inline fields below it (e.g. a Part's
+   Weapon list, WeaponForm expanded in place) rather than navigating away —
+   stacks its header row above the expanded content instead of the header's
+   own flex layout trying to wrap around it. */
+.shmup-encounter-list__row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.shmup-encounter-list__row-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shmup-weapon-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #808080;
+}
+
+/* ── Weapon pattern preview (WeaponPreview.tsx) ───────────────────────
+   A live animated canvas, not a static number readout — shmup bullet
+   patterns are hard to picture from arc/count/spacing fields alone. */
+.shmup-weapon-preview {
+  display: block;
+  margin: 0 auto 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  image-rendering: pixelated;
+}
+
+/* ── Part position editor (PartPositionEditor.tsx) ────────────────────
+   Dimmed body sprite as a reference frame, the Part's own sprite
+   draggable on top, plus arrow-nudge buttons for pixel-precise placement
+   without needing a steady thumb on mobile. */
+.shmup-part-position {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.shmup-part-position__stage {
+  position: relative;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  touch-action: none;
+}
+.shmup-part-position__body {
+  position: absolute;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.45;
+  filter: grayscale(0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24px;
+  pointer-events: none;
+}
+.shmup-part-position__crosshair {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px dashed #66ffee;
+  pointer-events: none;
+}
+.shmup-part-position__part {
+  position: absolute;
+  background-color: rgba(123, 61, 190, 0.35);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 2px solid #7b3dbe;
+  border-radius: 50%;
+  color: #fff;
+  cursor: grab;
+  touch-action: none;
+}
+.shmup-part-position__nudge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .shmup-image-picker {
@@ -570,6 +690,459 @@
      rather than always at the bottom regardless of which direction/side
      is being extended. */
   padding: 4px;
+}
+
+/* ── Enemy editor (E2 #192) ───────────────────────────────────────────
+   Free-form node-graph canvas: nodes are absolutely-positioned circular
+   buttons, edges are SVG lines underneath. Tap-driven (no drag-to-connect,
+   see specs/shmup-editor.md) -- tapping a node/edge reveals small on-canvas
+   quick-action buttons plus a below-canvas settings panel. */
+
+.shmup-enemy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 720px;
+}
+
+.shmup-enemy-canvas-scroll {
+  overflow: auto;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  max-height: 60vh;
+}
+
+.shmup-enemy-canvas-stage {
+  position: relative;
+  min-width: 100%;
+  min-height: 200px;
+}
+
+.shmup-enemy-canvas-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.shmup-enemy-canvas-svg line {
+  pointer-events: stroke;
+}
+
+.shmup-enemy-node-wrap {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+}
+
+/* Bezier handle drag target (EncounterEditor.tsx) — a real HTML button
+   (not an SVG shape) positioned directly on the canvas stage, same
+   coordinate space as .shmup-enemy-node-wrap. Smaller than the 28px
+   move/add/delete node controls, but still a real touch target — an
+   earlier SVG-circle version was both too small (~12px) and unreliable
+   to hit on mobile. */
+.shmup-handle-btn {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #66ffee;
+  border: 2px solid #0a3330;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.shmup-enemy-node {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #cc4400;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #ffcc88;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+.shmup-enemy-node--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+/* Action.visible === false — Disappear/teleport-out/pop-down steps read as ghosted rather than fully solid. */
+.shmup-enemy-node--hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.shmup-enemy-node__badges {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.shmup-enemy-node__controls {
+  position: absolute;
+  inset: -30px;
+  pointer-events: none;
+}
+.shmup-enemy-node__btn {
+  position: absolute;
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 14px;
+  cursor: pointer;
+}
+.shmup-enemy-node__btn--move {
+  top: 0;
+  left: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.shmup-enemy-node__btn--add {
+  top: 0;
+  right: 0;
+  background: rgba(34, 136, 51, 0.75);
+}
+.shmup-enemy-node__btn--attack {
+  bottom: 0;
+  left: 0;
+  background: rgba(204, 68, 0, 0.75);
+  font-size: 11px;
+}
+.shmup-enemy-node__btn--attack:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.shmup-enemy-node__btn--delete {
+  bottom: 0;
+  right: 0;
+  background: rgba(153, 0, 0, 0.75);
+}
+
+/* Small Part picker shown under a step's node when adding an attack to a
+   multi-Part Unit (mirrors the "+ Add Unit" picker's look, but anchored to
+   the node instead of the toolbar since it's a per-step action). */
+.shmup-part-picker {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: 220px;
+}
+
+.shmup-enemy-node__label {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Live scrub/play preview marker (movementPreview.ts) — smaller and a
+   different color than an authored waypoint node so it reads as "where the
+   unit actually is right now," not another step to tap. */
+.shmup-enemy-preview-dot {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #22bbaa;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #66ffee;
+  box-shadow: 0 0 8px #22bbaa;
+  pointer-events: none;
+}
+
+/* Attack-track placement marker — an independent event on the timeline,
+   not a movement waypoint, so it's deliberately smaller/differently
+   colored than .shmup-enemy-node (same "reads as secondary" reasoning as
+   the preview dot above) and anchored wherever the unit's bezier path
+   puts it at the attack's own time (EncounterEditor.tsx's attackAnchorWorld). */
+.shmup-attack-marker-wrap {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+}
+.shmup-attack-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(153, 0, 0, 0.85);
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #ff8844;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.shmup-attack-marker--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+
+/* ── Encounter editor's tile reference frame ──────────────────────────
+   A read-only silhouette of the tile's real footprint/edges, so an
+   enemy's entrance/exit can be placed meaningfully against where the
+   tile actually connects to its neighbors (specs/shmup-editor.md). */
+.shmup-encounter-frame {
+  position: relative;
+  border: 2px dashed #7b3dbe;
+  background-color: rgba(123, 61, 190, 0.12);
+  background-size: cover;
+  background-position: center;
+  box-sizing: border-box;
+}
+.shmup-encounter-frame__edge {
+  position: absolute;
+  display: flex;
+  font-size: 6px;
+  color: #ffcc88;
+  text-shadow: 1px 1px 0 #000;
+  gap: 4px;
+  pointer-events: none;
+}
+.shmup-encounter-frame__edge--north {
+  top: -12px;
+  left: 0;
+  right: 0;
+  justify-content: space-around;
+}
+.shmup-encounter-frame__edge--south {
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  justify-content: space-around;
+}
+.shmup-encounter-frame__edge--east {
+  right: -4px;
+  top: 50%;
+  transform: translate(100%, -50%);
+}
+.shmup-encounter-frame__edge--west {
+  left: -4px;
+  top: 50%;
+  transform: translate(-100%, -50%);
+}
+
+.shmup-enemy-picker-thumb {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6px;
+  color: #444;
+  text-align: center;
+}
+
+.shmup-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shmup-panel--confirm {
+  border-color: #aa2222;
+}
+
+.shmup-bullet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Encounter timeline scrubber (EncounterTimeline.tsx) ──────────────
+   One shared ruler for the whole encounter, one track per Unit instance.
+   Step markers are diamonds positioned by `time`; a drag handle appears
+   only when a step is selected, mirroring the canvas's own move-handle
+   pattern. Dragging/tapping the ruler background scrubs the playhead. */
+
+.shmup-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shmup-timeline__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shmup-timeline__readout {
+  font-size: 10px;
+  color: #ffcc88;
+}
+
+.shmup-timeline__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.shmup-timeline__stage {
+  position: relative;
+  padding: 20px 10px 12px;
+  touch-action: none;
+}
+
+.shmup-timeline__ruler {
+  position: relative;
+  height: 16px;
+}
+
+.shmup-timeline__tick {
+  position: absolute;
+  top: 0;
+  height: 16px;
+  border-left: 1px solid #444;
+  padding-left: 3px;
+  font-size: 8px;
+  color: #999;
+  white-space: nowrap;
+}
+
+.shmup-timeline__track {
+  position: relative;
+  padding-top: 6px;
+}
+
+.shmup-timeline__track-label {
+  font-size: 8px;
+  color: #ffcc88;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.shmup-timeline__lane {
+  position: relative;
+  height: 28px;
+}
+
+.shmup-timeline__lane-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.shmup-timeline__step-wrap {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+}
+
+.shmup-timeline__step {
+  width: 18px;
+  height: 18px;
+  transform: rotate(45deg);
+  background-color: #cc4400;
+  border: 2px solid #ffcc88;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-timeline__step--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+.shmup-timeline__step--hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.shmup-timeline__step-handle {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+/* One extra lane per Part with placed attacks, below the movement lane —
+   independent per-part tracks so a multi-turret Unit's schedules are
+   visually separate rows, not merged markers on one lane. */
+.shmup-timeline__lane--attack {
+  position: relative;
+  height: 20px;
+  margin-top: 2px;
+  padding-left: 3px;
+}
+.shmup-timeline__track-sublabel {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  font-size: 6px;
+  color: #ff8844;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.shmup-timeline__attack {
+  position: absolute;
+  top: 8px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: rgba(153, 0, 0, 0.85);
+  border: 2px solid #ff8844;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-timeline__attack--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+
+.shmup-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff3333;
+  pointer-events: none;
 }
 
 /* ── Tag graph ─────────────────────────────────────────────────────── */
