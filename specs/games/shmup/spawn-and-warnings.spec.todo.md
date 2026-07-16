@@ -61,9 +61,10 @@ table needed once every param can independently choose its own curve.
 ## 2. Spawn nodes
 
 A **spawn node** lives on a tile variant (`levels-and-tiles.spec.todo.md`
-§1) and defines how a group of enemies (running the same underlying
-enemy node-graph, `enemies-and-bullets.spec.todo.md`) come into existence
-together.
+§1) and defines how a group of enemies (each running the same underlying
+Unit definition — steps + Parts/Weapons, not a node graph; see
+`enemies-and-bullets.spec.todo.md`, reconciled against Epic 6's shipped
+`/shmup-editor` authoring model) come into existence together.
 
 - **Origin type**: `point` (single fixed location, e.g. a factory door),
   `region` (a box/rect, scattered/random placement), or `shape` (a
