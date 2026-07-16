@@ -2,11 +2,12 @@
 
 > Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
 > partially shipped, see `shmup-editor.md`), **E2 #192** (Unit +
-> Encounter editor — shipped minus layers, Parts/attack-tracks, and the
-> Scaling system, see `shmup-editor.md`), **E3 #193** (spawn node editor),
-> **E4 #194** (preview/playtest), **E5 #195** (export/import pipeline).
-> Source: design handoff docs (Claude Chat → Claude Code), 2026-07-04 and
-> 2026-07-11.
+> Encounter editor — shipped minus layers and per-param scaling curves,
+> see `shmup-editor.md`), **E3 #193** (spawn node editor — shipped minus
+> the same per-param scaling-curve retrofit, see `shmup-editor.md`'s
+> "Spawn nodes (E3)" section), **E4 #194** (preview/playtest), **E5 #195**
+> (export/import pipeline). Source: design handoff docs (Claude Chat →
+> Claude Code), 2026-07-04 and 2026-07-11.
 
 ## What this is
 
@@ -86,9 +87,10 @@ clusters/rarity — there's nothing biome-specific left in the data model
 to visualize instead.
 
 **Remaining:**
-- Attach spawn variants to a tile (needs E3's spawn-node editor to exist
-  first — a tile variant *is* a spawn-node configuration per the design
-  doc, so this is blocked on E3, not purely an E1 gap).
+- ~~Attach spawn variants to a tile~~ — resolved, not by building a new
+  variant concept: `EncounterDef` (E2) already *is* a tile variant (its own
+  weighted-random-pick doc comment), so E3 attached spawn nodes there
+  instead. See `shmup-editor.md`'s "Spawn nodes (E3)" section.
 - In-editor sketching of tile art (today's upload flow takes an existing
   image file; drawing new art from scratch in the tool is still future
   work).
@@ -373,8 +375,9 @@ what actually shipped.
   sheet instead of just frame 1, and (c) a small animation-player
   component. Reasonable to fold into E4 (Preview/playtest mode) rather
   than block E2 on it.
-- Unit variants aren't attachable to a tile yet — still blocked on E3's
-  spawn-node editor (same dependency E1's tile-variant gap already notes).
+- ~~Unit variants aren't attachable to a tile yet~~ — resolved by E3: a
+  spawn node references a `UnitDef` and lives inside an `EncounterDef`,
+  same as E1's tile-variant gap above.
 - **Deferred: rotating/facing Part sprites (turret tracking its aim at
   runtime).** A Part now has its own sprite and a visually-authored
   position (shipped in the "visual authoring pass" follow-up — see
@@ -419,12 +422,100 @@ what actually shipped.
   right" reason the bezier preview exists); and whether it needs its own
   per-Action or per-step override (e.g. "don't wobble while attacking").
 
-### E3 — Spawn node editor (#193)
+### E3 — Spawn node editor (#193) — shipped, minus per-param scaling curves
 
-Attach one or more spawn nodes to a tile variant (origin/shape/direction/
-mirror/timing/scaling), referencing enemy definitions built in E2.
-Outputs spawn-node JSON matching `spawn-and-warnings.spec.todo.md`'s data
-model.
+See `shmup-editor.md`'s "Spawn nodes (E3)" section for the full design.
+
+**Scope resolution going in**: the original framing ("attach one or more
+spawn nodes to a tile variant") assumed a `variants` concept E1 never
+built. It turned out not to be a gap — `EncounterDef` (E2) already *is*
+`levels-and-tiles.spec.todo.md` §1's "tile variant" (its own doc comment:
+"a random one \[encounter\] (weighted) is picked when the tile spawns in a
+level" — exactly "mutually-exclusive spawn variants... picked at placement
+time, optionally weighted"). So spawn nodes shipped as a new field
+*inside* `EncounterDef` (`spawnNodes: SpawnNodeDef[]`), a second,
+procedural way one encounter populates enemies alongside its hand-placed
+`units` — not a new sibling list on `TileDef`.
+
+**Done**:
+- **`SpawnNodeDef`** (`spawnTypes.ts`): origin (`point`/`region`/`shape`,
+  with `region`'s width/height and `shape`'s kind/span fields), free
+  distribution, direction (rotates a `shape` origin only), mirror
+  (reflects across the owning tile's own width, any origin type),
+  timing (`delayMs`/`intervalMs`/`countMode`), and scaling (`minCount`/
+  `maxCount`/`powerSplit`/`countCurve`) — referencing a `UnitDef` by id.
+- **`spawnShapes.ts`**: pure, unit-tested geometry — `computeShapePositions`
+  lays out a shape template's individuals with spacing *derived* from count
+  (spec's "a count of 3 spaces widely, a count of 15 packs tightly, same
+  shape either way"), `resolveSpawnPositions` applies rotation/anchor/
+  mirror on top for any origin type.
+- **`difficultyCurve.ts`**: the one piece of `spawn-and-warnings.spec.todo.md`
+  §1's shared curve-type system (`flat`/`linear`/`capped`/`stepped`) this
+  pass wires up, scoped to what §2 explicitly assigns a spawn node — see
+  "Scope decisions" below for what's deliberately NOT included.
+  `SpawnNodeDef.countCurve` resolves an incoming difficulty budget to an
+  actual spawn count within `[minCount, maxCount]` ("spawn count" is one
+  of §1's named curve-attachable params). `CurveField.tsx`/`CurveDef`/
+  `resolveCurve` are kept generic (not spawn-node-specific) so a future
+  per-param retrofit (see Remaining below) can reuse them.
+- **Canvas integration** (`EncounterEditor.tsx`): a ◈ diamond marker per
+  spawn node (drag ✥ to reposition the origin anchor, ✕ to delete
+  immediately, no confirm step), a dashed reference box for a `region`
+  origin, deterministic ghost-dot preview for a `shape` origin's layout.
+  "+ Add Spawn Node" sits next to "+ Add Unit"; a spawn node can be added
+  with no Unit reference yet ("Skip (pick Unit later)") since, unlike a
+  Unit instance, it stays meaningful mid-configuration.
+- **`SpawnNodePanel.tsx`** (mirrors `StepPanel.tsx`/`AttackPanel.tsx`):
+  all fields except the origin's world-space anchor (a canvas drag).
+  **`SpawnScalingPreview.tsx`**: a budget slider (0-100, editor-preview
+  only) driving a live dot-bar readout of resolved count/power — same "a
+  lot of numbers, zero defaults, nothing visual" motivation as E2's
+  `WeaponPreview.tsx` follow-up pass.
+- Saves as part of the owning `EncounterDef`/`TileDef` in `TILES.DAT`;
+  purely-additive field, no `SAVE_VERSION`/`TILE_SESSION_VERSION` bump
+  (backfilled to `[]` by a new `normalizeEncounter()` helper, same pattern
+  as `customImage`) — the in-progress draft rides along inside the
+  existing `TILE-DRAFT.DAT` session for free, no new stable FS id needed.
+
+**Scope decisions**:
+- **Per-param scaling-curve retrofit onto Unit/Weapon stats is
+  deliberately NOT built** — §1's broader vision (a curve attachable to
+  HP, fire rate, damage, arc width, spiral radius...) would mean reopening
+  E2's already-shipped `UnitStatsForm`/`WeaponForm`, a materially larger,
+  separate piece of work. `SpawnNodeDef.countCurve` is the one concrete
+  consumer shipped now; `resolvePowerMultiplier()` is a representative
+  preview number only, not wired to any real Unit stat.
+- **A `region` origin's scatter is `Math.random()`, not seeded/
+  deterministic** — a representative editor preview (and intentionally NOT
+  ghost-dot-previewed on canvas, unlike `shape`, to avoid jittering on
+  every unrelated re-render). The real game generator's own placement math
+  (not built yet) is a separate, seeded system per
+  `levels-and-tiles.spec.todo.md` §2.
+- **Spawn-node timing isn't on the shared timeline yet** — `delayMs`/
+  `intervalMs` are panel-only fields; `EncounterTimeline.tsx` still only
+  has step/attack tracks (a spawn selection is narrowed away before
+  reaching it). See Remaining below.
+- **No movement authoring for procedurally-spawned individuals** — a spawn
+  node has no per-individual step list to author (unlike an
+  `EncounterUnit`); how such an individual moves at runtime is an open
+  question left to the game implementation, same as a Weapon-spawned
+  bullet Unit's movement already is (`enemies-and-bullets.spec.todo.md`'s
+  Related note).
+
+**Remaining:**
+- **Spawn-node timing on the shared timeline** — a track/lane on
+  `EncounterTimeline.tsx` visualizing `delayMs`/`intervalMs` the way step
+  and attack tracks already do, instead of panel-only fields.
+- **Per-param scaling curves on Unit/Weapon stats** (see Scope decisions) —
+  the natural next consumer of `difficultyCurve.ts`/`CurveField.tsx` once
+  there's appetite to reopen E2's stat forms.
+- **Seeded/deterministic region scatter** — needed once there's a real
+  preview/export round-trip (E4/E5) that has to reproduce the same layout
+  twice, not just show a representative one.
+- **Encounter difficulty-range gating** (carried over from E2's Remaining
+  list) — still blocked on nothing concrete left to build against beyond
+  what shipped here; `EncounterDef.weight` remains the only
+  difficulty-adjacent authored field.
 
 ### E4 — Preview/playtest mode (#194)
 
@@ -462,5 +553,5 @@ editor rather than crashing the game at runtime.
 
 ## Reminders
 
-- `shmup-editor.md` now tracks current (partial-E1) behavior; keep
-  promoting sections here into it as E1's remaining gaps and E2-E5 ship.
+- `shmup-editor.md` now tracks current (partial-E1, E2, E3) behavior; keep
+  promoting sections here into it as E1's remaining gaps and E4-E5 ship.

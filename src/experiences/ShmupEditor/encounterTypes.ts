@@ -58,7 +58,19 @@
  * attacks to compete with the step sequence's "only the last step gets a
  * +" ordering rule — an attack can be placed anywhere on the timeline,
  * `encounterAttacks.ts` is unordered array CRUD, no chronology invariant.
+ *
+ * **Spawn nodes are a second, procedural way an encounter populates
+ * enemies (E3 #193, spawnTypes.ts) — not a new "variant" concept.** The
+ * encounter this file's `EncounterDef` describes already IS the "tile
+ * variant" from levels-and-tiles.spec.todo.md §1 (see `weight`, above: "a
+ * random one (weighted) is picked when the tile spawns"). A spawn node
+ * lives inside one encounter, alongside its hand-placed `units`, and
+ * describes a whole *group* — origin/distribution/direction/mirror/
+ * timing/scaling referencing a single UnitDef — instead of an individually
+ * authored bezier step sequence per enemy. See spawnTypes.ts for the full
+ * data model and reasoning.
  */
+import type { SpawnNodeDef } from "./spawnTypes";
 
 export interface Vec2 {
   x: number;
@@ -112,6 +124,8 @@ export interface EncounterDef {
   /** Relative weight when a tile has multiple encounters and one is picked at random (default 1). */
   weight: number;
   units: EncounterUnit[];
+  /** Procedural group-spawn configurations — see spawnTypes.ts. A second, independent way this encounter populates enemies, alongside `units`' hand-placed instances. */
+  spawnNodes: SpawnNodeDef[];
   createdAt: number;
   modifiedAt: number;
 }
@@ -136,6 +150,7 @@ export function createBlankEncounter(existingCount: number): EncounterDef {
     name: `Encounter ${existingCount + 1}`,
     weight: 1,
     units: [],
+    spawnNodes: [],
     createdAt: now,
     modifiedAt: now,
   };

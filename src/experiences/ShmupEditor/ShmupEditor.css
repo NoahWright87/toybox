@@ -903,6 +903,101 @@
   box-shadow: 0 0 0 2px #ff6b00;
 }
 
+/* ── Spawn nodes (EncounterEditor.tsx, E3 #193) ───────────────────────
+   A procedural group-spawn's origin marker (◈) — deliberately a different
+   shape/color from both .shmup-enemy-node (a movement waypoint) and
+   .shmup-attack-marker (an attack-track placement) so all three read as
+   distinct kinds of thing at a glance. Diamond via rotated square, teal
+   family (matching the bezier-handle teal, since both are "authoring
+   geometry" rather than a placed sprite). */
+.shmup-spawn-node-wrap {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+}
+.shmup-spawn-node {
+  width: 40px;
+  height: 40px;
+  transform: rotate(45deg);
+  background-color: #0a3330;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #66ffee;
+  color: #66ffee;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shmup-spawn-node > * {
+  transform: rotate(-45deg);
+}
+.shmup-spawn-node--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+
+/* A region origin's scatter box — dashed, no fill beyond a faint tint, same "reference geometry, not a placed thing" language as the tile frame. */
+.shmup-spawn-region-box {
+  position: absolute;
+  border: 2px dashed #66ffee;
+  background-color: rgba(102, 255, 238, 0.08);
+  pointer-events: none;
+}
+
+/* A shape origin's deterministic layout preview — small, dim, non-interactive dots (spawnShapes.ts's resolveSpawnPositions at a representative count). */
+.shmup-spawn-ghost-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: rgba(102, 255, 238, 0.5);
+  pointer-events: none;
+}
+
+/* ── Curve field (CurveField.tsx) + scaling preview (SpawnScalingPreview.tsx) ── */
+.shmup-curve-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.06);
+}
+.shmup-curve-thresholds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shmup-spawn-scaling-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-spawn-scaling-preview__value {
+  font-size: 10px;
+  min-width: 24px;
+  text-align: right;
+}
+.shmup-spawn-scaling-preview__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.shmup-spawn-scaling-preview__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid #66ffee;
+  background: transparent;
+}
+.shmup-spawn-scaling-preview__dot--filled {
+  background: #66ffee;
+}
+
 /* ── Encounter editor's tile reference frame ──────────────────────────
    A read-only silhouette of the tile's real footprint/edges, so an
    enemy's entrance/exit can be placed meaningfully against where the

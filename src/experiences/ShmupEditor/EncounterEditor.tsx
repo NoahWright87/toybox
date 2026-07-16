@@ -3,13 +3,17 @@ import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
 import StepPanel from "./StepPanel";
 import AttackPanel from "./AttackPanel";
+import SpawnNodePanel from "./SpawnNodePanel";
 import { resolveSpriteUrl } from "./enemySprites";
 import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
 import { addAttack, deleteAttack, updateAttack } from "./encounterAttacks";
+import { addSpawnNode, deleteSpawnNode, updateSpawnNode } from "./spawnNodes";
+import { resolveSpawnPositions } from "./spawnShapes";
 import { isStepTimeDerived, recomputeStepTimes, segmentArcLength, speedMultiplierForDuration } from "./encounterTiming";
 import { createEncounterUnit, type EncounterAttack, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
+import type { SpawnNodeDef } from "./spawnTypes";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
 
@@ -23,8 +27,13 @@ interface EncounterEditorProps {
   onDraftChange: (encounter: EncounterDef) => void;
 }
 
-type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
+type Selection =
+  | { instanceId: string; kind: "step"; stepId: string }
+  | { instanceId: string; kind: "attack"; attackId: string }
+  | { kind: "spawn"; nodeId: string }
+  | null;
 type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
+type SpawnDrag = { nodeId: string; pos: Vec2 } | null;
 /** Dragging an attack's aim handle — unlike bezier handles (an offset from a fixed step position), an attack's anchor itself moves along the bezier path over time, so the only thing worth persisting is the angle, not a position offset. */
 type AimDrag = { instanceId: string; attackId: string; angleDeg: number } | null;
 
@@ -44,6 +53,11 @@ const ATTACK_MARKER_DIAMETER = 32;
 const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
 /** Purely visual length of the aim-direction indicator/handle from an attack's anchor position — not a stored value, just how far out the drag target renders. */
 const AIM_HANDLE_LENGTH = 55;
+/** A spawn node's anchor marker (SpawnNodePanel.tsx's origin) — distinct size/shape from both a movement waypoint and an attack marker so all three read as different kinds of thing at a glance. */
+const SPAWN_MARKER_DIAMETER = 40;
+const SPAWN_MARKER_RADIUS = SPAWN_MARKER_DIAMETER / 2;
+/** Small non-interactive dots previewing a shape origin's individual layout — deterministic (no Math.random(), unlike a region origin's scatter) so they render stably every frame; shown at this representative count rather than any live difficulty budget (see SpawnScalingPreview.tsx for the numeric preview, which does model budget). */
+const SPAWN_GHOST_PREVIEW_COUNT_FALLBACK = 1;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -100,8 +114,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
   const [dragHandle, setDragHandle] = useState<HandleDrag>(null);
   const [dragAim, setDragAim] = useState<AimDrag>(null);
+  const [dragSpawn, setDragSpawn] = useState<SpawnDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [addingUnit, setAddingUnit] = useState(false);
+  const [addingSpawn, setAddingSpawn] = useState(false);
   const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -224,6 +240,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setSelection({ instanceId, kind: "attack", attackId });
   }
 
+  function selectSpawn(nodeId: string) {
+    setPendingDeleteKey(null);
+    setPickingAttackPartFor(null);
+    setSelection({ kind: "spawn", nodeId });
+  }
+
   function addUnitInstance(unitDefId: string) {
     const index = draft.units.length;
     // Staggered diagonally (not just horizontally) so each new instance's
@@ -241,6 +263,26 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     updateDraft({ ...draft, units: draft.units.filter((u) => u.id !== instanceId) });
     setSelection(null);
     setPendingDeleteKey(null);
+  }
+
+  function addSpawnGroup(unitDefId: string | null) {
+    const index = draft.spawnNodes.length;
+    const anchor: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2, y: TILE_UNIT / 2 + index * 40 };
+    const next = addSpawnNode(draft, anchor, unitDefId);
+    updateDraft(next);
+    setAddingSpawn(false);
+    const added = next.spawnNodes[next.spawnNodes.length - 1];
+    if (added) selectSpawn(added.id);
+  }
+
+  function updateSpawnGroup(nodeId: string, patch: Partial<SpawnNodeDef>) {
+    updateDraft(updateSpawnNode(draft, nodeId, patch));
+  }
+
+  /** Unlike a step (which can cascade-delete the rest of a sequence) or a first step (which removes a whole Unit instance), a spawn node has no chronology/ownership to protect — deletes immediately, same as an attack-track placement. */
+  function removeSpawnGroup(nodeId: string) {
+    updateDraft(deleteSpawnNode(draft, nodeId));
+    setSelection(null);
   }
 
   function addNextStep(instanceId: string) {
@@ -315,6 +357,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragPos(null);
   }
 
+  function beginSpawnDrag(nodeId: string, pos: Vec2, e: ReactPointerEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    setDragSpawn({ nodeId, pos });
+  }
+  function endSpawnDrag() {
+    if (!dragSpawn) return;
+    updateSpawnGroup(dragSpawn.nodeId, { origin: { ...draft.spawnNodes.find((n) => n.id === dragSpawn.nodeId)!.origin, anchor: dragSpawn.pos } });
+    setDragSpawn(null);
+  }
+
   /** Begins dragging `which` handle of `stepId`, seeding the drag from its current resolved (possibly-defaulted, turnRate-clamped) absolute position so the dot doesn't jump when you first touch it. */
   function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<HTMLButtonElement>) {
     e.stopPropagation();
@@ -378,6 +431,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     if (dragPos) {
       setDragPos({ ...dragPos, pos: worldPos });
     }
+    if (dragSpawn) {
+      setDragSpawn({ ...dragSpawn, pos: worldPos });
+    }
     if (dragHandle) {
       const instance = draft.units.find((u) => u.id === dragHandle.instanceId);
       const idx = instance?.steps.findIndex((s) => s.id === dragHandle.stepId) ?? -1;
@@ -408,13 +464,43 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     endDrag();
     endHandleDrag();
     endAimDrag();
+    endSpawnDrag();
   }
 
-  // Bounding box spans every instance's every step PLUS the tile reference frame itself, so the frame is always visible even before any Unit is placed.
+  const tileWidthPx = tile.footprint * TILE_UNIT;
+
+  /** The spawn node's anchor with a drag-in-progress override applied — used for rendering only, same "never write to draft until the drag ends" rule as effectiveStep. */
+  function effectiveSpawnAnchor(node: SpawnNodeDef): Vec2 {
+    return dragSpawn && dragSpawn.nodeId === node.id ? dragSpawn.pos : node.origin.anchor;
+  }
+
+  /** Deterministic ghost-dot preview of a `shape` origin's individual layout at a representative count (minCount, or 1 if unset) — region scatter is intentionally NOT previewed here (Math.random() would jitter every unrelated re-render); SpawnScalingPreview.tsx's dot bar is where region/region-adjacent count feedback lives instead. */
+  function spawnGhostPositions(node: SpawnNodeDef): Vec2[] {
+    if (node.origin.type !== "shape") return [];
+    const anchored = { ...node, origin: { ...node.origin, anchor: effectiveSpawnAnchor(node) } };
+    return resolveSpawnPositions(anchored, Math.max(node.minCount, SPAWN_GHOST_PREVIEW_COUNT_FALLBACK), tileWidthPx);
+  }
+
+  /** Every world-space point a spawn node occupies, for the canvas bounding box — the anchor itself, plus a region's box corners or a shape's ghost dots, so the box/template is never clipped off-canvas. */
+  function spawnBoundsPositions(node: SpawnNodeDef): Vec2[] {
+    const anchor = effectiveSpawnAnchor(node);
+    if (node.origin.type === "region") {
+      const halfW = node.origin.regionWidth / 2;
+      const halfH = node.origin.regionHeight / 2;
+      return [anchor, { x: anchor.x - halfW, y: anchor.y - halfH }, { x: anchor.x + halfW, y: anchor.y + halfH }];
+    }
+    if (node.origin.type === "shape") return [anchor, ...spawnGhostPositions(node)];
+    return [anchor];
+  }
+
+  // Bounding box spans every instance's every step, every spawn node's
+  // anchor/box/ghost-preview, PLUS the tile reference frame itself, so the
+  // frame is always visible even before any Unit is placed.
   const allPositions: Vec2[] = [
     { x: 0, y: 0 },
     { x: tile.footprint * TILE_UNIT, y: TILE_UNIT },
     ...draft.units.flatMap((inst) => inst.steps.map((s) => effectiveStep(inst.id, s).pos)),
+    ...draft.spawnNodes.flatMap(spawnBoundsPositions),
   ];
   const minX = Math.min(...allPositions.map((p) => p.x));
   const minY = Math.min(...allPositions.map((p) => p.y));
@@ -427,9 +513,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     return { x: pos.x - minX + PADDING, y: pos.y - minY + PADDING };
   }
 
-  const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
+  const selectedInstance = selection && selection.kind !== "spawn" ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
   const selectedStep: EncounterStep | undefined = selection?.kind === "step" ? selectedInstance?.steps.find((s) => s.id === selection.stepId) : undefined;
   const selectedAttack: EncounterAttack | undefined = selection?.kind === "attack" ? selectedInstance?.attacks.find((a) => a.id === selection.attackId) : undefined;
+  const selectedSpawn: SpawnNodeDef | undefined = selection?.kind === "spawn" ? draft.spawnNodes.find((n) => n.id === selection.nodeId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
   const selectedIdx = selectedInstance && selectedStep ? selectedInstance.steps.findIndex((s) => s.id === selectedStep.id) : -1;
   const selectedNextStep = selectedInstance && selectedIdx >= 0 ? selectedInstance.steps[selectedIdx + 1] : undefined;
@@ -494,7 +581,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         the curve leaving/arriving at it. Tap 🔫+ to add an attack anywhere on that Unit's timeline — it fires from wherever its path puts it at
         that time, not tied to a movement waypoint; a fixed-aim attack gets its own draggable handle. The dashed box is this tile's real
         footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below still lets you
-        drag to adjust pacing, and Play/scrub previews motion (teal marker).
+        drag to adjust pacing, and Play/scrub previews motion (teal marker). ◈ markers are spawn nodes — procedural group spawns referencing a
+        Unit, with their own origin/timing/scaling settings below (drag ✥ to reposition, dotted preview shows a shape's layout).
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -723,6 +811,67 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             });
           })}
 
+          {draft.spawnNodes.map((node) => {
+            const anchorWorld = effectiveSpawnAnchor(node);
+            const anchorStage = toStage(anchorWorld);
+            const isSelected = selection?.kind === "spawn" && selection.nodeId === node.id;
+            const unitDef = units.find((u) => u.id === node.unitDefId);
+            const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+            const regionStage = node.origin.type === "region" ? toStage({ x: anchorWorld.x - node.origin.regionWidth / 2, y: anchorWorld.y - node.origin.regionHeight / 2 }) : null;
+            return (
+              <div key={node.id}>
+                {regionStage && (
+                  <div
+                    className="shmup-spawn-region-box"
+                    style={{ left: regionStage.x, top: regionStage.y, width: node.origin.regionWidth, height: node.origin.regionHeight }}
+                  />
+                )}
+                {spawnGhostPositions(node).map((p, i) => {
+                  const stage = toStage(p);
+                  return <div key={i} className="shmup-spawn-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
+                })}
+                <div className="shmup-spawn-node-wrap" style={{ left: anchorStage.x - SPAWN_MARKER_RADIUS, top: anchorStage.y - SPAWN_MARKER_RADIUS }}>
+                  <button
+                    type="button"
+                    className={`shmup-spawn-node ${isSelected ? "shmup-spawn-node--selected" : ""}`}
+                    style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectSpawn(node.id);
+                    }}
+                    title={`${node.name} — ${unitDef?.name ?? "(no Unit set)"} (${node.origin.type})`}
+                  >
+                    {!spriteUrl && "◈"}
+                  </button>
+                  <div className="shmup-enemy-node__label">{node.name}</div>
+                  {isSelected && (
+                    <div className="shmup-enemy-node__controls">
+                      <button
+                        type="button"
+                        className="shmup-enemy-node__btn shmup-enemy-node__btn--move"
+                        title="Drag to move this spawn group's origin"
+                        onPointerDown={(e) => beginSpawnDrag(node.id, anchorWorld, e)}
+                      >
+                        ✥
+                      </button>
+                      <button
+                        type="button"
+                        className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeSpawnGroup(node.id);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
           {draft.units.map((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
             const preview = computeInstancePreview(instance, unitDef, scrubTime);
@@ -749,7 +898,11 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         onScrub={setScrubTime}
         playing={playing}
         onTogglePlay={() => setPlaying((v) => !v)}
-        selection={selection}
+        // Spawn-node selection isn't represented on the shared timeline yet
+        // (its own delay/interval timing is authored in SpawnNodePanel,
+        // not visualized as a track) — narrow it away rather than widening
+        // EncounterTimeline's own Selection type for a case it doesn't render.
+        selection={selection && selection.kind !== "spawn" ? selection : null}
         onSelectStep={selectStep}
         onSelectAttack={selectAttack}
         onRetimeStep={handleRetimeStep}
@@ -758,6 +911,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       <div className="shmup-btn-row">
         <button type="button" className="shmup-btn" onClick={() => setAddingUnit((v) => !v)}>
           + Add Unit
+        </button>
+        <button type="button" className="shmup-btn" onClick={() => setAddingSpawn((v) => !v)}>
+          + Add Spawn Node
         </button>
       </div>
       {addingUnit && (
@@ -777,6 +933,30 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             })
           )}
           <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddingUnit(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {addingSpawn && (
+        <div className="shmup-tile-picker">
+          {units.length === 0 ? (
+            <p className="shmup-hint">No Units in the library yet — a spawn node can still be added and pointed at a Unit later (Units menu).</p>
+          ) : (
+            units.map((u) => {
+              const url = resolveSpriteUrl(u.spriteId, u.customSprite);
+              return (
+                <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addSpawnGroup(u.id)} title={u.name}>
+                  <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
+                    {!url && <span>{u.name}</span>}
+                  </div>
+                </button>
+              );
+            })
+          )}
+          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => addSpawnGroup(null)}>
+            {units.length === 0 ? "Add" : "Skip (pick Unit later)"}
+          </button>
+          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddingSpawn(false)}>
             Cancel
           </button>
         </div>
@@ -816,6 +996,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateAttack(i, selectedAttack.id, patch))}
         />
       )}
+
+      {selectedSpawn && <SpawnNodePanel node={selectedSpawn} units={units} onChange={(patch) => updateSpawnGroup(selectedSpawn.id, patch)} />}
 
       {error && <p className="shmup-error">{error}</p>}
       <div className="shmup-btn-row">
