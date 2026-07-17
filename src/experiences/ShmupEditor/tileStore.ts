@@ -6,7 +6,7 @@
  */
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
-import { isValidEncounter, normalizeEncounter } from "./encounterValidation";
+import { isValidEncounter } from "./encounterValidation";
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID } from "./tileImages";
 import type { EdgeSlot, TileDef } from "./types";
 
@@ -25,11 +25,11 @@ import type { EdgeSlot, TileDef } from "./types";
 // (Parts/weapon-track pass) — bumping for the same reason.
 // v6: embedded EncounterStep's `actionId` was replaced by a plain
 // `visible: boolean` (Actions cut entirely) — bumping for the same reason.
-// EncounterDef.spawnNodes (E3 #193) does NOT bump this further — same
-// "purely additive optional field" treatment as customImage: a pre-E3
-// encounter simply lacks the array, and normalizeTile below backfills it
-// to [] via normalizeEncounter rather than the whole tile being discarded.
-const SAVE_VERSION = 6;
+// v7: embedded EncounterUnit gained `scaling: UnitScaling` (E3 #193, a
+// required object with its own required fields, not a purely-additive
+// optional one) — bumping for the same "reset rather than silently carry a
+// mismatched shape" reason as every prior EncounterUnit shape change.
+const SAVE_VERSION = 7;
 
 interface SavedLibrary {
   version: number;
@@ -74,7 +74,7 @@ function normalizeTile(tile: TileDef): TileDef {
   const customImage = typeof tile.customImage === "string" && tile.customImage ? tile.customImage : null;
   // A tile can't be left pointing imageId at a custom image that doesn't exist.
   const imageId = tile.imageId === CUSTOM_IMAGE_ID && !customImage ? NONE_IMAGE_ID : tile.imageId;
-  const encounters = Array.isArray(tile.encounters) ? tile.encounters.filter(isValidEncounter).map(normalizeEncounter) : [];
+  const encounters = Array.isArray(tile.encounters) ? tile.encounters.filter(isValidEncounter) : [];
   // Strip a stale `biome` key left over from a removed feature — not part
   // of TileDef anymore, so a load shouldn't resurrect/re-persist it.
   const clean: TileDef & { biome?: unknown } = { ...tile, imageId, customImage, encounters };

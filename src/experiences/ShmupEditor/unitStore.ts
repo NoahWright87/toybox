@@ -14,7 +14,7 @@
  */
 import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_UNITS_ID } from "../NsDoors97/filesystem/types";
-import { isValidEncounter, normalizeEncounter } from "./encounterValidation";
+import { isValidEncounter } from "./encounterValidation";
 import type { EncounterDef } from "./encounterTypes";
 import { createDefaultUnitLibrary, type UnitDef, type UnitPart, type WeaponDef } from "./unitTypes";
 import type { TileDef } from "./types";
@@ -189,9 +189,10 @@ export function clearUnitDraft(): void {
 // pass) — bumping for the same reason.
 // v5: EncounterStep's `actionId` was replaced by a plain `visible: boolean`
 // (Actions cut entirely) — bumping for the same reason.
-// EncounterDef.spawnNodes (E3 #193) does NOT bump this further — purely
-// additive, backfilled to [] by normalizeEncounter in loadTileSession below.
-const TILE_SESSION_VERSION = 5;
+// v6: EncounterUnit gained `scaling: UnitScaling` (E3 #193, a required
+// object, not a purely-additive optional field) — bumping for the same
+// reason as tileStore.ts's matching SAVE_VERSION bump.
+const TILE_SESSION_VERSION = 6;
 
 export interface TileEditSession {
   tile: TileDef;
@@ -241,8 +242,7 @@ export function loadTileSession(): TileEditSession | null {
     const { tile, activeEncounter } = parsed.session;
     if (!isValidSessionTile(tile)) return null;
     if (activeEncounter !== null && !isValidEncounter(activeEncounter)) return null;
-    // spawnNodes (E3 #193) is purely additive — backfilled here rather than bumping TILE_SESSION_VERSION, same as tileStore.ts's normalizeTile.
-    return { tile: { ...tile, encounters: tile.encounters.map(normalizeEncounter) }, activeEncounter: activeEncounter ? normalizeEncounter(activeEncounter) : null };
+    return { tile, activeEncounter };
   } catch {
     return null;
   }

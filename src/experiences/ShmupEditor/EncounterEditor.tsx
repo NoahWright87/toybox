@@ -3,17 +3,16 @@ import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
 import StepPanel from "./StepPanel";
 import AttackPanel from "./AttackPanel";
-import SpawnNodePanel from "./SpawnNodePanel";
+import UnitScalingPanel from "./UnitScalingPanel";
 import { resolveSpriteUrl } from "./enemySprites";
 import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
 import { addAttack, deleteAttack, updateAttack } from "./encounterAttacks";
-import { addSpawnNode, deleteSpawnNode, updateSpawnNode } from "./spawnNodes";
-import { resolveSpawnPositions } from "./spawnShapes";
 import { isStepTimeDerived, recomputeStepTimes, segmentArcLength, speedMultiplierForDuration } from "./encounterTiming";
 import { createEncounterUnit, type EncounterAttack, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
 import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
-import type { SpawnNodeDef } from "./spawnTypes";
+import { resolveScaling, type UnitScaling } from "./unitScaling";
+import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
 
@@ -27,15 +26,28 @@ interface EncounterEditorProps {
   onDraftChange: (encounter: EncounterDef) => void;
 }
 
-type Selection =
-  | { instanceId: string; kind: "step"; stepId: string }
-  | { instanceId: string; kind: "attack"; attackId: string }
-  | { kind: "spawn"; nodeId: string }
-  | null;
+type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
 type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
-type SpawnDrag = { nodeId: string; pos: Vec2 } | null;
 /** Dragging an attack's aim handle — unlike bezier handles (an offset from a fixed step position), an attack's anchor itself moves along the bezier path over time, so the only thing worth persisting is the angle, not a position offset. */
 type AimDrag = { instanceId: string; attackId: string; angleDeg: number } | null;
+
+/** Every draggable handle a Scaling positioning shape can offer (unitScaling.ts's UnitScaling — curve/v/grid/ring, plus the ping-pong override axis). Only the currently-selected shape's handles render at once, per "Design Handoff v2" §8.2. */
+type ScalingHandleId =
+  | { kind: "curvePoint"; index: number }
+  | { kind: "curveEnd" }
+  | { kind: "vTip" }
+  | { kind: "gridWidth" }
+  | { kind: "gridDepth" }
+  | { kind: "ringCenter" }
+  | { kind: "ringRadius" }
+  | { kind: "pingPongOverride" };
+type ScalingDrag = { instanceId: string; handle: ScalingHandleId; pos: Vec2 } | null;
+
+function sameScalingHandle(a: ScalingHandleId, b: ScalingHandleId): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "curvePoint" && b.kind === "curvePoint") return a.index === b.index;
+  return true;
+}
 
 const NODE_DIAMETER = 56;
 const NODE_RADIUS = NODE_DIAMETER / 2;
@@ -53,11 +65,6 @@ const ATTACK_MARKER_DIAMETER = 32;
 const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
 /** Purely visual length of the aim-direction indicator/handle from an attack's anchor position — not a stored value, just how far out the drag target renders. */
 const AIM_HANDLE_LENGTH = 55;
-/** A spawn node's anchor marker (SpawnNodePanel.tsx's origin) — distinct size/shape from both a movement waypoint and an attack marker so all three read as different kinds of thing at a glance. */
-const SPAWN_MARKER_DIAMETER = 40;
-const SPAWN_MARKER_RADIUS = SPAWN_MARKER_DIAMETER / 2;
-/** Small non-interactive dots previewing a shape origin's individual layout — deterministic (no Math.random(), unlike a region origin's scatter) so they render stably every frame; shown at this representative count rather than any live difficulty budget (see SpawnScalingPreview.tsx for the numeric preview, which does model budget). */
-const SPAWN_GHOST_PREVIEW_COUNT_FALLBACK = 1;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -107,6 +114,14 @@ function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined
  * automatically; `handleRetimeStep` is what makes dragging a derived step
  * on the timeline still feel like "set the time" even though under the
  * hood it's solving for a speed adjustment instead.
+ *
+ * **Scaling (E3 #193, unitScaling.ts) is a per-instance tab, not a new
+ * kind of thing.** Tapping ⚖️ on an instance's first step opens its
+ * Scaling panel (`UnitScalingPanel`, below the canvas, replacing Step/
+ * Attack panels while open) and reveals that instance's positioning-shape
+ * handles directly on this same canvas — a duplicate replays the
+ * instance's whole step/attack sequence anchored to its own slot, so
+ * scaling never needs its own separate placement UI.
  */
 export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
   const [draft, setDraft] = useState<EncounterDef>(encounter);
@@ -114,19 +129,21 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
   const [dragHandle, setDragHandle] = useState<HandleDrag>(null);
   const [dragAim, setDragAim] = useState<AimDrag>(null);
-  const [dragSpawn, setDragSpawn] = useState<SpawnDrag>(null);
+  const [scalingDrag, setScalingDrag] = useState<ScalingDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [addingUnit, setAddingUnit] = useState(false);
-  const [addingSpawn, setAddingSpawn] = useState(false);
   const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
+  const [scalingOpenFor, setScalingOpenFor] = useState<string | null>(null);
+  const [scalingPreviewBudget, setScalingPreviewBudget] = useState(0);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const error = validate(draft);
 
-  // Ephemeral preview state (scrub position, play/pause) is intentionally
-  // NOT part of `draft`/onDraftChange — it's a viewing aid, not authored
-  // content, so it doesn't need to survive a reload like the actual steps do.
+  // Ephemeral preview state (scrub position, play/pause, scaling preview
+  // budget) is intentionally NOT part of `draft`/onDraftChange — a viewing
+  // aid, not authored content, so it doesn't need to survive a reload like
+  // the actual steps/scaling config do.
   const allStepTimes = draft.units.flatMap((u) => u.steps.map((s) => s.time));
   const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + LAST_STEP_PREVIEW_WINDOW : 10;
 
@@ -158,7 +175,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // tweak all affect some step's arc-length/speed math, so recomputing
   // after every change (rather than only at specific call sites) is what
   // keeps a moving step's `time` honest without having to remember to do
-  // it everywhere.
+  // it everywhere. Scaling-only patches pass through harmlessly (nothing
+  // to recompute), so this stays the single mutation entry point.
   function updateInstance(instanceId: string, updater: (instance: EncounterUnit) => EncounterUnit) {
     updateDraft({
       ...draft,
@@ -169,6 +187,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         return recomputeStepTimes(updated, unitDef);
       }),
     });
+  }
+
+  function updateScaling(instanceId: string, patch: Partial<UnitScaling>) {
+    updateInstance(instanceId, (i) => ({ ...i, scaling: { ...i.scaling, ...patch } }));
   }
 
   /**
@@ -198,7 +220,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   useEffect(() => {
-    if (!selection) return;
+    if (!selection && !scalingOpenFor) return;
     function handlePointerDown(e: PointerEvent) {
       const target = e.target instanceof Element ? e.target : null;
       // A button's own onClick already does the right thing — see shmup-editor.md's
@@ -208,11 +230,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       if (!target?.closest(".shmup-enemy-canvas-stage") && !target?.closest(".shmup-panel") && !target?.closest(".shmup-timeline")) {
         setSelection(null);
         setPendingDeleteKey(null);
+        setScalingOpenFor(null);
       }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [selection]);
+  }, [selection, scalingOpenFor]);
 
   /** The step with position/handle overrides applied while a drag is in progress — used for rendering only, never written to `draft` until the drag ends. */
   function effectiveStep(instanceId: string, step: EncounterStep): EncounterStep {
@@ -231,19 +254,41 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function selectStep(instanceId: string, stepId: string) {
     setPendingDeleteKey(null);
     setPickingAttackPartFor(null);
+    setScalingOpenFor(null);
     setSelection({ instanceId, kind: "step", stepId });
   }
 
   function selectAttack(instanceId: string, attackId: string) {
     setPendingDeleteKey(null);
     setPickingAttackPartFor(null);
+    setScalingOpenFor(null);
     setSelection({ instanceId, kind: "attack", attackId });
   }
 
-  function selectSpawn(nodeId: string) {
+  /** Toggles the Scaling panel/handles for an instance (via its first step's ⚖️ button) — selects that first step too, so selectedInstance/selectedUnitDef stay coherent for the handle-rendering code below, same selection this instance's Step panel would otherwise use. */
+  function toggleScaling(instanceId: string) {
+    if (scalingOpenFor === instanceId) {
+      setScalingOpenFor(null);
+      return;
+    }
     setPendingDeleteKey(null);
     setPickingAttackPartFor(null);
-    setSelection({ kind: "spawn", nodeId });
+    setScalingOpenFor(instanceId);
+    const instance = draft.units.find((u) => u.id === instanceId);
+    const first = instance?.steps[0];
+    if (first) setSelection({ instanceId, kind: "step", stepId: first.id });
+  }
+
+  function addCurvePoint(instanceId: string) {
+    updateInstance(instanceId, (i) => {
+      const s = i.scaling;
+      const last = s.curvePoints[s.curvePoints.length - 1] ?? { x: 0, y: 0 };
+      const newPoint: Vec2 = { x: (last.x + s.curveEnd.x) / 2, y: (last.y + s.curveEnd.y) / 2 };
+      return { ...i, scaling: { ...s, curvePoints: [...s.curvePoints, newPoint] } };
+    });
+  }
+  function removeCurvePoint(instanceId: string, index: number) {
+    updateInstance(instanceId, (i) => ({ ...i, scaling: { ...i.scaling, curvePoints: i.scaling.curvePoints.filter((_, idx) => idx !== index) } }));
   }
 
   function addUnitInstance(unitDefId: string) {
@@ -263,26 +308,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     updateDraft({ ...draft, units: draft.units.filter((u) => u.id !== instanceId) });
     setSelection(null);
     setPendingDeleteKey(null);
-  }
-
-  function addSpawnGroup(unitDefId: string | null) {
-    const index = draft.spawnNodes.length;
-    const anchor: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2, y: TILE_UNIT / 2 + index * 40 };
-    const next = addSpawnNode(draft, anchor, unitDefId);
-    updateDraft(next);
-    setAddingSpawn(false);
-    const added = next.spawnNodes[next.spawnNodes.length - 1];
-    if (added) selectSpawn(added.id);
-  }
-
-  function updateSpawnGroup(nodeId: string, patch: Partial<SpawnNodeDef>) {
-    updateDraft(updateSpawnNode(draft, nodeId, patch));
-  }
-
-  /** Unlike a step (which can cascade-delete the rest of a sequence) or a first step (which removes a whole Unit instance), a spawn node has no chronology/ownership to protect — deletes immediately, same as an attack-track placement. */
-  function removeSpawnGroup(nodeId: string) {
-    updateDraft(deleteSpawnNode(draft, nodeId));
-    setSelection(null);
+    if (scalingOpenFor === instanceId) setScalingOpenFor(null);
   }
 
   function addNextStep(instanceId: string) {
@@ -357,17 +383,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragPos(null);
   }
 
-  function beginSpawnDrag(nodeId: string, pos: Vec2, e: ReactPointerEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    (e.target as Element).setPointerCapture(e.pointerId);
-    setDragSpawn({ nodeId, pos });
-  }
-  function endSpawnDrag() {
-    if (!dragSpawn) return;
-    updateSpawnGroup(dragSpawn.nodeId, { origin: { ...draft.spawnNodes.find((n) => n.id === dragSpawn.nodeId)!.origin, anchor: dragSpawn.pos } });
-    setDragSpawn(null);
-  }
-
   /** Begins dragging `which` handle of `stepId`, seeding the drag from its current resolved (possibly-defaulted, turnRate-clamped) absolute position so the dot doesn't jump when you first touch it. */
   function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<HTMLButtonElement>) {
     e.stopPropagation();
@@ -409,6 +424,24 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragAim(null);
   }
 
+  function beginScalingDrag(instanceId: string, handle: ScalingHandleId, currentAbsolute: Vec2, e: ReactPointerEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    setScalingDrag({ instanceId, handle, pos: currentAbsolute });
+  }
+  /** Converts the drag's final absolute world position back into whichever offset/number field `handle` represents, per unitScaling.ts's "handle fields are offsets from the instance's own position" convention. */
+  function endScalingDrag() {
+    if (!scalingDrag) return;
+    const { instanceId, handle, pos } = scalingDrag;
+    const instance = draft.units.find((u) => u.id === instanceId);
+    const origin = instance?.steps[0]?.pos;
+    if (instance && origin) {
+      const offset: Vec2 = { x: pos.x - origin.x, y: pos.y - origin.y };
+      updateScaling(instanceId, scalingPatchForHandle(instance.scaling, handle, offset, pos));
+    }
+    setScalingDrag(null);
+  }
+
   // Inverse of toStage() (defined below, after the bounding box it depends
   // on) — screen/pointer coords back to world coords. minX/minY matter
   // here: they're nonzero whenever anything in the bounding box sits left
@@ -430,9 +463,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     if (!worldPos) return;
     if (dragPos) {
       setDragPos({ ...dragPos, pos: worldPos });
-    }
-    if (dragSpawn) {
-      setDragSpawn({ ...dragSpawn, pos: worldPos });
     }
     if (dragHandle) {
       const instance = draft.units.find((u) => u.id === dragHandle.instanceId);
@@ -459,48 +489,67 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         setDragAim({ ...dragAim, angleDeg });
       }
     }
+    if (scalingDrag) {
+      setScalingDrag({ ...scalingDrag, pos: worldPos });
+    }
   }
   function onStagePointerUp() {
     endDrag();
     endHandleDrag();
     endAimDrag();
-    endSpawnDrag();
+    endScalingDrag();
   }
 
   const tileWidthPx = tile.footprint * TILE_UNIT;
 
-  /** The spawn node's anchor with a drag-in-progress override applied — used for rendering only, same "never write to draft until the drag ends" rule as effectiveStep. */
-  function effectiveSpawnAnchor(node: SpawnNodeDef): Vec2 {
-    return dragSpawn && dragSpawn.nodeId === node.id ? dragSpawn.pos : node.origin.anchor;
-  }
-
-  /** Deterministic ghost-dot preview of a `shape` origin's individual layout at a representative count (minCount, or 1 if unset) — region scatter is intentionally NOT previewed here (Math.random() would jitter every unrelated re-render); SpawnScalingPreview.tsx's dot bar is where region/region-adjacent count feedback lives instead. */
-  function spawnGhostPositions(node: SpawnNodeDef): Vec2[] {
-    if (node.origin.type !== "shape") return [];
-    const anchored = { ...node, origin: { ...node.origin, anchor: effectiveSpawnAnchor(node) } };
-    return resolveSpawnPositions(anchored, Math.max(node.minCount, SPAWN_GHOST_PREVIEW_COUNT_FALLBACK), tileWidthPx);
-  }
-
-  /** Every world-space point a spawn node occupies, for the canvas bounding box — the anchor itself, plus a region's box corners or a shape's ghost dots, so the box/template is never clipped off-canvas. */
-  function spawnBoundsPositions(node: SpawnNodeDef): Vec2[] {
-    const anchor = effectiveSpawnAnchor(node);
-    if (node.origin.type === "region") {
-      const halfW = node.origin.regionWidth / 2;
-      const halfH = node.origin.regionHeight / 2;
-      return [anchor, { x: anchor.x - halfW, y: anchor.y - halfH }, { x: anchor.x + halfW, y: anchor.y + halfH }];
+  // Every scaling handle's currently-resolved absolute (world) position for
+  // `instance`, keyed by handle id — used both for rendering (dashed stalk
+  // lines + drag-target buttons) and for seeding a fresh drag from the
+  // right spot. Only the instance's *own* `scaling.shape` contributes
+  // handles, per "Design Handoff v2" §8.2 (contextual, not all-shapes-at-once).
+  function scalingHandlesFor(instance: EncounterUnit): { handle: ScalingHandleId; pos: Vec2 }[] {
+    const origin = instance.steps[0]?.pos;
+    if (!origin) return [];
+    const s = instance.scaling;
+    const handles: { handle: ScalingHandleId; pos: Vec2 }[] = [];
+    if (s.shape === "curve") {
+      s.curvePoints.forEach((p, index) => handles.push({ handle: { kind: "curvePoint", index }, pos: { x: origin.x + p.x, y: origin.y + p.y } }));
+      handles.push({ handle: { kind: "curveEnd" }, pos: { x: origin.x + s.curveEnd.x, y: origin.y + s.curveEnd.y } });
+    } else if (s.shape === "v") {
+      handles.push({ handle: { kind: "vTip" }, pos: { x: origin.x + s.vTip.x, y: origin.y + s.vTip.y } });
+    } else if (s.shape === "grid") {
+      handles.push({ handle: { kind: "gridWidth" }, pos: { x: origin.x + s.gridWidth / 2, y: origin.y } });
+      handles.push({ handle: { kind: "gridDepth" }, pos: { x: origin.x, y: origin.y + s.gridDepth / 2 } });
+    } else if (s.shape === "ring") {
+      const center = { x: origin.x + s.ringCenterOffset.x, y: origin.y + s.ringCenterOffset.y };
+      handles.push({ handle: { kind: "ringCenter" }, pos: center });
+      handles.push({ handle: { kind: "ringRadius" }, pos: { x: center.x + s.ringRadius, y: center.y } });
     }
-    if (node.origin.type === "shape") return [anchor, ...spawnGhostPositions(node)];
-    return [anchor];
+    if (s.pingPong) {
+      handles.push({ handle: { kind: "pingPongOverride" }, pos: { x: s.pingPongOverride ?? tileWidthPx / 2, y: -TILE_UNIT * 0.35 } });
+    }
+    return handles.map(({ handle, pos }) =>
+      scalingDrag && scalingDrag.instanceId === instance.id && sameScalingHandle(scalingDrag.handle, handle) ? { handle, pos: scalingDrag.pos } : { handle, pos }
+    );
   }
 
-  // Bounding box spans every instance's every step, every spawn node's
-  // anchor/box/ghost-preview, PLUS the tile reference frame itself, so the
-  // frame is always visible even before any Unit is placed.
+  // Bounding box spans every instance's every step, every visible scaling
+  // handle/ghost-slot, PLUS the tile reference frame itself, so the frame
+  // is always visible even before any Unit is placed.
+  const scalingOpenInstance = scalingOpenFor ? draft.units.find((u) => u.id === scalingOpenFor) : undefined;
+  const scalingGhostSlots = scalingOpenInstance
+    ? applyPingPong(
+        resolveScalingSlots(scalingOpenInstance.scaling, scalingOpenInstance.steps[0]?.pos ?? { x: 0, y: 0 }, resolveScaling(scalingOpenInstance.scaling, scalingPreviewBudget).count),
+        scalingOpenInstance.scaling,
+        tileWidthPx
+      )
+    : [];
   const allPositions: Vec2[] = [
     { x: 0, y: 0 },
     { x: tile.footprint * TILE_UNIT, y: TILE_UNIT },
     ...draft.units.flatMap((inst) => inst.steps.map((s) => effectiveStep(inst.id, s).pos)),
-    ...draft.spawnNodes.flatMap(spawnBoundsPositions),
+    ...(scalingOpenInstance ? scalingHandlesFor(scalingOpenInstance).map((h) => h.pos) : []),
+    ...scalingGhostSlots,
   ];
   const minX = Math.min(...allPositions.map((p) => p.x));
   const minY = Math.min(...allPositions.map((p) => p.y));
@@ -513,14 +562,40 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     return { x: pos.x - minX + PADDING, y: pos.y - minY + PADDING };
   }
 
-  const selectedInstance = selection && selection.kind !== "spawn" ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
+  /** Converts a scaling drag's final absolute position into a UnitScaling patch, per-handle-kind. */
+  function scalingPatchForHandle(scaling: UnitScaling, handle: ScalingHandleId, offset: Vec2, absolute: Vec2): Partial<UnitScaling> {
+    switch (handle.kind) {
+      case "curvePoint":
+        return { curvePoints: scaling.curvePoints.map((p, idx) => (idx === handle.index ? offset : p)) };
+      case "curveEnd":
+        return { curveEnd: offset };
+      case "vTip":
+        return { vTip: offset };
+      case "gridWidth":
+        return { gridWidth: Math.max(0, Math.abs(offset.x) * 2) };
+      case "gridDepth":
+        return { gridDepth: Math.max(0, Math.abs(offset.y) * 2) };
+      case "ringCenter":
+        return { ringCenterOffset: offset };
+      case "ringRadius": {
+        const center = scaling.ringCenterOffset;
+        return { ringRadius: Math.max(1, Math.hypot(offset.x - center.x, offset.y - center.y)) };
+      }
+      case "pingPongOverride":
+        return { pingPongOverride: absolute.x };
+      default:
+        return {};
+    }
+  }
+
+  const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
   const selectedStep: EncounterStep | undefined = selection?.kind === "step" ? selectedInstance?.steps.find((s) => s.id === selection.stepId) : undefined;
   const selectedAttack: EncounterAttack | undefined = selection?.kind === "attack" ? selectedInstance?.attacks.find((a) => a.id === selection.attackId) : undefined;
-  const selectedSpawn: SpawnNodeDef | undefined = selection?.kind === "spawn" ? draft.spawnNodes.find((n) => n.id === selection.nodeId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
   const selectedIdx = selectedInstance && selectedStep ? selectedInstance.steps.findIndex((s) => s.id === selectedStep.id) : -1;
   const selectedNextStep = selectedInstance && selectedIdx >= 0 ? selectedInstance.steps[selectedIdx + 1] : undefined;
   const hasOutgoingSegment = selectedInstance && selectedNextStep ? isStepTimeDerived(selectedInstance, selectedNextStep.id, selectedUnitDef) : false;
+  const scalingPanelOpen = !!selectedInstance && scalingOpenFor === selectedInstance.id;
 
   // Aim-handle geometry for a selected attack — only rendered for a
   // "fixed"-aim weapon, since "player"-aimed weapons have no fixed angle to
@@ -542,7 +617,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // HTML drag-target buttons below (real touch targets — see file header:
   // raw SVG circles were both too small and too fiddly to hit on mobile).
   const handleDots: { which: "in" | "out"; stage: Vec2 }[] = [];
-  if (selectedInstance && selectedStep) {
+  if (selectedInstance && selectedStep && !scalingPanelOpen) {
     const turnRate = selectedUnitDef?.turnRate ?? 1;
     const effSelected = effectiveStep(selectedInstance.id, selectedStep);
     const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
@@ -553,6 +628,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     }
   }
   const selectedNodeStage = selectedInstance && selectedStep ? toStage(effectiveStep(selectedInstance.id, selectedStep).pos) : null;
+
+  const scalingHandleEntries = scalingPanelOpen && selectedInstance ? scalingHandlesFor(selectedInstance) : [];
+  const scalingOriginStage = scalingPanelOpen && selectedInstance?.steps[0] ? toStage(selectedInstance.steps[0].pos) : null;
 
   const framePos = toStage({ x: 0, y: 0 });
 
@@ -579,10 +657,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       <p className="shmup-hint">
         Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition, or the teal ⬦ handles to bend
         the curve leaving/arriving at it. Tap 🔫+ to add an attack anywhere on that Unit's timeline — it fires from wherever its path puts it at
-        that time, not tied to a movement waypoint; a fixed-aim attack gets its own draggable handle. The dashed box is this tile's real
-        footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below still lets you
-        drag to adjust pacing, and Play/scrub previews motion (teal marker). ◈ markers are spawn nodes — procedural group spawns referencing a
-        Unit, with their own origin/timing/scaling settings below (drag ✥ to reposition, dotted preview shows a shape's layout).
+        that time, not tied to a movement waypoint; a fixed-aim attack gets its own draggable handle. Tap ⚖️ (first step only) to open that
+        instance's Scaling tab — duplicates replay its whole sequence, positioned by a draggable shape (Curve/V/Grid/Ring). The dashed box is
+        this tile's real footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below
+        still lets you drag to adjust pacing, and Play/scrub previews motion (teal marker).
       </p>
 
       <div className="shmup-enemy-canvas-scroll">
@@ -641,6 +719,25 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   strokeDasharray="3,3"
                 />
               ))}
+
+            {/* Scaling shape stalks — origin to each handle, dashed, same visual language as bezier handle stalks. */}
+            {scalingOriginStage &&
+              scalingHandleEntries.map(({ handle, pos }, i) => {
+                const stage = toStage(pos);
+                const anchorStage = handle.kind === "ringRadius" && selectedInstance ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === "ringCenter")?.pos ?? pos) : scalingOriginStage;
+                return (
+                  <line
+                    key={i}
+                    x1={anchorStage.x}
+                    y1={anchorStage.y}
+                    x2={stage.x}
+                    y2={stage.y}
+                    stroke="#ffbb33"
+                    strokeWidth={1.5}
+                    strokeDasharray="3,3"
+                  />
+                );
+              })}
           </svg>
 
           {/* Bezier handle drag targets — real HTML buttons (not SVG shapes) so they're actually hittable on mobile, same reasoning as the ✥/+/✕ node controls below. */}
@@ -668,6 +765,29 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             />
           )}
 
+          {/* A scaling positioning-shape's handles — one set per shape kind (Curve/V/Grid/Ring), only while that instance's Scaling tab is open. */}
+          {selectedInstance &&
+            scalingHandleEntries.map(({ handle, pos }, i) => {
+              const stage = toStage(pos);
+              const title = handle.kind === "pingPongOverride" ? "Drag to set an asymmetric mirror axis" : "Drag to shape this scaling group";
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className="shmup-handle-btn shmup-handle-btn--scaling"
+                  title={title}
+                  style={{ left: stage.x - HANDLE_RADIUS, top: stage.y - HANDLE_RADIUS }}
+                  onPointerDown={(e) => beginScalingDrag(selectedInstance.id, handle, pos, e)}
+                />
+              );
+            })}
+
+          {/* Ghost slot preview — where duplicates would land at the panel's preview-budget count, dim and non-interactive. */}
+          {scalingGhostSlots.map((p, i) => {
+            const stage = toStage(p);
+            return <div key={i} className="shmup-scaling-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
+          })}
+
           {draft.units.flatMap((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
             const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
@@ -694,6 +814,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   <div className="shmup-enemy-node__badges">
                     {first && <span title="First step">▶</span>}
                     {!step.visible && <span title="Hidden">👻</span>}
+                    {instance.scaling.maxCount > 1 && <span title="Scaling enabled">⚖️</span>}
                   </div>
 
                   {isSelected && (
@@ -737,6 +858,19 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                       >
                         ✕
                       </button>
+                      {first && (
+                        <button
+                          type="button"
+                          className={`shmup-enemy-node__btn shmup-enemy-node__btn--scaling ${scalingOpenFor === instance.id ? "shmup-enemy-node__btn--active" : ""}`}
+                          title="Scaling — duplicate this instance"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleScaling(instance.id);
+                          }}
+                        >
+                          ⚖️
+                        </button>
+                      )}
                     </div>
                   )}
                   {pickingAttackPartFor === instance.id && isSelected && unitDef && (
@@ -811,67 +945,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             });
           })}
 
-          {draft.spawnNodes.map((node) => {
-            const anchorWorld = effectiveSpawnAnchor(node);
-            const anchorStage = toStage(anchorWorld);
-            const isSelected = selection?.kind === "spawn" && selection.nodeId === node.id;
-            const unitDef = units.find((u) => u.id === node.unitDefId);
-            const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
-            const regionStage = node.origin.type === "region" ? toStage({ x: anchorWorld.x - node.origin.regionWidth / 2, y: anchorWorld.y - node.origin.regionHeight / 2 }) : null;
-            return (
-              <div key={node.id}>
-                {regionStage && (
-                  <div
-                    className="shmup-spawn-region-box"
-                    style={{ left: regionStage.x, top: regionStage.y, width: node.origin.regionWidth, height: node.origin.regionHeight }}
-                  />
-                )}
-                {spawnGhostPositions(node).map((p, i) => {
-                  const stage = toStage(p);
-                  return <div key={i} className="shmup-spawn-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
-                })}
-                <div className="shmup-spawn-node-wrap" style={{ left: anchorStage.x - SPAWN_MARKER_RADIUS, top: anchorStage.y - SPAWN_MARKER_RADIUS }}>
-                  <button
-                    type="button"
-                    className={`shmup-spawn-node ${isSelected ? "shmup-spawn-node--selected" : ""}`}
-                    style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      selectSpawn(node.id);
-                    }}
-                    title={`${node.name} — ${unitDef?.name ?? "(no Unit set)"} (${node.origin.type})`}
-                  >
-                    {!spriteUrl && "◈"}
-                  </button>
-                  <div className="shmup-enemy-node__label">{node.name}</div>
-                  {isSelected && (
-                    <div className="shmup-enemy-node__controls">
-                      <button
-                        type="button"
-                        className="shmup-enemy-node__btn shmup-enemy-node__btn--move"
-                        title="Drag to move this spawn group's origin"
-                        onPointerDown={(e) => beginSpawnDrag(node.id, anchorWorld, e)}
-                      >
-                        ✥
-                      </button>
-                      <button
-                        type="button"
-                        className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeSpawnGroup(node.id);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
           {draft.units.map((instance) => {
             const unitDef = units.find((u) => u.id === instance.unitDefId);
             const preview = computeInstancePreview(instance, unitDef, scrubTime);
@@ -898,11 +971,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         onScrub={setScrubTime}
         playing={playing}
         onTogglePlay={() => setPlaying((v) => !v)}
-        // Spawn-node selection isn't represented on the shared timeline yet
-        // (its own delay/interval timing is authored in SpawnNodePanel,
-        // not visualized as a track) — narrow it away rather than widening
-        // EncounterTimeline's own Selection type for a case it doesn't render.
-        selection={selection && selection.kind !== "spawn" ? selection : null}
+        selection={selection}
         onSelectStep={selectStep}
         onSelectAttack={selectAttack}
         onRetimeStep={handleRetimeStep}
@@ -911,9 +980,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       <div className="shmup-btn-row">
         <button type="button" className="shmup-btn" onClick={() => setAddingUnit((v) => !v)}>
           + Add Unit
-        </button>
-        <button type="button" className="shmup-btn" onClick={() => setAddingSpawn((v) => !v)}>
-          + Add Spawn Node
         </button>
       </div>
       {addingUnit && (
@@ -937,32 +1003,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           </button>
         </div>
       )}
-      {addingSpawn && (
-        <div className="shmup-tile-picker">
-          {units.length === 0 ? (
-            <p className="shmup-hint">No Units in the library yet — a spawn node can still be added and pointed at a Unit later (Units menu).</p>
-          ) : (
-            units.map((u) => {
-              const url = resolveSpriteUrl(u.spriteId, u.customSprite);
-              return (
-                <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addSpawnGroup(u.id)} title={u.name}>
-                  <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
-                    {!url && <span>{u.name}</span>}
-                  </div>
-                </button>
-              );
-            })
-          )}
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => addSpawnGroup(null)}>
-            {units.length === 0 ? "Add" : "Skip (pick Unit later)"}
-          </button>
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddingSpawn(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
 
-      {selectedInstance && selectedStep && pendingDeleteKey === deleteKey(selectedInstance.id, selectedStep.id) && (
+      {selectedInstance && selectedStep && !scalingPanelOpen && pendingDeleteKey === deleteKey(selectedInstance.id, selectedStep.id) && (
         <div className="shmup-panel shmup-panel--confirm">
           <p className="shmup-hint">
             {isFirstStep(selectedInstance, selectedStep.id)
@@ -980,7 +1022,18 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         </div>
       )}
 
-      {selectedInstance && selectedStep && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
+      {selectedInstance && scalingPanelOpen && (
+        <UnitScalingPanel
+          scaling={selectedInstance.scaling}
+          previewBudget={scalingPreviewBudget}
+          onPreviewBudgetChange={setScalingPreviewBudget}
+          onChange={(patch) => updateScaling(selectedInstance.id, patch)}
+          onAddCurvePoint={() => addCurvePoint(selectedInstance.id)}
+          onRemoveCurvePoint={(index) => removeCurvePoint(selectedInstance.id, index)}
+        />
+      )}
+
+      {selectedInstance && selectedStep && !scalingPanelOpen && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
         <StepPanel
           step={selectedStep}
           timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
@@ -989,15 +1042,13 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         />
       )}
 
-      {selectedInstance && selectedAttack && (
+      {selectedInstance && selectedAttack && !scalingPanelOpen && (
         <AttackPanel
           unit={selectedUnitDef}
           attack={selectedAttack}
           onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateAttack(i, selectedAttack.id, patch))}
         />
       )}
-
-      {selectedSpawn && <SpawnNodePanel node={selectedSpawn} units={units} onChange={(patch) => updateSpawnGroup(selectedSpawn.id, patch)} />}
 
       {error && <p className="shmup-error">{error}</p>}
       <div className="shmup-btn-row">

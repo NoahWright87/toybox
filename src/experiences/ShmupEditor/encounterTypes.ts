@@ -59,18 +59,15 @@
  * +" ordering rule — an attack can be placed anywhere on the timeline,
  * `encounterAttacks.ts` is unordered array CRUD, no chronology invariant.
  *
- * **Spawn nodes are a second, procedural way an encounter populates
- * enemies (E3 #193, spawnTypes.ts) — not a new "variant" concept.** The
- * encounter this file's `EncounterDef` describes already IS the "tile
- * variant" from levels-and-tiles.spec.todo.md §1 (see `weight`, above: "a
- * random one (weighted) is picked when the tile spawns"). A spawn node
- * lives inside one encounter, alongside its hand-placed `units`, and
- * describes a whole *group* — origin/distribution/direction/mirror/
- * timing/scaling referencing a single UnitDef — instead of an individually
- * authored bezier step sequence per enemy. See spawnTypes.ts for the full
- * data model and reasoning.
+ * **Each `EncounterUnit` instance also owns a `scaling: UnitScaling`**
+ * (E3 #193, unitScaling.ts) — a per-instance panel, separate from its
+ * step/attack authoring, for procedurally duplicating that exact placed
+ * instance (same steps/attacks replayed per duplicate, anchored to its own
+ * slot) as the difficulty budget allows. See unitScaling.ts for the full
+ * data model and reasoning; this is not a new kind of thing alongside
+ * `EncounterUnit` — it's a field on it, per "Design Handoff v2" §6.
  */
-import type { SpawnNodeDef } from "./spawnTypes";
+import { createDefaultScaling, type UnitScaling } from "./unitScaling";
 
 export interface Vec2 {
   x: number;
@@ -110,12 +107,14 @@ export interface EncounterAttack {
   aimAngleOverride: number | null;
 }
 
-/** One Unit's placement + step sequence + attack-track placements within a single encounter. */
+/** One Unit's placement + step sequence + attack-track placements + scaling config within a single encounter. */
 export interface EncounterUnit {
   id: string;
   unitDefId: string;
   steps: EncounterStep[];
   attacks: EncounterAttack[];
+  /** Procedural duplication of this exact instance — see unitScaling.ts. */
+  scaling: UnitScaling;
 }
 
 export interface EncounterDef {
@@ -124,8 +123,6 @@ export interface EncounterDef {
   /** Relative weight when a tile has multiple encounters and one is picked at random (default 1). */
   weight: number;
   units: EncounterUnit[];
-  /** Procedural group-spawn configurations — see spawnTypes.ts. A second, independent way this encounter populates enemies, alongside `units`' hand-placed instances. */
-  spawnNodes: SpawnNodeDef[];
   createdAt: number;
   modifiedAt: number;
 }
@@ -150,12 +147,11 @@ export function createBlankEncounter(existingCount: number): EncounterDef {
     name: `Encounter ${existingCount + 1}`,
     weight: 1,
     units: [],
-    spawnNodes: [],
     createdAt: now,
     modifiedAt: now,
   };
 }
 
 export function createEncounterUnit(unitDefId: string): EncounterUnit {
-  return { id: makeEncounterUnitId(), unitDefId, steps: [], attacks: [] };
+  return { id: makeEncounterUnitId(), unitDefId, steps: [], attacks: [], scaling: createDefaultScaling() };
 }

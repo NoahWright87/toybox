@@ -972,139 +972,122 @@ Both new files are seeded for new installs (`filesystem/seed.ts`) and
 backfilled for existing sessions (`FileSystemStore.ts`'s `migrate()`), same
 as `TILES.DAT`.
 
-## Spawn nodes (E3)
+## Per-instance scaling (E3)
 
-**Not a new "variant" concept — `EncounterDef` already was one.** E3's
-scope question going in was where a spawn node's parent "tile variant"
-(`levels-and-tiles.spec.todo.md` §1: "a tile definition can declare
-multiple mutually-exclusive spawn variants... the generator picks one at
-placement time, optionally weighted") should live, since E1 never built a
-dedicated `variants` concept. The answer turned out to already exist:
-`EncounterDef.weight` (E2, above) plus its own doc comment — "a random one
-(weighted) is picked when the tile spawns in a level" — **is** that
-mutually-exclusive-variant mechanism; a tile's `encounters` list already
-*is* levels-and-tiles.spec.todo.md §1's "variants." So E3 added spawn
-nodes as a **second, procedural way one encounter populates enemies**,
-living inside `EncounterDef` alongside its hand-placed `units` — not a new
-sibling list on `TileDef`.
+**Corrected mid-flight — the first pass built this wrong.** An initial cut
+of E3 modeled "spawn nodes" as a standalone concept (`SpawnNodeDef`) living
+parallel to `EncounterUnit`, with its own origin/marker/picker on the
+canvas — a second, competing way to populate an encounter. Noah's
+correction, against the original "Design Handoff v2" doc's actual §6: you
+place a Unit and author its behavior with the **existing** step/attack
+timeline exactly as before (unchanged by E3 at all); Scaling is **a tab/
+section on that already-placed instance**, not a new kind of thing. The
+standalone-spawn-node code was deleted outright, not kept around unused —
+see git history if the earlier shape is ever relevant. This section
+describes what actually shipped after the correction.
 
-**What a spawn node is, that an `EncounterUnit` isn't**: an `EncounterUnit`
-is one hand-authored individual with its own full bezier step sequence and
-attack tracks. A spawn node (`SpawnNodeDef`, `spawnTypes.ts`) is a whole
-*group* — it references one `UnitDef` by id and describes where the group
-originates, how it's laid out, how it's timed, and how its count/power
-scales with the difficulty budget — without authoring an individual step
-sequence per spawned enemy. How a procedurally-spawned individual actually
-moves once it exists (there's no per-instance path to reference) is
-explicitly left to the game-runtime implementation to resolve, the same
-open question `shmup-editor.md`'s Related section already flags for a
-Weapon-spawned bullet Unit.
+**`EncounterUnit` gained a `scaling: UnitScaling` field** (`unitScaling.ts`)
+— every placed instance has one, always, at `maxCount: 1` (a no-op) by
+default. Opening the Scaling tab doesn't create anything new; it edits a
+field that was already there. A duplicate produced by scaling **replays
+the instance's entire step/attack sequence independently, anchored to its
+own slot** (convoy-style) — this file only computes *where* the slots are
+and *how many* there are, never behavior.
 
-- **Origin** (`SpawnOrigin`): `point` (single fixed location — every
-  individual emerges from the same spot, staggered only by timing),
-  `region` (a box; individuals scatter randomly within it — `Math.random()`,
-  a representative editor preview, not the seeded/deterministic system the
-  real game generator will need per `levels-and-tiles.spec.todo.md` §2), or
-  `shape` (a template — V/arc/line/grid — whose individuals' spacing is
-  *derived* from how many fill it, per spec: "a count of 3 spaces widely, a
-  count of 15 packs tightly, same shape either way," never authored
-  per-count). `spanStart`/`spanEnd` are normalized percentages of the
-  owning tile's real footprint width (spec's own example: "a V spanning
-  25-75% of tile width") — `spawnShapes.ts`'s `computeShapePositions` is
-  the pure, unit-tested local-space layout math (a V/arc use the span's
-  midpoint as a symmetric apex, rising/bowing toward the edges; grid packs
-  into rows/cols within the span box).
-- **Distribution**, **direction**, **mirror**: plain fields per spec —
-  distribution is free (not force-derived from origin type, though
-  region/shape typically pair with random/ordered respectively); direction
-  is a rotation applied to a `shape` origin's template only (region/point
-  don't rotate — nothing directional to rotate); mirror reflects the whole
-  resolved origin across the *owning tile's own width* (`tileWidthPx - x`),
-  composing with any origin type, exactly as spec describes.
-- **Timing**: `delayMs`, `intervalMs` (0 = simultaneous, >0 = a staggered
-  queue), `countMode: "fixed" | "untilTileEnds"`. There's no separate
-  `fixedCount` field — when `countMode === "fixed"`, the actual total *is*
-  whatever the scaling system below resolves; keeping one number instead of
-  two redundant/possibly-contradictory ones.
-- **Scaling** (`difficultyCurve.ts` + `spawnTypes.ts`) — the one piece of
-  `spawn-and-warnings.spec.todo.md` §1's shared curve-type system
-  (`flat`/`linear`/`capped`/`stepped`) this pass actually wires up, scoped
-  narrowly to what §2 explicitly assigns a spawn node: `minCount`,
-  `maxCount`, `powerSplit` (0-100), plus a `countCurve: CurveDef` governing
-  how an incoming difficulty budget resolves to an actual spawn count
-  within `[minCount, maxCount]` — "spawn count" is one of the
-  curve-attachable params §1 names by name, so this isn't a stretch of the
-  spec's own scope. `resolveSpawnCount()` is pure/unit-tested: resolve the
-  curve, clamp into bounds, round to a whole individual.
-  **Deliberately NOT built in this pass**: retrofitting curves onto
-  individual Unit/Weapon numeric fields (HP, fire rate, damage...) — that's
-  §1's broader vision, but it would mean reopening E2's already-shipped
-  `UnitStatsForm`/`WeaponForm`, a materially larger and separate piece of
-  work. `CurveField.tsx` (the type/base/rate/cap/thresholds editor) and
-  `CurveDef`/`resolveCurve` (`difficultyCurve.ts`) are kept deliberately
-  generic — not spawn-node-specific — so that future retrofit can reuse
-  them instead of inventing its own curve UI/math. `resolvePowerMultiplier()`
-  is a representative preview number only (not wired to any real Unit
-  stat), same "no shared runtime yet to match" caveat `WeaponPreview.tsx`
-  already documents for its own approximations.
+**One scaling mechanism, not several — condensed down from an earlier
+over-build.** The first pass also over-built a `flat`/`linear`/`capped`/
+`stepped` curve-type picker (`spawn-and-warnings.spec.todo.md` §1's
+broader vision) onto the wrong data model. Per Noah's "condensed to just
+one": §4.2's recursive conserved-budget model is the *only* algorithm now
+— `resolveScaling()` (`unitScaling.ts`) splits an incoming budget between
+count (gated by `minCostPerInstance`, the self-limiting floor — once
+remaining budget can't afford one more instance, duplication stops, no
+artificial cap needed) and power (`powerSplit`, 0-100%), clamped to
+`[minCount, maxCount]`. No curve-shape choice anywhere. Unspendable
+leftover from a failed split is simply dropped (not folded into power) —
+preserves legible thresholds ("suddenly there are more") rather than
+smoothing into imperceptible continuous creep, per §4.2. `powerMultiplier`
+is a representative preview number only, same "no shared runtime yet to
+match" caveat `WeaponPreview.tsx` already documents for its own
+approximations — retrofitting real per-param curves onto Unit/Weapon stats
+stays out of scope (see `shmup-editor.todo.md`).
 
-**Surfaces** — spawn nodes render and are edited directly on the same
-Encounter canvas as `EncounterUnit` instances (`EncounterEditor.tsx`), not
-a separate view:
+**Positioning shape has real draggable canvas handles, not number-only
+fields** — per §6/§8.2, `ScalingShapeKind` is `curve`/`v`/`grid`/`ring`,
+each with its own handle set (`unitScalingShapes.ts`'s `resolveScalingSlots`
+is the pure, unit-tested geometry):
 
-- A ◈ diamond marker (`.shmup-spawn-node`, teal-on-dark) at the origin's
-  world-space anchor — deliberately a different shape/color from both a
-  movement waypoint (orange circle) and an attack marker (red circle) so
-  all three read as distinct kinds of thing at a glance. Selecting it
-  reveals the same ✥ move-handle (drag to reposition the anchor) and ✕
-  delete pattern as everywhere else on this canvas; delete is immediate, no
-  confirm step, same reasoning as an attack-track placement (no
-  chronology/ownership to protect).
-- A `region` origin additionally renders a dashed reference box
-  (`.shmup-spawn-region-box`) at its authored width/height. A `shape`
-  origin additionally renders small dim, non-interactive **ghost dots**
-  (`.shmup-spawn-ghost-dot`, via `resolveSpawnPositions`) previewing the
-  template's actual layout at a representative count (`minCount`, or 1) —
-  deterministic and stable across re-renders, unlike `region`'s
-  `Math.random()` scatter, which is intentionally *not* ghost-previewed on
-  canvas (it would jitter on every unrelated re-render, e.g. the timeline's
-  Play tick) — `SpawnScalingPreview`'s dot bar (below) is where
-  region-adjacent count feedback lives instead.
-- **`SpawnNodePanel.tsx`** (below-canvas, mirrors `StepPanel.tsx`/
-  `AttackPanel.tsx`'s role): name, Unit reference picker, origin type +
-  type-specific fields (region width/height; shape kind + span), free
-  distribution, direction, mirror, the three timing fields, and the
-  scaling fields plus `CurveField`. **`SpawnScalingPreview.tsx`** sits at
-  the bottom — a budget slider (0-100, editor-preview-only; there's no live
-  `D` value to read at authoring time) driving a live dot-bar readout of
-  `resolveSpawnCount`/`resolvePowerMultiplier` at the chosen budget, same
-  "a lot of numbers, zero defaults, nothing visual" motivation that drove
-  E2's `WeaponPreview.tsx`/`PartPositionEditor.tsx` follow-up pass.
-- **"+ Add Spawn Node"** sits next to "+ Add Unit" in the same toolbar row,
-  opening the same kind of Unit-library picker (sprite thumbnails) — with a
-  "Skip (pick Unit later)" escape hatch (or "Add" if the library is empty)
-  since, unlike an `EncounterUnit` instance, a spawn node is still
-  meaningful with `unitDefId: null` while it's being configured.
-- **Not (yet) on the shared timeline**: a spawn node's own `delayMs`/
-  `intervalMs` timing is authored in its panel, not visualized as a track
-  on `EncounterTimeline.tsx` the way steps/attacks are — `selection` is
-  narrowed away (`kind !== "spawn"`) before reaching that component rather
-  than widening its `Selection` type for a case it doesn't render yet. See
-  `shmup-editor.todo.md`'s Remaining list.
+- **Curve** — a variable-length polyline through `curvePoints` (add/remove
+  via panel buttons) ending at `curveEnd`, each an offset from the
+  instance's own position — unifies straight line (zero intermediate
+  points), arc, and S-curve as one primitive, per spec. Slots are placed at
+  even arc-length intervals along the whole polyline.
+- **V** — the instance's own position is the point/apex (fixed, per spec:
+  "original position becomes the V's point"); a single draggable `vTip`
+  handle sets the far end, `vWidth` (a panel field) sets how wide the two
+  arms spread at that end. Slots distribute symmetrically outward from the
+  apex, one arm each side.
+- **Grid** — two draggable handles (`gridWidth`/`gridDepth`, one on each
+  axis from the instance's own centered position) size a block/rank
+  formation; slots pack into the resulting rows/cols.
+- **Ring** — a draggable `ringCenter` handle (defaults to the instance's
+  own position, per spec) plus a draggable `ringRadius` handle at distance
+  `ringRadius` from it; slots distribute evenly around the circle.
+- All four are **offsets from the instance's own first-step position**, not
+  absolute world coordinates — same convention `EncounterStep.handleIn`/
+  `handleOut` already use, and what lets `createDefaultScaling()` produce
+  sensible handles regardless of where the instance ends up placed.
+- **Ping-pong**: mirrors the whole resolved slot set across the owning
+  tile's own center axis, free, no extra authoring — a `pingPongOverride`
+  (a draggable ⟷ handle, world-space X) is the narrow, only-shown-when-
+  relevant override for an intentionally asymmetric mirror, same "override
+  whitelist" pattern as a step's `speedMultiplier`.
+- Only the instance's own `scaling.shape`'s handles render at once — per
+  §8.2, "extra draggable handles... appear contextually only while editing
+  the relevant... Action," not all four shapes' handles simultaneously.
 
-**Persistence**: `EncounterDef.spawnNodes` is a purely-additive optional
-field, same treatment as `customImage` on `TileDef` — `tileStore.ts`'s
-`SAVE_VERSION` and `unitStore.ts`'s `TILE_SESSION_VERSION` were **not**
-bumped. `encounterValidation.ts`'s `isValidEncounter` tolerates a
-pre-existing encounter missing the field entirely; the new
-`normalizeEncounter()` backfills it to `[]` (filtering out any malformed
-entries) at every load site (`tileStore.ts`'s `normalizeTile`,
-`unitStore.ts`'s `loadTileSession`) — same two-step "permissive validate,
-then normalize" pattern `normalizeTile` already used for `customImage`. A
-spawn node's own in-progress edits ride along inside the existing
-`TILE-DRAFT.DAT` session for free (it's just another field on the
-`EncounterDef` object `TileEditorForm`/`EncounterEditor` already bubble up
-via `onDraftChange`) — no new stable FS id or session slot needed.
+**Surfaces** (`EncounterEditor.tsx`, `UnitScalingPanel.tsx`) — everything
+lives on the same canvas/panel area steps and attacks already use, no new
+view:
+
+- Each instance's **first step** gains a 5th control button, **⚖️**
+  (top-center — the existing move/add/attack/delete buttons occupy the 4
+  corners, and a lone single-step instance is simultaneously first *and*
+  last, so top-right is already claimed by "+"). Tapping it toggles that
+  instance's Scaling tab: the panel area below the canvas swaps `StepPanel`/
+  `AttackPanel` out for `UnitScalingPanel`, and that instance's shape
+  handles appear on the canvas (selecting the instance's first step under
+  the hood, so the existing `selectedInstance`/`selectedUnitDef` plumbing
+  stays coherent). A ⚖️ badge on the node itself (alongside ▶/👻) marks any
+  instance whose `maxCount > 1`, so scaling-enabled instances are
+  identifiable without opening the tab.
+- **Ghost slot dots** (`.shmup-scaling-ghost-dot`, dim, non-interactive)
+  preview where duplicates would actually land, computed live from
+  `resolveScalingSlots`/`applyPingPong` at the panel's own **preview
+  budget slider** (0-100, editor-preview-only — no live `D` at authoring
+  time) — dragging the slider updates the canvas ghost count in the same
+  frame as the panel's numeric readout, both driven by the one
+  `resolveScaling()` call. This is the closest E3 gets to §8.3's "difficulty
+  budget slider... shows ghost copies... appearing/repositioning live" —
+  scoped to one instance's own slider rather than a global one shared
+  across the whole encounter (see `shmup-editor.todo.md`'s Remaining list).
+- **Count range fields gate the rest of the panel**: `maxCount > 1` is what
+  reveals power split/min cost/spawn delay/shape/ping-pong/preview — at the
+  default `maxCount: 1`, the panel is just two fields and the instance
+  behaves exactly as if E3 didn't exist.
+
+**Persistence**: `EncounterUnit.scaling` is a **required** field validated
+strictly (`encounterValidation.ts`'s `isUnitScaling`) — not treated as a
+purely-additive optional one, same precedent as the Parts/weapon-track pass
+bumping versions when `EncounterUnit` gained `attacks`. `tileStore.ts`'s
+`SAVE_VERSION` (6→7) and `unitStore.ts`'s `TILE_SESSION_VERSION` (5→6) both
+bumped — a pre-E3 encounter unit is genuinely missing required scaling
+fields, not one optional one, so a stale save resets rather than being
+partially backfilled. Scaling edits ride along inside the existing
+`TILE-DRAFT.DAT` session for free (just another field on the `EncounterUnit`
+object already bubbled up via `onDraftChange`) — no new stable FS id or
+session slot needed, and no new saved draft state for the panel's own
+preview-budget slider (ephemeral, same as the timeline's scrub/play state).
 
 ## Persistence
 
@@ -1132,7 +1115,7 @@ hackable/discoverable in the file browser.
 
 - [`shmup-editor.todo.md`](shmup-editor.todo.md) — remaining work (E1's
   art import, E2/E3's deferred per-param scaling-curve retrofit, E4-E5)
-- [`games/shmup/levels-and-tiles.spec.todo.md`](games/shmup/levels-and-tiles.spec.todo.md) — the data model this editor's tile export shape matches, including §1's "tile variant" concept this editor realizes as `EncounterDef` (see "Spawn nodes (E3)" above)
-- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the game-runtime spec for L3/L4/L8 (Epic 5), reconciled to treat this editor's Unit+Parts+flat-step-list+bezier+WeaponDef shape (see "Unit + Encounter editor (E2)" above) as the authoritative content model, replacing its original node-graph draft. Flags a few open questions this editor's design doesn't need to answer but L3/L4's runtime implementation will: how a Weapon-spawned bullet Unit — or a spawn node's procedurally-placed individual (see "Spawn nodes (E3)" above) — moves without an authored step list, and whether branch-condition-dependent behaviors (flee/enrage/phase-change/onDeath) get a narrow opt-in replacement or stay hand-coded-only like bosses
-- [`games/shmup/spawn-and-warnings.spec.todo.md`](games/shmup/spawn-and-warnings.spec.todo.md) — §1's shared difficulty-budget curve system (`difficultyCurve.ts` implements it) and §2's spawn-node data model this editor's `SpawnNodeDef` export shape matches
+- [`games/shmup/levels-and-tiles.spec.todo.md`](games/shmup/levels-and-tiles.spec.todo.md) — the data model this editor's tile export shape matches, including §1's "tile variant" concept this editor realizes as `EncounterDef` (see "Unit + Encounter editor (E2)" above)
+- [`games/shmup/enemies-and-bullets.spec.todo.md`](games/shmup/enemies-and-bullets.spec.todo.md) — the game-runtime spec for L3/L4/L8 (Epic 5), reconciled to treat this editor's Unit+Parts+flat-step-list+bezier+WeaponDef shape (see "Unit + Encounter editor (E2)" above) as the authoritative content model, replacing its original node-graph draft. Flags a few open questions this editor's design doesn't need to answer but L3/L4's runtime implementation will: how a Weapon-spawned bullet Unit moves without an authored step list, and whether branch-condition-dependent behaviors (flee/enrage/phase-change/onDeath) get a narrow opt-in replacement or stay hand-coded-only like bosses
+- [`games/shmup/spawn-and-warnings.spec.todo.md`](games/shmup/spawn-and-warnings.spec.todo.md) — §1's shared difficulty-budget model (§4.2's recursive conserved-budget variant is what "Per-instance scaling (E3)" above implements; §1's broader per-param curve-type system stays unbuilt, see `shmup-editor.todo.md`) and §2's spawn-node draft, superseded for this editor by the per-instance Scaling design above (see git history for the earlier, wrong standalone-spawn-node shape)
 - [`ns-doors-97.md`](ns-doors-97.md) — the filesystem this tool persists through
