@@ -134,14 +134,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [addingUnit, setAddingUnit] = useState(false);
   const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
   const [scalingOpenFor, setScalingOpenFor] = useState<string | null>(null);
-  const [scalingPreviewBudget, setScalingPreviewBudget] = useState(0);
+  const [scalingPreviewDifficulty, setScalingPreviewDifficulty] = useState(0);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const error = validate(draft);
 
   // Ephemeral preview state (scrub position, play/pause, scaling preview
-  // budget) is intentionally NOT part of `draft`/onDraftChange — a viewing
+  // Difficulty) is intentionally NOT part of `draft`/onDraftChange — a viewing
   // aid, not authored content, so it doesn't need to survive a reload like
   // the actual steps/scaling config do.
   const allStepTimes = draft.units.flatMap((u) => u.steps.map((s) => s.time));
@@ -539,7 +539,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const scalingOpenInstance = scalingOpenFor ? draft.units.find((u) => u.id === scalingOpenFor) : undefined;
   const scalingGhostSlots = scalingOpenInstance
     ? applyPingPong(
-        resolveScalingSlots(scalingOpenInstance.scaling, scalingOpenInstance.steps[0]?.pos ?? { x: 0, y: 0 }, resolveScaling(scalingOpenInstance.scaling, scalingPreviewBudget).count),
+        resolveScalingSlots(scalingOpenInstance.scaling, scalingOpenInstance.steps[0]?.pos ?? { x: 0, y: 0 }, resolveScaling(scalingOpenInstance.scaling, scalingPreviewDifficulty).count),
         scalingOpenInstance.scaling,
         tileWidthPx
       )
@@ -782,7 +782,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               );
             })}
 
-          {/* Ghost slot preview — where duplicates would land at the panel's preview-budget count, dim and non-interactive. */}
+          {/* Ghost slot preview — where duplicates would land at the panel's preview-Difficulty count, dim and non-interactive. */}
           {scalingGhostSlots.map((p, i) => {
             const stage = toStage(p);
             return <div key={i} className="shmup-scaling-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
@@ -1025,8 +1025,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       {selectedInstance && scalingPanelOpen && (
         <UnitScalingPanel
           scaling={selectedInstance.scaling}
-          previewBudget={scalingPreviewBudget}
-          onPreviewBudgetChange={setScalingPreviewBudget}
+          previewDifficulty={scalingPreviewDifficulty}
+          onPreviewDifficultyChange={setScalingPreviewDifficulty}
           onChange={(patch) => updateScaling(selectedInstance.id, patch)}
           onAddCurvePoint={() => addCurvePoint(selectedInstance.id)}
           onRemoveCurvePoint={(index) => removeCurvePoint(selectedInstance.id, index)}

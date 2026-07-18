@@ -1,72 +1,54 @@
+import { Dial } from "../../components/Dial/Dial";
 import { resolveScaling, type ScalingShapeKind, type UnitScaling } from "./unitScaling";
 
 interface UnitScalingPanelProps {
   scaling: UnitScaling;
-  previewBudget: number;
-  onPreviewBudgetChange: (budget: number) => void;
+  previewDifficulty: number;
+  onPreviewDifficultyChange: (difficulty: number) => void;
   onChange: (patch: Partial<UnitScaling>) => void;
   onAddCurvePoint: () => void;
   onRemoveCurvePoint: (index: number) => void;
 }
 
-const PREVIEW_BUDGET_MAX = 100;
+const PREVIEW_DIFFICULTY_MAX = 100;
+/** maxCount's dial ceiling — generous for "how many duplicate enemies from one authored instance," distinct from the much larger bullet counts a Weapon can produce (that's a different scale entirely, see WeaponDef). */
+const MAX_COUNT_CEILING = 30;
 
 /**
  * "Design Handoff v2" §6 — a Scaling tab/section for an already-placed
  * `EncounterUnit` instance, separate from its step/attack authoring
- * (`StepPanel.tsx`/`AttackPanel.tsx`). Count range/power split/min cost
- * drive §4.2's single conserved-budget algorithm (`resolveScaling`,
- * unitScaling.ts) — no curve-type picker, condensed to one mechanism.
- * Positioning-shape *values* live here as editable number fields; the
- * shape's actual *handles* are canvas drag targets (EncounterEditor.tsx),
+ * (`StepPanel.tsx`/`AttackPanel.tsx`). `maxCount`/`minCostPerInstance`
+ * drive the single count/power algorithm (`resolveScaling`, unitScaling.ts)
+ * — see that file's header for why there's no `powerSplit` or `minCount`
+ * field anymore. Positioning-shape *values* live here as editable fields;
+ * the shape's actual *handles* are canvas drag targets (EncounterEditor.tsx),
  * shown/hidden together with this panel per §8.2 ("appear contextually
  * only while editing the relevant... Action").
  */
-export default function UnitScalingPanel({ scaling, previewBudget, onPreviewBudgetChange, onChange, onAddCurvePoint, onRemoveCurvePoint }: UnitScalingPanelProps) {
+export default function UnitScalingPanel({ scaling, previewDifficulty, onPreviewDifficultyChange, onChange, onAddCurvePoint, onRemoveCurvePoint }: UnitScalingPanelProps) {
   const scalingEnabled = scaling.maxCount > 1;
-  const resolution = resolveScaling(scaling, previewBudget);
+  const resolution = resolveScaling(scaling, previewDifficulty);
 
   return (
     <div className="shmup-panel">
       <div className="shmup-field-row">
-        <label className="shmup-field shmup-field--inline">
-          <span>Min count</span>
-          <input type="number" min={1} className="shmup-input shmup-input--small" value={scaling.minCount} onChange={(e) => onChange({ minCount: Math.max(1, Number(e.target.value)) })} />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Max count</span>
-          <input type="number" min={1} className="shmup-input shmup-input--small" value={scaling.maxCount} onChange={(e) => onChange({ maxCount: Math.max(1, Number(e.target.value)) })} />
-        </label>
+        <Dial label="Max count" value={scaling.maxCount} onChange={(v) => onChange({ maxCount: v })} min={1} max={MAX_COUNT_CEILING} showNudgeButtons />
       </div>
-      <p className="shmup-hint">Min is always the originally-placed instance itself. Raising max above 1 enables the rest of this panel.</p>
+      <p className="shmup-hint">The placed instance is always there at count 1. Raising this above 1 enables the rest of this panel.</p>
 
       {scalingEnabled && (
         <>
           <div className="shmup-field-row">
-            <label className="shmup-field shmup-field--inline">
-              <span>Power split (%)</span>
-              <input type="number" min={0} max={100} className="shmup-input shmup-input--small" value={scaling.powerSplit} onChange={(e) => onChange({ powerSplit: Number(e.target.value) })} />
-            </label>
-            <label className="shmup-field shmup-field--inline">
-              <span>Min cost / instance</span>
-              <input
-                type="number"
-                min={0.01}
-                step={0.1}
-                className="shmup-input shmup-input--small"
-                value={scaling.minCostPerInstance}
-                onChange={(e) => onChange({ minCostPerInstance: Math.max(0.01, Number(e.target.value)) })}
-              />
-            </label>
+            <Dial label="Min cost / instance" value={scaling.minCostPerInstance} onChange={(v) => onChange({ minCostPerInstance: Math.max(0.01, v) })} step={1} showNudgeButtons />
             <label className="shmup-field shmup-field--inline">
               <span>Spawn delay (ms)</span>
               <input type="number" min={0} className="shmup-input shmup-input--small" value={scaling.spawnDelayMs} onChange={(e) => onChange({ spawnDelayMs: Number(e.target.value) })} />
             </label>
           </div>
           <p className="shmup-hint">
-            0% power split spends the whole budget on more count (a swarm); 100% spends it all on power instead (bounded by max count — set max
-            count to 1 for a miniboss that never duplicates). Min cost/instance is the self-limiting floor: once remaining budget can't afford
-            one more, duplication stops — low = smooth frequent steps, high = infrequent chunky jumps.
+            The incoming Difficulty value is split evenly across however many instances it can afford at this cost each (capped at max count) —
+            not spent separately. Low cost affords more instances quickly (a swarm); high cost affords fewer, but each gets a bigger share of
+            Difficulty (passed down to whatever it spawns) once it can afford to exist at all — below this cost, it simply doesn't spawn yet.
           </p>
 
           <label className="shmup-field shmup-field--inline">
@@ -124,13 +106,13 @@ export default function UnitScalingPanel({ scaling, previewBudget, onPreviewBudg
           </label>
 
           <label className="shmup-field shmup-field--inline">
-            <span>Preview budget</span>
-            <input type="range" min={0} max={PREVIEW_BUDGET_MAX} value={previewBudget} onChange={(e) => onPreviewBudgetChange(Number(e.target.value))} />
-            <span className="shmup-spawn-scaling-preview__value">{previewBudget}</span>
+            <span>Preview Difficulty</span>
+            <input type="range" min={0} max={PREVIEW_DIFFICULTY_MAX} value={previewDifficulty} onChange={(e) => onPreviewDifficultyChange(Number(e.target.value))} />
+            <span className="shmup-spawn-scaling-preview__value">{previewDifficulty}</span>
           </label>
           <p className="shmup-hint">
-            At this budget: <strong>{resolution.count}</strong> instance{resolution.count === 1 ? "" : "s"}, ~<strong>{resolution.powerMultiplier.toFixed(2)}x</strong> power
-            (representative preview — not wired to any real stat yet).
+            At this Difficulty: <strong>{resolution.count}</strong> instance{resolution.count === 1 ? "" : "s"}, <strong>{resolution.power}</strong>{" "}
+            Difficulty passed to whatever each one spawns (not wired to any real stat yet).
           </p>
         </>
       )}

@@ -6,37 +6,47 @@ function scaling(patch: Partial<UnitScaling>): UnitScaling {
 }
 
 describe("resolveScaling", () => {
-  it("stays at minCount (1) when maxCount is 1, regardless of budget", () => {
-    const s = scaling({ minCount: 1, maxCount: 1 });
-    expect(resolveScaling(s, 0).count).toBe(1);
-    expect(resolveScaling(s, 1000).count).toBe(1);
+  it("D=50, cost=25, maxCount>=2 -> 2 instances worth 25 Difficulty each", () => {
+    const s = scaling({ maxCount: 5, minCostPerInstance: 25 });
+    expect(resolveScaling(s, 50)).toEqual({ count: 2, power: 25 });
   });
 
-  it("buys more count as budget grows, floored by minCostPerInstance", () => {
-    const s = scaling({ minCount: 1, maxCount: 10, minCostPerInstance: 5, powerSplit: 0 });
-    expect(resolveScaling(s, 0).count).toBe(1); // clamped up to minCount
-    expect(resolveScaling(s, 12).count).toBe(2); // floor(12/5)=2
-    expect(resolveScaling(s, 24).count).toBe(4); // floor(24/5)=4
+  it("D=50, cost=45 -> a single instance gets the whole 50, not just its 45 cost", () => {
+    const s = scaling({ maxCount: 5, minCostPerInstance: 45 });
+    expect(resolveScaling(s, 50)).toEqual({ count: 1, power: 50 });
   });
 
-  it("clamps count at maxCount even with huge budget", () => {
-    const s = scaling({ minCount: 1, maxCount: 3, minCostPerInstance: 1, powerSplit: 0 });
-    expect(resolveScaling(s, 1000).count).toBe(3);
+  it("D=50, cost=5, maxCount>=10 -> 10 instances worth 5 each", () => {
+    const s = scaling({ maxCount: 10, minCostPerInstance: 5 });
+    expect(resolveScaling(s, 50)).toEqual({ count: 10, power: 5 });
   });
 
-  it("powerSplit=100 spends nothing on count beyond minCount", () => {
-    const s = scaling({ minCount: 1, maxCount: 10, minCostPerInstance: 1, powerSplit: 100 });
-    expect(resolveScaling(s, 500).count).toBe(1);
-    expect(resolveScaling(s, 500).powerMultiplier).toBeGreaterThan(1);
+  it("D=50, cost=5, maxCount=4 (cap binds before affordability) -> 4 instances splitting the whole 50", () => {
+    const s = scaling({ maxCount: 4, minCostPerInstance: 5 });
+    expect(resolveScaling(s, 50)).toEqual({ count: 4, power: 12 }); // floor(50/4)=12, remainder dropped
   });
 
-  it("powerSplit=0 never boosts power beyond 1x", () => {
-    const s = scaling({ minCount: 1, maxCount: 10, minCostPerInstance: 1, powerSplit: 0 });
-    expect(resolveScaling(s, 500).powerMultiplier).toBe(1);
+  it("count floors at 0 when Difficulty can't afford even one instance (elite/late-game gating)", () => {
+    const s = scaling({ maxCount: 5, minCostPerInstance: 1000 });
+    expect(resolveScaling(s, 50)).toEqual({ count: 0, power: 0 });
   });
 
-  it("never drops below minCount even if the curve resolves lower", () => {
-    const s = scaling({ minCount: 2, maxCount: 5, minCostPerInstance: 100, powerSplit: 0 });
-    expect(resolveScaling(s, 0).count).toBe(2);
+  it("maxCount=1 always passes the entire Difficulty down, regardless of cost (miniboss case)", () => {
+    const s = scaling({ maxCount: 1, minCostPerInstance: 1 });
+    expect(resolveScaling(s, 10)).toEqual({ count: 1, power: 10 });
+    expect(resolveScaling(s, 1000)).toEqual({ count: 1, power: 1000 });
+  });
+
+  it("power keeps growing with Difficulty even after count saturates at maxCount (no wasted budget)", () => {
+    const s = scaling({ maxCount: 5, minCostPerInstance: 2 });
+    expect(resolveScaling(s, 20).count).toBe(5); // saturated
+    expect(resolveScaling(s, 20).power).toBe(4); // 20/5
+    expect(resolveScaling(s, 50).count).toBe(5); // still capped
+    expect(resolveScaling(s, 50).power).toBe(10); // 50/5 -- grew, nothing discarded
+  });
+
+  it("negative Difficulty is treated as zero", () => {
+    const s = scaling({ maxCount: 5, minCostPerInstance: 1 });
+    expect(resolveScaling(s, -10)).toEqual({ count: 0, power: 0 });
   });
 });

@@ -192,7 +192,10 @@ export function clearUnitDraft(): void {
 // v6: EncounterUnit gained `scaling: UnitScaling` (E3 #193, a required
 // object, not a purely-additive optional field) — bumping for the same
 // reason as tileStore.ts's matching SAVE_VERSION bump.
-const TILE_SESSION_VERSION = 6;
+// v7: UnitScaling's `minCount`/`powerSplit` fields were removed (corrected
+// count/power algorithm) — bumping for the same reason as tileStore.ts's
+// matching SAVE_VERSION bump.
+const TILE_SESSION_VERSION = 7;
 
 export interface TileEditSession {
   tile: TileDef;

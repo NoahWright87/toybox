@@ -58,9 +58,7 @@ function isUnitScaling(v: unknown): v is UnitScaling {
   if (typeof v !== "object" || v === null) return false;
   const s = v as Record<string, unknown>;
   return (
-    isNumber(s.minCount) &&
     isNumber(s.maxCount) &&
-    isNumber(s.powerSplit) &&
     isNumber(s.minCostPerInstance) &&
     isNumber(s.spawnDelayMs) &&
     typeof s.shape === "string" &&

@@ -29,7 +29,11 @@ import type { EdgeSlot, TileDef } from "./types";
 // required object with its own required fields, not a purely-additive
 // optional one) — bumping for the same "reset rather than silently carry a
 // mismatched shape" reason as every prior EncounterUnit shape change.
-const SAVE_VERSION = 7;
+// v8: UnitScaling's `minCount`/`powerSplit` fields were removed — the
+// count/power algorithm was corrected to a single-pool model
+// (unitScaling.ts's `resolveScaling`) that doesn't use either. Bumping so a
+// pre-v8 save doesn't silently carry the two dead fields forward.
+const SAVE_VERSION = 8;
 
 interface SavedLibrary {
   version: number;
