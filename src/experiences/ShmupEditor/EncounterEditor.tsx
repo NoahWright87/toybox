@@ -16,6 +16,7 @@ import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPrev
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import { computeAttackBullets, computeCameraBoundsRect, resolveAttackAimDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
+import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
 
@@ -63,15 +64,13 @@ const PREVIEW_RADIUS = PREVIEW_DIAMETER / 2;
 const HANDLE_DIAMETER = 22;
 const HANDLE_RADIUS = HANDLE_DIAMETER / 2;
 const PADDING = 60;
-/** Reference-frame sizing: matches encounterSteps.ts's default next-step offset, so a freshly grown sequence reads at a similar scale to the tile itself. */
-const TILE_UNIT = 130;
 /** Attack-track markers are smaller than a movement waypoint node — secondary to the path, same "reads as another layer, not another waypoint" reasoning as PREVIEW_DIAMETER. */
 const ATTACK_MARKER_DIAMETER = 32;
 const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
 /** Purely visual length of the aim-direction indicator/handle from an attack's anchor position — not a stored value, just how far out the drag target renders. */
 const AIM_HANDLE_LENGTH = 55;
-/** View (pan/zoom) range — ZOOM_MIN well below 1 is the explicit point: the old fixed-scale canvas could never show more than roughly one tile's worth of content at once, per Noah's usability note. Matches JigsawPuzzle.tsx's zoom-toward-cursor/pinch pattern, not NS Art's discrete-step one. */
-const ZOOM_MIN = 0.15;
+/** View (pan/zoom) range — ZOOM_MIN well below 1 is the explicit point: the old fixed-scale canvas could never show more than roughly one tile's worth of content at once, per Noah's usability note. Matches JigsawPuzzle.tsx's zoom-toward-cursor/pinch pattern, not NS Art's discrete-step one. Lower than it needs to be for a 1x1 tile so the widest (3x1) footprint still fits on the narrowest mobile viewport after editorScale.ts's TILE_UNIT increase — fitView's `* 1.15` margin plus a 3x1 tile at TILE_UNIT=720 needs roughly 0.145 on a ~380px-wide phone viewport. */
+const ZOOM_MIN = 0.08;
 const ZOOM_MAX = 3;
 const PINCH_ZOOM_MIN_DIST = 1;
 /** Ceiling for the E4 hitbox-preview mode's encounter-wide Difficulty slider — same range as UnitScalingPanel.tsx's per-instance preview slider, just driving every scaled instance in the encounter at once (specs/shmup-editor.todo.md's "Encounter-wide difficulty-preview slider" Remaining item). */
@@ -867,9 +866,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     for (const instance of draft.units) {
       const unitDef = units.find((u) => u.id === instance.unitDefId);
       if (!unitDef) continue;
-      const preview = computeInstancePreview(instance, unitDef, scrubTime);
-      if (!preview || !preview.step.visible) continue;
-      const originPos = instance.steps[0]?.pos ?? preview.pos;
+      const originPos = instance.steps[0]?.pos ?? computeInstancePreview(instance, unitDef, scrubTime)?.pos ?? { x: 0, y: 0 };
       // Scaled duplicates fire the exact same authored step/attack sequence
       // as the base instance, each anchored to its own slot — so every
       // duplicate's live position and every one of its attacks' anchors are
@@ -878,11 +875,27 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // "duplicates replay the whole sequence independently" model E3's
       // Scaling tab already establishes; this is that model evaluated live
       // at the current scrub time instead of as static ghost dots.
+      //
+      // **`spawnDelayMs` staggers each duplicate's own local clock** —
+      // slot index N spawns `N * spawnDelayMs` after the base instance
+      // (slot 0, no delay). `dupLocalTime` maps the shared global
+      // `scrubTime` back onto that duplicate's own sequence-relative
+      // clock, so `computeInstancePreview`/`attackAnchorWorld` (which
+      // operate purely in authored/local time — the same values on the
+      // timeline) don't need to know anything shifted; only the "what
+      // global instant does this correspond to" mapping changes per slot.
+      // Before its own delayed spawn instant, `computeInstancePreview`
+      // returns null (dupLocalTime before the first step's time) and the
+      // slot simply doesn't render yet — matches a real staggered spawn
+      // queue rather than every duplicate popping in at once.
       const count = instance.scaling.maxCount > 1 ? resolveScaling(instance.scaling, hitboxPreviewDifficulty).count : 1;
       const slots = applyPingPong(resolveScalingSlots(instance.scaling, originPos, count), instance.scaling, tileWidthPx);
       slots.forEach((slot, slotIdx) => {
+        const dupLocalTime = scrubTime - (instance.scaling.spawnDelayMs * slotIdx) / 1000;
+        const dupPreview = computeInstancePreview(instance, unitDef, dupLocalTime);
+        if (!dupPreview || !dupPreview.step.visible) return;
         const delta: Vec2 = { x: slot.x - originPos.x, y: slot.y - originPos.y };
-        const dupPos: Vec2 = { x: preview.pos.x + delta.x, y: preview.pos.y + delta.y };
+        const dupPos: Vec2 = { x: dupPreview.pos.x + delta.x, y: dupPreview.pos.y + delta.y };
         hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStage(dupPos), sizePx: unitDef.size * 2 });
 
         for (const attack of instance.attacks) {
@@ -892,7 +905,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           if (!part || !weapon || !baseAnchor) continue;
           const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y };
           const aimDeg = resolveAttackAimDeg(attack, weapon, anchor, playerRefWorld);
-          const elapsedMs = (scrubTime - attack.time) * 1000;
+          const elapsedMs = (dupLocalTime - attack.time) * 1000;
           const bulletDiameterPx = resolveBulletRadius(weapon, units) * 2;
           computeAttackBullets(weapon, aimDeg, attack.durationMs, elapsedMs).forEach((b, bi) => {
             hitboxBulletMarkers.push({

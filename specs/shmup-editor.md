@@ -805,6 +805,28 @@ to drag (see "Movement" above).
 - **`EncounterTileFrame.tsx`** is unchanged from the graph-based pass — a
   read-only dashed rectangle sized to the tile's real footprint, labeled
   with its actual edge tags, always present in the canvas's bounding box.
+- **World scale (`editorScale.ts`)**: the tile frame's size (and every
+  other world-coordinate default — a freshly-added step's offset from its
+  predecessor, a Scaling shape's default handle positions) is driven by
+  one shared `TILE_UNIT` constant, now `720` (was `130` — Noah: "weren't
+  you going to make [tiles] much larger so units aren't half their
+  size?"). `130` was never anchored to anything; each file that needed a
+  "how far apart should this default be" number picked its own value by
+  eye and hoped it stayed roughly in sync with the others, which is
+  exactly how a 56px authoring icon ended up reading as ~43% of a 1x1
+  tile's width. `720` is anchored to `games/shmup/src/config.ts`'s real
+  `GAME_WIDTH` — a 1x1 tile now represents roughly one real screen's
+  width, the same "tie the editor to real gameplay scale" reasoning
+  `hitboxPreview.ts`'s camera-bounds overlay already applies. Everything
+  that read the old local `TILE_UNIT`/`DEFAULT_NEXT_OFFSET`/scaling-shape
+  defaults now imports this one constant instead
+  (`EncounterEditor.tsx`, `encounterSteps.ts`, `unitScaling.ts`'s
+  `createDefaultScaling()`); `ZOOM_MIN` dropped from `0.15` to `0.08` so
+  the widest (3x1) footprint still fits on a narrow phone viewport at the
+  new scale. Purely a "what number does new content start at" change —
+  no data shape changed, so no `SAVE_VERSION` bump; an already-saved
+  encounter's existing (small, old-scale) positions render unchanged,
+  just now closer to the tile's corner than before until re-authored.
 - **`encounterSteps.ts`** replaces the old `encounterGraph.ts` graph CRUD
   with pure array operations on one instance's `steps` list —
   `addStep`/`updateStep`/`moveStep`/`isFirstStep`/`isLastStep`/
@@ -1270,12 +1292,23 @@ slider — the previously-deferred §8.3 slider.** The toggle reveals its own
 Difficulty slider (0-100, independent of the per-instance Scaling tab's
 own preview slider above) driving `resolveScaling()`/`resolveScalingSlots()`/
 `applyPingPong()` for **every** scaled instance in the encounter
-simultaneously. Each duplicate's live hitbox position is the base
-instance's own `computeInstancePreview` position at `scrubTime`, offset by
-that slot's delta from the instance's authored position — duplicates
-replay the exact same step/attack sequence anchored to their own slot,
-same model E3 already established, just evaluated live instead of as
-static ghost dots. Every duplicate's attacks fire too, offset the same way.
+simultaneously. Duplicates replay the exact same step/attack sequence
+anchored to their own slot, same model E3 already established, just
+evaluated live instead of as static ghost dots.
+
+**`spawnDelayMs` actually staggers duplicates now — it used to be a
+stored-but-never-read field, so every duplicate appeared to spawn
+simultaneously regardless of its value (Noah caught this: "everything
+spawns simultaneously instead of individually").** Fix: slot index `N`'s
+own local clock (the same authored step/attack `time` values every
+duplicate shares) is offset from the shared `scrubTime` by `N *
+spawnDelayMs`, so `computeInstancePreview`/`attackAnchorWorld` — which
+only ever read local/authored time, never global time — evaluate each
+duplicate at its own correctly-shifted instant. Before its own delayed
+spawn instant, `computeInstancePreview` returns null the same way it
+already does for the base instance before its first step's time, so a
+not-yet-spawned duplicate simply doesn't render — no separate "hasn't
+spawned yet" check needed. Duplicates' attacks shift the same way.
 
 **Explicitly not built** (`shmup-editor.todo.md` tracks these as
 Remaining): chaining multiple tiles via L1's edge-matcher to preview a

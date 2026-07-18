@@ -18,8 +18,9 @@
  * predecessor.
  */
 import { makeStepId, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
+import { TILE_UNIT } from "./editorScale";
 
-const DEFAULT_NEXT_OFFSET: Vec2 = { x: 130, y: 0 };
+const DEFAULT_NEXT_OFFSET: Vec2 = { x: TILE_UNIT, y: 0 };
 /** Default gap (seconds) between a newly appended step and the one before it. */
 const DEFAULT_STEP_DURATION = 2;
 

@@ -522,9 +522,17 @@ after the correction.**
 - **Per-param scaling curves on Unit/Weapon stats** (see Scope decisions) —
   the eventual home for §1's broader curve-type vision, if/when there's
   appetite to reopen E2's stat forms.
-- **Spawn delay isn't on the shared timeline yet** — `UnitScaling.spawnDelayMs`
-  is a panel-only field; `EncounterTimeline.tsx` doesn't yet show a
-  duplicate's staggered spawn markers the way step/attack tracks render.
+- **Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
+  itself.** `UnitScaling.spawnDelayMs` used to be a stored-but-never-read
+  field (every duplicate appeared to spawn simultaneously in the preview,
+  regardless of this value — Noah caught this). `EncounterEditor.tsx`'s
+  hitbox-preview computation now maps each duplicate slot's own local
+  clock forward by `slotIndex * spawnDelayMs` before evaluating its
+  position/attacks, so duplicates stagger in visibly one at a time when
+  scrubbing/playing with the preview on. `EncounterTimeline.tsx`'s ruler
+  itself still shows only one set of step/attack markers per instance,
+  not one per duplicate's shifted copy — the delay is real and simulated,
+  just not drawn on the timeline UI yet.
 - **Encounter difficulty-range gating** (carried over from E2's Remaining
   list) — still blocked on nothing concrete left to build against beyond
   what shipped here; `EncounterDef.weight` remains the only

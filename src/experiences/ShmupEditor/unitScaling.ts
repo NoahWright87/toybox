@@ -60,6 +60,7 @@
  * handle defaults without knowing where the instance will end up placed.
  */
 import type { Vec2 } from "./encounterTypes";
+import { TILE_UNIT } from "./editorScale";
 
 export type ScalingShapeKind = "curve" | "v" | "grid" | "ring";
 
@@ -100,13 +101,16 @@ export function createDefaultScaling(): UnitScaling {
     spawnDelayMs: 0,
     shape: "curve",
     curvePoints: [],
-    curveEnd: { x: 0, y: 150 },
-    vTip: { x: 0, y: 150 },
-    vWidth: 120,
-    gridWidth: 160,
-    gridDepth: 120,
+    // Scaled against editorScale.ts's TILE_UNIT so a fresh shape reads at a
+    // sensible size relative to the tile, same ratios the old TILE_UNIT=130
+    // scale used (e.g. vWidth was ~0.92x TILE_UNIT; still is here).
+    curveEnd: { x: 0, y: TILE_UNIT * 1.1 },
+    vTip: { x: 0, y: TILE_UNIT * 1.1 },
+    vWidth: TILE_UNIT * 0.9,
+    gridWidth: TILE_UNIT * 1.2,
+    gridDepth: TILE_UNIT * 0.9,
     ringCenterOffset: { x: 0, y: 0 },
-    ringRadius: 100,
+    ringRadius: TILE_UNIT * 0.75,
     pingPong: false,
     pingPongOverride: null,
   };
