@@ -840,6 +840,37 @@ to drag (see "Movement" above).
 - **A tap on any `<button>` never triggers the canvas's outside-click
   deselect** — carried over unchanged from both earlier passes.
 
+- **Pan/zoom (`EncounterMinimap.tsx`)**: the canvas is a fixed-size
+  viewport (`.shmup-enemy-canvas-viewport`) showing a stage transformed by
+  `translate(pan) scale(zoom)` — continuous zoom from `0.15` to `3`, below
+  a tile's own size so a whole large tile can be seen at once, matching
+  `JigsawPuzzle.tsx`'s pattern rather than the discrete-step/native-scroll
+  one NS Art uses. Zoom via on-canvas +/− buttons, ctrl/cmd+wheel toward
+  the cursor, or two-finger pinch; one-finger drag on empty canvas
+  background pans. A small minimap (bottom-left) shows the tile outline
+  and every step position at a glance, with click/drag-to-pan. The
+  viewport fits the whole stage on first mount (`fitView`, guarded to run
+  once) and never resizes after that — the bug this replaced was the
+  stage's own bounding box being recomputed every render from *content*,
+  including whatever was mid-drag, so the coordinate frame shifted under
+  the pointer while dragging a unit near an edge. The fix separates "world
+  content" (`minX`/`minY`/`width`/`height`, derived only from **committed**
+  positions — `scalingHandlesFor`'s live-drag override is explicitly
+  excluded from this calculation) from "how you're viewing it" (`pan`/
+  `zoom` state, applied as a pure CSS transform on the stage): dragging a
+  unit never touches pan/zoom, and panning/zooming never touches unit
+  positions.
+- **Interactive controls layered over the pan/zoom arena must guard the
+  arena's own `onPointerDown`.** The zoom buttons and minimap sit inside
+  `.shmup-enemy-canvas-viewport` so their raw `pointerdown` bubbles to the
+  arena's background-pan handler; if that handler unconditionally calls
+  `setPointerCapture` on itself first, the control's own `onClick` never
+  fires (pointer capture wins the gesture before the browser completes the
+  click). `onArenaPointerDown` checks `e.target.closest("button, canvas,
+  input, select")` and bails out immediately for a match, so any control
+  that manages its own pointer events (the minimap already did via
+  `stopPropagation`) is left alone.
+
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
 Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly.

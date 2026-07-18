@@ -706,18 +706,31 @@
   max-width: 720px;
 }
 
-.shmup-enemy-canvas-scroll {
-  overflow: auto;
+/* Fixed-size viewport (pan/zoom navigator, EncounterEditor.tsx) — replaces
+   the old native-`overflow: auto` scrolling container. Native scroll used
+   to fight dragging directly: the stage's own size was derived from
+   content including whatever was mid-drag, so a drag near an edge could
+   grow/shrink the stage and shift the whole coordinate frame under the
+   pointer. Panning/zooming is now a `transform` on `.shmup-enemy-canvas-stage`,
+   fully decoupled from unit/handle dragging — this viewport just clips
+   whatever's currently visible. `touch-action: none` hands pinch/pan
+   entirely to the custom pointer handlers instead of the browser's native
+   page-zoom/scroll gestures. */
+.shmup-enemy-canvas-viewport {
+  position: relative;
+  overflow: hidden;
   background: #180800;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  max-height: 60vh;
+  height: 60vh;
+  min-height: 260px;
+  touch-action: none;
 }
 
 .shmup-enemy-canvas-stage {
   position: relative;
-  min-width: 100%;
   min-height: 200px;
+  touch-action: none;
 }
 
 .shmup-enemy-canvas-svg {
@@ -727,6 +740,47 @@
 }
 .shmup-enemy-canvas-svg line {
   pointer-events: stroke;
+}
+
+.shmup-canvas-zoom-btns {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 3;
+}
+.shmup-canvas-zoom-btn {
+  width: 26px;
+  height: 26px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-canvas-zoom-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-canvas-zoom-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+/* Minimap (EncounterMinimap.tsx) — click/drag to pan, same corner-overlay convention as the zoom buttons. */
+.shmup-minimap {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  touch-action: none;
+  z-index: 3;
+  image-rendering: pixelated;
 }
 
 .shmup-enemy-node-wrap {

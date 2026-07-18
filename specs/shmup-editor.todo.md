@@ -449,11 +449,19 @@ after the correction.**
   instance behaves exactly as it did before E3 until scaling is opened and
   raised. A duplicate replays the instance's *entire* step/attack sequence
   independently, anchored to its own slot — no per-individual authoring.
-- **One scaling algorithm** (`resolveScaling()`): §4.2's recursive
-  conserved-budget model, condensed from an earlier (wrong) curve-type
-  picker — budget splits between count (via `minCostPerInstance`, the
-  self-limiting floor) and power (`powerSplit`), clamped to `[minCount,
-  maxCount]`. No curve shape to pick anywhere.
+- **One scaling algorithm** (`resolveScaling()`): a single incoming
+  Difficulty value spreads evenly, not split by a separate weighting field.
+  `count = min(floor(D / minCostPerInstance), maxCount)` (floored at 0 —
+  an unaffordable instance simply doesn't spawn, doubling as elite/late-
+  game gating with no separate system needed), then
+  `power = floor(D / count)` — the *whole* remaining Difficulty divided
+  evenly across however many instances actually spawned, not each
+  instance's own cost. Rounds in the player's favor (floor, never up). No
+  `minCount` (true floor is zero) and no `powerSplit` (an earlier version
+  of this formula split budget between count and power as separate
+  currencies before conserving it across `maxCount` saturation — dropped
+  after worked examples showed it silently discarded budget once the
+  count cap bound). No curve shape to pick anywhere.
 - **Real draggable canvas handles per positioning shape**
   (`unitScalingShapes.ts`'s `resolveScalingSlots`, pure/unit-tested):
   Curve (variable-point polyline), V (fixed apex at the instance's own
@@ -467,10 +475,13 @@ after the correction.**
   shape's handles on canvas and swapping `StepPanel`/`AttackPanel` for
   `UnitScalingPanel` below. A ⚖️ badge marks any instance with
   `maxCount > 1` even when the tab is closed.
-- **`UnitScalingPanel.tsx`**: count range (gates the rest of the panel),
-  power split, min cost/instance, spawn delay, shape + its numeric fields,
-  ping-pong, and a **preview budget slider** (0-100, editor-preview-only)
-  whose live count/power readout also drives the canvas's ghost-slot dots
+- **`UnitScalingPanel.tsx`**: max count and min cost/instance as
+  FL-Studio-style vertical-drag `Dial` controls (`src/components/Dial/`,
+  new reusable component — right-click/long-press to reset, tap-to-type,
+  optional nudge buttons), spawn delay, shape + its numeric fields,
+  ping-pong, and a **preview Difficulty slider** (0-100, editor-preview-
+  only) whose live count/power readout ("N instances, N Difficulty passed
+  to whatever each one spawns") also drives the canvas's ghost-slot dots
   (`resolveScalingSlots`/`applyPingPong`) in the same frame — the closest
   E3 gets to §8.3's difficulty-preview slider, scoped per-instance rather
   than encounter-wide (see Remaining).
@@ -486,8 +497,9 @@ after the correction.**
   stepped curves attachable to HP, fire rate, damage...) would mean
   reopening E2's already-shipped `UnitStatsForm`/`WeaponForm`, a materially
   larger, separate piece of work, and isn't what §6's actual Scaling panel
-  calls for. `resolveScaling()`'s `powerMultiplier` is a representative
-  preview number only, not wired to any real Unit/Weapon stat.
+  calls for. `resolveScaling()`'s `power` is the Difficulty value handed
+  down to whatever the instance itself spawns — a representative preview
+  number only for now, not wired to any real Unit/Weapon stat.
 - **Spawn-node-level concepts from the reverted first pass (origin
   point/region/shape-with-span, distribution, direction, mirror-as-a-
   standalone-field, timing delay/interval/count-mode) do not exist** —

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
+import EncounterMinimap from "./EncounterMinimap";
 import StepPanel from "./StepPanel";
 import AttackPanel from "./AttackPanel";
 import UnitScalingPanel from "./UnitScalingPanel";
@@ -65,6 +66,10 @@ const ATTACK_MARKER_DIAMETER = 32;
 const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
 /** Purely visual length of the aim-direction indicator/handle from an attack's anchor position — not a stored value, just how far out the drag target renders. */
 const AIM_HANDLE_LENGTH = 55;
+/** View (pan/zoom) range — ZOOM_MIN well below 1 is the explicit point: the old fixed-scale canvas could never show more than roughly one tile's worth of content at once, per Noah's usability note. Matches JigsawPuzzle.tsx's zoom-toward-cursor/pinch pattern, not NS Art's discrete-step one. */
+const ZOOM_MIN = 0.15;
+const ZOOM_MAX = 3;
+const PINCH_ZOOM_MIN_DIST = 1;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -137,7 +142,22 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [scalingPreviewDifficulty, setScalingPreviewDifficulty] = useState(0);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // View state (pan/zoom) — deliberately separate from `draft`: dragging a
+  // unit must never move the view, and panning/zooming must never move a
+  // unit. Refs mirror the state for use inside event handlers (wheel/pinch)
+  // without stale closures, same pattern as JigsawPuzzle.tsx.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState<Vec2>({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const panRef = useRef<Vec2>({ x: 0, y: 0 });
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { panRef.current = pan; }, [pan]);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const arenaRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const bgPointersRef = useRef<Map<number, Vec2>>(new Map());
+  const lastPinchRef = useRef<{ dist: number; midX: number; midY: number } | null>(null);
+  const didFitViewRef = useRef(false);
   const error = validate(draft);
 
   // Ephemeral preview state (scrub position, play/pause, scaling preview
@@ -452,10 +472,19 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // by exactly minX/minY whenever the canvas's bounding box didn't happen
   // to start at the origin, which a Playwright test with a non-numeric
   // assertion (visual-only) would never have caught.
+  //
+  // Uses `arenaRef` (the outer, untransformed viewport) rather than
+  // `stageRef` (the inner element the pan/zoom CSS transform is actually
+  // applied to) — subtracting `pan` and dividing by `zoom` explicitly,
+  // same math as JigsawPuzzle.tsx's piece-drag world-coordinate
+  // conversion, rather than reading them back out of a transformed
+  // element's own (harder-to-reason-about) getBoundingClientRect().
   function toWorld(clientX: number, clientY: number): Vec2 | null {
-    if (!stageRef.current) return null;
-    const rect = stageRef.current.getBoundingClientRect();
-    return { x: clientX - rect.left - PADDING + minX, y: clientY - rect.top - PADDING + minY };
+    if (!arenaRef.current) return null;
+    const rect = arenaRef.current.getBoundingClientRect();
+    const stageX = (clientX - rect.left - panRef.current.x) / zoomRef.current;
+    const stageY = (clientY - rect.top - panRef.current.y) / zoomRef.current;
+    return { x: stageX - PADDING + minX, y: stageY - PADDING + minY };
   }
 
   function onStagePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
@@ -500,6 +529,115 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     endScalingDrag();
   }
 
+  /** Zoom toward a specific screen point (where the cursor/pinch-midpoint is) rather than the stage's origin, so the thing you're looking at stays under the pointer instead of the view jumping. Same formula as JigsawPuzzle.tsx's applyZoom. */
+  const applyZoom = useCallback((newZoom: number, screenCx: number, screenCy: number) => {
+    const oldZoom = zoomRef.current;
+    const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+    if (clamped === oldZoom) return;
+    const nextPan = {
+      x: screenCx - (screenCx - panRef.current.x) * (clamped / oldZoom),
+      y: screenCy - (screenCy - panRef.current.y) * (clamped / oldZoom),
+    };
+    zoomRef.current = clamped;
+    panRef.current = nextPan;
+    setZoom(clamped);
+    setPan(nextPan);
+  }, []);
+
+  /**
+   * Background pan + pinch-zoom, tracked entirely independently of the
+   * step/handle/attack/scaling drags above — those are captured by the
+   * specific button that starts them (`setPointerCapture` + `stopPropagation`),
+   * so a background gesture (this handler) only ever sees pointers that
+   * never touched an interactive element in the first place. One finger
+   * pans; a second added mid-gesture starts a pinch (matching
+   * JigsawPuzzle.tsx's `handleArenaPointerDown/Move/Up`).
+   */
+  function onArenaPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    // A raw pointerdown on the zoom buttons/minimap (or any future control
+    // layered over the arena) bubbles up to this handler before the browser
+    // finishes the click — if we steal pointer capture here first, the
+    // control's own onClick never fires. Those elements handle their own
+    // events, so background pan/pinch tracking must ignore them entirely.
+    if ((e.target as HTMLElement).closest("button, canvas, input, select")) return;
+    bgPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (bgPointersRef.current.size === 2) {
+      const [a, b] = [...bgPointersRef.current.values()];
+      lastPinchRef.current = { dist: Math.max(PINCH_ZOOM_MIN_DIST, Math.hypot(b.x - a.x, b.y - a.y)), midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
+    } else {
+      lastPinchRef.current = null;
+    }
+  }
+  function onArenaPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!bgPointersRef.current.has(e.pointerId)) return;
+    const prev = bgPointersRef.current.get(e.pointerId)!;
+    bgPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...bgPointersRef.current.values()];
+    const arena = arenaRef.current;
+    if (!arena) return;
+
+    if (pts.length >= 2) {
+      const [a, b] = pts;
+      const dist = Math.max(PINCH_ZOOM_MIN_DIST, Math.hypot(b.x - a.x, b.y - a.y));
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const last = lastPinchRef.current;
+      if (last) {
+        const rect = arena.getBoundingClientRect();
+        const oldZoom = zoomRef.current;
+        const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, oldZoom * (dist / last.dist)));
+        const cx = midX - rect.left;
+        const cy = midY - rect.top;
+        const nextPan = {
+          x: cx - (cx - panRef.current.x) * (newZoom / oldZoom) + (midX - last.midX),
+          y: cy - (cy - panRef.current.y) * (newZoom / oldZoom) + (midY - last.midY),
+        };
+        zoomRef.current = newZoom;
+        panRef.current = nextPan;
+        setZoom(newZoom);
+        setPan(nextPan);
+      }
+      lastPinchRef.current = { dist, midX, midY };
+    } else {
+      const nextPan = { x: panRef.current.x + (e.clientX - prev.x), y: panRef.current.y + (e.clientY - prev.y) };
+      panRef.current = nextPan;
+      setPan(nextPan);
+      lastPinchRef.current = null;
+    }
+  }
+  function onArenaPointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    bgPointersRef.current.delete(e.pointerId);
+    if (bgPointersRef.current.size < 2) lastPinchRef.current = null;
+  }
+
+  // Ctrl/Cmd+wheel to zoom, toward the cursor — a native (not React
+  // synthetic) listener because preventDefault on a wheel event requires
+  // `{ passive: false }`, which React's onWheel prop can't reliably attach.
+  useEffect(() => {
+    const arena = arenaRef.current;
+    if (!arena) return;
+    function handler(e: WheelEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const rect = arena!.getBoundingClientRect();
+      applyZoom(zoomRef.current * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - rect.left, e.clientY - rect.top);
+    }
+    arena.addEventListener("wheel", handler, { passive: false });
+    return () => arena.removeEventListener("wheel", handler);
+  }, [applyZoom]);
+
+  // Tracks the viewport's own rendered size (for the minimap's viewport-rectangle overlay and for centering pan math) since it's a fixed CSS size, not content-derived.
+  useEffect(() => {
+    const arena = arenaRef.current;
+    if (!arena) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setViewportSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(arena);
+    return () => observer.disconnect();
+  }, []);
+
   const tileWidthPx = tile.footprint * TILE_UNIT;
 
   // Every scaling handle's currently-resolved absolute (world) position for
@@ -507,7 +645,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // lines + drag-target buttons) and for seeding a fresh drag from the
   // right spot. Only the instance's *own* `scaling.shape` contributes
   // handles, per "Design Handoff v2" §8.2 (contextual, not all-shapes-at-once).
-  function scalingHandlesFor(instance: EncounterUnit): { handle: ScalingHandleId; pos: Vec2 }[] {
+  function scalingHandlesFor(instance: EncounterUnit, includeLiveDrag = true): { handle: ScalingHandleId; pos: Vec2 }[] {
     const origin = instance.steps[0]?.pos;
     if (!origin) return [];
     const s = instance.scaling;
@@ -528,6 +666,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     if (s.pingPong) {
       handles.push({ handle: { kind: "pingPongOverride" }, pos: { x: s.pingPongOverride ?? tileWidthPx / 2, y: -TILE_UNIT * 0.35 } });
     }
+    if (!includeLiveDrag) return handles;
     return handles.map(({ handle, pos }) =>
       scalingDrag && scalingDrag.instanceId === instance.id && sameScalingHandle(scalingDrag.handle, handle) ? { handle, pos: scalingDrag.pos } : { handle, pos }
     );
@@ -544,11 +683,20 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         tileWidthPx
       )
     : [];
+  // Deliberately uses *committed* positions only (`s.pos`, not
+  // `effectiveStep(...)`'s live-drag override; `scalingHandlesFor`'s
+  // `includeLiveDrag=false`) — this is the fix for the canvas-scrolls-
+  // while-dragging bug: recomputing the coordinate frame's origin
+  // (`minX`/`minY` below) from a position that's still moving mid-gesture
+  // meant every pointermove could shift where "world (0,0)" lands on
+  // screen, which visually reads as the canvas sliding under the drag.
+  // Content that's actually been placed still grows the frame normally —
+  // this only defers that growth until the drag/handle actually commits.
   const allPositions: Vec2[] = [
     { x: 0, y: 0 },
     { x: tile.footprint * TILE_UNIT, y: TILE_UNIT },
-    ...draft.units.flatMap((inst) => inst.steps.map((s) => effectiveStep(inst.id, s).pos)),
-    ...(scalingOpenInstance ? scalingHandlesFor(scalingOpenInstance).map((h) => h.pos) : []),
+    ...draft.units.flatMap((inst) => inst.steps.map((s) => s.pos)),
+    ...(scalingOpenInstance ? scalingHandlesFor(scalingOpenInstance, false).map((h) => h.pos) : []),
     ...scalingGhostSlots,
   ];
   const minX = Math.min(...allPositions.map((p) => p.x));
@@ -561,6 +709,26 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function toStage(pos: Vec2): Vec2 {
     return { x: pos.x - minX + PADDING, y: pos.y - minY + PADDING };
   }
+
+  // Fits the whole stage (tile + everything placed on it) into the
+  // viewport once, the first time both are known — mirrors
+  // JigsawPuzzle.tsx's `fitView`. Only runs once per mount (not on every
+  // content change) so panning/zooming while authoring isn't fought by an
+  // auto-refit; opening a *different* encounter remounts this component
+  // fresh via React's key-less-prop-change re-render, which is fine here
+  // since `encounter`/`tile` are effectively identity props for this view.
+  useEffect(() => {
+    if (didFitViewRef.current) return;
+    if (viewportSize.width === 0 || viewportSize.height === 0) return;
+    const fitZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(viewportSize.width / (width * 1.15), viewportSize.height / (height * 1.15))));
+    const nextPan = { x: viewportSize.width / 2 - (width / 2) * fitZoom, y: viewportSize.height / 2 - (height / 2) * fitZoom };
+    didFitViewRef.current = true;
+    zoomRef.current = fitZoom;
+    panRef.current = nextPan;
+    setZoom(fitZoom);
+    setPan(nextPan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewportSize.width, viewportSize.height]);
 
   /** Converts a scaling drag's final absolute position into a UnitScaling patch, per-handle-kind. */
   function scalingPatchForHandle(scaling: UnitScaling, handle: ScalingHandleId, offset: Vec2, absolute: Vec2): Partial<UnitScaling> {
@@ -633,6 +801,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const scalingOriginStage = scalingPanelOpen && selectedInstance?.steps[0] ? toStage(selectedInstance.steps[0].pos) : null;
 
   const framePos = toStage({ x: 0, y: 0 });
+  const tileRectStage = { x: framePos.x, y: framePos.y, width: tileWidthPx, height: TILE_UNIT };
+  const stepPointsStage = draft.units.flatMap((inst) => inst.steps.map((s) => toStage(s.pos)));
 
   return (
     <div className="shmup-enemy-form">
@@ -663,11 +833,18 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         still lets you drag to adjust pacing, and Play/scrub previews motion (teal marker).
       </p>
 
-      <div className="shmup-enemy-canvas-scroll">
+      <div
+        className="shmup-enemy-canvas-viewport"
+        ref={arenaRef}
+        onPointerDown={onArenaPointerDown}
+        onPointerMove={onArenaPointerMove}
+        onPointerUp={onArenaPointerUp}
+        onPointerCancel={onArenaPointerUp}
+      >
         <div
           className="shmup-enemy-canvas-stage"
           ref={stageRef}
-          style={{ width, height }}
+          style={{ width, height, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}
           onPointerMove={onStagePointerMove}
           onPointerUp={onStagePointerUp}
           onPointerCancel={onStagePointerUp}
@@ -961,6 +1138,40 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             );
           })}
         </div>
+
+        {/* Zoom controls + minimap — siblings of the transformed stage, not children of it, so they stay fixed-size/fixed-position regardless of the current zoom (same reason JigsawPuzzle.tsx's minimap lives outside its transformed arena content). */}
+        <div className="shmup-canvas-zoom-btns">
+          {/* zoomRef.current, not the `zoom` state closure — a rapid run of clicks (or clicks that land before React re-renders) would otherwise all divide/multiply the same stale value instead of compounding. */}
+          <button
+            type="button"
+            className="shmup-canvas-zoom-btn"
+            onClick={() => applyZoom(zoomRef.current / 1.3, viewportSize.width / 2, viewportSize.height / 2)}
+            disabled={zoom <= ZOOM_MIN}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="shmup-canvas-zoom-btn"
+            onClick={() => applyZoom(zoomRef.current * 1.3, viewportSize.width / 2, viewportSize.height / 2)}
+            disabled={zoom >= ZOOM_MAX}
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
+        <EncounterMinimap
+          stageWidth={width}
+          stageHeight={height}
+          tileRectStage={tileRectStage}
+          stepPointsStage={stepPointsStage}
+          pan={pan}
+          zoom={zoom}
+          viewportWidth={viewportSize.width}
+          viewportHeight={viewportSize.height}
+          onPan={setPan}
+        />
       </div>
 
       <EncounterTimeline
