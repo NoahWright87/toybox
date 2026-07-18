@@ -49,6 +49,17 @@ export default function ShmupEditor() {
   // requiring a save-then-reopen round trip first.
   const [extraTags, setExtraTags] = useState<string[]>([]);
 
+  // Encounter editor's controls used to explain themselves via inline
+  // `.shmup-hint` paragraphs — Noah's "remove all the muted explanatory
+  // text, put instructions in the Help menu instead." This is that menu,
+  // centralized here (not split across ShmupEditorPage.tsx's StandaloneWindow
+  // `helpContent` prop, which used to carry the Tile editor's own tips) so
+  // there's exactly one Help menu regardless of whether this experience is
+  // hosted inside a Doors 97 Window (no other Help source at all) or the
+  // standalone `/shmup-editor` route (StandaloneWindow would otherwise
+  // append its own second "Help" label alongside this one).
+  const [helpTopic, setHelpTopic] = useState<"tile" | "encounter" | null>(null);
+
   const availableTags = useMemo(() => {
     const merged = new Set([...collectUsedTags(tiles), ...extraTags]);
     return [...merged].sort((a, b) => a.localeCompare(b));
@@ -277,6 +288,13 @@ export default function ShmupEditor() {
           { label: "Unit List", onClick: () => setView("unit-list") },
         ],
       },
+      {
+        label: "Help",
+        items: [
+          { label: "Tile Editor", onClick: () => setHelpTopic("tile") },
+          { label: "Encounter Editor", onClick: () => setHelpTopic("encounter") },
+        ],
+      },
     ],
     [tiles.length, units.length]
   );
@@ -369,6 +387,41 @@ export default function ShmupEditor() {
           </>
         )}
       </div>
+      {helpTopic && (
+        <div className="shmup-help-backdrop" onClick={() => setHelpTopic(null)}>
+          <div className="shmup-help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shmup-help-modal__header">
+              <span>{helpTopic === "tile" ? "Tile Editor" : "Encounter Editor"}</span>
+              <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setHelpTopic(null)}>
+                ✕
+              </button>
+            </div>
+            {helpTopic === "tile" ? (
+              <ul className="shmup-help-modal__list">
+                <li>Click "+ New Tile" to author a tile's footprint and edges</li>
+                <li>North/south edges take one tag per column; east/west are single tags</li>
+                <li>Check "Wall" on an edge to mark it hard-wall (nothing may connect there)</li>
+                <li>Connector tiles automatically match any south edge</li>
+                <li>Use Connection Tester to check whether two tiles actually attach</li>
+                <li>Tiles save automatically to TILES.DAT in the virtual filesystem</li>
+              </ul>
+            ) : (
+              <ul className="shmup-help-modal__list">
+                <li>Tap a step to select it; drag ✥ to move, teal ⬦ handles bend the curve.</li>
+                <li>+ (last step) adds the next step. 🔫+ adds an attack at that step's time.</li>
+                <li>⚖️ (first step) opens Scaling — duplicates replay the whole sequence on a draggable shape.</li>
+                <li>Dashed box = the tile's real footprint/edges.</li>
+                <li>Step timing is usually automatic (distance ÷ speed) — drag on the timeline or adjust Speed to change pacing.</li>
+                <li>Duration on an attack keeps a repeating weapon firing after its start; 0 = single burst.</li>
+                <li>Scaling: Difficulty splits evenly across however many instances Min Cost affords, capped at Max Count. Low cost = a swarm; high cost = fewer, stronger.</li>
+                <li>⊡ (top-left of canvas) toggles a real-scale hitbox preview: red boxes = enemies, red dots = bullets, green circle = reference player hitbox, thick yellow border = tile bounds, dotted border = roughly what's on screen at once.</li>
+                <li>⛶ (top-right of canvas) fills the screen with the viewport; Esc or tap it again to shrink back.</li>
+                <li>Dials: drag up/down to change, tap the number to type one, right-click or press-and-hold to reset.</li>
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

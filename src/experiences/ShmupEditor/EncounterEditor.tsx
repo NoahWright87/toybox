@@ -5,6 +5,7 @@ import EncounterMinimap from "./EncounterMinimap";
 import StepPanel from "./StepPanel";
 import AttackPanel from "./AttackPanel";
 import UnitScalingPanel from "./UnitScalingPanel";
+import { Dial } from "../../components/Dial/Dial";
 import { resolveSpriteUrl } from "./enemySprites";
 import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
@@ -32,6 +33,8 @@ type Selection = { instanceId: string; kind: "step"; stepId: string } | { instan
 type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
 /** Dragging an attack's aim handle — unlike bezier handles (an offset from a fixed step position), an attack's anchor itself moves along the bezier path over time, so the only thing worth persisting is the angle, not a position offset. */
 type AimDrag = { instanceId: string; attackId: string; angleDeg: number } | null;
+/** Everything below the pinned timeline/viewport is tabbed instead of stacked inline (mobile scroll-and-lose-your-selection fix) — Basics/Add are always available, the third slot shows whichever node is currently selected. */
+type EditorTab = "basics" | "add" | "step" | "attack" | "scaling";
 
 /** Every draggable handle a Scaling positioning shape can offer (unitScaling.ts's UnitScaling — curve/v/grid/ring, plus the ping-pong override axis). Only the currently-selected shape's handles render at once, per "Design Handoff v2" §8.2. */
 type ScalingHandleId =
@@ -101,11 +104,22 @@ function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined
  * editor section). No graph, no separately-configured edges — a step is
  * `{ position, time, action, handles }`, and the action (attack/animation
  * — no movement, see unitTypes.ts) is looked up on the referenced Unit,
- * not authored here. The tile's real footprint/edges render as a fixed
- * reference frame (EncounterTileFrame) so placement is meaningful relative
- * to the tile's actual neighbors. Tap a step to move/extend/delete it and
- * edit which Action it uses; `EncounterTimeline` below the canvas shows
- * *when* it happens and doubles as a live motion preview.
+ * not authored here.
+ *
+ * **Layout: pinned timeline+viewport, everything else tabbed.** Noah's
+ * report: scrolling down to a selected node's settings routinely scrolled
+ * far enough to trigger the outside-tap deselect, making the settings
+ * disappear right as you reached them. `EncounterTimeline` + the canvas
+ * viewport now live in one `position: sticky` head pinned to the top of
+ * the scroll container; everything that used to stack inline below the
+ * canvas (Basics fields, the Unit picker, Step/Attack/Scaling settings) is
+ * a tab instead, so there's rarely anything to scroll past at all.
+ * Selecting a step/attack, or opening Scaling, auto-switches to that
+ * tab — see `contextualTab`/`effectiveTab` below. An "embiggen" button on
+ * the viewport takes it fullscreen when half the screen isn't enough
+ * (`embiggen` state). Explanatory prose that used to sit inline as
+ * `.shmup-hint` paragraphs now lives in the Help menu (`ShmupEditor.tsx`)
+ * instead, per Noah's "remove all the muted explanatory text."
  *
  * **Every segment between two steps is a cubic bezier curve** (`bezier.ts`),
  * rendered as an SVG path instead of a straight line. Selecting a step
@@ -125,11 +139,10 @@ function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined
  *
  * **Scaling (E3 #193, unitScaling.ts) is a per-instance tab, not a new
  * kind of thing.** Tapping ⚖️ on an instance's first step opens its
- * Scaling panel (`UnitScalingPanel`, below the canvas, replacing Step/
- * Attack panels while open) and reveals that instance's positioning-shape
- * handles directly on this same canvas — a duplicate replays the
- * instance's whole step/attack sequence anchored to its own slot, so
- * scaling never needs its own separate placement UI.
+ * Scaling tab and reveals that instance's positioning-shape handles
+ * directly on this same canvas — a duplicate replays the instance's whole
+ * step/attack sequence anchored to its own slot, so scaling never needs
+ * its own separate placement UI.
  */
 export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
   const [draft, setDraft] = useState<EncounterDef>(encounter);
@@ -139,12 +152,13 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [dragAim, setDragAim] = useState<AimDrag>(null);
   const [scalingDrag, setScalingDrag] = useState<ScalingDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
-  const [addingUnit, setAddingUnit] = useState(false);
   const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
   const [scalingOpenFor, setScalingOpenFor] = useState<string | null>(null);
   const [scalingPreviewDifficulty, setScalingPreviewDifficulty] = useState(0);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [activeTab, setActiveTab] = useState<EditorTab>("basics");
+  const [embiggen, setEmbiggen] = useState(false);
   // E4 low-fi hitbox/boundary preview mode (specs/shmup-editor.todo.md) —
   // an alternate rendering of the same scrubTime/playing timeline already
   // above, not a separate playback engine. Ephemeral viewing aid, same
@@ -192,6 +206,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, maxTime]);
+
+  // Escape exits the embiggened viewport — a fullscreen overlay with no
+  // other obvious way out shouldn't be a dead end.
+  useEffect(() => {
+    if (!embiggen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setEmbiggen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [embiggen]);
 
   function updateDraft(next: EncounterDef) {
     setDraft(next);
@@ -256,7 +281,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // Encounter editor section (collapsing the panel on pointerdown shifted layout
       // under an in-flight click and silently ate the Save action).
       if (target?.closest("button")) return;
-      if (!target?.closest(".shmup-enemy-canvas-stage") && !target?.closest(".shmup-panel") && !target?.closest(".shmup-timeline")) {
+      if (!target?.closest(".shmup-enemy-canvas-stage") && !target?.closest(".shmup-enc-tabs") && !target?.closest(".shmup-timeline")) {
         setSelection(null);
         setPendingDeleteKey(null);
         setScalingOpenFor(null);
@@ -285,6 +310,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setPickingAttackPartFor(null);
     setScalingOpenFor(null);
     setSelection({ instanceId, kind: "step", stepId });
+    setActiveTab("step");
   }
 
   function selectAttack(instanceId: string, attackId: string) {
@@ -292,17 +318,20 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setPickingAttackPartFor(null);
     setScalingOpenFor(null);
     setSelection({ instanceId, kind: "attack", attackId });
+    setActiveTab("attack");
   }
 
-  /** Toggles the Scaling panel/handles for an instance (via its first step's ⚖️ button) — selects that first step too, so selectedInstance/selectedUnitDef stay coherent for the handle-rendering code below, same selection this instance's Step panel would otherwise use. */
+  /** Toggles the Scaling tab/handles for an instance (via its first step's ⚖️ button) — selects that first step too, so selectedInstance/selectedUnitDef stay coherent for the handle-rendering code below, same selection this instance's Step tab would otherwise use. */
   function toggleScaling(instanceId: string) {
     if (scalingOpenFor === instanceId) {
       setScalingOpenFor(null);
+      setActiveTab("step");
       return;
     }
     setPendingDeleteKey(null);
     setPickingAttackPartFor(null);
     setScalingOpenFor(instanceId);
+    setActiveTab("scaling");
     const instance = draft.units.find((u) => u.id === instanceId);
     const first = instance?.steps[0];
     if (first) setSelection({ instanceId, kind: "step", stepId: first.id });
@@ -328,7 +357,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     const startPos: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
     const instance = addStep(createEncounterUnit(unitDefId), startPos);
     updateDraft({ ...draft, units: [...draft.units, instance] });
-    setAddingUnit(false);
     const added = instance.steps[0];
     if (added) selectStep(instance.id, added.id);
   }
@@ -563,11 +591,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
    * JigsawPuzzle.tsx's `handleArenaPointerDown/Move/Up`).
    */
   function onArenaPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    // A raw pointerdown on the zoom buttons/minimap (or any future control
-    // layered over the arena) bubbles up to this handler before the browser
-    // finishes the click — if we steal pointer capture here first, the
-    // control's own onClick never fires. Those elements handle their own
-    // events, so background pan/pinch tracking must ignore them entirely.
+    // A raw pointerdown on the zoom buttons/minimap/corner controls (or any
+    // future control layered over the arena) bubbles up to this handler
+    // before the browser finishes the click — if we steal pointer capture
+    // here first, the control's own onClick never fires. Those elements
+    // handle their own events, so background pan/pinch tracking must
+    // ignore them entirely.
     if ((e.target as HTMLElement).closest("button, canvas, input, select")) return;
     bgPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -774,6 +803,16 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const hasOutgoingSegment = selectedInstance && selectedNextStep ? isStepTimeDerived(selectedInstance, selectedNextStep.id, selectedUnitDef) : false;
   const scalingPanelOpen = !!selectedInstance && scalingOpenFor === selectedInstance.id;
 
+  // Which contextual tab (if any) matches the current selection — the tab
+  // strip only offers this slot when it's non-null, and selecting/opening
+  // a node explicitly switches to it (selectStep/selectAttack/toggleScaling
+  // above). If the active tab stops being valid (its node got deleted, or
+  // nothing is selected anymore), fall back to Basics rather than showing
+  // an empty tab.
+  const contextualTab: EditorTab | null = scalingPanelOpen ? "scaling" : selection?.kind === "step" ? "step" : selection?.kind === "attack" ? "attack" : null;
+  const availableTabs: EditorTab[] = contextualTab ? ["basics", "add", contextualTab] : ["basics", "add"];
+  const effectiveTab: EditorTab = availableTabs.includes(activeTab) ? activeTab : (contextualTab ?? "basics");
+
   // Aim-handle geometry for a selected attack — only rendered for a
   // "fixed"-aim weapon, since "player"-aimed weapons have no fixed angle to
   // drag (they track/snapshot the player at runtime instead).
@@ -870,525 +909,526 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   return (
     <div className="shmup-enemy-form">
-      <div className="shmup-tile-form__toolbar">
-        <label className="shmup-field shmup-field--inline">
-          <span>Encounter name</span>
-          <input type="text" className="shmup-input" value={draft.name} onChange={(e) => updateDraft({ ...draft, name: e.target.value })} />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Weight</span>
-          <input
-            type="number"
-            min={0}
-            step={0.1}
-            className="shmup-input shmup-input--small"
-            value={draft.weight}
-            onChange={(e) => updateDraft({ ...draft, weight: Number(e.target.value) })}
-          />
-        </label>
-        <button
-          type="button"
-          className={`shmup-btn shmup-btn--small ${hitboxPreviewOn ? "shmup-btn--active" : ""}`}
-          onClick={() => setHitboxPreviewOn((v) => !v)}
-          title="Low-fi hitbox/boundary preview — real hitbox sizes instead of authoring icons, plus tile/camera/player reference geometry"
-        >
-          {hitboxPreviewOn ? "◉ Hitbox preview" : "○ Hitbox preview"}
-        </button>
-        {hitboxPreviewOn && (
-          <label className="shmup-field shmup-field--inline">
-            <span>Preview Difficulty</span>
-            <input
-              type="range"
-              min={0}
-              max={HITBOX_PREVIEW_DIFFICULTY_MAX}
-              value={hitboxPreviewDifficulty}
-              onChange={(e) => setHitboxPreviewDifficulty(Number(e.target.value))}
+      <div className="shmup-enc-sticky-head">
+        <EncounterTimeline
+          units={draft.units}
+          unitDefs={units}
+          maxTime={maxTime}
+          scrubTime={scrubTime}
+          onScrub={setScrubTime}
+          playing={playing}
+          onTogglePlay={() => setPlaying((v) => !v)}
+          selection={selection}
+          onSelectStep={selectStep}
+          onSelectAttack={selectAttack}
+          onRetimeStep={handleRetimeStep}
+        />
+
+        <div className={`shmup-enc-viewport-pin${embiggen ? " shmup-enc-viewport-pin--embiggen" : ""}`}>
+          <div
+            className="shmup-enemy-canvas-viewport"
+            ref={arenaRef}
+            onPointerDown={onArenaPointerDown}
+            onPointerMove={onArenaPointerMove}
+            onPointerUp={onArenaPointerUp}
+            onPointerCancel={onArenaPointerUp}
+          >
+            <div
+              className="shmup-enemy-canvas-stage"
+              ref={stageRef}
+              style={{ width, height, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}
+              onPointerMove={onStagePointerMove}
+              onPointerUp={onStagePointerUp}
+              onPointerCancel={onStagePointerUp}
+            >
+              <div style={{ position: "absolute", left: framePos.x, top: framePos.y }}>
+                <EncounterTileFrame tile={tile} widthPx={tile.footprint * TILE_UNIT} heightPx={TILE_UNIT} />
+              </div>
+
+              <svg className="shmup-enemy-canvas-svg" width={width} height={height}>
+                <defs>
+                  <marker id="shmup-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#ffcc88" />
+                  </marker>
+                </defs>
+                {draft.units.flatMap((instance) => {
+                  const unitDef = units.find((u) => u.id === instance.unitDefId);
+                  const turnRate = unitDef?.turnRate ?? 1;
+                  return instance.steps.slice(1).map((step, i) => {
+                    const prev = effectiveStep(instance.id, instance.steps[i]);
+                    const cur = effectiveStep(instance.id, step);
+                    const { p0, p1, p2, p3 } = resolveSegment(prev, cur, turnRate);
+                    const a = toStage(p0);
+                    const b = toStage(p1);
+                    const c = toStage(p2);
+                    const d = toStage(p3);
+                    return (
+                      <path
+                        key={step.id}
+                        d={`M ${a.x},${a.y} C ${b.x},${b.y} ${c.x},${c.y} ${d.x},${d.y}`}
+                        fill="none"
+                        stroke="#ffcc88"
+                        strokeWidth={2}
+                        markerEnd="url(#shmup-arrow)"
+                      />
+                    );
+                  });
+                })}
+
+                {selectedNodeStage &&
+                  handleDots.map(({ which, stage }) => (
+                    <line
+                      key={which}
+                      x1={selectedNodeStage.x}
+                      y1={selectedNodeStage.y}
+                      x2={stage.x}
+                      y2={stage.y}
+                      stroke="#66ffee"
+                      strokeWidth={1.5}
+                      strokeDasharray="3,3"
+                    />
+                  ))}
+
+                {/* Scaling shape stalks — origin to each handle, dashed, same visual language as bezier handle stalks. */}
+                {scalingOriginStage &&
+                  scalingHandleEntries.map(({ handle, pos }, i) => {
+                    const stage = toStage(pos);
+                    const anchorStage = handle.kind === "ringRadius" && selectedInstance ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === "ringCenter")?.pos ?? pos) : scalingOriginStage;
+                    return (
+                      <line
+                        key={i}
+                        x1={anchorStage.x}
+                        y1={anchorStage.y}
+                        x2={stage.x}
+                        y2={stage.y}
+                        stroke="#ffbb33"
+                        strokeWidth={1.5}
+                        strokeDasharray="3,3"
+                      />
+                    );
+                  })}
+              </svg>
+
+              {/* Bezier handle drag targets — real HTML buttons (not SVG shapes) so they're actually hittable on mobile, same reasoning as the ✥/+/✕ node controls below. */}
+              {selectedInstance &&
+                selectedStep &&
+                handleDots.map(({ which, stage }) => (
+                  <button
+                    key={which}
+                    type="button"
+                    className="shmup-handle-btn"
+                    title={which === "out" ? "Bend outgoing curve" : "Bend incoming curve"}
+                    style={{ left: stage.x - HANDLE_RADIUS, top: stage.y - HANDLE_RADIUS }}
+                    onPointerDown={(e) => beginHandleDrag(selectedInstance.id, selectedStep.id, which, e)}
+                  />
+                ))}
+
+              {/* An attack's aim handle — same real-HTML-button pattern, one per selected fixed-aim attack, drag to set its firing angle. */}
+              {selectedInstance && selectedAttack && aimHandleStage && (
+                <button
+                  type="button"
+                  className="shmup-handle-btn"
+                  title="Drag to aim"
+                  style={{ left: aimHandleStage.x - HANDLE_RADIUS, top: aimHandleStage.y - HANDLE_RADIUS }}
+                  onPointerDown={(e) => beginAimDrag(selectedInstance.id, selectedAttack.id, e)}
+                />
+              )}
+
+              {/* A scaling positioning-shape's handles — one set per shape kind (Curve/V/Grid/Ring), only while that instance's Scaling tab is open. */}
+              {selectedInstance &&
+                scalingHandleEntries.map(({ handle, pos }, i) => {
+                  const stage = toStage(pos);
+                  const title = handle.kind === "pingPongOverride" ? "Drag to set an asymmetric mirror axis" : "Drag to shape this scaling group";
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      className="shmup-handle-btn shmup-handle-btn--scaling"
+                      title={title}
+                      style={{ left: stage.x - HANDLE_RADIUS, top: stage.y - HANDLE_RADIUS }}
+                      onPointerDown={(e) => beginScalingDrag(selectedInstance.id, handle, pos, e)}
+                    />
+                  );
+                })}
+
+              {/* Ghost slot preview — where duplicates would land at the panel's preview-Difficulty count, dim and non-interactive. */}
+              {scalingGhostSlots.map((p, i) => {
+                const stage = toStage(p);
+                return <div key={i} className="shmup-scaling-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
+              })}
+
+              {draft.units.flatMap((instance) => {
+                const unitDef = units.find((u) => u.id === instance.unitDefId);
+                const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+                return instance.steps.map((step) => {
+                  const pos = toStage(effectiveStep(instance.id, step).pos);
+                  const first = isFirstStep(instance, step.id);
+                  const last = isLastStep(instance, step.id);
+                  const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
+                  return (
+                    <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
+                      <button
+                        type="button"
+                        className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${!step.visible ? "shmup-enemy-node--hidden" : ""}`}
+                        style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          selectStep(instance.id, step.id);
+                        }}
+                        title={unitDef?.name ?? "(missing Unit)"}
+                      >
+                        {!spriteUrl && "●"}
+                      </button>
+                      {first && <div className="shmup-enemy-node__label">{unitDef?.name ?? "?"}</div>}
+                      <div className="shmup-enemy-node__badges">
+                        {first && <span title="First step">▶</span>}
+                        {!step.visible && <span title="Hidden">👻</span>}
+                        {instance.scaling.maxCount > 1 && <span title="Scaling enabled">⚖️</span>}
+                      </div>
+
+                      {isSelected && (
+                        <div className="shmup-enemy-node__controls">
+                          <button type="button" className="shmup-enemy-node__btn shmup-enemy-node__btn--move" title="Drag to move" onPointerDown={(e) => beginDrag(instance.id, step.id, step.pos, e)}>
+                            ✥
+                          </button>
+                          {last && (
+                            <button
+                              type="button"
+                              className="shmup-enemy-node__btn shmup-enemy-node__btn--add"
+                              title="Add next step"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addNextStep(instance.id);
+                              }}
+                            >
+                              +
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="shmup-enemy-node__btn shmup-enemy-node__btn--attack"
+                            title={unitDef && unitDef.parts.some((p) => p.weapons.length > 0) ? "Add an attack at this step's time" : "Add a Weapon to this Unit's Parts first (Units menu)"}
+                            disabled={!unitDef || !unitDef.parts.some((p) => p.weapons.length > 0)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestAddAttack(instance.id, unitDef, step.time);
+                            }}
+                          >
+                            🔫+
+                          </button>
+                          <button
+                            type="button"
+                            className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
+                            title={first ? "Remove this Unit from the encounter" : "Delete"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDeleteStep(instance.id, step.id);
+                            }}
+                          >
+                            ✕
+                          </button>
+                          {first && (
+                            <button
+                              type="button"
+                              className={`shmup-enemy-node__btn shmup-enemy-node__btn--scaling ${scalingOpenFor === instance.id ? "shmup-enemy-node__btn--active" : ""}`}
+                              title="Scaling — duplicate this instance"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleScaling(instance.id);
+                              }}
+                            >
+                              ⚖️
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {pickingAttackPartFor === instance.id && isSelected && unitDef && (
+                        <div className="shmup-tile-picker shmup-part-picker">
+                          {unitDef.parts.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="shmup-btn shmup-btn--small"
+                              disabled={p.weapons.length === 0}
+                              title={p.weapons.length === 0 ? "This Part has no Weapons yet" : undefined}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addAttackToPart(instance.id, p.id, step.time);
+                              }}
+                            >
+                              {p.name}
+                            </button>
+                          ))}
+                          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPickingAttackPartFor(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })}
+
+              {draft.units.flatMap((instance) => {
+                const unitDef = units.find((u) => u.id === instance.unitDefId);
+                if (!unitDef) return [];
+                return instance.attacks.map((attack) => {
+                  const part = unitDef.parts.find((p) => p.id === attack.partId);
+                  const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
+                  const anchorWorld = attackAnchorWorld(instance, unitDef, attack);
+                  if (!anchorWorld) return null;
+                  const pos = toStage(anchorWorld);
+                  const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
+                  const partSpriteUrl = part ? resolveSpriteUrl(part.spriteId, part.customSprite) : null;
+                  return (
+                    <div key={attack.id} className="shmup-attack-marker-wrap" style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}>
+                      <button
+                        type="button"
+                        className={`shmup-attack-marker ${isSelected ? "shmup-attack-marker--selected" : ""}`}
+                        style={partSpriteUrl ? { backgroundImage: `url(${partSpriteUrl})` } : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          selectAttack(instance.id, attack.id);
+                        }}
+                        title={`${part?.name ?? "?"}: ${weapon?.name ?? "(missing Weapon)"} @ ${attack.time.toFixed(1)}s`}
+                      >
+                        {!partSpriteUrl && "🔫"}
+                      </button>
+                      {isSelected && (
+                        <div className="shmup-enemy-node__controls">
+                          <button
+                            type="button"
+                            className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
+                            title="Delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteAttackEvent(instance.id, attack.id);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })}
+
+              {!hitboxPreviewOn &&
+                draft.units.map((instance) => {
+                  const unitDef = units.find((u) => u.id === instance.unitDefId);
+                  const preview = computeInstancePreview(instance, unitDef, scrubTime);
+                  if (!preview || !preview.step.visible) return null;
+                  const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+                  const pos = toStage(preview.pos);
+                  return (
+                    <div
+                      key={`preview-${instance.id}`}
+                      className="shmup-enemy-preview-dot"
+                      style={{ left: pos.x - PREVIEW_RADIUS, top: pos.y - PREVIEW_RADIUS, backgroundImage: spriteUrl ? `url(${spriteUrl})` : undefined }}
+                      title={`${unitDef?.name ?? "?"} @ ${scrubTime.toFixed(1)}s`}
+                    />
+                  );
+                })}
+
+              {hitboxPreviewOn && (
+                <>
+                  {/* Tile bounds — thick yellow, the tile's real footprint. Camera/playable bounds — dotted, roughly what's visible on screen at once (hitboxPreview.ts's computeCameraBoundsRect). Player reference — a static green circle at real hitboxRadiusNormal scale standing in for the (not simulated) player ship. */}
+                  <div className="shmup-hitbox-tile-bounds" style={{ left: tileRectStage.x, top: tileRectStage.y, width: tileRectStage.width, height: tileRectStage.height }} />
+                  <div className="shmup-hitbox-camera-bounds" style={{ left: cameraBoundsStage.x, top: cameraBoundsStage.y, width: cameraBoundsStage.width, height: cameraBoundsStage.height }} />
+                  <div
+                    className="shmup-hitbox-player"
+                    style={{
+                      left: playerRefStage.x - PLAYER_REFERENCE_HITBOX_RADIUS,
+                      top: playerRefStage.y - PLAYER_REFERENCE_HITBOX_RADIUS,
+                      width: PLAYER_REFERENCE_HITBOX_RADIUS * 2,
+                      height: PLAYER_REFERENCE_HITBOX_RADIUS * 2,
+                    }}
+                    title="Reference player hitbox (not simulated — a static stand-in)"
+                  />
+                  {hitboxEnemyMarkers.map((m) => (
+                    <div
+                      key={m.key}
+                      className="shmup-hitbox-enemy"
+                      style={{ left: m.stage.x - m.sizePx / 2, top: m.stage.y - m.sizePx / 2, width: m.sizePx, height: m.sizePx }}
+                    />
+                  ))}
+                  {hitboxBulletMarkers.map((m) => (
+                    <div
+                      key={m.key}
+                      className="shmup-hitbox-bullet"
+                      style={{ left: m.stage.x - m.diameterPx / 2, top: m.stage.y - m.diameterPx / 2, width: m.diameterPx, height: m.diameterPx, opacity: m.alpha }}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Corner overlays — siblings of the transformed stage, not children of it, so they stay fixed-size/fixed-position regardless of the current zoom. */}
+            <div className="shmup-canvas-corner shmup-canvas-corner--top-left">
+              <button
+                type="button"
+                className={`shmup-canvas-corner-btn ${hitboxPreviewOn ? "shmup-btn--active" : ""}`}
+                onClick={() => setHitboxPreviewOn((v) => !v)}
+                title="Low-fi hitbox/boundary preview"
+              >
+                ⊡
+              </button>
+              {hitboxPreviewOn && (
+                <Dial label="Diff." value={hitboxPreviewDifficulty} onChange={setHitboxPreviewDifficulty} min={0} max={HITBOX_PREVIEW_DIFFICULTY_MAX} size={32} />
+              )}
+            </div>
+            <div className="shmup-canvas-corner shmup-canvas-corner--top-right">
+              <button type="button" className="shmup-canvas-corner-btn" onClick={() => setEmbiggen((v) => !v)} title={embiggen ? "Shrink" : "Embiggen — fullscreen"}>
+                {embiggen ? "⤡" : "⛶"}
+              </button>
+            </div>
+
+            <div className="shmup-canvas-zoom-btns">
+              {/* zoomRef.current, not the `zoom` state closure — a rapid run of clicks (or clicks that land before React re-renders) would otherwise all divide/multiply the same stale value instead of compounding. */}
+              <button
+                type="button"
+                className="shmup-canvas-zoom-btn"
+                onClick={() => applyZoom(zoomRef.current / 1.3, viewportSize.width / 2, viewportSize.height / 2)}
+                disabled={zoom <= ZOOM_MIN}
+                title="Zoom out"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="shmup-canvas-zoom-btn"
+                onClick={() => applyZoom(zoomRef.current * 1.3, viewportSize.width / 2, viewportSize.height / 2)}
+                disabled={zoom >= ZOOM_MAX}
+                title="Zoom in"
+              >
+                +
+              </button>
+            </div>
+            <EncounterMinimap
+              stageWidth={width}
+              stageHeight={height}
+              tileRectStage={tileRectStage}
+              stepPointsStage={stepPointsStage}
+              pan={pan}
+              zoom={zoom}
+              viewportWidth={viewportSize.width}
+              viewportHeight={viewportSize.height}
+              onPan={setPan}
             />
-            <span className="shmup-spawn-scaling-preview__value">{hitboxPreviewDifficulty}</span>
-          </label>
-        )}
+          </div>
+        </div>
       </div>
 
-      <p className="shmup-hint">
-        Tap a step to select it. Tap the + (last step only) to add the next step; drag the ✥ handle to reposition, or the teal ⬦ handles to bend
-        the curve leaving/arriving at it. Tap 🔫+ to add an attack anywhere on that Unit's timeline — it fires from wherever its path puts it at
-        that time, not tied to a movement waypoint; a fixed-aim attack gets its own draggable handle. Tap ⚖️ (first step only) to open that
-        instance's Scaling tab — duplicates replay its whole sequence, positioned by a draggable shape (Curve/V/Grid/Ring). The dashed box is
-        this tile's real footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below
-        still lets you drag to adjust pacing, and Play/scrub previews motion (teal marker).
-        {hitboxPreviewOn &&
-          " Hitbox preview is on: red boxes are enemies (and their scaled duplicates) at their real hitbox size, red dots are bullets in flight, the green circle is a reference player hitbox, the thick yellow border is the tile's real bounds, and the dotted border is roughly how much of it is visible on screen at once."}
-      </p>
+      <div className="shmup-enc-tabs">
+        <div className="shmup-enc-tabbar">
+          <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "basics" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("basics")}>
+            Basics
+          </button>
+          <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "add" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("add")}>
+            + Add
+          </button>
+          {contextualTab === "step" && (
+            <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "step" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("step")}>
+              Step
+            </button>
+          )}
+          {contextualTab === "attack" && (
+            <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "attack" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("attack")}>
+              Attack
+            </button>
+          )}
+          {contextualTab === "scaling" && (
+            <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "scaling" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("scaling")}>
+              Scaling
+            </button>
+          )}
+        </div>
 
-      <div
-        className="shmup-enemy-canvas-viewport"
-        ref={arenaRef}
-        onPointerDown={onArenaPointerDown}
-        onPointerMove={onArenaPointerMove}
-        onPointerUp={onArenaPointerUp}
-        onPointerCancel={onArenaPointerUp}
-      >
-        <div
-          className="shmup-enemy-canvas-stage"
-          ref={stageRef}
-          style={{ width, height, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}
-          onPointerMove={onStagePointerMove}
-          onPointerUp={onStagePointerUp}
-          onPointerCancel={onStagePointerUp}
-        >
-          <div style={{ position: "absolute", left: framePos.x, top: framePos.y }}>
-            <EncounterTileFrame tile={tile} widthPx={tile.footprint * TILE_UNIT} heightPx={TILE_UNIT} />
-          </div>
-
-          <svg className="shmup-enemy-canvas-svg" width={width} height={height}>
-            <defs>
-              <marker id="shmup-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" fill="#ffcc88" />
-              </marker>
-            </defs>
-            {draft.units.flatMap((instance) => {
-              const unitDef = units.find((u) => u.id === instance.unitDefId);
-              const turnRate = unitDef?.turnRate ?? 1;
-              return instance.steps.slice(1).map((step, i) => {
-                const prev = effectiveStep(instance.id, instance.steps[i]);
-                const cur = effectiveStep(instance.id, step);
-                const { p0, p1, p2, p3 } = resolveSegment(prev, cur, turnRate);
-                const a = toStage(p0);
-                const b = toStage(p1);
-                const c = toStage(p2);
-                const d = toStage(p3);
-                return (
-                  <path
-                    key={step.id}
-                    d={`M ${a.x},${a.y} C ${b.x},${b.y} ${c.x},${c.y} ${d.x},${d.y}`}
-                    fill="none"
-                    stroke="#ffcc88"
-                    strokeWidth={2}
-                    markerEnd="url(#shmup-arrow)"
-                  />
-                );
-              });
-            })}
-
-            {selectedNodeStage &&
-              handleDots.map(({ which, stage }) => (
-                <line
-                  key={which}
-                  x1={selectedNodeStage.x}
-                  y1={selectedNodeStage.y}
-                  x2={stage.x}
-                  y2={stage.y}
-                  stroke="#66ffee"
-                  strokeWidth={1.5}
-                  strokeDasharray="3,3"
-                />
-              ))}
-
-            {/* Scaling shape stalks — origin to each handle, dashed, same visual language as bezier handle stalks. */}
-            {scalingOriginStage &&
-              scalingHandleEntries.map(({ handle, pos }, i) => {
-                const stage = toStage(pos);
-                const anchorStage = handle.kind === "ringRadius" && selectedInstance ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === "ringCenter")?.pos ?? pos) : scalingOriginStage;
-                return (
-                  <line
-                    key={i}
-                    x1={anchorStage.x}
-                    y1={anchorStage.y}
-                    x2={stage.x}
-                    y2={stage.y}
-                    stroke="#ffbb33"
-                    strokeWidth={1.5}
-                    strokeDasharray="3,3"
-                  />
-                );
-              })}
-          </svg>
-
-          {/* Bezier handle drag targets — real HTML buttons (not SVG shapes) so they're actually hittable on mobile, same reasoning as the ✥/+/✕ node controls below. */}
-          {selectedInstance &&
-            selectedStep &&
-            handleDots.map(({ which, stage }) => (
-              <button
-                key={which}
-                type="button"
-                className="shmup-handle-btn"
-                title={which === "out" ? "Drag to bend the curve leaving this step" : "Drag to bend the curve arriving at this step"}
-                style={{ left: stage.x - HANDLE_RADIUS, top: stage.y - HANDLE_RADIUS }}
-                onPointerDown={(e) => beginHandleDrag(selectedInstance.id, selectedStep.id, which, e)}
-              />
-            ))}
-
-          {/* An attack's aim handle — same real-HTML-button pattern, one per selected fixed-aim attack, drag to set its firing angle. */}
-          {selectedInstance && selectedAttack && aimHandleStage && (
-            <button
-              type="button"
-              className="shmup-handle-btn"
-              title="Drag to aim"
-              style={{ left: aimHandleStage.x - HANDLE_RADIUS, top: aimHandleStage.y - HANDLE_RADIUS }}
-              onPointerDown={(e) => beginAimDrag(selectedInstance.id, selectedAttack.id, e)}
-            />
+        <div className="shmup-enc-tab-content">
+          {effectiveTab === "basics" && (
+            <div className="shmup-panel">
+              <label className="shmup-field shmup-field--inline">
+                <span>Name</span>
+                <input type="text" className="shmup-input" value={draft.name} onChange={(e) => updateDraft({ ...draft, name: e.target.value })} />
+              </label>
+              <div className="shmup-dial-grid">
+                <Dial label="Weight" value={draft.weight} onChange={(v) => updateDraft({ ...draft, weight: v })} step={0.1} showNudgeButtons />
+              </div>
+            </div>
           )}
 
-          {/* A scaling positioning-shape's handles — one set per shape kind (Curve/V/Grid/Ring), only while that instance's Scaling tab is open. */}
-          {selectedInstance &&
-            scalingHandleEntries.map(({ handle, pos }, i) => {
-              const stage = toStage(pos);
-              const title = handle.kind === "pingPongOverride" ? "Drag to set an asymmetric mirror axis" : "Drag to shape this scaling group";
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  className="shmup-handle-btn shmup-handle-btn--scaling"
-                  title={title}
-                  style={{ left: stage.x - HANDLE_RADIUS, top: stage.y - HANDLE_RADIUS }}
-                  onPointerDown={(e) => beginScalingDrag(selectedInstance.id, handle, pos, e)}
-                />
-              );
-            })}
+          {effectiveTab === "add" && (
+            <div className="shmup-tile-picker">
+              {units.length === 0 ? (
+                <p className="shmup-readout">No Units yet — create one via the Units menu.</p>
+              ) : (
+                units.map((u) => {
+                  const url = resolveSpriteUrl(u.spriteId, u.customSprite);
+                  return (
+                    <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addUnitInstance(u.id)} title={u.name}>
+                      <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
+                        {!url && <span>{u.name}</span>}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
 
-          {/* Ghost slot preview — where duplicates would land at the panel's preview-Difficulty count, dim and non-interactive. */}
-          {scalingGhostSlots.map((p, i) => {
-            const stage = toStage(p);
-            return <div key={i} className="shmup-scaling-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
-          })}
-
-          {draft.units.flatMap((instance) => {
-            const unitDef = units.find((u) => u.id === instance.unitDefId);
-            const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
-            return instance.steps.map((step) => {
-              const pos = toStage(effectiveStep(instance.id, step).pos);
-              const first = isFirstStep(instance, step.id);
-              const last = isLastStep(instance, step.id);
-              const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
-              return (
-                <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
-                  <button
-                    type="button"
-                    className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${!step.visible ? "shmup-enemy-node--hidden" : ""}`}
-                    style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      selectStep(instance.id, step.id);
-                    }}
-                    title={unitDef?.name ?? "(missing Unit)"}
-                  >
-                    {!spriteUrl && "●"}
-                  </button>
-                  {first && <div className="shmup-enemy-node__label">{unitDef?.name ?? "?"}</div>}
-                  <div className="shmup-enemy-node__badges">
-                    {first && <span title="First step">▶</span>}
-                    {!step.visible && <span title="Hidden">👻</span>}
-                    {instance.scaling.maxCount > 1 && <span title="Scaling enabled">⚖️</span>}
-                  </div>
-
-                  {isSelected && (
-                    <div className="shmup-enemy-node__controls">
-                      <button type="button" className="shmup-enemy-node__btn shmup-enemy-node__btn--move" title="Drag to move" onPointerDown={(e) => beginDrag(instance.id, step.id, step.pos, e)}>
-                        ✥
-                      </button>
-                      {last && (
-                        <button
-                          type="button"
-                          className="shmup-enemy-node__btn shmup-enemy-node__btn--add"
-                          title="Add next step"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addNextStep(instance.id);
-                          }}
-                        >
-                          +
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="shmup-enemy-node__btn shmup-enemy-node__btn--attack"
-                        title={unitDef && unitDef.parts.some((p) => p.weapons.length > 0) ? "Add an attack at this step's time" : "Add a Weapon to this Unit's Parts first (Units menu)"}
-                        disabled={!unitDef || !unitDef.parts.some((p) => p.weapons.length > 0)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestAddAttack(instance.id, unitDef, step.time);
-                        }}
-                      >
-                        🔫+
-                      </button>
-                      <button
-                        type="button"
-                        className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
-                        title={first ? "Remove this Unit from the encounter" : "Delete"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestDeleteStep(instance.id, step.id);
-                        }}
-                      >
-                        ✕
-                      </button>
-                      {first && (
-                        <button
-                          type="button"
-                          className={`shmup-enemy-node__btn shmup-enemy-node__btn--scaling ${scalingOpenFor === instance.id ? "shmup-enemy-node__btn--active" : ""}`}
-                          title="Scaling — duplicate this instance"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleScaling(instance.id);
-                          }}
-                        >
-                          ⚖️
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {pickingAttackPartFor === instance.id && isSelected && unitDef && (
-                    <div className="shmup-tile-picker shmup-part-picker">
-                      {unitDef.parts.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className="shmup-btn shmup-btn--small"
-                          disabled={p.weapons.length === 0}
-                          title={p.weapons.length === 0 ? "This Part has no Weapons yet" : undefined}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addAttackToPart(instance.id, p.id, step.time);
-                          }}
-                        >
-                          {p.name}
-                        </button>
-                      ))}
-                      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPickingAttackPartFor(null)}>
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            });
-          })}
-
-          {draft.units.flatMap((instance) => {
-            const unitDef = units.find((u) => u.id === instance.unitDefId);
-            if (!unitDef) return [];
-            return instance.attacks.map((attack) => {
-              const part = unitDef.parts.find((p) => p.id === attack.partId);
-              const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
-              const anchorWorld = attackAnchorWorld(instance, unitDef, attack);
-              if (!anchorWorld) return null;
-              const pos = toStage(anchorWorld);
-              const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
-              const partSpriteUrl = part ? resolveSpriteUrl(part.spriteId, part.customSprite) : null;
-              return (
-                <div key={attack.id} className="shmup-attack-marker-wrap" style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}>
-                  <button
-                    type="button"
-                    className={`shmup-attack-marker ${isSelected ? "shmup-attack-marker--selected" : ""}`}
-                    style={partSpriteUrl ? { backgroundImage: `url(${partSpriteUrl})` } : undefined}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      selectAttack(instance.id, attack.id);
-                    }}
-                    title={`${part?.name ?? "?"}: ${weapon?.name ?? "(missing Weapon)"} @ ${attack.time.toFixed(1)}s`}
-                  >
-                    {!partSpriteUrl && "🔫"}
-                  </button>
-                  {isSelected && (
-                    <div className="shmup-enemy-node__controls">
-                      <button
-                        type="button"
-                        className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteAttackEvent(instance.id, attack.id);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            });
-          })}
-
-          {!hitboxPreviewOn &&
-            draft.units.map((instance) => {
-              const unitDef = units.find((u) => u.id === instance.unitDefId);
-              const preview = computeInstancePreview(instance, unitDef, scrubTime);
-              if (!preview || !preview.step.visible) return null;
-              const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
-              const pos = toStage(preview.pos);
-              return (
-                <div
-                  key={`preview-${instance.id}`}
-                  className="shmup-enemy-preview-dot"
-                  style={{ left: pos.x - PREVIEW_RADIUS, top: pos.y - PREVIEW_RADIUS, backgroundImage: spriteUrl ? `url(${spriteUrl})` : undefined }}
-                  title={`${unitDef?.name ?? "?"} @ ${scrubTime.toFixed(1)}s`}
-                />
-              );
-            })}
-
-          {hitboxPreviewOn && (
+          {effectiveTab === "step" && selectedInstance && selectedStep && (
             <>
-              {/* Tile bounds — thick yellow, the tile's real footprint. Camera/playable bounds — dotted, roughly what's visible on screen at once (hitboxPreview.ts's computeCameraBoundsRect). Player reference — a static green circle at real hitboxRadiusNormal scale standing in for the (not simulated) player ship. */}
-              <div className="shmup-hitbox-tile-bounds" style={{ left: tileRectStage.x, top: tileRectStage.y, width: tileRectStage.width, height: tileRectStage.height }} />
-              <div className="shmup-hitbox-camera-bounds" style={{ left: cameraBoundsStage.x, top: cameraBoundsStage.y, width: cameraBoundsStage.width, height: cameraBoundsStage.height }} />
-              <div
-                className="shmup-hitbox-player"
-                style={{
-                  left: playerRefStage.x - PLAYER_REFERENCE_HITBOX_RADIUS,
-                  top: playerRefStage.y - PLAYER_REFERENCE_HITBOX_RADIUS,
-                  width: PLAYER_REFERENCE_HITBOX_RADIUS * 2,
-                  height: PLAYER_REFERENCE_HITBOX_RADIUS * 2,
-                }}
-                title="Reference player hitbox (not simulated — a static stand-in)"
-              />
-              {hitboxEnemyMarkers.map((m) => (
-                <div
-                  key={m.key}
-                  className="shmup-hitbox-enemy"
-                  style={{ left: m.stage.x - m.sizePx / 2, top: m.stage.y - m.sizePx / 2, width: m.sizePx, height: m.sizePx }}
+              {pendingDeleteKey === deleteKey(selectedInstance.id, selectedStep.id) ? (
+                <div className="shmup-panel shmup-panel--confirm">
+                  <p className="shmup-readout">{isFirstStep(selectedInstance, selectedStep.id) ? "Remove this Unit from the encounter?" : "Delete this step onward?"}</p>
+                  <div className="shmup-btn-row">
+                    <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => requestDeleteStep(selectedInstance.id, selectedStep.id)}>
+                      Confirm
+                    </button>
+                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteKey(null)}>
+                      Keep
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <StepPanel
+                  step={selectedStep}
+                  timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
+                  hasOutgoingSegment={hasOutgoingSegment}
+                  onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))}
                 />
-              ))}
-              {hitboxBulletMarkers.map((m) => (
-                <div
-                  key={m.key}
-                  className="shmup-hitbox-bullet"
-                  style={{ left: m.stage.x - m.diameterPx / 2, top: m.stage.y - m.diameterPx / 2, width: m.diameterPx, height: m.diameterPx, opacity: m.alpha }}
-                />
-              ))}
+              )}
             </>
           )}
-        </div>
 
-        {/* Zoom controls + minimap — siblings of the transformed stage, not children of it, so they stay fixed-size/fixed-position regardless of the current zoom (same reason JigsawPuzzle.tsx's minimap lives outside its transformed arena content). */}
-        <div className="shmup-canvas-zoom-btns">
-          {/* zoomRef.current, not the `zoom` state closure — a rapid run of clicks (or clicks that land before React re-renders) would otherwise all divide/multiply the same stale value instead of compounding. */}
-          <button
-            type="button"
-            className="shmup-canvas-zoom-btn"
-            onClick={() => applyZoom(zoomRef.current / 1.3, viewportSize.width / 2, viewportSize.height / 2)}
-            disabled={zoom <= ZOOM_MIN}
-            title="Zoom out"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="shmup-canvas-zoom-btn"
-            onClick={() => applyZoom(zoomRef.current * 1.3, viewportSize.width / 2, viewportSize.height / 2)}
-            disabled={zoom >= ZOOM_MAX}
-            title="Zoom in"
-          >
-            +
-          </button>
-        </div>
-        <EncounterMinimap
-          stageWidth={width}
-          stageHeight={height}
-          tileRectStage={tileRectStage}
-          stepPointsStage={stepPointsStage}
-          pan={pan}
-          zoom={zoom}
-          viewportWidth={viewportSize.width}
-          viewportHeight={viewportSize.height}
-          onPan={setPan}
-        />
-      </div>
-
-      <EncounterTimeline
-        units={draft.units}
-        unitDefs={units}
-        maxTime={maxTime}
-        scrubTime={scrubTime}
-        onScrub={setScrubTime}
-        playing={playing}
-        onTogglePlay={() => setPlaying((v) => !v)}
-        selection={selection}
-        onSelectStep={selectStep}
-        onSelectAttack={selectAttack}
-        onRetimeStep={handleRetimeStep}
-      />
-
-      <div className="shmup-btn-row">
-        <button type="button" className="shmup-btn" onClick={() => setAddingUnit((v) => !v)}>
-          + Add Unit
-        </button>
-      </div>
-      {addingUnit && (
-        <div className="shmup-tile-picker">
-          {units.length === 0 ? (
-            <p className="shmup-hint">No Units in the library yet — create one first (Units menu).</p>
-          ) : (
-            units.map((u) => {
-              const url = resolveSpriteUrl(u.spriteId, u.customSprite);
-              return (
-                <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addUnitInstance(u.id)} title={u.name}>
-                  <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
-                    {!url && <span>{u.name}</span>}
-                  </div>
-                </button>
-              );
-            })
+          {effectiveTab === "attack" && selectedInstance && selectedAttack && (
+            <AttackPanel unit={selectedUnitDef} attack={selectedAttack} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateAttack(i, selectedAttack.id, patch))} />
           )}
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setAddingUnit(false)}>
+
+          {effectiveTab === "scaling" && selectedInstance && scalingPanelOpen && (
+            <UnitScalingPanel
+              scaling={selectedInstance.scaling}
+              previewDifficulty={scalingPreviewDifficulty}
+              onPreviewDifficultyChange={setScalingPreviewDifficulty}
+              onChange={(patch) => updateScaling(selectedInstance.id, patch)}
+              onAddCurvePoint={() => addCurvePoint(selectedInstance.id)}
+              onRemoveCurvePoint={(index) => removeCurvePoint(selectedInstance.id, index)}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="shmup-enc-footer">
+        {error && <p className="shmup-error">{error}</p>}
+        <div className="shmup-btn-row">
+          <button type="button" className="shmup-btn shmup-btn--primary" disabled={!!error} onClick={handleSave}>
+            Save Encounter
+          </button>
+          <button type="button" className="shmup-btn" onClick={onCancel}>
             Cancel
           </button>
         </div>
-      )}
-
-      {selectedInstance && selectedStep && !scalingPanelOpen && pendingDeleteKey === deleteKey(selectedInstance.id, selectedStep.id) && (
-        <div className="shmup-panel shmup-panel--confirm">
-          <p className="shmup-hint">
-            {isFirstStep(selectedInstance, selectedStep.id)
-              ? "Remove this Unit (and its whole sequence) from the encounter?"
-              : "Delete this step and everything after it in the sequence?"}
-          </p>
-          <div className="shmup-btn-row">
-            <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => requestDeleteStep(selectedInstance.id, selectedStep.id)}>
-              Confirm
-            </button>
-            <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteKey(null)}>
-              Keep
-            </button>
-          </div>
-        </div>
-      )}
-
-      {selectedInstance && scalingPanelOpen && (
-        <UnitScalingPanel
-          scaling={selectedInstance.scaling}
-          previewDifficulty={scalingPreviewDifficulty}
-          onPreviewDifficultyChange={setScalingPreviewDifficulty}
-          onChange={(patch) => updateScaling(selectedInstance.id, patch)}
-          onAddCurvePoint={() => addCurvePoint(selectedInstance.id)}
-          onRemoveCurvePoint={(index) => removeCurvePoint(selectedInstance.id, index)}
-        />
-      )}
-
-      {selectedInstance && selectedStep && !scalingPanelOpen && pendingDeleteKey !== deleteKey(selectedInstance.id, selectedStep.id) && (
-        <StepPanel
-          step={selectedStep}
-          timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
-          hasOutgoingSegment={hasOutgoingSegment}
-          onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))}
-        />
-      )}
-
-      {selectedInstance && selectedAttack && !scalingPanelOpen && (
-        <AttackPanel
-          unit={selectedUnitDef}
-          attack={selectedAttack}
-          onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateAttack(i, selectedAttack.id, patch))}
-        />
-      )}
-
-      {error && <p className="shmup-error">{error}</p>}
-      <div className="shmup-btn-row">
-        <button type="button" className="shmup-btn shmup-btn--primary" disabled={!!error} onClick={handleSave}>
-          Save Encounter
-        </button>
-        <button type="button" className="shmup-btn" onClick={onCancel}>
-          Cancel
-        </button>
       </div>
     </div>
   );

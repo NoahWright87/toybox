@@ -769,8 +769,8 @@ value unmodified."
 ### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterSteps.ts`)
 
 Same tap-driven interaction model as earlier passes (tap a node to select
-it, overlay quick-action buttons, below-canvas settings panel for the real
-fields), simplified by the graph-to-array collapse: consecutive steps
+it, overlay quick-action buttons, a settings tab for the real fields — see
+"Layout" below), simplified by the graph-to-array collapse: consecutive steps
 within one instance render as an SVG `<path>` cubic-bezier command
 (`resolveSegment`, `bezier.ts`) instead of a graph edge — there's nothing
 to tap or delete on the connector itself, only its two endpoints' handles
@@ -870,6 +870,80 @@ to drag (see "Movement" above).
   input, select")` and bails out immediately for a match, so any control
   that manages its own pointer events (the minimap already did via
   `stopPropagation`) is left alone.
+
+### Layout: pinned timeline/viewport + tabs (`EncounterEditor.tsx`, `ShmupEditor.tsx`)
+
+**Reworked after real usability friction — Noah's report: scrolling down
+to a selected node's settings routinely scrolled far enough to trigger the
+outside-tap deselect, so the settings disappeared right as you reached
+them.** The original layout stacked everything in one long scrolling
+column (toolbar, canvas, timeline, Add-Unit picker, Step/Attack/Scaling
+panel, Save/Cancel) — fine on desktop, a trap on mobile.
+
+- **`EncounterTimeline` + the canvas viewport now live in one `position:
+  sticky` head** (`.shmup-enc-sticky-head`, `top: 0`) pinned to the top of
+  the scroll container, stuck together as a single unit so the viewport
+  doesn't need to know the timeline's own (variable, track-count-dependent)
+  height to position itself under it.
+- **Everything else is a tab**, not a stack: **Basics** (name, weight),
+  **+ Add** (the Unit picker), and one contextual slot that only appears
+  once something is selected — **Step**, **Attack**, or **Scaling**,
+  matching `selection`/`scalingOpenFor`. Selecting a step/attack or opening
+  Scaling explicitly switches to that tab (`selectStep`/`selectAttack`/
+  `toggleScaling` each call `setActiveTab`); manually switching to Basics/
+  Add doesn't lose the underlying selection, and a stale contextual tab
+  (its node got deleted) falls back to Basics automatically
+  (`effectiveTab`'s derivation, not extra cleanup code). "+ Add Unit"'s old
+  toggle-button-plus-inline-picker collapsed into just the Add tab itself —
+  selecting it *is* the toggle now.
+- **"Embiggen"** (⛶, top-right corner of the viewport — same word Doors
+  97's own window maximize button already uses) makes the viewport fill
+  the screen (`position: fixed; inset: 0`) when half the screen isn't
+  enough; tap again or press Escape to shrink back. Independent of the
+  Doors 97 window's own maximize — this is about the canvas specifically
+  still needing more room even in a maximized window on a small screen.
+  The existing pan/zoom state (and the one-time `fitView`) carries over
+  unchanged across the toggle; only the viewport's own CSS position/size
+  changes.
+- **The E4 hitbox-preview toggle moved from the old toolbar into a corner
+  overlay** (⊡, top-left of the viewport, matching the zoom buttons/
+  minimap's existing corner-overlay convention) — its Difficulty Dial only
+  renders inline next to the button while the toggle is on.
+- **Muted `.shmup-hint` explanatory paragraphs are gone from every panel**
+  (StepPanel/AttackPanel/UnitScalingPanel and the canvas's own top
+  instruction paragraph) — Noah's "remove all the muted explanatory text,
+  put instructions in the Help menu instead." `ShmupEditor.tsx` now
+  registers a "Help" menu with two topics (Tile Editor, Encounter Editor),
+  each opening a small modal with the consolidated tips. This Help menu is
+  intentionally the *only* one: `ShmupEditorPage.tsx`'s `StandaloneWindow`
+  used to carry its own separate `helpContent` (Tile-editor-only tips) —
+  `StandaloneWindow` concatenates its own menus with a hosted app's
+  `useWindowMenus` registration rather than replacing them the way Doors
+  97's `Window.tsx` does, so keeping both would have shown two "Help"
+  labels on the standalone route specifically. The Tile-editor tips moved
+  into `ShmupEditor.tsx`'s own modal instead, and `helpContent` was
+  dropped from `ShmupEditorPage.tsx`.
+- **Numeric fields converted to `Dial`s wherever a plain number made sense
+  as a drag/nudge/tap-to-type control** — Weight (Basics), Time/Speed
+  multiplier (Step), Time/Duration/Aim override (Attack, in a
+  `.shmup-dial-grid` row), Spawn delay/V width/Grid width+depth/Ring
+  radius (Scaling, alongside the Max count/Min cost Dials E3 already had).
+  Two fields kept their original input type deliberately: a step's `time`
+  when derived (`timeDerived`) renders as a plain read-only `.shmup-readout`
+  instead of a Dial, since a Dial has no disabled/non-interactive state
+  and dragging it would silently do nothing; an attack's `aimAngleOverride`
+  pairs its Dial with a small explicit "✕ clear" button
+  (`.shmup-dial-with-clear`) since Dial's own right-click/long-press reset
+  can only restore a concrete number, not this field's real "no override,
+  follow the Weapon" (`null`) state.
+- **Save/Cancel + the validation error message are a sticky-bottom footer**
+  (`.shmup-enc-footer`), always reachable regardless of scroll position or
+  active tab — the same "don't make me scroll to reach the thing I need"
+  fix applied to the other end of the screen.
+- The outside-tap deselect effect's "was this click inside something that
+  should keep the selection" check now includes `.shmup-enc-tabs` (the
+  tab bar + content wrapper) in place of the narrower `.shmup-panel`
+  check it used before tabs existed.
 
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
@@ -1140,8 +1214,10 @@ preview-budget slider (ephemeral, same as the timeline's scrub/play state).
 
 **Editor-side timeline playback layered on the scrubber E2 already
 shipped — not a new playback engine, and not real Phaser.** `hitboxPreview.ts`
-+ a "Hitbox preview" toggle button in `EncounterEditor.tsx`'s toolbar swap
-the canvas's touch-friendly authoring icons (56px sprite thumbnails, sized
++ a "Hitbox preview" toggle button (⊡, a corner overlay on the canvas
+viewport itself — see "Layout" above; originally a toolbar button before
+that toolbar was removed) swap the canvas's touch-friendly authoring
+icons (56px sprite thumbnails, sized
 for tapping, not real scale) for reference geometry at the current
 `scrubTime`, so "does a full-count line still fit the tile and still read
 clearly" is something to actually look at rather than infer from numbers
