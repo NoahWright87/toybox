@@ -1,10 +1,14 @@
-# Shmup — Spawn Nodes, Difficulty Budget & Warning Indicators Spec
+# Shmup — Difficulty Budget & Warning Indicators Spec
 
 > Issues: **L5 #187** (spawn nodes + generalized scaling), **L6 #188**
-> (warning indicators). Part of **Epic 5 #181**. Status: design locked,
-> not yet implemented. Source: design handoff doc (Claude Chat → Claude
-> Code), 2026-07-04, reconciled against the shipped
-> `systems/difficulty/curves.ts` + `archetypes.ts` (F8 #136).
+> (warning indicators). Part of **Epic 5 #181**. Status: §1's budget
+> concept and §3's warnings are design-locked, not yet implemented. §2's
+> standalone "spawn node" model is **superseded** — the count/power half
+> of L5 shipped in `/shmup-editor` Epic 6 E3 as a tab on an already-placed
+> Unit instance, not a separate concept; see §2 below. Source: design
+> handoff doc (Claude Chat → Claude Code), 2026-07-04, reconciled against
+> the shipped `systems/difficulty/curves.ts` + `archetypes.ts` (F8 #136)
+> and the shipped `/shmup-editor` scaling model.
 
 ## What this generalizes (does not replace)
 
@@ -24,8 +28,9 @@ itself is computed, only what consumes it.
 ## 1. Difficulty budget (shared system)
 
 Referenced by tile-variant weighting (`levels-and-tiles.spec.todo.md`),
-spawn-node scaling (§3 below), and per-param enemy/bullet stat scaling
-(`enemies-and-bullets.spec.todo.md`). Design once, reference everywhere:
+per-instance count/power scaling (§2 below), and per-param enemy/bullet
+stat scaling (`enemies-and-bullets.spec.todo.md`). Design once, reference
+everywhere:
 
 - **Difficulty budget**: a number derived from `D` (the existing
   escalation scalar — season/episode/stage-offset/mapLag, unchanged).
@@ -45,54 +50,47 @@ spawn-node scaling (§3 below), and per-param enemy/bullet stat scaling
   faster/more-homing tends to read as "unfair" past a fairly low ceiling.
   This is a deliberate per-param choice in the editor (`specs/shmup-editor.todo.md`'s
   E2), not an accidental side effect of a global scaling toggle.
-- **Spawn-node count/power allocation**: a spawn node defines `minCount`,
-  `maxCount`, and a `powerSplit` percentage (0-100) describing how
-  incoming budget divides between buying more count vs. buying more
-  power/tier per existing unit. `powerSplit = 0` behaves like "count
-  only" (weak, ever more numerous — a swarm). `powerSplit = 100` with
-  `maxCount = 1` behaves like "power only" (a miniboss that never
-  duplicates, only gets stronger).
+- **Count/power allocation**: shipped as `/shmup-editor`'s per-instance
+  `UnitScaling`/`resolveScaling()` (see §2) — `count = min(floor(budget /
+  minCostPerInstance), maxCount)`, then `power = floor(budget / count)`,
+  the whole remaining budget divided evenly across however many instances
+  actually spawned. No separate `powerSplit` currency: a cheap
+  `minCostPerInstance` against a low `maxCount` behaves like "power only"
+  (a miniboss that hits its count cap fast and dumps the rest of the
+  budget into one or two instances); an expensive `maxCount` against a
+  high one behaves like "count only" (a swarm, budget spread thin).
 
 Existing `ARCHETYPE_EMPHASIS`-style per-archetype leans (e.g. elite leans
 HP/damage, drone leans density) are re-expressible as authored per-param
 curve-type + rate choices on an enemy definition — no separate emphasis
 table needed once every param can independently choose its own curve.
 
-## 2. Spawn nodes
+## 2. Per-instance scaling (shipped — supersedes the original spawn-node design)
 
-A **spawn node** lives on a tile variant (`levels-and-tiles.spec.todo.md`
-§1) and defines how a group of enemies (each running the same underlying
-Unit definition — steps + Parts/Weapons, not a node graph; see
-`enemies-and-bullets.spec.todo.md`, reconciled against Epic 6's shipped
-`/shmup-editor` authoring model) come into existence together.
+This section originally specified a standalone "spawn node" concept
+living on a tile variant, parallel to and separate from placed enemies —
+its own origin/shape/distribution/timing model. Noah corrected that
+during Epic 6 E3: there is no separate spawn-node kind of thing. An
+editor author places a Unit instance exactly as always (steps +
+Parts/Weapons on the existing timeline, not a node graph) and opts it
+into duplication via a **Scaling tab on that same instance**. Duplicates
+replay the instance's entire authored step/attack sequence independently,
+anchored to their own slot — there's no separate authoring surface for
+"the group" as a distinct entity from "the enemy."
 
-- **Origin type**: `point` (single fixed location, e.g. a factory door),
-  `region` (a box/rect, scattered/random placement), or `shape` (a
-  template of relative positions — V, arc, line, grid).
-- **Distribution**: `random` (for `region` origins) or `ordered` (fixed
-  relative positions, for `shape` origins).
-- **Shape definition**: authored as **normalized boundary positions**
-  (e.g. a V spanning 25-75% of tile width), not fixed absolute positions
-  per-count. Spacing between individuals is derived programmatically from
-  the current spawn count filling that boundary — a count of 3 spaces
-  widely, a count of 15 packs tightly, same shape either way. This
-  decouples shape authoring entirely from count scaling.
-- **Direction**: a rotation applied to the shape (e.g. a V oriented from
-  north vs. northwest vs. west) — one angle param, not a separate shape
-  per direction.
-- **Mirror**: boolean; reflects the entire origin (post-rotation) across
-  a center axis, spawning a second full copy of the group. Composes with
-  any origin type — mirroring a point spawns two factories, mirroring a
-  shape mirrors the formation.
-- **Timing**: first-spawn delay, interval between individual spawns (0 =
-  simultaneous, >0 = staggered queue), and total count (fixed, or "until
-  tile ends").
-- **Scaling**: uses §1's shared system — `minCount`, `maxCount`,
-  `powerSplit`.
+**See `specs/shmup-editor.md`'s "Per-instance scaling (E3)" section for
+the full shipped design** — `UnitScaling`'s fields, the four positioning
+shapes (Curve/V/Grid/Ring, replacing this section's old origin-type +
+distribution + direction + mirror fields with real draggable canvas
+handles), ping-pong mirroring, and `resolveScaling()`'s count/power
+formula (§1 above). `specs/shmup-editor.todo.md`'s "Per-instance scaling
+(E3)" entry tracks what's shipped vs. remaining (notably: the
+encounter-wide difficulty-preview slider, and spawn delay not yet on the
+shared timeline).
 
-No leader-death/scatter logic for spawn groups (see Epic 5 #181's
-deferred list) — each individual in a group runs its own copy of the
-enemy graph independently once spawned.
+No leader-death/scatter logic for scaled instances (see Epic 5 #181's
+deferred list) — each duplicate runs its own copy of the instance's
+step/attack sequence independently once spawned.
 
 ## 3. Warning indicators (L6)
 
@@ -109,9 +107,9 @@ per-enemy:
   point, for `appear`/static-entrance enemies (factories, turrets,
   hazards) that materialize inside the visible tile.
 - **`warningLead`** (how far ahead of actual spawn the indicator appears)
-  is tunable per enemy/spawn-node, not a single global constant — faster-
-  entering enemies need more lead time than slow ones, since the goal is
-  equal *reaction time*, not equal *warning time*.
+  is tunable per enemy/Unit instance, not a single global constant —
+  faster-entering enemies need more lead time than slow ones, since the
+  goal is equal *reaction time*, not equal *warning time*.
 - `teleport`'s `telegraphAtDestination` toggle and beam attacks'
   `onTrigger` telegraph phase (both `enemies-and-bullets.spec.todo.md`)
   are the same underlying concept applied at smaller scale — a visible
@@ -124,9 +122,12 @@ readable signal.
 ## Related
 
 - [`levels-and-tiles.spec.todo.md`](levels-and-tiles.spec.todo.md) — tiles
-  and tile variants, which spawn nodes live on
+  and tile variants, which scaled Unit instances live on
 - [`enemies-and-bullets.spec.todo.md`](enemies-and-bullets.spec.todo.md) —
-  the enemy/bullet node-graph model this spec's budget scales
+  the enemy/bullet Unit-instance model (steps + Parts/Weapons, not a node
+  graph) this spec's budget scales
+- [`shmup-editor.md`](../../shmup-editor.md) — the shipped `/shmup-editor`
+  per-instance scaling design §2 points to
 - [`run-structure.spec.md`](run-structure.spec.md) — `computeDifficulty()`,
   the source of `D` this spec's budget derives from
 - [`tuning.spec.todo.md`](tuning.spec.todo.md) — where the concrete curve
