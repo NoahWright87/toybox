@@ -943,6 +943,45 @@
   pointer-events: none;
 }
 
+/* E4 low-fi hitbox/boundary preview mode (hitboxPreview.ts,
+   specs/shmup-editor.todo.md) — real-scale reference geometry shown
+   instead of the (deliberately oversized, touch-friendly) authoring
+   icons above, so bullet density/hitbox overlap reads honestly. All
+   pointer-events: none — this is a read-only overlay, never a drag
+   target. */
+.shmup-hitbox-tile-bounds {
+  position: absolute;
+  border: 4px solid #ffdd33;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.shmup-hitbox-camera-bounds {
+  position: absolute;
+  border: 2px dotted #ffffff;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.shmup-hitbox-player {
+  position: absolute;
+  border-radius: 50%;
+  background-color: rgba(34, 221, 68, 0.35);
+  border: 2px solid #22dd44;
+  pointer-events: none;
+}
+.shmup-hitbox-enemy {
+  position: absolute;
+  background-color: rgba(255, 51, 51, 0.25);
+  border: 2px solid #ff3333;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.shmup-hitbox-bullet {
+  position: absolute;
+  border-radius: 50%;
+  background-color: #ff3333;
+  pointer-events: none;
+}
+
 /* Attack-track placement marker — an independent event on the timeline,
    not a movement waypoint, so it's deliberately smaller/differently
    colored than .shmup-enemy-node (same "reads as secondary" reasoning as

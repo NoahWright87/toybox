@@ -1026,22 +1026,34 @@ own slot** (convoy-style) — this file only computes *where* the slots are
 and *how many* there are, never behavior.
 
 **One scaling mechanism, not several — condensed down from an earlier
-over-build.** The first pass also over-built a `flat`/`linear`/`capped`/
-`stepped` curve-type picker (`spawn-and-warnings.spec.todo.md` §1's
-broader vision) onto the wrong data model. Per Noah's "condensed to just
-one": §4.2's recursive conserved-budget model is the *only* algorithm now
-— `resolveScaling()` (`unitScaling.ts`) splits an incoming budget between
-count (gated by `minCostPerInstance`, the self-limiting floor — once
-remaining budget can't afford one more instance, duplication stops, no
-artificial cap needed) and power (`powerSplit`, 0-100%), clamped to
-`[minCount, maxCount]`. No curve-shape choice anywhere. Unspendable
-leftover from a failed split is simply dropped (not folded into power) —
-preserves legible thresholds ("suddenly there are more") rather than
-smoothing into imperceptible continuous creep, per §4.2. `powerMultiplier`
-is a representative preview number only, same "no shared runtime yet to
-match" caveat `WeaponPreview.tsx` already documents for its own
-approximations — retrofitting real per-param curves onto Unit/Weapon stats
-stays out of scope (see `shmup-editor.todo.md`).
+over-build, then simplified again after worked examples exposed a second
+bug.** The first pass over-built a `flat`/`linear`/`capped`/`stepped`
+curve-type picker (`spawn-and-warnings.spec.todo.md` §1's broader vision)
+onto the wrong data model; condensing that down to one mechanism still
+left a `powerSplit` (0-100%) field splitting incoming Difficulty between
+count and power as two separate currencies, plus a `minCount` floor.
+Worked examples from Noah exposed that `powerSplit` silently discarded
+budget once `maxCount` saturated (e.g. a 4-instance cap at 5 Difficulty/
+instance with 50 incoming Difficulty should give each instance the whole
+remaining share, not just its own 5) — and that the true floor for count
+is simply zero (an unaffordable instance doesn't spawn at all, which
+doubles as elite/late-game gating with no separate system needed). Both
+fields were removed. **Current algorithm** (`resolveScaling()`,
+`unitScaling.ts`): a single incoming Difficulty value spreads evenly, not
+split by any weighting field —
+`count = min(floor(D / minCostPerInstance), maxCount)`, floored at 0, then
+`power = floor(D / count)` — the *whole* remaining Difficulty divided
+evenly across however many instances actually spawned (not each
+instance's own cost), rounding in the player's favor. No curve-shape
+choice anywhere. `power` is a representative preview number only, same
+"no shared runtime yet to match" caveat `WeaponPreview.tsx` already
+documents for its own approximations — retrofitting real per-param curves
+onto Unit/Weapon stats stays out of scope (see `shmup-editor.todo.md`).
+`maxCount`/`minCostPerInstance` are authored via `Dial` (`src/components/
+Dial/`), a new reusable FL-Studio-style vertical-drag knob component —
+right-click or long-press to reset, tap the value to type a number
+directly, optional +/- nudge buttons — built for reuse across Doors 97,
+not scoped to this editor.
 
 **Positioning shape has real draggable canvas handles, not number-only
 fields** — per §6/§8.2, `ScalingShapeKind` is `curve`/`v`/`grid`/`ring`,
@@ -1095,17 +1107,21 @@ view:
 - **Ghost slot dots** (`.shmup-scaling-ghost-dot`, dim, non-interactive)
   preview where duplicates would actually land, computed live from
   `resolveScalingSlots`/`applyPingPong` at the panel's own **preview
-  budget slider** (0-100, editor-preview-only — no live `D` at authoring
-  time) — dragging the slider updates the canvas ghost count in the same
-  frame as the panel's numeric readout, both driven by the one
-  `resolveScaling()` call. This is the closest E3 gets to §8.3's "difficulty
-  budget slider... shows ghost copies... appearing/repositioning live" —
-  scoped to one instance's own slider rather than a global one shared
-  across the whole encounter (see `shmup-editor.todo.md`'s Remaining list).
+  Difficulty slider** (0-100, editor-preview-only — no live `D` at
+  authoring time) — dragging the slider updates the canvas ghost count in
+  the same frame as the panel's numeric readout, both driven by the one
+  `resolveScaling()` call. This is scoped to one instance's own slider,
+  static (not tied to the timeline scrubber) — good for shaping a single
+  instance's positioning shape in isolation. E4's "Hitbox preview" toggle
+  (see below) separately ships an actual **encounter-wide** Difficulty
+  slider driving every scaled instance in the encounter at once, live at
+  the current scrub position — the two sliders are independent and serve
+  different moments of authoring (shaping one instance's shape vs.
+  sanity-checking the whole encounter's readability).
 - **Count range fields gate the rest of the panel**: `maxCount > 1` is what
-  reveals power split/min cost/spawn delay/shape/ping-pong/preview — at the
-  default `maxCount: 1`, the panel is just two fields and the instance
-  behaves exactly as if E3 didn't exist.
+  reveals min cost/spawn delay/shape/ping-pong/preview — at the default
+  `maxCount: 1`, the panel is just one Dial and the instance behaves
+  exactly as if E3 didn't exist.
 
 **Persistence**: `EncounterUnit.scaling` is a **required** field validated
 strictly (`encounterValidation.ts`'s `isUnitScaling`) — not treated as a
@@ -1119,6 +1135,81 @@ partially backfilled. Scaling edits ride along inside the existing
 object already bubbled up via `onDraftChange`) — no new stable FS id or
 session slot needed, and no new saved draft state for the panel's own
 preview-budget slider (ephemeral, same as the timeline's scrub/play state).
+
+## Low-fi hitbox/boundary preview (E4)
+
+**Editor-side timeline playback layered on the scrubber E2 already
+shipped — not a new playback engine, and not real Phaser.** `hitboxPreview.ts`
++ a "Hitbox preview" toggle button in `EncounterEditor.tsx`'s toolbar swap
+the canvas's touch-friendly authoring icons (56px sprite thumbnails, sized
+for tapping, not real scale) for reference geometry at the current
+`scrubTime`, so "does a full-count line still fit the tile and still read
+clearly" is something to actually look at rather than infer from numbers
+(the goal `spawn-and-warnings.spec.todo.md`'s original design doc named
+for this feature).
+
+**What renders, at the current scrub position**:
+- **Enemies** — a red box per live instance (and per scaled duplicate, at
+  its own slot's live position — see below), sized to the Unit's real
+  `size` (its hitbox radius), not the big authoring icon.
+- **Bullets in flight** — a red dot per bullet, reusing `weaponPreview.ts`'s
+  actual per-shot math (`shotAngleOffsets`, `sweepOffsetDeg`,
+  `PREVIEW_BULLET_SPEED`, `PREVIEW_BULLET_LIFE_MS`) via a new
+  `computeAttackBullets`. This is **not** the same orchestration as
+  `WeaponForm.tsx`'s standalone preview: that preview loops a single-burst
+  weapon forever (`PREVIEW_LOOP_FALLBACK_MS`) so it keeps demonstrating
+  itself while you're just browsing the picker, which would make every
+  attack look like it fires forever here — exactly the density/fairness
+  misread this preview exists to catch. `computeAttackBullets` instead
+  fires an `EncounterAttack` exactly as authored: once if `durationMs ===
+  0` (per that field's own doc comment), otherwise repeating every
+  `weapon.fireIntervalMs` only while still within `durationMs`. Bullet
+  size is the weapon's `spawnUnitId`'s own real `size` (`resolveBulletRadius`),
+  falling back to a documented default (6px) when it doesn't resolve.
+- **Player reference** — a static green circle, radius 6, documented
+  against `games/shmup/src/tuning/index.ts`'s real
+  `TUNING.combat.hitboxRadiusNormal` (independently maintained, not
+  imported — same "no shared code with the game" stance the rest of the
+  editor takes). Placed low in the tile (85% down), the same way a
+  vertical shmup's own ship sits near the bottom of the screen. Not
+  simulated or draggable — a fixed stand-in, since there's no live player
+  to track at authoring time. A `"player"`-aimed weapon's bullets aim at
+  this marker (`resolveAttackAimDeg`) — a real improvement over
+  `WeaponForm.tsx`'s isolated preview, which has no reference point
+  available at all while just browsing the picker.
+- **Tile bounds** — a thick yellow border on the tile's real footprint
+  (the same rectangle `EncounterTileFrame` already outlines, just louder).
+- **Camera/playable bounds** — a dotted border, a static approximation of
+  "how much of the tile is visible on screen at once." Width matches the
+  tile's own width, per `levels-and-tiles.spec.todo.md` §4 ("the camera
+  framing... show[s] more/less active width" — camera width tracks the
+  tile, not an independent fixed value); height is derived from
+  `games/shmup/src/config.ts`'s real 720x1280 portrait aspect ratio and
+  centered on the tile (`computeCameraBoundsRect`). Does **not** animate/
+  ease the way the real playable-bounds box does when a level transitions
+  between sections (§4) — a static reference, not a scroll simulation.
+
+**Scaled duplicates render for real, using an encounter-wide Difficulty
+slider — the previously-deferred §8.3 slider.** The toggle reveals its own
+Difficulty slider (0-100, independent of the per-instance Scaling tab's
+own preview slider above) driving `resolveScaling()`/`resolveScalingSlots()`/
+`applyPingPong()` for **every** scaled instance in the encounter
+simultaneously. Each duplicate's live hitbox position is the base
+instance's own `computeInstancePreview` position at `scrubTime`, offset by
+that slot's delta from the instance's authored position — duplicates
+replay the exact same step/attack sequence anchored to their own slot,
+same model E3 already established, just evaluated live instead of as
+static ghost dots. Every duplicate's attacks fire too, offset the same way.
+
+**Explicitly not built** (`shmup-editor.todo.md` tracks these as
+Remaining): chaining multiple tiles via L1's edge-matcher to preview a
+generated sequence (blocked on L2's JIT-streaming system existing first);
+surfacing L6's warning-indicator lead times (L6 isn't built anywhere yet);
+an actual animated/scrolling camera simulation.
+
+No persistence — `hitboxPreviewOn`/the encounter-wide Difficulty slider
+are ephemeral viewing aids, same "not part of `draft`/`onDraftChange`"
+reasoning as `scrubTime`/`playing` themselves.
 
 ## Persistence
 

@@ -536,6 +536,57 @@ Preview a tile or a short generated sequence in-browser without a full
 game import round-trip — validates readability/fairness (warning lead
 times, bullet density) before export.
 
+**Status: low-fi hitbox/boundary preview shipped; multi-tile chaining and
+warning-indicator surfacing not started.** `hitboxPreview.ts` +
+`EncounterEditor.tsx`'s "Hitbox preview" toggle is editor-side timeline
+playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
+`playing`) — not a separate playback engine, and not real Phaser.
+
+**What shipped**:
+- Toggling "Hitbox preview" swaps the canvas's big touch-friendly authoring
+  icons for real-scale reference geometry at the current scrub position:
+  red boxes for enemies (and their scaled duplicates, per E3) at their
+  authored `UnitDef.size`, red dots for bullets in flight (reusing
+  `weaponPreview.ts`'s per-shot math — arc offsets, sweep, travel speed/
+  life — via a new `computeAttackBullets` that fires an attack exactly as
+  authored instead of looping forever the way the standalone
+  `WeaponForm.tsx` preview does for demo purposes), a static green
+  reference circle standing in for the player's own hitbox (radius 6,
+  documented against `games/shmup`'s real `TUNING.combat.hitboxRadiusNormal`
+  — no live player exists at authoring time, same approximation the rest
+  of the editor already accepts for `turnRate`/`trackPlayer`), a thick
+  yellow border for the tile's real bounds, and a dotted border for a
+  static "how much of the tile is visible on screen at once" reference
+  rectangle (`computeCameraBoundsRect` — width matches the tile's own
+  width per `levels-and-tiles.spec.todo.md` §4's "camera shows more/less
+  active width" framing, height derived from `games/shmup`'s real 720x1280
+  aspect ratio, centered on the tile; does **not** animate/ease between
+  sections the way the real playable-bounds box does — a static
+  approximation, not a simulation).
+- **Ships the previously-deferred "encounter-wide difficulty-preview
+  slider"** (§8.3, listed above as E3 Remaining) as the toggle's own
+  Difficulty slider — every scaled instance's duplicate count/positions in
+  the preview resolve against this one shared value, not the per-instance
+  Scaling-tab slider (which still exists separately, driving only that
+  tab's own static ghost-slot dots while open).
+- A `"player"`-aimed weapon's bullets aim at the reference player marker in
+  this preview — a real improvement over `WeaponForm.tsx`'s isolated
+  preview, which has no reference point available at all while just
+  browsing the picker.
+
+**Explicitly not built**:
+- **Multi-tile chaining** (§'s "optionally chain a few tiles via L1's
+  edge-matcher") — this preview is scoped to one encounter at a time,
+  matching where `EncounterEditor.tsx` already lives; chaining tiles
+  together would need the L2 JIT-streaming/edge-matching system
+  (`levels-and-tiles.spec.todo.md`) to exist first.
+- **Warning-indicator lead-time surfacing** (L6 #188,
+  `spawn-and-warnings.spec.todo.md` §3) — not built anywhere yet, so
+  there's nothing for this preview to surface.
+- **A literal camera simulation** — the dotted bounds rectangle is static
+  (see above), not an animated/scrolling camera tracking a moving
+  reference point.
+
 ### E5 — Export/import pipeline (#195)
 
 The versioned JSON schema for every authored type, the concrete landing

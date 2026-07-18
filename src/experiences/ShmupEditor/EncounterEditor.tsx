@@ -14,6 +14,7 @@ import { createEncounterUnit, type EncounterAttack, type EncounterDef, type Enco
 import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
+import { computeAttackBullets, computeCameraBoundsRect, resolveAttackAimDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
 import type { TileDef } from "./types";
 import type { UnitDef } from "./unitTypes";
 
@@ -70,6 +71,8 @@ const AIM_HANDLE_LENGTH = 55;
 const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 3;
 const PINCH_ZOOM_MIN_DIST = 1;
+/** Ceiling for the E4 hitbox-preview mode's encounter-wide Difficulty slider — same range as UnitScalingPanel.tsx's per-instance preview slider, just driving every scaled instance in the encounter at once (specs/shmup-editor.todo.md's "Encounter-wide difficulty-preview slider" Remaining item). */
+const HITBOX_PREVIEW_DIFFICULTY_MAX = 100;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -142,6 +145,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [scalingPreviewDifficulty, setScalingPreviewDifficulty] = useState(0);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // E4 low-fi hitbox/boundary preview mode (specs/shmup-editor.todo.md) —
+  // an alternate rendering of the same scrubTime/playing timeline already
+  // above, not a separate playback engine. Ephemeral viewing aid, same
+  // "not part of draft/onDraftChange" reasoning as scrubTime itself.
+  const [hitboxPreviewOn, setHitboxPreviewOn] = useState(false);
+  const [hitboxPreviewDifficulty, setHitboxPreviewDifficulty] = useState(30);
   // View state (pan/zoom) — deliberately separate from `draft`: dragging a
   // unit must never move the view, and panning/zooming must never move a
   // unit. Refs mirror the state for use inside event handlers (wheel/pinch)
@@ -804,6 +813,61 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const tileRectStage = { x: framePos.x, y: framePos.y, width: tileWidthPx, height: TILE_UNIT };
   const stepPointsStage = draft.units.flatMap((inst) => inst.steps.map((s) => toStage(s.pos)));
 
+  // E4 hitbox/boundary preview (hitboxPreview.ts) — a static reference
+  // point standing in for the player (no live player exists at authoring
+  // time), placed low in the tile the same way a vertical shmup's own ship
+  // sits near the bottom of the screen. World space, so it composes
+  // directly with attack anchors/aim math below.
+  const playerRefWorld: Vec2 = { x: tileWidthPx / 2, y: TILE_UNIT * 0.85 };
+  const playerRefStage = toStage(playerRefWorld);
+  const cameraBoundsStage = computeCameraBoundsRect(tileRectStage);
+
+  const hitboxEnemyMarkers: { key: string; stage: Vec2; sizePx: number }[] = [];
+  const hitboxBulletMarkers: { key: string; stage: Vec2; diameterPx: number; alpha: number }[] = [];
+  if (hitboxPreviewOn) {
+    for (const instance of draft.units) {
+      const unitDef = units.find((u) => u.id === instance.unitDefId);
+      if (!unitDef) continue;
+      const preview = computeInstancePreview(instance, unitDef, scrubTime);
+      if (!preview || !preview.step.visible) continue;
+      const originPos = instance.steps[0]?.pos ?? preview.pos;
+      // Scaled duplicates fire the exact same authored step/attack sequence
+      // as the base instance, each anchored to its own slot — so every
+      // duplicate's live position and every one of its attacks' anchors are
+      // just the base instance's own preview position/anchor, offset by
+      // that slot's delta from the instance's own authored position. Same
+      // "duplicates replay the whole sequence independently" model E3's
+      // Scaling tab already establishes; this is that model evaluated live
+      // at the current scrub time instead of as static ghost dots.
+      const count = instance.scaling.maxCount > 1 ? resolveScaling(instance.scaling, hitboxPreviewDifficulty).count : 1;
+      const slots = applyPingPong(resolveScalingSlots(instance.scaling, originPos, count), instance.scaling, tileWidthPx);
+      slots.forEach((slot, slotIdx) => {
+        const delta: Vec2 = { x: slot.x - originPos.x, y: slot.y - originPos.y };
+        const dupPos: Vec2 = { x: preview.pos.x + delta.x, y: preview.pos.y + delta.y };
+        hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStage(dupPos), sizePx: unitDef.size * 2 });
+
+        for (const attack of instance.attacks) {
+          const part = unitDef.parts.find((p) => p.id === attack.partId);
+          const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
+          const baseAnchor = part && weapon ? attackAnchorWorld(instance, unitDef, attack) : null;
+          if (!part || !weapon || !baseAnchor) continue;
+          const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y };
+          const aimDeg = resolveAttackAimDeg(attack, weapon, anchor, playerRefWorld);
+          const elapsedMs = (scrubTime - attack.time) * 1000;
+          const bulletDiameterPx = resolveBulletRadius(weapon, units) * 2;
+          computeAttackBullets(weapon, aimDeg, attack.durationMs, elapsedMs).forEach((b, bi) => {
+            hitboxBulletMarkers.push({
+              key: `${instance.id}-${slotIdx}-${attack.id}-${bi}`,
+              stage: toStage({ x: anchor.x + b.x, y: anchor.y + b.y }),
+              diameterPx: bulletDiameterPx,
+              alpha: b.alpha,
+            });
+          });
+        }
+      });
+    }
+  }
+
   return (
     <div className="shmup-enemy-form">
       <div className="shmup-tile-form__toolbar">
@@ -822,6 +886,27 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             onChange={(e) => updateDraft({ ...draft, weight: Number(e.target.value) })}
           />
         </label>
+        <button
+          type="button"
+          className={`shmup-btn shmup-btn--small ${hitboxPreviewOn ? "shmup-btn--active" : ""}`}
+          onClick={() => setHitboxPreviewOn((v) => !v)}
+          title="Low-fi hitbox/boundary preview — real hitbox sizes instead of authoring icons, plus tile/camera/player reference geometry"
+        >
+          {hitboxPreviewOn ? "◉ Hitbox preview" : "○ Hitbox preview"}
+        </button>
+        {hitboxPreviewOn && (
+          <label className="shmup-field shmup-field--inline">
+            <span>Preview Difficulty</span>
+            <input
+              type="range"
+              min={0}
+              max={HITBOX_PREVIEW_DIFFICULTY_MAX}
+              value={hitboxPreviewDifficulty}
+              onChange={(e) => setHitboxPreviewDifficulty(Number(e.target.value))}
+            />
+            <span className="shmup-spawn-scaling-preview__value">{hitboxPreviewDifficulty}</span>
+          </label>
+        )}
       </div>
 
       <p className="shmup-hint">
@@ -831,6 +916,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         instance's Scaling tab — duplicates replay its whole sequence, positioned by a draggable shape (Curve/V/Grid/Ring). The dashed box is
         this tile's real footprint/edges, for reference. Most steps' timing is automatic — based on distance and speed — but the timeline below
         still lets you drag to adjust pacing, and Play/scrub previews motion (teal marker).
+        {hitboxPreviewOn &&
+          " Hitbox preview is on: red boxes are enemies (and their scaled duplicates) at their real hitbox size, red dots are bullets in flight, the green circle is a reference player hitbox, the thick yellow border is the tile's real bounds, and the dotted border is roughly how much of it is visible on screen at once."}
       </p>
 
       <div
@@ -1122,21 +1209,54 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             });
           })}
 
-          {draft.units.map((instance) => {
-            const unitDef = units.find((u) => u.id === instance.unitDefId);
-            const preview = computeInstancePreview(instance, unitDef, scrubTime);
-            if (!preview || !preview.step.visible) return null;
-            const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
-            const pos = toStage(preview.pos);
-            return (
+          {!hitboxPreviewOn &&
+            draft.units.map((instance) => {
+              const unitDef = units.find((u) => u.id === instance.unitDefId);
+              const preview = computeInstancePreview(instance, unitDef, scrubTime);
+              if (!preview || !preview.step.visible) return null;
+              const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+              const pos = toStage(preview.pos);
+              return (
+                <div
+                  key={`preview-${instance.id}`}
+                  className="shmup-enemy-preview-dot"
+                  style={{ left: pos.x - PREVIEW_RADIUS, top: pos.y - PREVIEW_RADIUS, backgroundImage: spriteUrl ? `url(${spriteUrl})` : undefined }}
+                  title={`${unitDef?.name ?? "?"} @ ${scrubTime.toFixed(1)}s`}
+                />
+              );
+            })}
+
+          {hitboxPreviewOn && (
+            <>
+              {/* Tile bounds — thick yellow, the tile's real footprint. Camera/playable bounds — dotted, roughly what's visible on screen at once (hitboxPreview.ts's computeCameraBoundsRect). Player reference — a static green circle at real hitboxRadiusNormal scale standing in for the (not simulated) player ship. */}
+              <div className="shmup-hitbox-tile-bounds" style={{ left: tileRectStage.x, top: tileRectStage.y, width: tileRectStage.width, height: tileRectStage.height }} />
+              <div className="shmup-hitbox-camera-bounds" style={{ left: cameraBoundsStage.x, top: cameraBoundsStage.y, width: cameraBoundsStage.width, height: cameraBoundsStage.height }} />
               <div
-                key={`preview-${instance.id}`}
-                className="shmup-enemy-preview-dot"
-                style={{ left: pos.x - PREVIEW_RADIUS, top: pos.y - PREVIEW_RADIUS, backgroundImage: spriteUrl ? `url(${spriteUrl})` : undefined }}
-                title={`${unitDef?.name ?? "?"} @ ${scrubTime.toFixed(1)}s`}
+                className="shmup-hitbox-player"
+                style={{
+                  left: playerRefStage.x - PLAYER_REFERENCE_HITBOX_RADIUS,
+                  top: playerRefStage.y - PLAYER_REFERENCE_HITBOX_RADIUS,
+                  width: PLAYER_REFERENCE_HITBOX_RADIUS * 2,
+                  height: PLAYER_REFERENCE_HITBOX_RADIUS * 2,
+                }}
+                title="Reference player hitbox (not simulated — a static stand-in)"
               />
-            );
-          })}
+              {hitboxEnemyMarkers.map((m) => (
+                <div
+                  key={m.key}
+                  className="shmup-hitbox-enemy"
+                  style={{ left: m.stage.x - m.sizePx / 2, top: m.stage.y - m.sizePx / 2, width: m.sizePx, height: m.sizePx }}
+                />
+              ))}
+              {hitboxBulletMarkers.map((m) => (
+                <div
+                  key={m.key}
+                  className="shmup-hitbox-bullet"
+                  style={{ left: m.stage.x - m.diameterPx / 2, top: m.stage.y - m.diameterPx / 2, width: m.diameterPx, height: m.diameterPx, opacity: m.alpha }}
+                />
+              ))}
+            </>
+          )}
         </div>
 
         {/* Zoom controls + minimap — siblings of the transformed stage, not children of it, so they stay fixed-size/fixed-position regardless of the current zoom (same reason JigsawPuzzle.tsx's minimap lives outside its transformed arena content). */}
