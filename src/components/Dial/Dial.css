@@ -1,0 +1,94 @@
+/* FL-Studio-style rotary control (Dial.tsx) — flat Win95 chrome, not a
+   photoreal knob: rotation reads clearly against a beveled circle without
+   needing a fake metal/plastic look. */
+
+.win95-dial {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #000;
+}
+
+.win95-dial__label {
+  white-space: nowrap;
+}
+
+.win95-dial__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.win95-dial__face {
+  position: relative;
+  border-radius: 50%;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: grab;
+  touch-action: none;
+  flex-shrink: 0;
+  padding: 0;
+}
+.win95-dial__face:active {
+  cursor: grabbing;
+}
+.win95-dial__face:focus-visible {
+  outline: 2px solid #cc4400;
+  outline-offset: 2px;
+}
+
+.win95-dial__pointer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  background: #000;
+  transform-origin: top center;
+  pointer-events: none;
+}
+
+.win95-dial__nudge {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+.win95-dial__nudge:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.win95-dial__value {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 1px 4px;
+  cursor: text;
+  min-width: 32px;
+  text-align: center;
+  color: #000;
+}
+
+.win95-dial__value-input {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  width: 48px;
+  text-align: center;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 1px 4px;
+}
