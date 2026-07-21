@@ -6,3 +6,4 @@ public/shmup/
 playwright-report/
 test-results/
 *.tsbuildinfo
+.claude/settings.local.json
