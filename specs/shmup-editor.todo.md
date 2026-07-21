@@ -112,7 +112,7 @@ to visualize instead.
 
 ### E2 — Unit + Encounter editor (#192) — shipped, minus per-param scaling curves
 
-**Revised four times.** The first pass put a full movement/dwell/attack
+**Revised six times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition. That didn't match the
 intended content model, so it was corrected to enemy-is-stats-only with
 the graph moved onto the encounter. A second design pass (external
@@ -123,9 +123,17 @@ the **timeline scrubber** and cut the step-level Trigger system in favor of
 a plain `time` field once a real timeline existed to preview against. A
 fourth pass replaced per-Action movement kinds (straightLine/wave/spiral)
 with a single **bezier-curve** model driven by two plain Unit stats
-(`speed`/`turnRate`) — see below. See `shmup-editor.md`'s "Unit + Encounter
-editor (E2)" section for the full current design; this entry describes
-what actually shipped.
+(`speed`/`turnRate`). A fifth pass cut Actions entirely (`EncounterStep`
+carried a plain `visible: boolean`, no Action buffet). **A sixth pass
+reversed that cut — Actions are back**, reconciled against design-handoff
+v3 and real usage of the shipped Action-less editor: an `ActionDef` is now
+a fused movement%/facing/invincibility-toggle/optional-attack bundle,
+`WeaponDef` is gone (folded into `ActionDef.attack`), Layers/
+`defaultActionId`/`CollisionGroup`/per-Part hitboxes all shipped alongside
+it, and the Unit/Part/Action edit forms picked up the same tab+Dial
+treatment the Encounter editor got in the mobile-UX pass. See
+`shmup-editor.md`'s "Unit + Encounter editor (E2)" section for the full
+current design; this entry describes what actually shipped.
 
 **Done**:
 - **Units** are sprite + stats (HP, contact damage, score value, base
@@ -354,6 +362,21 @@ what actually shipped.
   time-locked reference frames are still not a concept here. What the game
   does with layers when picking which Encounters combine on a tile spawn
   is a separate runtime concern this editor doesn't need to know about.
+  **Deliberate departure from v3 §6's model, confirmed by Noah, not an
+  oversight**: v3 describes layer as an *Encounter*-level concept (an
+  Encounter "can define up to 3 layers... and places one or more Unit
+  instances into each layer it defines," with a same-tile-spawn selection
+  algorithm that excludes other Encounters sharing an already-covered
+  layer). What shipped instead puts layer on the *Unit definition* — Noah:
+  "Layer is a Unit definition. In the editor, when adding a Unit you
+  choose which layer you're adding to." This means v3 §6's selection
+  algorithm (steps 1-4, picking one Encounter then excluding others by
+  shared layer) has no literal Encounter-level layer to key off anymore —
+  it needs re-deriving against "which layers do this Encounter's placed
+  Units happen to use" instead, or a different algorithm entirely. Not an
+  editor concern per Noah ("None of that is relevant to the editor... a
+  separate concern") but flagged here since it's real, unresolved
+  game-runtime design debt v3 as written doesn't actually cover anymore.
 - **Rendered Part sprites shipped in a follow-up UX pass (Noah's "a lot
   of numbers, zero defaults, nothing visual" feedback) — rotating/
   facing-mode Part sprites are still deferred.** A Part now has its own
@@ -394,6 +417,65 @@ what actually shipped.
   scrubber and E4's hitbox preview, both of which currently assume one
   tile-relative coordinate space for everything) before it's built — flagged
   here so it isn't lost, not attempted as part of the Actions-are-back pass.
+  **This is v3's §6 "Reference frame" concept** (`scrollLocked` for Ground,
+  `timeLocked` for Air) — v3 already names the two behaviors this needs;
+  what's missing is deciding how `timeLocked` interacts with this editor's
+  shared encounter clock and the timeline scrubber before building it.
+- **A Unit can't be authored with zero Parts, contradicting v3 §4** ("A
+  Unit does not require Parts... the simplest case... is a Unit with zero
+  Parts and a single Final Action on the Unit itself"). `UnitStatsForm.tsx`'s
+  `validate()` still hard-requires `parts.length >= 1` and the last Part
+  can't be deleted — a holdover from before the Unit itself gained its own
+  `actions` buffet (Actions-are-back pass). Since a Part-less Unit is now
+  structurally supported everywhere else (the base Unit's own Actions
+  already work standalone), this is just a leftover validation rule, not a
+  deep gap — dropping it should be low-effort whenever picked up.
+- **Clone doesn't exist anywhere, despite being cited repeatedly as the
+  answer to "how do I author a variant."** Both `unitTypes.ts`'s doc
+  comments and the in-app Help modal tell an author to "Clone the Action"
+  to get a fixed-angle/differently-tuned variant instead of a per-placement
+  override — that's the whole justification for cutting per-placement aim
+  overrides and per-step speed multipliers when Actions came back. No
+  Clone button exists on an Action, a Part, or a Unit. This is v3 §8.1's
+  "**Clone** should be a first-class operation here" — currently the only
+  way to get a variant is manually re-entering every field by hand. Worth
+  prioritizing since several other design decisions lean on it existing.
+- **No minimum-duration placement validation (v3 §8.2).** "The editor
+  should prevent placing a node earlier than the minimum duration of the
+  preceding node allows" — not built. A Part-track placement's `time` can
+  be set to land before the previous placement on that same track has
+  finished (per its own `computeAttackDurationMs`), with no warning. Low
+  priority (an authoring-quality-of-life check, not a data-integrity one)
+  but flagged since v3 calls it out explicitly.
+- **No color-coding by Action category on the timeline (v3 §8.2).**
+  `EncounterTimeline.tsx` renders every step as the same orange diamond and
+  every Part-track placement as the same 🔫 marker regardless of whether
+  the referenced Action is movement/attack/state — v3 asks for movement/
+  attack/state-toggle to "each read as visually distinct at a glance," with
+  invincible-setting Actions rendering as "a darker variant" of whatever
+  category color applies. Not built; low priority until the timeline is
+  busy enough for it to matter.
+- **No dedicated Unit/Part Action mini-timeline (v3 §8.1) — confirmed
+  intentional scope cut, not a gap.** Noah, during the Actions-are-back
+  design pass: "Let's talk about this in more detail... we don't need a
+  full timeline." Actions are authored via a flat list + inline form
+  (`ActionForm.tsx`) instead of v3's proposed nested piano-roll editor.
+  Revisit only if/when a Unit's own Actions need to be sequenced against
+  each other rather than referenced individually by encounter placements.
+- **Weapon strength doesn't pass down to spawned Units via the difficulty
+  system (v3 §4.2, §5.5).** `ActionAttack.spawnScale` is a flat multiplier
+  only — a spawned bullet Unit's stats don't scale with whatever
+  difficulty/power value produced the Action that fired it. Same root
+  cause as the "per-param scaling curves" item below: no per-param
+  difficulty-scaling-curve system exists yet for *any* Unit/Action stat,
+  weapon-spawned or not.
+- **No `Destroyed` Action auto-added when a Part's `hasHealth` is enabled
+  (v3 §4.1).** v3: "a `Destroyed` Action is automatically added to that
+  Part's buffet, used to set the corpse/wreck sprite once the Part's HP
+  reaches zero." Correctly out of scope for now — there's no animation/
+  alternate-sprite system to hang a corpse sprite on yet (same reason
+  invincible currently just hides the sprite as a documented stand-in) —
+  revisit once real sprite-swapping exists.
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —
   deferred. `enemies-and-bullets.spec.todo.md` never defines a curve shape
   beyond "flat" as one option, so there was nothing concrete to build
