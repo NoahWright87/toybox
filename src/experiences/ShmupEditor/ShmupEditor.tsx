@@ -58,7 +58,7 @@ export default function ShmupEditor() {
   // hosted inside a Doors 97 Window (no other Help source at all) or the
   // standalone `/shmup-editor` route (StandaloneWindow would otherwise
   // append its own second "Help" label alongside this one).
-  const [helpTopic, setHelpTopic] = useState<"tile" | "encounter" | null>(null);
+  const [helpTopic, setHelpTopic] = useState<"tile" | "unit" | "encounter" | null>(null);
 
   const availableTags = useMemo(() => {
     const merged = new Set([...collectUsedTags(tiles), ...extraTags]);
@@ -306,6 +306,7 @@ export default function ShmupEditor() {
         label: "Help",
         items: [
           { label: "Tile Editor", onClick: () => setHelpTopic("tile") },
+          { label: "Units & Actions", onClick: () => setHelpTopic("unit") },
           { label: "Encounter Editor", onClick: () => setHelpTopic("encounter") },
         ],
       },
@@ -406,12 +407,12 @@ export default function ShmupEditor() {
         <div className="shmup-help-backdrop" onClick={() => setHelpTopic(null)}>
           <div className="shmup-help-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shmup-help-modal__header">
-              <span>{helpTopic === "tile" ? "Tile Editor" : "Encounter Editor"}</span>
+              <span>{helpTopic === "tile" ? "Tile Editor" : helpTopic === "unit" ? "Units & Actions" : "Encounter Editor"}</span>
               <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setHelpTopic(null)}>
                 ✕
               </button>
             </div>
-            {helpTopic === "tile" ? (
+            {helpTopic === "tile" && (
               <ul className="shmup-help-modal__list">
                 <li>Click "+ New Tile" to author a tile's footprint and edges</li>
                 <li>North/south edges take one tag per column; east/west are single tags</li>
@@ -420,15 +421,35 @@ export default function ShmupEditor() {
                 <li>Use Connection Tester to check whether two tiles actually attach</li>
                 <li>Tiles save automatically to TILES.DAT in the virtual filesystem</li>
               </ul>
-            ) : (
+            )}
+            {helpTopic === "unit" && (
+              <ul className="shmup-help-modal__list">
+                <li>Speed is a Unit's fixed max — an Action's Movement % dial selects how much of it is actually used, so difficulty scaling never has to touch Speed directly.</li>
+                <li>Turn rate caps how sharply a Unit can curve between an encounter's waypoints (a multiple of each segment's straight-line length).</li>
+                <li>Layer (Ground/Air/Doodad) picks which roster a Unit shows up under in the Encounter editor's "+ Add" picker.</li>
+                <li>Default Action is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</li>
+                <li>An Action's own Actions buffet is used directly when the Unit has no Parts; a Part's own Actions govern that Part's independent attack track instead.</li>
+                <li>A Part's Position tab: drag its sprite over the dimmed reference of the Unit's own body (or use the Offset dials) — this anchors that Part's Actions' facing/attack.</li>
+                <li>A Part's Hitbox tab: unchecked = fused to the Unit's body, damage attributed to the Unit. Checked = its own hitbox, subject to Damage x (a weak point &gt;1, armor &lt;1); its own HP pool if Has HP is also checked, otherwise damage passes through to the Unit's shared HP.</li>
+                <li>An Action's Movement % of 0 = stationary. Facing "Fixed" uses the Angle dial; "Follows movement"/"Faces the player" ignore it.</li>
+                <li>An Action's Sets Invincible: "no change" carries the previous value forward; Invincible hides the sprite as a temporary stand-in until real animations exist.</li>
+                <li>An Action's Attack fires relative to its own Facing — 0/0 is a single shot straight ahead, 0/360 a full radial burst, a gap like 5/355 leaves a safe lane at the facing direction.</li>
+                <li>Sweep speed rotates the whole arc over time (0 = static) — this is "rotating"/spiral fire, not a separate mode.</li>
+                <li>"Fire for as long as this Action runs" (unchecked) reveals Burst count — a fixed number of bursts instead of firing indefinitely.</li>
+                <li>Collision group controls which spawned things can hit each other in the eventual game runtime — same group never hits itself, and the two projectile groups never hit each other either.</li>
+                <li>Dials: drag up/down to change, tap the number to type one, right-click or press-and-hold to reset.</li>
+              </ul>
+            )}
+            {helpTopic === "encounter" && (
               <ul className="shmup-help-modal__list">
                 <li>Tap a step to select it; drag ✥ to move, teal ⬦ handles bend the curve.</li>
-                <li>+ (last step) adds the next step. 🔫+ adds an attack at that step's time.</li>
+                <li>+ (last step) adds the next step. 🔫+ adds an Action placement on a Part's own track at that step's time.</li>
                 <li>⚖️ (first step) opens Scaling — duplicates replay the whole sequence on a draggable shape.</li>
                 <li>Dashed box = the tile's real footprint/edges.</li>
-                <li>Step timing is usually automatic (distance ÷ speed) — drag on the timeline or adjust Speed to change pacing.</li>
-                <li>Duration on an attack keeps a repeating weapon firing after its start; 0 = single burst.</li>
+                <li>Step timing is usually automatic (distance ÷ the step's own Action's Movement %) — pick a different (or Cloned) Action to retime a moving segment; drag-to-retime only works on a manually-timed (first or dwelling) step.</li>
+                <li>An Action's own duration (when it has an attack) is computed from its burst/telegraph/repeat fields, not hand-edited — shown as a read-only readout on a selected Part-track placement.</li>
                 <li>Scaling: Difficulty splits evenly across however many instances Min Cost affords, capped at Max Count. Low cost = a swarm; high cost = fewer, stronger.</li>
+                <li>+ Add filters the Unit picker by Layer (Ground/Air/Doodad) — a Unit only shows up under its own authored layer.</li>
                 <li>⊡ (top-left of canvas) toggles a real-scale hitbox preview: red boxes = enemies, red dots = bullets, green circle = reference player hitbox, thick yellow border = tile bounds, dotted border = roughly what's on screen at once.</li>
                 <li>⛶ (top-right of canvas) fills the screen with the viewport; Esc or tap it again to shrink back.</li>
                 <li>Dials: drag up/down to change, tap the number to type one, right-click or press-and-hold to reset.</li>

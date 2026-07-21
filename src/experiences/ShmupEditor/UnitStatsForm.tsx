@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Dial } from "../../components/Dial/Dial";
 import SpritePicker from "./SpritePicker";
 import ActionForm from "./ActionForm";
 import { createBlankAction, type ActionDef, type UnitDef, type UnitLayer, type UnitPart } from "./unitTypes";
@@ -14,6 +15,8 @@ interface UnitStatsFormProps {
   onEditPart: (part: UnitPart) => void;
   onDeletePart: (partId: string) => void;
 }
+
+type UnitTab = "basics" | "actions" | "parts";
 
 function validate(unit: UnitDef): string | null {
   if (!unit.name.trim()) return "Name is required.";
@@ -40,13 +43,18 @@ function actionSummary(action: ActionDef): string {
  * and always governing the base Unit's own movement/facing/state) + a set
  * of Parts, each owning its own independent reusable Action buffet (see
  * PartEditor.tsx), authored once here and selected/placed repeatedly
- * across encounters (see EncounterEditor.tsx). Same toolbar-then-fields
- * shape as TileEditorForm.tsx; the Parts section mirrors that form's
- * Encounters section (list + New/Edit/Delete, editing navigates to a
- * dedicated view).
+ * across encounters (see EncounterEditor.tsx).
+ *
+ * **Tabbed (Basics/Actions/Parts) with `Dial` knobs for the stat fields**,
+ * mirroring `EncounterEditor.tsx`'s tab treatment — explanatory text that
+ * used to sit inline as `.shmup-hint` paragraphs now lives in the Help
+ * menu's "Units & Actions" topic instead. Parts still navigate to a
+ * dedicated `PartEditor.tsx` view on Edit (a Part is a full sub-form in its
+ * own right, not something that fits inline the way an Action does).
  */
 export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftChange, onNewPart, onEditPart, onDeletePart }: UnitStatsFormProps) {
   const [draft, setDraft] = useState<UnitDef>(unit);
+  const [tab, setTab] = useState<UnitTab>("basics");
   const [pendingDeletePartId, setPendingDeletePartId] = useState<string | null>(null);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [pendingDeleteActionId, setPendingDeleteActionId] = useState<string | null>(null);
@@ -84,164 +92,155 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
 
   return (
     <div className="shmup-enemy-form">
-      <label className="shmup-field shmup-field--inline">
-        <span>Name</span>
-        <input type="text" className="shmup-input" value={draft.name} onChange={(e) => update({ name: e.target.value })} />
-      </label>
-
-      <SpritePicker spriteId={draft.spriteId} customSprite={draft.customSprite} onChange={(spriteId, customSprite) => update({ spriteId, customSprite })} />
-
-      <div className="shmup-field-row">
-        <label className="shmup-field shmup-field--inline">
-          <span>HP</span>
-          <input type="number" min={1} className="shmup-input shmup-input--small" value={draft.hp} onChange={(e) => update({ hp: Number(e.target.value) })} />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Contact damage</span>
-          <input type="number" min={0} className="shmup-input shmup-input--small" value={draft.contactDamage} onChange={(e) => update({ contactDamage: Number(e.target.value) })} />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Score value</span>
-          <input type="number" min={0} className="shmup-input shmup-input--small" value={draft.scoreValue} onChange={(e) => update({ scoreValue: Number(e.target.value) })} />
-        </label>
-      </div>
-      <div className="shmup-field-row">
-        <label className="shmup-field shmup-field--inline">
-          <span>Speed</span>
-          <input type="number" min={0} className="shmup-input shmup-input--small" value={draft.speed} onChange={(e) => update({ speed: Number(e.target.value) })} />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Turn rate</span>
-          <input type="number" min={0} step={0.1} className="shmup-input shmup-input--small" value={draft.turnRate} onChange={(e) => update({ turnRate: Number(e.target.value) })} />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Hitbox size</span>
-          <input type="number" min={1} className="shmup-input shmup-input--small" value={draft.size} onChange={(e) => update({ size: Number(e.target.value) })} />
-        </label>
-      </div>
-      <p className="shmup-hint">
-        Speed is this Unit's fixed max — an Action's Movement % selects how much of it is actually used. Turn rate is how sharply it can curve
-        between an encounter's waypoints (a multiple of each segment's straight-line length).
-      </p>
-
-      <div className="shmup-field-row">
-        <label className="shmup-field shmup-field--inline">
-          <span>Layer</span>
-          <select className="shmup-input" value={draft.layer} onChange={(e) => update({ layer: e.target.value as UnitLayer })}>
-            <option value="ground">Ground</option>
-            <option value="air">Air</option>
-            <option value="doodad">Doodad</option>
-          </select>
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Default Action</span>
-          <select className="shmup-input" value={draft.defaultActionId ?? ""} onChange={(e) => update({ defaultActionId: e.target.value === "" ? null : e.target.value })}>
-            <option value="">(none)</option>
-            {draft.actions.map((action) => (
-              <option key={action.id} value={action.id}>
-                {action.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <p className="shmup-hint">Default Action is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</p>
-
-      <div className="shmup-field">
-        <span>Actions ({draft.actions.length})</span>
-        <p className="shmup-hint">
-          This Unit's own reusable Action buffet — used directly when it has no Parts, and always governs the base Unit's own
-          movement/facing/state.
-        </p>
-        <ul className="shmup-encounter-list">
-          {draft.actions.map((action) => (
-            <li key={action.id} className="shmup-encounter-list__row shmup-encounter-list__row--stack">
-              <div className="shmup-encounter-list__row-header">
-                <span>
-                  {action.name} — {actionSummary(action)}
-                </span>
-                <div className="shmup-btn-row">
-                  <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setExpandedActionId(expandedActionId === action.id ? null : action.id)}>
-                    {expandedActionId === action.id ? "Collapse" : "Edit"}
-                  </button>
-                  {pendingDeleteActionId === action.id ? (
-                    <>
-                      <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => deleteAction(action.id)}>
-                        Confirm
-                      </button>
-                      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteActionId(null)}>
-                        Keep
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteActionId(action.id)}>
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-              {expandedActionId === action.id && <ActionForm action={action} onChange={(a) => updateAction(action.id, a)} units={units} excludeUnitId={draft.id} />}
-            </li>
-          ))}
-        </ul>
-        <div className="shmup-btn-row">
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={addAction}>
-            + New Action
+      <div className="shmup-enc-tabs">
+        <div className="shmup-enc-tabbar">
+          <button type="button" className={`shmup-enc-tab-btn ${tab === "basics" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("basics")}>
+            Basics
+          </button>
+          <button type="button" className={`shmup-enc-tab-btn ${tab === "actions" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("actions")}>
+            Actions ({draft.actions.length})
+          </button>
+          <button type="button" className={`shmup-enc-tab-btn ${tab === "parts" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("parts")}>
+            Parts ({draft.parts.length})
           </button>
         </div>
-      </div>
 
-      <div className="shmup-field">
-        <span>Parts ({draft.parts.length})</span>
-        <p className="shmup-hint">
-          Named anchor points, each with its own reusable Action buffet and its own independent action track per encounter placement — a
-          battleship's three turrets are three Parts. Most Units just need the default "Main" part.
-        </p>
-        <ul className="shmup-encounter-list">
-          {draft.parts.map((part) => (
-            <li key={part.id} className="shmup-encounter-list__row">
-              <span>
-                {part.name} — {partSummary(part)}
-              </span>
-              <div className="shmup-btn-row">
-                <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEditPart(part)}>
-                  Edit
-                </button>
-                {pendingDeletePartId === part.id ? (
-                  <>
-                    <button
-                      type="button"
-                      className="shmup-btn shmup-btn--small shmup-btn--danger"
-                      onClick={() => {
-                        onDeletePart(part.id);
-                        setPendingDeletePartId(null);
-                      }}
-                    >
-                      Confirm
-                    </button>
-                    <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeletePartId(null)}>
-                      Keep
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className="shmup-btn shmup-btn--small"
-                    disabled={draft.parts.length <= 1}
-                    title={draft.parts.length <= 1 ? "A Unit needs at least one Part" : undefined}
-                    onClick={() => setPendingDeletePartId(part.id)}
-                  >
-                    Delete
-                  </button>
-                )}
+        <div className="shmup-enc-tab-content">
+          {tab === "basics" && (
+            <div className="shmup-panel">
+              <label className="shmup-field shmup-field--inline">
+                <span>Name</span>
+                <input type="text" className="shmup-input" value={draft.name} onChange={(e) => update({ name: e.target.value })} />
+              </label>
+
+              <SpritePicker spriteId={draft.spriteId} customSprite={draft.customSprite} onChange={(spriteId, customSprite) => update({ spriteId, customSprite })} />
+
+              <div className="shmup-dial-grid">
+                <Dial label="HP" value={draft.hp} onChange={(v) => update({ hp: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
+                <Dial label="Contact dmg" value={draft.contactDamage} onChange={(v) => update({ contactDamage: Math.max(0, v) })} min={0} step={1} showNudgeButtons />
+                <Dial label="Score" value={draft.scoreValue} onChange={(v) => update({ scoreValue: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
               </div>
-            </li>
-          ))}
-        </ul>
-        <div className="shmup-btn-row">
-          <button type="button" className="shmup-btn shmup-btn--small" onClick={onNewPart}>
-            + New Part
-          </button>
+              <div className="shmup-dial-grid">
+                <Dial label="Speed" value={draft.speed} onChange={(v) => update({ speed: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
+                <Dial label="Turn rate" value={draft.turnRate} onChange={(v) => update({ turnRate: Math.max(0, v) })} min={0} step={0.1} showNudgeButtons />
+                <Dial label="Hitbox size" value={draft.size} onChange={(v) => update({ size: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
+              </div>
+
+              <div className="shmup-field-row">
+                <label className="shmup-field shmup-field--inline">
+                  <span>Layer</span>
+                  <select className="shmup-input" value={draft.layer} onChange={(e) => update({ layer: e.target.value as UnitLayer })}>
+                    <option value="ground">Ground</option>
+                    <option value="air">Air</option>
+                    <option value="doodad">Doodad</option>
+                  </select>
+                </label>
+                <label className="shmup-field shmup-field--inline">
+                  <span>Default Action</span>
+                  <select className="shmup-input" value={draft.defaultActionId ?? ""} onChange={(e) => update({ defaultActionId: e.target.value === "" ? null : e.target.value })}>
+                    <option value="">(none)</option>
+                    {draft.actions.map((action) => (
+                      <option key={action.id} value={action.id}>
+                        {action.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {tab === "actions" && (
+            <div className="shmup-panel">
+              <ul className="shmup-encounter-list">
+                {draft.actions.map((action) => (
+                  <li key={action.id} className="shmup-encounter-list__row shmup-encounter-list__row--stack">
+                    <div className="shmup-encounter-list__row-header">
+                      <span>
+                        {action.name} — {actionSummary(action)}
+                      </span>
+                      <div className="shmup-btn-row">
+                        <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setExpandedActionId(expandedActionId === action.id ? null : action.id)}>
+                          {expandedActionId === action.id ? "Collapse" : "Edit"}
+                        </button>
+                        {pendingDeleteActionId === action.id ? (
+                          <>
+                            <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => deleteAction(action.id)}>
+                              Confirm
+                            </button>
+                            <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteActionId(null)}>
+                              Keep
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeleteActionId(action.id)}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {expandedActionId === action.id && <ActionForm action={action} onChange={(a) => updateAction(action.id, a)} units={units} excludeUnitId={draft.id} />}
+                  </li>
+                ))}
+              </ul>
+              <div className="shmup-btn-row">
+                <button type="button" className="shmup-btn shmup-btn--small" onClick={addAction}>
+                  + New Action
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === "parts" && (
+            <div className="shmup-panel">
+              <ul className="shmup-encounter-list">
+                {draft.parts.map((part) => (
+                  <li key={part.id} className="shmup-encounter-list__row">
+                    <span>
+                      {part.name} — {partSummary(part)}
+                    </span>
+                    <div className="shmup-btn-row">
+                      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEditPart(part)}>
+                        Edit
+                      </button>
+                      {pendingDeletePartId === part.id ? (
+                        <>
+                          <button
+                            type="button"
+                            className="shmup-btn shmup-btn--small shmup-btn--danger"
+                            onClick={() => {
+                              onDeletePart(part.id);
+                              setPendingDeletePartId(null);
+                            }}
+                          >
+                            Confirm
+                          </button>
+                          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeletePartId(null)}>
+                            Keep
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="shmup-btn shmup-btn--small"
+                          disabled={draft.parts.length <= 1}
+                          title={draft.parts.length <= 1 ? "A Unit needs at least one Part" : undefined}
+                          onClick={() => setPendingDeletePartId(part.id)}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="shmup-btn-row">
+                <button type="button" className="shmup-btn shmup-btn--small" onClick={onNewPart}>
+                  + New Part
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

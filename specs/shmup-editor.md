@@ -1141,6 +1141,42 @@ panel, Save/Cancel) — fine on desktop, a trap on mobile.
   tab bar + content wrapper) in place of the narrower `.shmup-panel`
   check it used before tabs existed.
 
+### Unit/Part/Action forms adopted the same tab + Dial treatment (`UnitStatsForm.tsx`, `PartEditor.tsx`, `ActionForm.tsx`)
+
+**A follow-up pass ("give the rest of the UI the tab and knob treatment,"
+Noah) — the Encounter editor's tabs/`Dial` conversion above didn't extend
+to the Unit-authoring side when Actions came back, so those forms were
+still one long scrolling stack of plain number inputs with `.shmup-hint`
+paragraphs.** Reworked to match, same reasoning as the mobile-UX pass:
+
+- **`UnitStatsForm.tsx`**: **Basics** (name/sprite/HP/contact damage/score
+  value/speed/turn rate/hitbox size — all Dials except name/sprite —
+  /layer/default-Action), **Actions** (the Unit's own buffet — list +
+  inline `ActionForm`), **Parts** (list, Edit still navigates to the
+  dedicated `PartEditor.tsx` view — a Part is a full sub-form in its own
+  right, unlike an Action, so it doesn't fit inline).
+- **`PartEditor.tsx`**: **Basics** (name/sprite/`PartPositionEditor` +
+  Offset X/Y Dials), **Hitbox** (has-hitbox/damage-multiplier Dial/
+  has-health/HP Dial), **Actions** (list + inline `ActionForm`, same as
+  the Unit's own).
+- **`ActionForm.tsx`**: **Basics** (name/facing/Movement %/Angle Dials),
+  **State** (sets-invincible/requires-invincible), **Attack** (the
+  Add/Remove-Attack toggle, and when present, every arc/count/spacing/
+  sweep/burst/spawn field — all Dials except the enum selects). The live
+  `ActionPreview` stays outside the tabs, above them, regardless of which
+  tab is active — same "the animated preview is the first thing shown, not
+  an afterthought" reasoning as before.
+
+All three reuse the exact same `.shmup-enc-tabbar`/`.shmup-enc-tab-btn`/
+`.shmup-enc-tab-content`/`.shmup-dial-grid` CSS classes `EncounterEditor.tsx`
+already established — despite the `enc`-prefixed class names (a holdover
+from when tabs were Encounter-editor-only), the markup and styling are
+generic and were never actually scoped to that one view. **Every removed
+`.shmup-hint` paragraph's content moved into the Help menu's new "Units &
+Actions" topic** (`ShmupEditor.tsx`), alongside the pre-existing Tile
+Editor/Encounter Editor topics — same "explanatory text lives in Help, not
+inline" convention the Encounter editor's own tab pass established.
+
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
 Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly.
