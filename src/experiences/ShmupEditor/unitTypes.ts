@@ -317,7 +317,272 @@ export function createDefaultBulletUnit(): UnitDef {
   };
 }
 
+// ── Default projectile Units (spawned by an Action's attack.spawnUnitId) ──
+
+/**
+ * A projectile is just a Unit (see file header) — these are placeholder
+ * "make stuff up" stats-and-sprite pairs for the curated set extracted
+ * from the projectile sheet (see public/shmup-editor/projectiles/README.md),
+ * giving an attack's `spawnUnitId` a variety of ready-to-use options beyond
+ * the single default Bullet. Each gets its own single "Fly" Action (same
+ * shape as createDefaultBulletUnit's) so it actually travels once spawned
+ * — `defaultActionId` is exactly what a dynamically-spawned Unit runs,
+ * and a projectile is always spawned that way, never hand-placed. None
+ * of them fire anything themselves — a projectile that recurses into more
+ * projectiles is possible per the data model, but isn't a useful default.
+ */
+interface ProjectileSpec {
+  slug: string;
+  name: string;
+  spriteId: string;
+  hp: number;
+  contactDamage: number;
+  speed: number;
+  size: number;
+}
+
+const PROJECTILE_SPECS: ProjectileSpec[] = [
+  { slug: "bullet-tiny", name: "Bullet (Tiny)", spriteId: "proj-bullet-tiny", hp: 1, contactDamage: 1, speed: 500, size: 4 },
+  { slug: "bullet-red-tip", name: "Bullet (Red Tip)", spriteId: "proj-bullet-red-tip", hp: 1, contactDamage: 2, speed: 450, size: 6 },
+  { slug: "bullet-tracer", name: "Bullet (Tracer)", spriteId: "proj-bullet-tracer", hp: 1, contactDamage: 2, speed: 480, size: 6 },
+  { slug: "bullet-copper", name: "Bullet (Copper)", spriteId: "proj-bullet-copper", hp: 1, contactDamage: 2, speed: 470, size: 6 },
+  { slug: "shell-heavy", name: "Shell (Heavy)", spriteId: "proj-shell-heavy", hp: 1, contactDamage: 5, speed: 350, size: 10 },
+  { slug: "rocket-red", name: "Rocket (Red)", spriteId: "proj-rocket-red", hp: 2, contactDamage: 6, speed: 260, size: 10 },
+  { slug: "rocket-gold", name: "Rocket (Gold)", spriteId: "proj-rocket-gold", hp: 2, contactDamage: 6, speed: 240, size: 11 },
+  { slug: "missile", name: "Missile", spriteId: "proj-missile-static", hp: 2, contactDamage: 5, speed: 300, size: 9 },
+  { slug: "poison-flask", name: "Poison Flask", spriteId: "proj-poison-flask", hp: 1, contactDamage: 3, speed: 200, size: 9 },
+  { slug: "mine-spiked-ball", name: "Spiked Mine", spriteId: "proj-mine-spiked-ball", hp: 3, contactDamage: 4, speed: 150, size: 10 },
+  { slug: "cluster-shell", name: "Cluster Shell", spriteId: "proj-cluster-shell", hp: 1, contactDamage: 3, speed: 280, size: 9 },
+  { slug: "mine-morning-star", name: "Morning Star Mine", spriteId: "proj-mine-morning-star", hp: 4, contactDamage: 6, speed: 130, size: 12 },
+  { slug: "fire-orb", name: "Fire Orb", spriteId: "proj-fire-orb", hp: 1, contactDamage: 4, speed: 320, size: 8 },
+  { slug: "starburst", name: "Starburst", spriteId: "proj-starburst", hp: 1, contactDamage: 5, speed: 300, size: 9 },
+  { slug: "energy-orb-blue", name: "Energy Orb (Blue)", spriteId: "proj-energy-orb-blue", hp: 1, contactDamage: 3, speed: 380, size: 7 },
+  { slug: "lightning-bolt", name: "Lightning Bolt", spriteId: "proj-lightning-bolt", hp: 1, contactDamage: 4, speed: 550, size: 6 },
+  { slug: "crystal-burst-green", name: "Crystal Burst (Green)", spriteId: "proj-crystal-burst-green", hp: 1, contactDamage: 4, speed: 300, size: 8 },
+  { slug: "orb-capsule-purple", name: "Orb Capsule (Purple)", spriteId: "proj-orb-capsule-purple", hp: 1, contactDamage: 3, speed: 340, size: 8 },
+  { slug: "toxic-canister", name: "Toxic Canister", spriteId: "proj-toxic-canister", hp: 2, contactDamage: 4, speed: 220, size: 9 },
+  { slug: "energy-canister-blue", name: "Energy Canister (Blue)", spriteId: "proj-energy-canister-blue", hp: 2, contactDamage: 3, speed: 300, size: 8 },
+];
+
+function projectileUnitId(slug: string): string {
+  return `unit-default-proj-${slug}`;
+}
+
+function createFlyAction(): ActionDef {
+  return {
+    id: makeActionId(),
+    name: "Fly",
+    movementPercent: 100,
+    facing: "faceMovement",
+    fixedFacingDeg: 90,
+    setsInvincible: null,
+    requiresInvincible: false,
+    attack: null,
+  };
+}
+
+function createProjectileUnit(spec: ProjectileSpec, now: number): UnitDef {
+  const flyAction = createFlyAction();
+  return {
+    id: projectileUnitId(spec.slug),
+    name: spec.name,
+    spriteId: spec.spriteId,
+    customSprite: null,
+    hp: spec.hp,
+    contactDamage: spec.contactDamage,
+    scoreValue: 0,
+    speed: spec.speed,
+    turnRate: 1,
+    size: spec.size,
+    layer: "ground",
+    defaultActionId: flyAction.id,
+    actions: [flyAction],
+    parts: [createDefaultPart()],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
+// ── Default enemy Units, pre-wired with a basic movement + attack Action ──
+
+/**
+ * Every enemy Unit below is seeded with two Actions: a "Move" Action
+ * (`movementPercent: 100`, facing the direction of travel — or, for the
+ * two stationary turrets, `movementPercent: 0`/fixed facing) on the
+ * Unit's own buffet, plus an "Attack" Action (stationary, facing the
+ * player, firing the default Bullet on repeat) either also on the Unit's
+ * own buffet (simple single-sprite vehicles) or on a dedicated Turret
+ * Part's buffet (body+turret vehicles) — see file header on why Parts
+ * have their own independent Action buffet. `defaultActionId` points at
+ * the Move Action, same convention as createDefaultBulletUnit's "Fly".
+ */
+function createMoveAction(canMove: boolean): ActionDef {
+  return {
+    id: makeActionId(),
+    name: "Move",
+    movementPercent: canMove ? 100 : 0,
+    facing: canMove ? "faceMovement" : "fixed",
+    fixedFacingDeg: 90,
+    setsInvincible: null,
+    requiresInvincible: false,
+    attack: null,
+  };
+}
+
+function createAttackAction(burstIntervalMs: number): ActionDef {
+  return {
+    id: makeActionId(),
+    name: "Attack",
+    movementPercent: 0,
+    facing: "facePlayer",
+    fixedFacingDeg: 90,
+    setsInvincible: null,
+    requiresInvincible: false,
+    attack: {
+      arcStartDeg: 0,
+      arcEndDeg: 0,
+      count: 1,
+      spacing: "even",
+      perShotDelayMs: 0,
+      sweepSpeedDeg: 0,
+      pingPong: false,
+      burstIntervalMs,
+      telegraphMs: 0,
+      repeatCount: null,
+      spawnUnitId: DEFAULT_BULLET_UNIT_ID,
+      spawnScale: 1,
+      spawnGroup: "enemyProjectile",
+    },
+  };
+}
+
+interface SimpleEnemySpec {
+  slug: string;
+  name: string;
+  spriteId: string;
+  layer: UnitLayer;
+  hp: number;
+  contactDamage: number;
+  scoreValue: number;
+  speed: number;
+  turnRate: number;
+  size: number;
+  fireIntervalMs: number;
+}
+
+const SIMPLE_ENEMY_SPECS: SimpleEnemySpec[] = [
+  { slug: "skull-buggy", name: "Skull Buggy", spriteId: "skull-buggy", layer: "ground", hp: 15, contactDamage: 2, scoreValue: 150, speed: 140, turnRate: 1.2, size: 14, fireIntervalMs: 1100 },
+  { slug: "skull-technical", name: "Skull Technical", spriteId: "skull-technical", layer: "ground", hp: 20, contactDamage: 2, scoreValue: 180, speed: 110, turnRate: 1, size: 16, fireIntervalMs: 900 },
+  { slug: "skull-motorcycle", name: "Skull Motorcycle", spriteId: "skull-motorcycle", layer: "ground", hp: 10, contactDamage: 2, scoreValue: 120, speed: 170, turnRate: 1.5, size: 12, fireIntervalMs: 1300 },
+  { slug: "skull-helicopter", name: "Skull Helicopter", spriteId: "skull-helicopter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 200, speed: 130, turnRate: 1.3, size: 16, fireIntervalMs: 1000 },
+  { slug: "heli", name: "Attack Helicopter", spriteId: "heli", layer: "air", hp: 30, contactDamage: 3, scoreValue: 220, speed: 140, turnRate: 1.2, size: 16, fireIntervalMs: 950 },
+  { slug: "heli-transport", name: "Transport Helicopter", spriteId: "heli-transport", layer: "air", hp: 50, contactDamage: 2, scoreValue: 260, speed: 100, turnRate: 0.8, size: 20, fireIntervalMs: 1400 },
+  { slug: "jet-bomber", name: "Jet Bomber", spriteId: "jet-bomber", layer: "air", hp: 45, contactDamage: 4, scoreValue: 300, speed: 160, turnRate: 0.9, size: 20, fireIntervalMs: 1200 },
+  { slug: "jet-fighter", name: "Jet Fighter", spriteId: "jet-fighter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 220, speed: 220, turnRate: 1.4, size: 16, fireIntervalMs: 800 },
+  { slug: "jet-stealth", name: "Stealth Jet", spriteId: "jet-stealth", layer: "air", hp: 20, contactDamage: 4, scoreValue: 260, speed: 240, turnRate: 1.5, size: 15, fireIntervalMs: 750 },
+  { slug: "motorcycle-sidecar", name: "Motorcycle + Sidecar", spriteId: "motorcycle-sidecar", layer: "ground", hp: 18, contactDamage: 2, scoreValue: 150, speed: 150, turnRate: 1.3, size: 14, fireIntervalMs: 1000 },
+  { slug: "plane-prop", name: "Prop Plane", spriteId: "plane-prop", layer: "air", hp: 55, contactDamage: 3, scoreValue: 280, speed: 120, turnRate: 0.7, size: 22, fireIntervalMs: 1300 },
+  { slug: "truck-transport", name: "Transport Truck", spriteId: "truck-transport", layer: "ground", hp: 35, contactDamage: 2, scoreValue: 200, speed: 90, turnRate: 0.8, size: 18, fireIntervalMs: 1400 },
+  { slug: "turret", name: "Turret", spriteId: "turret", layer: "ground", hp: 30, contactDamage: 3, scoreValue: 200, speed: 0, turnRate: 0, size: 16, fireIntervalMs: 1000 },
+  { slug: "turret-4x", name: "Turret (Quad)", spriteId: "turret-4x", layer: "ground", hp: 40, contactDamage: 4, scoreValue: 260, speed: 0, turnRate: 0, size: 18, fireIntervalMs: 700 },
+  { slug: "train-front", name: "Train (Front)", spriteId: "train-front", layer: "ground", hp: 80, contactDamage: 4, scoreValue: 400, speed: 60, turnRate: 0.4, size: 26, fireIntervalMs: 1500 },
+  { slug: "train-rear", name: "Train (Rear)", spriteId: "train-rear", layer: "ground", hp: 60, contactDamage: 3, scoreValue: 320, speed: 60, turnRate: 0.4, size: 24, fireIntervalMs: 1500 },
+];
+
+function enemyUnitId(slug: string): string {
+  return `unit-default-${slug}`;
+}
+
+function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
+  const moveAction = createMoveAction(spec.speed > 0);
+  const attackAction = createAttackAction(spec.fireIntervalMs);
+  return {
+    id: enemyUnitId(spec.slug),
+    name: spec.name,
+    spriteId: spec.spriteId,
+    customSprite: null,
+    hp: spec.hp,
+    contactDamage: spec.contactDamage,
+    scoreValue: spec.scoreValue,
+    speed: spec.speed,
+    turnRate: spec.turnRate,
+    size: spec.size,
+    layer: spec.layer,
+    defaultActionId: moveAction.id,
+    actions: [moveAction, attackAction],
+    parts: [createDefaultPart()],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
+interface TurretedEnemySpec {
+  slug: string;
+  name: string;
+  bodySpriteId: string;
+  turretSpriteId: string;
+  turretOffset: Vec2;
+  layer: UnitLayer;
+  hp: number;
+  contactDamage: number;
+  scoreValue: number;
+  speed: number;
+  turnRate: number;
+  size: number;
+  fireIntervalMs: number;
+}
+
+/** Vehicles split into a body + turret sprite (see enemies/README.md's "incoming" batch and the pre-existing armored-truck/battle-tank Parts-demo set) — the turret is its own Part, offset from center, carrying the Attack Action. */
+const TURRETED_ENEMY_SPECS: TurretedEnemySpec[] = [
+  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffset: { x: 0, y: 0 }, layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, speed: 90, turnRate: 0.8, size: 20, fireIntervalMs: 1000 },
+  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffset: { x: 0, y: 0 }, layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, speed: 70, turnRate: 0.6, size: 22, fireIntervalMs: 900 },
+  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffset: { x: 0, y: -10 }, layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, speed: 40, turnRate: 0.3, size: 34, fireIntervalMs: 1100 },
+  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffset: { x: 0, y: -6 }, layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, speed: 85, turnRate: 0.8, size: 20, fireIntervalMs: 1300 },
+  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffset: { x: 0, y: -8 }, layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, speed: 60, turnRate: 0.4, size: 24, fireIntervalMs: 850 },
+];
+
+function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef {
+  const moveAction = createMoveAction(spec.speed > 0);
+  const main = createDefaultPart();
+  const turret: UnitPart = {
+    id: makePartId(),
+    name: "Turret",
+    offset: spec.turretOffset,
+    spriteId: spec.turretSpriteId,
+    customSprite: null,
+    hasHitbox: false,
+    hasHealth: false,
+    hp: 10,
+    damageMultiplier: 1,
+    actions: [createAttackAction(spec.fireIntervalMs)],
+  };
+  return {
+    id: enemyUnitId(spec.slug),
+    name: spec.name,
+    spriteId: spec.bodySpriteId,
+    customSprite: null,
+    hp: spec.hp,
+    contactDamage: spec.contactDamage,
+    scoreValue: spec.scoreValue,
+    speed: spec.speed,
+    turnRate: spec.turnRate,
+    size: spec.size,
+    layer: spec.layer,
+    defaultActionId: moveAction.id,
+    actions: [moveAction],
+    parts: [main, turret],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
 /** The full default Unit library a brand-new/reset session starts with. */
 export function createDefaultUnitLibrary(): UnitDef[] {
-  return [createDefaultBulletUnit()];
+  const now = Date.now();
+  return [
+    createDefaultBulletUnit(),
+    ...PROJECTILE_SPECS.map((spec) => createProjectileUnit(spec, now)),
+    ...SIMPLE_ENEMY_SPECS.map((spec) => createSimpleEnemyUnit(spec, now)),
+    ...TURRETED_ENEMY_SPECS.map((spec) => createTurretedEnemyUnit(spec, now)),
+  ];
 }

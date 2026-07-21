@@ -35,10 +35,11 @@ A tile (`TileDef`) has:
   every south slot's tag to the wildcard (`*`), matching any incoming edge.
 - `weight`, `imageId`, `customImage`, `name`: authoring metadata
   (weight is exported; the rest are editor-only, not part of the gameplay
-  shape). `imageId` picks from a small built-in set (`tileImages.ts`:
-  none/water/grass/shore) **or** the reserved `CUSTOM_IMAGE_ID`, which
-  renders `customImage` instead — a per-tile uploaded image (see Custom
-  art below). `resolveTileImageUrl()`
+  shape). `imageId` picks from a built-in set (`tileImages.ts` — plain
+  biomes water/grass/sand/swamp/lava/rocky/concrete/forest, a set of
+  biome-transition and road tiles, and a diagonal corner piece) **or**
+  the reserved `CUSTOM_IMAGE_ID`, which renders `customImage` instead —
+  a per-tile uploaded image (see Custom art below). `resolveTileImageUrl()`
   (`types.ts`) is the one place that knows how to turn `imageId`/
   `customImage` into an actual URL — `TileArt`/`TilePreview` both call it
   rather than reading `imageId` directly. Each image is one
@@ -774,24 +775,54 @@ attack together instead of a standalone Weapon.)
   sweep oscillates within a fixed `SWEEP_PINGPONG_AMPLITUDE_DEG` (90°)
   since `ActionAttack` has no separate amplitude field to derive one from
   — a documented preview simplification, not authored data.
-- **A default "Bullet" Unit is now seeded automatically.** `unitTypes.ts`'s
-  `createDefaultBulletUnit()`/`createDefaultUnitLibrary()` build a
-  ready-to-use generic projectile (a supplied glow sprite,
-  `bullet-basic.png`, low HP, small hitbox, sensible speed) with a stable
-  id (`DEFAULT_BULLET_UNIT_ID`, not random) so reseeding never
-  duplicates it, and one seeded "Fly" Action (100% movement,
-  `facing: "faceMovement"`, no attack) set as both its sole Action and its
-  `defaultActionId`. `unitStore.ts`'s `loadUnits` seeds-and-persists this
+- **A default Unit library is seeded automatically, well beyond just a
+  Bullet.** `unitTypes.ts`'s `createDefaultUnitLibrary()` builds:
+  - the original ready-to-use generic projectile (a supplied glow sprite,
+    `bullet-basic.png`, low HP, small hitbox, sensible speed) via
+    `createDefaultBulletUnit()`, stable id `DEFAULT_BULLET_UNIT_ID` so
+    reseeding never duplicates it, with one seeded "Fly" Action (100%
+    movement, `facing: "faceMovement"`, no attack) set as both its sole
+    Action and its `defaultActionId` — `createBlankAttack` still defaults
+    `spawnUnitId` to this Bullet, so a brand-new attack does something
+    visible immediately instead of firing nothing;
+  - a curated set of 20 more projectile Units (bullets/shells, rockets,
+    mines/bombs, fire/energy orbs, sci-fi canisters — see
+    `public/shmup-editor/projectiles/README.md`), each with the same
+    single "Fly" Action pattern as the Bullet (a projectile is always
+    spawned dynamically via some other Unit's `attack.spawnUnitId`, never
+    hand-placed, so `defaultActionId` — the Action a dynamically-spawned
+    Unit runs — is the only Action it actually needs) and made-up
+    `hp`/`speed`/`size`/`contactDamage`, giving any attack's `spawnUnitId`
+    picker real variety instead of one option;
+  - a full roster of enemy Units built from every sprite in
+    `enemySprites.ts` (the pre-existing skull-\*/armored-truck/battle-tank
+    set plus a new "incoming" vehicle batch — helicopters, jets, trucks,
+    turrets, a battleship, and a 3-car armored train, see
+    `public/shmup-editor/enemies/README.md`), each pre-wired with a
+    "Move" Action (100% movement facing the direction of travel, or
+    stationary/fixed-facing for the two turret Units) on the Unit's own
+    buffet — set as `defaultActionId` — plus an "Attack" Action (0%
+    movement, `facing: "facePlayer"`, firing the default Bullet on
+    repeat) either also on the Unit's own buffet (single-sprite vehicles)
+    or on a dedicated Turret Part's independent buffet (body+turret
+    vehicles, mirroring the pre-existing armored-truck/battle-tank
+    Parts-demo split). Each Unit also gets a `layer` (`"air"` for the
+    helicopters/jets/prop plane, `"ground"` for everything else — trucks,
+    tanks, motorcycles, trains, turrets, the battleship). Stats
+    (`hp`/`contactDamage`/`scoreValue`/`speed`/`turnRate`/`size`) are
+    made-up placeholder numbers loosely scaled to each vehicle's apparent
+    size/role, not balanced gameplay data.
+
+  All of the above use stable (not random) ids
+  (`unit-default-<slug>`/`unit-default-proj-<slug>`) so reseeding never
+  duplicates them. `unitStore.ts`'s `loadUnits` seeds-and-persists this
   library the moment it would otherwise return empty — a brand-new
   install, or any save that fails the version/shape check (the same
-  fallback every prior version bump already used, now landing on one
-  Unit instead of a truly blank library). `createBlankAttack` also
-  defaults `spawnUnitId` to this Bullet rather than `null`, so a
-  brand-new attack does something visible immediately instead of firing
-  nothing. Noah, on this Unit staying live-shared rather than getting
-  cloned per-use: "Most enemies will fire the same handful of projectiles,
-  so changing one of them WILL affect all units — but that's fine by me.
-  I think it makes balance easier maybe?"
+  fallback every prior version bump already used). Noah, on the shared
+  default Bullet staying live rather than getting cloned per-use: "Most
+  enemies will fire the same handful of projectiles, so changing one of
+  them WILL affect all units — but that's fine by me. I think it makes
+  balance easier maybe?"
 
 ### Timing (`encounterTypes.ts`, `encounterTiming.ts`, `EncounterTimeline.tsx`)
 
@@ -1557,9 +1588,16 @@ reasoning as `scrubTime`/`playing` themselves.
 Per root `CLAUDE.md`'s mandatory rule, the tile library is **fsStore-backed**,
 not localStorage: `C:\Programs\Accessories\Shmup Editor\TILES.DAT` holds
 the whole library as a versioned JSON array (`{ version, tiles }`), loaded/
-saved via `src/experiences/ShmupEditor/tileStore.ts`. A corrupt or
-stale-shape save falls back to an empty library rather than crashing
-(same defensive-load pattern as `MahjongSolitaire`'s save state).
+saved via `src/experiences/ShmupEditor/tileStore.ts`. A brand-new install
+(empty `TILES.DAT`) or a corrupt/stale-shape save is seeded with the full
+default tile library (`types.ts`'s `createDefaultTileLibrary`) rather than
+falling back to empty — one `TileDef` per built-in image in
+`tileImages.ts`, tagged for what's actually in the art (a plain biome's
+edges all carry that biome's tag; a transition tile's two "pure" edges
+are tagged and its other two are hardwalled, since a mixed/gradient edge
+has no single tag that could describe it — see that file for the exact
+per-tile breakdown). The seed is saved immediately, same pattern as
+`unitStore.ts`'s pre-existing default-Unit-library seeding (below).
 Purely-additive optional fields (`customImage`) don't bump
 `SAVE_VERSION` — a pre-existing save missing it is still valid and gets
 backfilled to its default (`null`) on load, rather than the whole

@@ -19,9 +19,38 @@ export const CUSTOM_IMAGE_ID = "custom";
 
 export const TILE_IMAGES: TileImageOption[] = [
   { id: NONE_IMAGE_ID, label: "None", url: null },
+  // Plain biomes
   { id: "water", label: "Water", url: "/shmup-editor/tiles/water.png" },
   { id: "grass", label: "Grass", url: "/shmup-editor/tiles/grass.png" },
-  { id: "shore", label: "Shore (water→grass)", url: "/shmup-editor/tiles/shore.png" },
+  { id: "sand", label: "Sand", url: "/shmup-editor/tiles/sand.png" },
+  { id: "swamp", label: "Swamp", url: "/shmup-editor/tiles/swamp.png" },
+  { id: "lava", label: "Lava", url: "/shmup-editor/tiles/lava.png" },
+  { id: "rocky", label: "Rocky", url: "/shmup-editor/tiles/rocky.png" },
+  { id: "concrete", label: "Concrete", url: "/shmup-editor/tiles/concrete.png" },
+  { id: "forest", label: "Forest", url: "/shmup-editor/tiles/forest.png" },
+  // Horizontal (north/south) biome transitions
+  { id: "grass-water", label: "Grass → Water", url: "/shmup-editor/tiles/grass-water.png" },
+  { id: "grass-sand", label: "Grass → Sand", url: "/shmup-editor/tiles/grass-sand.png" },
+  { id: "grass-sand-natural", label: "Grass → Sand (natural)", url: "/shmup-editor/tiles/grass-sand-natural.png" },
+  { id: "grass-swamp", label: "Grass → Swamp", url: "/shmup-editor/tiles/grass-swamp.png" },
+  { id: "sand-rocky", label: "Sand → Rocky", url: "/shmup-editor/tiles/sand-rocky.png" },
+  { id: "sand-water-natural", label: "Sand → Water", url: "/shmup-editor/tiles/sand-water-natural.png" },
+  { id: "sand-concrete", label: "Sand → Concrete", url: "/shmup-editor/tiles/sand-concrete.png" },
+  { id: "sand-concrete-wall", label: "Sand → Concrete (gate)", url: "/shmup-editor/tiles/sand-concrete-wall.png" },
+  { id: "concrete-water", label: "Concrete → Water", url: "/shmup-editor/tiles/concrete-water.png" },
+  { id: "concrete-water-wall", label: "Concrete → Water (pier)", url: "/shmup-editor/tiles/concrete-water-wall.png" },
+  { id: "concrete-lava", label: "Concrete → Lava", url: "/shmup-editor/tiles/concrete-lava.png" },
+  { id: "concrete-lava-wall", label: "Concrete → Lava (barrier)", url: "/shmup-editor/tiles/concrete-lava-wall.png" },
+  { id: "forest-water", label: "Forest → Water", url: "/shmup-editor/tiles/forest-water.png" },
+  // Vertical (east/west) biome transition
+  { id: "grass-forest", label: "Forest → Grass", url: "/shmup-editor/tiles/grass-forest.png" },
+  // Diagonal corner
+  { id: "grass-water-diag", label: "Water/Grass Corner", url: "/shmup-editor/tiles/grass-water-diag.png" },
+  // Road (grass biome, road tag north/south)
+  { id: "grass-road-straight", label: "Road (straight)", url: "/shmup-editor/tiles/grass-road-straight.png" },
+  { id: "grass-road-curve", label: "Road (curve)", url: "/shmup-editor/tiles/grass-road-curve.png" },
+  { id: "grass-road-start", label: "Road (trailhead)", url: "/shmup-editor/tiles/grass-road-start.png" },
+  { id: "grass-road-concrete", label: "Road → Concrete (gate)", url: "/shmup-editor/tiles/grass-road-concrete.png" },
 ];
 
 export function tileImageById(id: string): TileImageOption {
