@@ -15,7 +15,7 @@
  * hands down to whatever it itself spawns.** A Level gives a Tile some
  * Difficulty; the Tile spreads it evenly across whatever it spawns; each
  * spawned instance resolves its own `count`/`power` from its own share and
- * passes `power` on down the same way (to its Weapons' spawned bullets,
+ * passes `power` on down the same way (to its Actions' spawned bullets,
  * and eventually — once that's designed — to its own stats). The editor
  * doesn't need to know what produces the incoming Difficulty value or what
  * `power` will eventually affect; it only needs this one resolution step.

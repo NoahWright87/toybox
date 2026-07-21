@@ -1,5 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { attacksForPart } from "./encounterAttacks";
+import { partActionsForPart } from "./partActions";
+import { isStepTimeDerived } from "./encounterTiming";
+import { resolveInvincibleAt } from "./actionState";
 import type { EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
@@ -33,6 +35,15 @@ const STAGE_PADDING_LEFT = 12;
  * a drag handle appears only when selected, mirroring the canvas's move
  * handle (EncounterEditor.tsx) rather than making every marker draggable
  * at all times. Tapping/dragging the ruler background scrubs the playhead.
+ *
+ * **The retime-drag handle only appears on a manually-timed step.** A
+ * *derived* step's time comes from arc length / the referenced Action's
+ * Movement % (encounterTiming.ts) — since Movement % now lives on the
+ * shared, reusable Action rather than a per-placement field, there's no
+ * longer a safe per-placement value to solve-and-write-back when dragging
+ * (see that file's header). Retiming a moving segment means picking a
+ * different Action for the step that starts it (Step tab), not dragging
+ * its arrival marker.
  */
 export default function EncounterTimeline({
   units,
@@ -130,19 +141,21 @@ export default function EncounterTimeline({
                   {instance.steps.map((step) => {
                     const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
                     const left = stepTime(instance.id, step) * PX_PER_SEC + STAGE_PADDING_LEFT;
+                    const invincible = unitDef ? resolveInvincibleAt(instance.steps, unitDef.actions, step.time) : false;
+                    const derived = isStepTimeDerived(instance, step.id, unitDef);
                     return (
                       <div key={step.id} className="shmup-timeline__step-wrap" style={{ left }}>
                         <button
                           type="button"
-                          className={`shmup-timeline__step ${isSelected ? "shmup-timeline__step--selected" : ""} ${!step.visible ? "shmup-timeline__step--hidden" : ""}`}
+                          className={`shmup-timeline__step ${isSelected ? "shmup-timeline__step--selected" : ""} ${invincible ? "shmup-timeline__step--hidden" : ""}`}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectStep(instance.id, step.id);
                           }}
-                          title={step.visible ? undefined : "Hidden"}
+                          title={invincible ? "Invincible" : undefined}
                         />
-                        {isSelected && (
+                        {isSelected && !derived && (
                           <button
                             type="button"
                             className="shmup-timeline__step-handle"
@@ -157,28 +170,28 @@ export default function EncounterTimeline({
                   })}
                 </div>
 
-                {/* One extra lane per Part that has at least one placed attack — independent per-part tracks, so a battleship's three turrets show up as three separate rows, not merged into one. */}
+                {/* One extra lane per Part that has at least one placed Action — independent per-part tracks, so a battleship's three turrets show up as three separate rows, not merged into one. */}
                 {unitDef?.parts
-                  .filter((part) => attacksForPart(instance, part.id).length > 0)
+                  .filter((part) => partActionsForPart(instance, part.id).length > 0)
                   .map((part) => (
                     <div key={part.id} className="shmup-timeline__lane shmup-timeline__lane--attack">
                       <div className="shmup-timeline__track-sublabel">{part.name}</div>
-                      {attacksForPart(instance, part.id).map((attack) => {
-                        const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
-                        const weapon = part.weapons.find((w) => w.id === attack.weaponId);
-                        const left = attack.time * PX_PER_SEC + STAGE_PADDING_LEFT;
+                      {partActionsForPart(instance, part.id).map((placement) => {
+                        const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === placement.id;
+                        const action = part.actions.find((a) => a.id === placement.actionId);
+                        const left = placement.time * PX_PER_SEC + STAGE_PADDING_LEFT;
                         return (
                           <button
-                            key={attack.id}
+                            key={placement.id}
                             type="button"
                             className={`shmup-timeline__attack ${isSelected ? "shmup-timeline__attack--selected" : ""}`}
                             style={{ left }}
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
-                              onSelectAttack(instance.id, attack.id);
+                              onSelectAttack(instance.id, placement.id);
                             }}
-                            title={weapon?.name ?? "(missing Weapon)"}
+                            title={action?.name ?? "(missing Action)"}
                           />
                         );
                       })}

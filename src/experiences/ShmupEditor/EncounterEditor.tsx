@@ -9,16 +9,17 @@ import { Dial } from "../../components/Dial/Dial";
 import { resolveSpriteUrl } from "./enemySprites";
 import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, isLastStep, moveStep, updateStep } from "./encounterSteps";
-import { addAttack, deleteAttack, updateAttack } from "./encounterAttacks";
-import { isStepTimeDerived, recomputeStepTimes, segmentArcLength, speedMultiplierForDuration } from "./encounterTiming";
-import { createEncounterUnit, type EncounterAttack, type EncounterDef, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
-import { computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
+import { addPartAction, deletePartAction, updatePartAction } from "./partActions";
+import { isStepTimeDerived, recomputeStepTimes } from "./encounterTiming";
+import { resolveInvincibleAt } from "./actionState";
+import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type PartActionPlacement, type Vec2 } from "./encounterTypes";
+import { computeInstanceHeadingDeg, computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
-import { computeAttackBullets, computeCameraBoundsRect, resolveAttackAimDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
+import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
-import type { UnitDef } from "./unitTypes";
+import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
 
 interface EncounterEditorProps {
   tile: TileDef;
@@ -32,8 +33,6 @@ interface EncounterEditorProps {
 
 type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
 type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
-/** Dragging an attack's aim handle — unlike bezier handles (an offset from a fixed step position), an attack's anchor itself moves along the bezier path over time, so the only thing worth persisting is the angle, not a position offset. */
-type AimDrag = { instanceId: string; attackId: string; angleDeg: number } | null;
 /** Everything below the pinned timeline/viewport is tabbed instead of stacked inline (mobile scroll-and-lose-your-selection fix) — Basics/Add are always available, the third slot shows whichever node is currently selected. */
 type EditorTab = "basics" | "add" | "step" | "attack" | "scaling";
 
@@ -67,8 +66,6 @@ const PADDING = 60;
 /** Attack-track markers are smaller than a movement waypoint node — secondary to the path, same "reads as another layer, not another waypoint" reasoning as PREVIEW_DIAMETER. */
 const ATTACK_MARKER_DIAMETER = 32;
 const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
-/** Purely visual length of the aim-direction indicator/handle from an attack's anchor position — not a stored value, just how far out the drag target renders. */
-const AIM_HANDLE_LENGTH = 55;
 /** View (pan/zoom) range — ZOOM_MIN well below 1 is the explicit point: the old fixed-scale canvas could never show more than roughly one tile's worth of content at once, per Noah's usability note. Matches JigsawPuzzle.tsx's zoom-toward-cursor/pinch pattern, not NS Art's discrete-step one. Lower than it needs to be for a 1x1 tile so the widest (3x1) footprint still fits on the narrowest mobile viewport after editorScale.ts's TILE_UNIT increase — fitView's `* 1.15` margin plus a 3x1 tile at TILE_UNIT=720 needs roughly 0.145 on a ~380px-wide phone viewport. */
 const ZOOM_MIN = 0.08;
 const ZOOM_MAX = 3;
@@ -86,8 +83,8 @@ function deleteKey(instanceId: string, stepId: string): string {
   return `${instanceId}:${stepId}`;
 }
 
-/** An attack's anchor position in world space — wherever the instance's bezier path (via computeInstancePreview) puts it at the attack's own time, plus the firing Part's offset. Falls back to the instance's first step (still positionally meaningful, even before the instance has technically "spawned") rather than nothing. */
-function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: EncounterAttack): Vec2 | null {
+/** A Part-action placement's anchor position in world space — wherever the instance's bezier path (via computeInstancePreview) puts it at the placement's own time, plus the firing Part's offset. Falls back to the instance's first step (still positionally meaningful, even before the instance has technically "spawned") rather than nothing. */
+function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: PartActionPlacement): Vec2 | null {
   if (!unitDef) return null;
   const part = unitDef.parts.find((p) => p.id === attack.partId);
   if (!part) return null;
@@ -148,7 +145,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [selection, setSelection] = useState<Selection>(null);
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
   const [dragHandle, setDragHandle] = useState<HandleDrag>(null);
-  const [dragAim, setDragAim] = useState<AimDrag>(null);
   const [scalingDrag, setScalingDrag] = useState<ScalingDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
@@ -247,29 +243,16 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   /**
-   * Dragging a step on the timeline. For a manually-timed step (first
-   * step, or dwelling at the same position as its predecessor) this just
-   * sets `time` directly, same as always. For a *derived* step, dragging
-   * instead solves for the `speedMultiplier` the predecessor would need to
-   * arrive exactly there (encounterTiming.ts's `speedMultiplierForDuration`)
-   * and writes that onto the *predecessor* step — never onto the shared
-   * Unit — so pacing is tunable per-placement without mutating the Unit's
-   * reusable stats. `updateInstance`'s recompute then turns that
-   * multiplier back into the step's actual `time`.
+   * Dragging a step on the timeline. Only ever invoked for a manually-timed
+   * step (first step, or dwelling at the same position as its predecessor)
+   * — EncounterTimeline.tsx only renders the retime-drag handle for those,
+   * since a *derived* step's time comes from arc length / the referenced
+   * Action's Movement % (a shared, reusable value — see encounterTiming.ts's
+   * file header for why there's no longer a safe per-placement multiplier
+   * to solve-and-write-back for a derived step).
    */
   function handleRetimeStep(instanceId: string, stepId: string, draggedTime: number) {
-    updateInstance(instanceId, (instance) => {
-      const idx = instance.steps.findIndex((s) => s.id === stepId);
-      const unitDef = units.find((u) => u.id === instance.unitDefId);
-      if (idx <= 0 || !unitDef || !isStepTimeDerived(instance, stepId, unitDef)) {
-        return updateStep(instance, stepId, { time: draggedTime });
-      }
-      const prev = instance.steps[idx - 1];
-      const cur = instance.steps[idx];
-      const arcLength = segmentArcLength(prev, cur, unitDef);
-      const multiplier = speedMultiplierForDuration(arcLength, unitDef.speed, draggedTime - prev.time);
-      return updateStep(instance, prev.id, { speedMultiplier: multiplier });
-    });
+    updateInstance(instanceId, (instance) => updateStep(instance, stepId, { time: draggedTime }));
   }
 
   useEffect(() => {
@@ -354,7 +337,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     // label doesn't render directly on top of the previous one's — still
     // just a default, since the move handle can reposition either.
     const startPos: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
-    const instance = addStep(createEncounterUnit(unitDefId), startPos);
+    const instance = addStep(createEncounterUnit(unitDefId), null, startPos);
     updateDraft({ ...draft, units: [...draft.units, instance] });
     const added = instance.steps[0];
     if (added) selectStep(instance.id, added.id);
@@ -370,23 +353,23 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function addNextStep(instanceId: string) {
     const before = draft.units.find((u) => u.id === instanceId);
     if (!before) return;
-    const after = addStep(before);
+    const after = addStep(before, null);
     updateInstance(instanceId, () => after);
     const added = after.steps[after.steps.length - 1];
     if (added) selectStep(instanceId, added.id);
   }
 
-  /** Adds an attack-track placement for `partId`, defaulting `time` to `atTime` and the weapon to that Part's first — a no-op if the Part has no Weapons yet (nothing to reference). */
+  /** Adds a Part-action-track placement for `partId`, defaulting `time` to `atTime` and the Action to that Part's first — a no-op if the Part has no Actions yet (nothing to reference). */
   function addAttackToPart(instanceId: string, partId: string, atTime: number) {
     const before = draft.units.find((u) => u.id === instanceId);
     const unitDef = units.find((u) => u.id === before?.unitDefId);
     const part = unitDef?.parts.find((p) => p.id === partId);
-    const weaponId = part?.weapons[0]?.id;
-    if (!before || !weaponId) return;
-    const after = addAttack(before, partId, weaponId, atTime);
+    const actionId = part?.actions[0]?.id;
+    if (!before || !actionId) return;
+    const after = addPartAction(before, partId, actionId, atTime);
     updateInstance(instanceId, () => after);
     setPickingAttackPartFor(null);
-    const added = after.attacks[after.attacks.length - 1];
+    const added = after.partActions[after.partActions.length - 1];
     if (added) selectAttack(instanceId, added.id);
   }
 
@@ -401,7 +384,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   }
 
   function deleteAttackEvent(instanceId: string, attackId: string) {
-    updateInstance(instanceId, (i) => deleteAttack(i, attackId));
+    updateInstance(instanceId, (i) => deletePartAction(i, attackId));
     setSelection(null);
   }
 
@@ -460,24 +443,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       updateStep(i, dragHandle.stepId, dragHandle.which === "out" ? { handleOut: dragHandle.offset } : { handleIn: dragHandle.offset })
     );
     setDragHandle(null);
-  }
-
-  /** Seeds the drag from the attack's current (possibly-overridden) angle, same "don't jump on first touch" reasoning as beginHandleDrag. */
-  function beginAimDrag(instanceId: string, attackId: string, e: ReactPointerEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    (e.target as Element).setPointerCapture(e.pointerId);
-    const instance = draft.units.find((u) => u.id === instanceId);
-    const attack = instance?.attacks.find((a) => a.id === attackId);
-    if (!instance || !attack) return;
-    const unitDef = units.find((u) => u.id === instance.unitDefId);
-    const part = unitDef?.parts.find((p) => p.id === attack.partId);
-    const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
-    setDragAim({ instanceId, attackId, angleDeg: attack.aimAngleOverride ?? weapon?.fixedAngleDeg ?? 0 });
-  }
-  function endAimDrag() {
-    if (!dragAim) return;
-    updateInstance(dragAim.instanceId, (i) => updateAttack(i, dragAim.attackId, { aimAngleOverride: dragAim.angleDeg }));
-    setDragAim(null);
   }
 
   function beginScalingDrag(instanceId: string, handle: ScalingHandleId, currentAbsolute: Vec2, e: ReactPointerEvent<HTMLButtonElement>) {
@@ -544,16 +509,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         }
       }
     }
-    if (dragAim) {
-      const instance = draft.units.find((u) => u.id === dragAim.instanceId);
-      const attack = instance?.attacks.find((a) => a.id === dragAim.attackId);
-      const unitDef = units.find((u) => u.id === instance?.unitDefId);
-      const anchor = instance && attack ? attackAnchorWorld(instance, unitDef, attack) : null;
-      if (anchor) {
-        const angleDeg = (Math.atan2(worldPos.y - anchor.y, worldPos.x - anchor.x) * 180) / Math.PI;
-        setDragAim({ ...dragAim, angleDeg });
-      }
-    }
     if (scalingDrag) {
       setScalingDrag({ ...scalingDrag, pos: worldPos });
     }
@@ -561,7 +516,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function onStagePointerUp() {
     endDrag();
     endHandleDrag();
-    endAimDrag();
     endScalingDrag();
   }
 
@@ -795,11 +749,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
   const selectedStep: EncounterStep | undefined = selection?.kind === "step" ? selectedInstance?.steps.find((s) => s.id === selection.stepId) : undefined;
-  const selectedAttack: EncounterAttack | undefined = selection?.kind === "attack" ? selectedInstance?.attacks.find((a) => a.id === selection.attackId) : undefined;
+  const selectedAttack: PartActionPlacement | undefined = selection?.kind === "attack" ? selectedInstance?.partActions.find((a) => a.id === selection.attackId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
   const selectedIdx = selectedInstance && selectedStep ? selectedInstance.steps.findIndex((s) => s.id === selectedStep.id) : -1;
   const selectedNextStep = selectedInstance && selectedIdx >= 0 ? selectedInstance.steps[selectedIdx + 1] : undefined;
-  const hasOutgoingSegment = selectedInstance && selectedNextStep ? isStepTimeDerived(selectedInstance, selectedNextStep.id, selectedUnitDef) : false;
   const scalingPanelOpen = !!selectedInstance && scalingOpenFor === selectedInstance.id;
 
   // Which contextual tab (if any) matches the current selection — the tab
@@ -811,22 +764,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const contextualTab: EditorTab | null = scalingPanelOpen ? "scaling" : selection?.kind === "step" ? "step" : selection?.kind === "attack" ? "attack" : null;
   const availableTabs: EditorTab[] = contextualTab ? ["basics", "add", contextualTab] : ["basics", "add"];
   const effectiveTab: EditorTab = availableTabs.includes(activeTab) ? activeTab : (contextualTab ?? "basics");
-
-  // Aim-handle geometry for a selected attack — only rendered for a
-  // "fixed"-aim weapon, since "player"-aimed weapons have no fixed angle to
-  // drag (they track/snapshot the player at runtime instead).
-  const selectedAttackPart = selectedAttack ? selectedUnitDef?.parts.find((p) => p.id === selectedAttack.partId) : undefined;
-  const selectedAttackWeapon = selectedAttackPart ? selectedAttackPart.weapons.find((w) => w.id === selectedAttack?.weaponId) : undefined;
-  const selectedAttackAnchor = selectedInstance && selectedAttack ? attackAnchorWorld(selectedInstance, selectedUnitDef, selectedAttack) : null;
-  const draggingThisAim = dragAim && selectedAttack && dragAim.attackId === selectedAttack.id;
-  const selectedAimAngleDeg = draggingThisAim ? dragAim.angleDeg : (selectedAttack?.aimAngleOverride ?? selectedAttackWeapon?.fixedAngleDeg ?? 0);
-  const aimHandleStage =
-    selectedAttackAnchor && selectedAttackWeapon?.aimMode === "fixed"
-      ? toStage({
-          x: selectedAttackAnchor.x + AIM_HANDLE_LENGTH * Math.cos((selectedAimAngleDeg * Math.PI) / 180),
-          y: selectedAttackAnchor.y + AIM_HANDLE_LENGTH * Math.sin((selectedAimAngleDeg * Math.PI) / 180),
-        })
-      : null;
 
   // Computed once, used both for the SVG stalk lines (visual only) and the
   // HTML drag-target buttons below (real touch targets — see file header:
@@ -893,28 +830,40 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       slots.forEach((slot, slotIdx) => {
         const dupLocalTime = scrubTime - (instance.scaling.spawnDelayMs * slotIdx) / 1000;
         const dupPreview = computeInstancePreview(instance, unitDef, dupLocalTime);
-        if (!dupPreview || !dupPreview.step.visible) return;
+        if (!dupPreview || dupPreview.invincible) return;
         const delta: Vec2 = { x: slot.x - originPos.x, y: slot.y - originPos.y };
         const dupPos: Vec2 = { x: dupPreview.pos.x + delta.x, y: dupPreview.pos.y + delta.y };
         hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStage(dupPos), sizePx: unitDef.size * 2 });
+        const headingDeg = computeInstanceHeadingDeg(instance, unitDef, dupLocalTime);
 
-        for (const attack of instance.attacks) {
-          const part = unitDef.parts.find((p) => p.id === attack.partId);
-          const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
-          const baseAnchor = part && weapon ? attackAnchorWorld(instance, unitDef, attack) : null;
-          if (!part || !weapon || !baseAnchor) continue;
-          const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y };
-          const aimDeg = resolveAttackAimDeg(attack, weapon, anchor, playerRefWorld);
-          const elapsedMs = (dupLocalTime - attack.time) * 1000;
-          const bulletDiameterPx = resolveBulletRadius(weapon, units) * 2;
-          computeAttackBullets(weapon, aimDeg, attack.durationMs, elapsedMs).forEach((b, bi) => {
+        function pushAttackBullets(key: string, facing: Pick<ActionDef, "facing" | "fixedFacingDeg">, attack: ActionAttack, anchor: Vec2, elapsedMs: number) {
+          const aimDeg = resolveActionFacingDeg(facing, anchor, playerRefWorld, headingDeg);
+          const durationMs = computeAttackDurationMs(attack);
+          const bulletDiameterPx = resolveBulletRadius(attack, units) * 2;
+          computeAttackBullets(attack, aimDeg, durationMs, elapsedMs).forEach((b, bi) => {
             hitboxBulletMarkers.push({
-              key: `${instance.id}-${slotIdx}-${attack.id}-${bi}`,
+              key: `${key}-${bi}`,
               stage: toStage({ x: anchor.x + b.x, y: anchor.y + b.y }),
               diameterPx: bulletDiameterPx,
               alpha: b.alpha,
             });
           });
+        }
+
+        // The base Unit's own attack, if its currently-active step references an Action with one — anchored at the instance's own current (interpolated) position, no Part offset.
+        const activeAction = dupPreview.step.actionId ? unitDef.actions.find((a) => a.id === dupPreview.step.actionId) : undefined;
+        if (activeAction?.attack) {
+          pushAttackBullets(`${instance.id}-${slotIdx}-base`, activeAction, activeAction.attack, dupPos, (dupLocalTime - dupPreview.step.time) * 1000);
+        }
+
+        // Every Part's independent attack track.
+        for (const attack of instance.partActions) {
+          const part = unitDef.parts.find((p) => p.id === attack.partId);
+          const action = part?.actions.find((a) => a.id === attack.actionId);
+          const baseAnchor = part && action?.attack ? attackAnchorWorld(instance, unitDef, attack) : null;
+          if (!part || !action?.attack || !baseAnchor) continue;
+          const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y };
+          pushAttackBullets(`${instance.id}-${slotIdx}-${attack.id}`, action, action.attack, anchor, (dupLocalTime - attack.time) * 1000);
         }
       });
     }
@@ -1036,17 +985,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   />
                 ))}
 
-              {/* An attack's aim handle — same real-HTML-button pattern, one per selected fixed-aim attack, drag to set its firing angle. */}
-              {selectedInstance && selectedAttack && aimHandleStage && (
-                <button
-                  type="button"
-                  className="shmup-handle-btn"
-                  title="Drag to aim"
-                  style={{ left: aimHandleStage.x - HANDLE_RADIUS, top: aimHandleStage.y - HANDLE_RADIUS }}
-                  onPointerDown={(e) => beginAimDrag(selectedInstance.id, selectedAttack.id, e)}
-                />
-              )}
-
               {/* A scaling positioning-shape's handles — one set per shape kind (Curve/V/Grid/Ring), only while that instance's Scaling tab is open. */}
               {selectedInstance &&
                 scalingHandleEntries.map(({ handle, pos }, i) => {
@@ -1078,11 +1016,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   const first = isFirstStep(instance, step.id);
                   const last = isLastStep(instance, step.id);
                   const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
+                  const invincible = unitDef ? resolveInvincibleAt(instance.steps, unitDef.actions, step.time) : false;
                   return (
                     <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
                       <button
                         type="button"
-                        className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${!step.visible ? "shmup-enemy-node--hidden" : ""}`}
+                        className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${invincible ? "shmup-enemy-node--hidden" : ""}`}
                         style={spriteUrl ? { backgroundImage: `url(${spriteUrl})` } : undefined}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1095,7 +1034,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                       {first && <div className="shmup-enemy-node__label">{unitDef?.name ?? "?"}</div>}
                       <div className="shmup-enemy-node__badges">
                         {first && <span title="First step">▶</span>}
-                        {!step.visible && <span title="Hidden">👻</span>}
+                        {invincible && <span title="Invincible">🛡️</span>}
                         {instance.scaling.maxCount > 1 && <span title="Scaling enabled">⚖️</span>}
                       </div>
 
@@ -1120,8 +1059,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                           <button
                             type="button"
                             className="shmup-enemy-node__btn shmup-enemy-node__btn--attack"
-                            title={unitDef && unitDef.parts.some((p) => p.weapons.length > 0) ? "Add an attack at this step's time" : "Add a Weapon to this Unit's Parts first (Units menu)"}
-                            disabled={!unitDef || !unitDef.parts.some((p) => p.weapons.length > 0)}
+                            title={unitDef && unitDef.parts.some((p) => p.actions.length > 0) ? "Add an Action placement at this step's time" : "Add an Action to this Unit's Parts first (Units menu)"}
+                            disabled={!unitDef || !unitDef.parts.some((p) => p.actions.length > 0)}
                             onClick={(e) => {
                               e.stopPropagation();
                               requestAddAttack(instance.id, unitDef, step.time);
@@ -1162,8 +1101,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                               key={p.id}
                               type="button"
                               className="shmup-btn shmup-btn--small"
-                              disabled={p.weapons.length === 0}
-                              title={p.weapons.length === 0 ? "This Part has no Weapons yet" : undefined}
+                              disabled={p.actions.length === 0}
+                              title={p.actions.length === 0 ? "This Part has no Actions yet" : undefined}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 addAttackToPart(instance.id, p.id, step.time);
@@ -1185,9 +1124,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               {draft.units.flatMap((instance) => {
                 const unitDef = units.find((u) => u.id === instance.unitDefId);
                 if (!unitDef) return [];
-                return instance.attacks.map((attack) => {
+                return instance.partActions.map((attack) => {
                   const part = unitDef.parts.find((p) => p.id === attack.partId);
-                  const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
+                  const action = part?.actions.find((a) => a.id === attack.actionId);
                   const anchorWorld = attackAnchorWorld(instance, unitDef, attack);
                   if (!anchorWorld) return null;
                   const pos = toStage(anchorWorld);
@@ -1203,7 +1142,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                           e.stopPropagation();
                           selectAttack(instance.id, attack.id);
                         }}
-                        title={`${part?.name ?? "?"}: ${weapon?.name ?? "(missing Weapon)"} @ ${attack.time.toFixed(1)}s`}
+                        title={`${part?.name ?? "?"}: ${action?.name ?? "(missing Action)"} @ ${attack.time.toFixed(1)}s`}
                       >
                         {!partSpriteUrl && "🔫"}
                       </button>
@@ -1231,7 +1170,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 draft.units.map((instance) => {
                   const unitDef = units.find((u) => u.id === instance.unitDefId);
                   const preview = computeInstancePreview(instance, unitDef, scrubTime);
-                  if (!preview || !preview.step.visible) return null;
+                  if (!preview || preview.invincible) return null;
                   const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
                   const pos = toStage(preview.pos);
                   return (
@@ -1407,8 +1346,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               ) : (
                 <StepPanel
                   step={selectedStep}
+                  unitDef={selectedUnitDef}
                   timeDerived={isStepTimeDerived(selectedInstance, selectedStep.id, selectedUnitDef)}
-                  hasOutgoingSegment={hasOutgoingSegment}
                   onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateStep(i, selectedStep.id, patch))}
                 />
               )}
@@ -1416,7 +1355,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           )}
 
           {effectiveTab === "attack" && selectedInstance && selectedAttack && (
-            <AttackPanel unit={selectedUnitDef} attack={selectedAttack} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updateAttack(i, selectedAttack.id, patch))} />
+            <AttackPanel unit={selectedUnitDef} attack={selectedAttack} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updatePartAction(i, selectedAttack.id, patch))} />
           )}
 
           {effectiveTab === "scaling" && selectedInstance && scalingPanelOpen && (

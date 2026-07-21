@@ -110,7 +110,7 @@ to visualize instead.
   never renders two *different* tiles touching except in the Connection
   Viewer's single-column stack.
 
-### E2 — Unit + Encounter editor (#192) — shipped, minus scaling/layers
+### E2 — Unit + Encounter editor (#192) — shipped, minus per-param scaling curves
 
 **Revised four times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition. That didn't match the
@@ -328,28 +328,57 @@ what actually shipped.
   `SAVE_VERSION` (7→8) and `TILE_SESSION_VERSION` (4→5), plus
   `tileStore.ts`'s `SAVE_VERSION` (5→6), all bumped — the usual "reset
   rather than silently carry a mismatched shape" reason.
+- ~~Actions cut entirely~~ — **reversed.** After building with the
+  Action-less editor for a while, Noah's call was that a plain step/attack
+  model was missing too much (reusable named behaviors, facing/rotation, a
+  reason for a bullet to be more than a straight line) to be worth
+  avoiding the indirection: "They seemed unnecessary before, but after
+  using the editor I realize they were just missing too much. So yeah,
+  Actions are back, baby!" The Action that came back is not the one
+  described above, though — it's a fused movement%/facing/invincibility-
+  toggle/optional-attack bundle, and it also absorbed `WeaponDef` entirely
+  (see the Parts/Weapon-track pass below) and gained Layers/per-Part
+  hitboxes/CollisionGroup at the same time. See `shmup-editor.md`'s
+  "Unit + Encounter editor (E2)" section (current, canonical) for the full
+  shape — the "Scope decisions"/"Remaining" bullets below that mention
+  Layers or per-Part hitboxes as deferred are stale as of this reversal.
 
 **Scope decisions**:
 - **Branch conditions remain cut entirely** — no conditional jump exists
-  anywhere in the step list.
-- **Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
-  time-locked) are deferred** — every step today is a plain canvas
-  position with no layer or frame-of-reference concept.
+  anywhere in the step list. `requiresInvincible` (an Action precondition,
+  added when Actions came back) is a narrow, orthogonal gate, not a branch.
+- ~~Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
+  time-locked) are deferred~~ — **Layers shipped** when Actions came back:
+  `UnitDef.layer: "ground" | "air" | "doodad"`, chosen once per Unit, shown
+  as a filter in the Encounter editor's "+ Add" picker. Scroll-locked/
+  time-locked reference frames are still not a concept here. What the game
+  does with layers when picking which Encounters combine on a tile spawn
+  is a separate runtime concern this editor doesn't need to know about.
 - **Rendered Part sprites shipped in a follow-up UX pass (Noah's "a lot
   of numbers, zero defaults, nothing visual" feedback) — rotating/
   facing-mode Part sprites are still deferred.** A Part now has its own
   `spriteId`/`customSprite`, positioned visually (`PartPositionEditor.tsx`
   — drag over a dimmed reference of the Unit's body, or arrow-nudge) and
   rendered as its actual sprite on the encounter canvas's attack markers.
-  What's still not built is the design doc's §5.4 **facing modes**
-  (`fixedToBody`/`facePlayer`/`faceMovement`/`faceAttackTarget` — e.g. a
-  tank's turret visually *rotating* to track its aim at runtime) — a
-  Part's sprite renders statically at its authored offset, no rotation
-  transform; see Remaining below.
+  What's still not built is the design doc's §5.4 **facing modes** as a
+  *visual rotation* of the sprite itself — a Part's Action does carry a
+  logical `facing` (`fixed`/`faceMovement`/`facePlayer`, used for its
+  attack's aim) as of the Actions-are-back reversal, but the Part's
+  *sprite* still renders statically at its authored offset with no
+  rotation transform tracking that facing; see Remaining below.
+- ~~Per-Part hitboxes are reserved for hand-coded bosses only~~ —
+  **reversed, now general.** `UnitPart` gained `hasHitbox`/`hasHealth`/
+  `hp`/`damageMultiplier` when Actions came back — Noah: "we're 80% of the
+  way there with sprites and positions, let's just go for it." Hittability
+  cascades top-down only (AND-logic against the parent Unit's own
+  invincible state) — see `shmup-editor.md`'s "Invincibility" section.
 - **The recursive conserved-budget scaling system (§4.2) is deferred** —
-  `WeaponDef.spawnScale` is a plain flat multiplier, not budget-derived;
-  no Scaling panel, no count-range/power-split/spawn-delay/positioning-
-  shape UI exists. Weight is still a plain flat number.
+  `ActionAttack.spawnScale` (formerly `WeaponDef.spawnScale`) is a plain
+  flat multiplier, not budget-derived; no Scaling panel, no
+  count-range/power-split/spawn-delay/positioning-shape UI exists at the
+  Action-attack level (E3's per-*instance* Scaling tab, unrelated, does
+  exist — see `shmup-editor.md`'s "Per-instance scaling (E3)"). Weight is
+  still a plain flat number.
 
 **Remaining:**
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —

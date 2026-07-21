@@ -14,7 +14,7 @@ import { loadTiles, saveTiles } from "./tileStore";
 import { clearTileSession, clearUnitDraft, loadTileSession, loadUnitDraft, loadUnits, saveTileSession, saveUnitDraft, saveUnits } from "./unitStore";
 import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, makeTileId, type TileDef } from "./types";
-import { createBlankPart, createBlankUnit, makePartId, makeUnitId, makeWeaponId, type UnitDef, type UnitPart } from "./unitTypes";
+import { createBlankPart, createBlankUnit, makeActionId, makePartId, makeUnitId, type ActionDef, type UnitDef, type UnitPart } from "./unitTypes";
 import { createBlankEncounter, type EncounterDef } from "./encounterTypes";
 import "./ShmupEditor.css";
 
@@ -181,13 +181,27 @@ export default function ShmupEditor() {
     setView("unit-edit");
   }
 
+  /** Regenerates every Action's id in `actions` and returns both the fresh array and the old-id -> new-id map, so a caller holding a reference into the old set (e.g. `defaultActionId`) can be remapped rather than left dangling. */
+  function cloneActions(actions: ActionDef[]): { actions: ActionDef[]; idMap: Map<string, string> } {
+    const idMap = new Map<string, string>();
+    const cloned = actions.map((a) => {
+      const id = makeActionId();
+      idMap.set(a.id, id);
+      return { ...a, id };
+    });
+    return { actions: cloned, idMap };
+  }
+
   function handleDuplicateUnit(unit: UnitDef) {
     const now = Date.now();
+    const { actions, idMap } = cloneActions(unit.actions);
     const copy: UnitDef = {
       ...unit,
       id: makeUnitId(),
       name: `${unit.name} copy`,
-      parts: unit.parts.map((p) => ({ ...p, id: makePartId(), weapons: p.weapons.map((w) => ({ ...w, id: makeWeaponId() })) })),
+      actions,
+      defaultActionId: unit.defaultActionId ? (idMap.get(unit.defaultActionId) ?? null) : null,
+      parts: unit.parts.map((p) => ({ ...p, id: makePartId(), actions: cloneActions(p.actions).actions })),
       createdAt: now,
       modifiedAt: now,
     };
@@ -346,6 +360,7 @@ export default function ShmupEditor() {
             <h3 className="shmup-editor__heading">{units.some((u) => u.id === editingUnit.id) ? "Edit Unit" : "New Unit"}</h3>
             <UnitStatsForm
               unit={editingUnit}
+              units={units}
               onSave={handleSaveUnit}
               onCancel={handleCancelUnitEdit}
               onDraftChange={handleUnitDraftChange}

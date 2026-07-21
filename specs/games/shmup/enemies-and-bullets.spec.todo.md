@@ -9,6 +9,21 @@
 > and settled on a materially different content shape (see "What changed"
 > below). L3/L4/L8 were never implemented against the original draft, so
 > this reconciliation is a plan update, not a migration.
+>
+> **Stale as of 2026-07-21: the editor reversed its "cut Actions
+> entirely" pass and reintroduced them in a new shape, which also folded
+> `WeaponDef` into the reintroduced `ActionDef` and added Layers/
+> CollisionGroup/per-Part hitboxes.** Every `WeaponDef`/`weapons: WeaponDef[]`
+> reference below describes the editor's shape as of the 2026-07-16
+> reconciliation, not its current one — see `shmup-editor.md`'s "Unit +
+> Encounter editor (E2)" section (the canonical, current source) for the
+> real shape: a Unit's/Part's `weapons` buffet is now `actions:
+> ActionDef[]`, and what used to be `WeaponDef`'s fields now live under
+> `ActionDef.attack`. Since L3/L4/L8 are still unimplemented, this is
+> another plan update rather than a migration — the mechanics below (arc/
+> count/spacing/sweep, a Weapon-spawns-a-Unit-by-id bullet model, per-Part
+> attack tracks) are still substantively accurate, just relocated one
+> level of indirection over.
 
 ## What changed since the original node-graph draft
 

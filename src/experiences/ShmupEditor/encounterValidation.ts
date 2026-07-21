@@ -15,7 +15,7 @@
  * one optional one, so tileStore.ts/unitStore.ts reset on version mismatch
  * instead of this file trying to backfill a whole nested object's defaults.
  */
-import type { EncounterAttack, EncounterDef, EncounterStep, EncounterUnit } from "./encounterTypes";
+import type { EncounterDef, EncounterStep, EncounterUnit, PartActionPlacement } from "./encounterTypes";
 import type { ScalingShapeKind, UnitScaling } from "./unitScaling";
 
 function isNumber(v: unknown): v is number {
@@ -31,25 +31,17 @@ function isEncounterStep(v: unknown): v is EncounterStep {
   return (
     typeof s.id === "string" &&
     isVec2(s.pos) &&
-    typeof s.visible === "boolean" &&
+    (s.actionId === null || typeof s.actionId === "string") &&
     isNumber(s.time) &&
-    isNumber(s.speedMultiplier) &&
     (s.handleOut === null || isVec2(s.handleOut)) &&
     (s.handleIn === null || isVec2(s.handleIn))
   );
 }
 
-function isEncounterAttack(v: unknown): v is EncounterAttack {
+function isPartActionPlacement(v: unknown): v is PartActionPlacement {
   if (typeof v !== "object" || v === null) return false;
   const a = v as Record<string, unknown>;
-  return (
-    typeof a.id === "string" &&
-    typeof a.partId === "string" &&
-    typeof a.weaponId === "string" &&
-    isNumber(a.time) &&
-    isNumber(a.durationMs) &&
-    (a.aimAngleOverride === null || isNumber(a.aimAngleOverride))
-  );
+  return typeof a.id === "string" && typeof a.partId === "string" && isNumber(a.time) && (a.actionId === null || typeof a.actionId === "string");
 }
 
 const SCALING_SHAPES: ScalingShapeKind[] = ["curve", "v", "grid", "ring"];
@@ -85,8 +77,8 @@ function isEncounterUnit(v: unknown): v is EncounterUnit {
     typeof u.unitDefId === "string" &&
     Array.isArray(u.steps) &&
     u.steps.every(isEncounterStep) &&
-    Array.isArray(u.attacks) &&
-    u.attacks.every(isEncounterAttack) &&
+    Array.isArray(u.partActions) &&
+    u.partActions.every(isPartActionPlacement) &&
     isUnitScaling(u.scaling)
   );
 }

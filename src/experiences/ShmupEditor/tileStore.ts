@@ -33,7 +33,11 @@ import type { EdgeSlot, TileDef } from "./types";
 // count/power algorithm was corrected to a single-pool model
 // (unitScaling.ts's `resolveScaling`) that doesn't use either. Bumping so a
 // pre-v8 save doesn't silently carry the two dead fields forward.
-const SAVE_VERSION = 8;
+// v9: embedded EncounterStep dropped `visible`/`speedMultiplier`, gained
+// `actionId`; embedded EncounterAttack was replaced by PartActionPlacement
+// (`encounterTypes.ts`) — Actions are back. Bumping for the same reason as
+// v6 (the mirror-image change, when Actions were cut).
+const SAVE_VERSION = 9;
 
 interface SavedLibrary {
   version: number;

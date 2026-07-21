@@ -11,7 +11,7 @@ interface UnitScalingPanelProps {
 }
 
 const PREVIEW_DIFFICULTY_MAX = 100;
-/** maxCount's dial ceiling — generous for "how many duplicate enemies from one authored instance," distinct from the much larger bullet counts a Weapon can produce (that's a different scale entirely, see WeaponDef). */
+/** maxCount's dial ceiling — generous for "how many duplicate enemies from one authored instance," distinct from the much larger bullet counts an Action's attack can produce (that's a different scale entirely, see unitTypes.ts's ActionAttack). */
 const MAX_COUNT_CEILING = 30;
 
 /**
