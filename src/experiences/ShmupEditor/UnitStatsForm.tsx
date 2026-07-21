@@ -21,7 +21,6 @@ type UnitTab = "basics" | "actions" | "parts";
 function validate(unit: UnitDef): string | null {
   if (!unit.name.trim()) return "Name is required.";
   if (unit.hp <= 0) return "HP must be positive.";
-  if (unit.parts.length === 0) return "A Unit needs at least one Part.";
   return null;
 }
 
@@ -83,6 +82,21 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
     });
     setPendingDeleteActionId(null);
     if (expandedActionId === actionId) setExpandedActionId(null);
+  }
+
+  /**
+   * `onNewPart`/`onEditPart` navigate away to `PartEditor.tsx`'s own view,
+   * which remounts this form fresh (with the parent's now-current `unit`)
+   * on return — so those two never needed a local update. Delete doesn't
+   * navigate anywhere, so without also updating `draft` here directly, the
+   * Parts list kept showing the just-deleted Part until the next
+   * unrelated remount (a real bug — `onDeletePart` alone only updated the
+   * parent's `editingUnit`, never this component's own stale local copy).
+   */
+  function deletePart(partId: string) {
+    update({ parts: draft.parts.filter((p) => p.id !== partId) });
+    onDeletePart(partId);
+    setPendingDeletePartId(null);
   }
 
   function handleSave() {
@@ -205,14 +219,7 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
                       </button>
                       {pendingDeletePartId === part.id ? (
                         <>
-                          <button
-                            type="button"
-                            className="shmup-btn shmup-btn--small shmup-btn--danger"
-                            onClick={() => {
-                              onDeletePart(part.id);
-                              setPendingDeletePartId(null);
-                            }}
-                          >
+                          <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => deletePart(part.id)}>
                             Confirm
                           </button>
                           <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeletePartId(null)}>
@@ -220,13 +227,7 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
                           </button>
                         </>
                       ) : (
-                        <button
-                          type="button"
-                          className="shmup-btn shmup-btn--small"
-                          disabled={draft.parts.length <= 1}
-                          title={draft.parts.length <= 1 ? "A Unit needs at least one Part" : undefined}
-                          onClick={() => setPendingDeletePartId(part.id)}
-                        >
+                        <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPendingDeletePartId(part.id)}>
                           Delete
                         </button>
                       )}

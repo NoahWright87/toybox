@@ -421,17 +421,24 @@ current design; this entry describes what actually shipped.
   `timeLocked` for Air) — v3 already names the two behaviors this needs;
   what's missing is deciding how `timeLocked` interacts with this editor's
   shared encounter clock and the timeline scrubber before building it.
-- **A Unit can't be authored with zero Parts, contradicting v3 §4** ("A
-  Unit does not require Parts... the simplest case... is a Unit with zero
-  Parts and a single Final Action on the Unit itself"). `UnitStatsForm.tsx`'s
-  `validate()` still hard-requires `parts.length >= 1` and the last Part
-  can't be deleted — a holdover from before the Unit itself gained its own
-  `actions` buffet (Actions-are-back pass). Since a Part-less Unit is now
-  structurally supported everywhere else (the base Unit's own Actions
-  already work standalone), this is just a leftover validation rule, not a
-  deep gap — dropping it should be low-effort whenever picked up.
+- ~~A Unit can't be authored with zero Parts, contradicting v3 §4~~ —
+  **resolved.** v3 §4: "A Unit does not require Parts... the simplest
+  case... is a Unit with zero Parts and a single Final Action on the Unit
+  itself." `UnitStatsForm.tsx`'s `validate()` no longer requires
+  `parts.length >= 1`, and the last Part can be deleted like any other —
+  the base Unit's own `actions` buffet already worked standalone, this was
+  just a leftover validation rule from before Actions came back. Fixed a
+  real bug found while verifying this: deleting a Part didn't visually
+  update the Parts list until navigating away and back (`onDeletePart`
+  only updated the parent `ShmupEditor.tsx`'s `editingUnit`, never
+  `UnitStatsForm`'s own separately-held `draft` state) — `deletePart()` now
+  updates both.
 - **Clone doesn't exist anywhere, despite being cited repeatedly as the
-  answer to "how do I author a variant."** Both `unitTypes.ts`'s doc
+  answer to "how do I author a variant" (v3 §8.1).** Genuinely easy to add
+  — a shallow-copy-with-a-fresh-id, same shape as `handleDuplicateUnit`'s
+  existing id-remapping in `ShmupEditor.tsx` — **deliberately backlogged,
+  not prioritized right now** (Noah, 2026-07-21: "It's easy to add, but
+  let's save it for later"). Both `unitTypes.ts`'s doc
   comments and the in-app Help modal tell an author to "Clone the Action"
   to get a fixed-angle/differently-tuned variant instead of a per-placement
   override — that's the whole justification for cutting per-placement aim

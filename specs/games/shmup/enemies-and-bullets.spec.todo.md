@@ -189,15 +189,21 @@ zero-length bezier segment has nothing to travel along, so
 `shmup-editor.md`'s timing system already special-cases this (the step's
 `time` stays manually authored rather than derived from a curve).
 
-**The `scrollLocked`/`screenLocked` distinction (holding position against
-scroll vs. drifting with it) is deferred, not built.** Every step today is
-a plain canvas position with no reference-frame concept —
-`shmup-editor.todo.md`'s Scope decisions explicitly lists "layers
-(Ground/Air/Doodad) and reference frames (scroll-locked/time-locked)" as
-deferred. Until that lands, whether a dwelling enemy holds screen position
-or scrolls with the terrain is presumably a runtime-only decision (e.g.
-per enemy archetype) rather than something the editor lets an author
-choose per-step.
+**The `scrollLocked`/`timeLocked` reference-frame distinction (holding
+position against scroll vs. drifting with it) is still deferred, not
+built — this is unaffected by Layers shipping.** `UnitDef.layer`
+(Ground/Air/Doodad) shipped as an authored, Unit-level field — a fixed
+property of the Unit definition itself, chosen once when authoring the
+Unit, **not** an Encounter-level concept and **not** the same thing as the
+reference-frame question. Every step today is still a plain tile-relative
+canvas position regardless of which layer its Unit belongs to — there's no
+`scrollLocked`/`timeLocked` concept anywhere yet, so a Ground Unit and an
+Air Unit are scheduled identically even though an Air Unit's position
+conceptually shouldn't be tile-relative. Until that lands, whether a
+dwelling enemy holds screen position or scrolls with the terrain is
+presumably a runtime-only decision (e.g. per enemy archetype) rather than
+something the editor lets an author choose per-step. See
+`shmup-editor.todo.md`'s E2 Remaining list for the tracked gap.
 
 ## 4. Exit
 
