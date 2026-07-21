@@ -22,20 +22,34 @@
  * case, so the preview doesn't guess one; freezing is the only outcome
  * that can never look like the unit "keeps traveling after it reaches the
  * final node" (a real bug this editor hit before this behavior existed).
- * The step's own `visible` still evaluates normally; only position freezes.
+ *
+ * **`invincible` replaces the old per-step `visible` flag** — derived by
+ * walking the instance's own steps' `actionId`s through the owning Unit's
+ * Action buffet (`actionState.ts`'s `resolveInvincibleAt`), not read
+ * directly off the step. Until a real animation system exists to swap in
+ * an alternate sprite, rendering code treats `invincible` the same way it
+ * used to treat `visible === false` — hide the sprite as a temporary
+ * stand-in (unitTypes.ts's file header).
  */
 import { cubicBezierPoint, distanceBetween, resolveSegment } from "./bezier";
 import { activeStepAt } from "./encounterSteps";
+import { resolveInvincibleAt } from "./actionState";
 import type { EncounterStep, EncounterUnit, Vec2 } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
 export interface InstancePreview {
   pos: Vec2;
   step: EncounterStep;
+  invincible: boolean;
 }
 
 /** How far past the last step's time the timeline ruler extends, purely for layout (so the final diamond isn't flush against the edge) — not used for motion preview, which holds terminal/dwelling steps in place. */
 export const LAST_STEP_PREVIEW_WINDOW = 3;
+
+/** Stand-in heading (degrees, down) for `computeInstanceHeadingDeg` when an instance is dwelling/stationary — there's no real direction of travel to derive one from, so a facing="faceMovement" Action needs *some* fixed reading rather than an undefined one. Same convention as ActionPreview.tsx's own stand-in for the isolated (no-real-path) authoring preview. */
+const STATIONARY_HEADING_FALLBACK_DEG = 90;
+/** Time delta used to numerically differentiate the bezier position curve for `computeInstanceHeadingDeg` — small enough to closely track the curve's real tangent, large enough to stay well clear of floating-point noise. */
+const HEADING_EPSILON_SEC = 0.05;
 
 const POSITION_EPSILON = 0.5;
 
@@ -44,16 +58,28 @@ export function computeInstancePreview(instance: EncounterUnit, unitDef: UnitDef
   if (!unitDef) return null;
   const step = activeStepAt(instance, t);
   if (!step) return null;
+  const invincible = resolveInvincibleAt(instance.steps, unitDef.actions, t);
 
   const idx = instance.steps.findIndex((s) => s.id === step.id);
   const next = instance.steps[idx + 1];
   if (!next || distanceBetween(step.pos, next.pos) <= POSITION_EPSILON) {
-    return { pos: step.pos, step }; // no destination to head toward — hold in place
+    return { pos: step.pos, step, invincible }; // no destination to head toward — hold in place
   }
 
   const duration = next.time - step.time;
   const u = duration > 0 ? Math.min(1, Math.max(0, (t - step.time) / duration)) : 0;
   const { p0, p1, p2, p3 } = resolveSegment(step, next, unitDef.turnRate);
   const pos = cubicBezierPoint(p0, p1, p2, p3, u);
-  return { pos, step };
+  return { pos, step, invincible };
+}
+
+/** The instance's direction of travel (degrees, 0=+x/90=+y) at encounter-time `t`, numerically differentiated from `computeInstancePreview`'s own position curve — used to resolve a facing="faceMovement" Action to a real angle. Falls back to a fixed stand-in when the instance isn't actually moving at `t` (dwelling, before/after its path, or unresolvable) since there's no principled direction in that case either. */
+export function computeInstanceHeadingDeg(instance: EncounterUnit, unitDef: UnitDef | undefined, t: number): number {
+  const a = computeInstancePreview(instance, unitDef, t);
+  const b = computeInstancePreview(instance, unitDef, t + HEADING_EPSILON_SEC);
+  if (!a || !b) return STATIONARY_HEADING_FALLBACK_DEG;
+  const dx = b.pos.x - a.pos.x;
+  const dy = b.pos.y - a.pos.y;
+  if (Math.hypot(dx, dy) < 0.01) return STATIONARY_HEADING_FALLBACK_DEG;
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
 }

@@ -1,18 +1,22 @@
 /**
  * Defensive shape validation for EncounterDef (specs/shmup-editor.todo.md,
- * E2 #192 — reworked per the "Design Handoff v2" doc). Shared by
- * tileStore.ts (encounters embedded in a saved tile) and the tile-editing
- * session draft. Same spirit as tileStore.ts's isValidTileDef: a corrupt
- * or stale-shape encounter (including a hand-edited TILES.DAT/DRAFT.DAT,
- * which this hackable app explicitly permits per root CLAUDE.md) is
- * rejected rather than crashing.
+ * E2 #192 — reworked per the "Design Handoff v2" doc; E3 #193 added
+ * `EncounterUnit.scaling`). Shared by tileStore.ts (encounters embedded in
+ * a saved tile) and the tile-editing session draft. Same spirit as
+ * tileStore.ts's isValidTileDef: a corrupt or stale-shape encounter
+ * (including a hand-edited TILES.DAT/DRAFT.DAT, which this hackable app
+ * explicitly permits per root CLAUDE.md) is rejected rather than crashing.
  *
- * Much smaller than early versions: a step is just a position/time/
- * visibility/handles record now — no Action reference at all (the Action
- * buffet was cut entirely, see unitTypes.ts), no recursive graph/payload
- * validation needed here.
+ * `EncounterUnit.scaling` is validated strictly (not treated as a
+ * purely-additive optional field the way `TileDef.customImage` is) — same
+ * precedent as the Parts/attack-track pass, which bumped SAVE_VERSION/
+ * TILE_SESSION_VERSION for `EncounterUnit` gaining `attacks`. A pre-E3
+ * encounter unit is genuinely missing required scaling fields, not just
+ * one optional one, so tileStore.ts/unitStore.ts reset on version mismatch
+ * instead of this file trying to backfill a whole nested object's defaults.
  */
-import type { EncounterAttack, EncounterDef, EncounterStep, EncounterUnit } from "./encounterTypes";
+import type { EncounterDef, EncounterStep, EncounterUnit, PartActionPlacement } from "./encounterTypes";
+import type { ScalingShapeKind, UnitScaling } from "./unitScaling";
 
 function isNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
@@ -27,24 +31,41 @@ function isEncounterStep(v: unknown): v is EncounterStep {
   return (
     typeof s.id === "string" &&
     isVec2(s.pos) &&
-    typeof s.visible === "boolean" &&
+    (s.actionId === null || typeof s.actionId === "string") &&
     isNumber(s.time) &&
-    isNumber(s.speedMultiplier) &&
     (s.handleOut === null || isVec2(s.handleOut)) &&
     (s.handleIn === null || isVec2(s.handleIn))
   );
 }
 
-function isEncounterAttack(v: unknown): v is EncounterAttack {
+function isPartActionPlacement(v: unknown): v is PartActionPlacement {
   if (typeof v !== "object" || v === null) return false;
   const a = v as Record<string, unknown>;
+  return typeof a.id === "string" && typeof a.partId === "string" && isNumber(a.time) && (a.actionId === null || typeof a.actionId === "string");
+}
+
+const SCALING_SHAPES: ScalingShapeKind[] = ["curve", "v", "grid", "ring"];
+
+function isUnitScaling(v: unknown): v is UnitScaling {
+  if (typeof v !== "object" || v === null) return false;
+  const s = v as Record<string, unknown>;
   return (
-    typeof a.id === "string" &&
-    typeof a.partId === "string" &&
-    typeof a.weaponId === "string" &&
-    isNumber(a.time) &&
-    isNumber(a.durationMs) &&
-    (a.aimAngleOverride === null || isNumber(a.aimAngleOverride))
+    isNumber(s.maxCount) &&
+    isNumber(s.minCostPerInstance) &&
+    isNumber(s.spawnDelayMs) &&
+    typeof s.shape === "string" &&
+    (SCALING_SHAPES as string[]).includes(s.shape) &&
+    Array.isArray(s.curvePoints) &&
+    s.curvePoints.every(isVec2) &&
+    isVec2(s.curveEnd) &&
+    isVec2(s.vTip) &&
+    isNumber(s.vWidth) &&
+    isNumber(s.gridWidth) &&
+    isNumber(s.gridDepth) &&
+    isVec2(s.ringCenterOffset) &&
+    isNumber(s.ringRadius) &&
+    typeof s.pingPong === "boolean" &&
+    (s.pingPongOverride === null || isNumber(s.pingPongOverride))
   );
 }
 
@@ -56,8 +77,9 @@ function isEncounterUnit(v: unknown): v is EncounterUnit {
     typeof u.unitDefId === "string" &&
     Array.isArray(u.steps) &&
     u.steps.every(isEncounterStep) &&
-    Array.isArray(u.attacks) &&
-    u.attacks.every(isEncounterAttack)
+    Array.isArray(u.partActions) &&
+    u.partActions.every(isPartActionPlacement) &&
+    isUnitScaling(u.scaling)
   );
 }
 

@@ -25,7 +25,19 @@ import type { EdgeSlot, TileDef } from "./types";
 // (Parts/weapon-track pass) — bumping for the same reason.
 // v6: embedded EncounterStep's `actionId` was replaced by a plain
 // `visible: boolean` (Actions cut entirely) — bumping for the same reason.
-const SAVE_VERSION = 6;
+// v7: embedded EncounterUnit gained `scaling: UnitScaling` (E3 #193, a
+// required object with its own required fields, not a purely-additive
+// optional one) — bumping for the same "reset rather than silently carry a
+// mismatched shape" reason as every prior EncounterUnit shape change.
+// v8: UnitScaling's `minCount`/`powerSplit` fields were removed — the
+// count/power algorithm was corrected to a single-pool model
+// (unitScaling.ts's `resolveScaling`) that doesn't use either. Bumping so a
+// pre-v8 save doesn't silently carry the two dead fields forward.
+// v9: embedded EncounterStep dropped `visible`/`speedMultiplier`, gained
+// `actionId`; embedded EncounterAttack was replaced by PartActionPlacement
+// (`encounterTypes.ts`) — Actions are back. Bumping for the same reason as
+// v6 (the mirror-image change, when Actions were cut).
+const SAVE_VERSION = 9;
 
 interface SavedLibrary {
   version: number;

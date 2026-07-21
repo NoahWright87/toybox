@@ -2,11 +2,12 @@
 
 > Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
 > partially shipped, see `shmup-editor.md`), **E2 #192** (Unit +
-> Encounter editor — shipped minus layers, Parts/attack-tracks, and the
-> Scaling system, see `shmup-editor.md`), **E3 #193** (spawn node editor),
-> **E4 #194** (preview/playtest), **E5 #195** (export/import pipeline).
-> Source: design handoff docs (Claude Chat → Claude Code), 2026-07-04 and
-> 2026-07-11.
+> Encounter editor — shipped minus layers and per-param scaling curves,
+> see `shmup-editor.md`), **E3 #193** (per-instance scaling — shipped minus
+> the same per-param scaling-curve retrofit, see `shmup-editor.md`'s
+> "Per-instance scaling (E3)" section), **E4 #194** (preview/playtest),
+> **E5 #195** (export/import pipeline). Source: design handoff docs
+> (Claude Chat → Claude Code), 2026-07-04 and 2026-07-11.
 
 ## What this is
 
@@ -86,9 +87,12 @@ clusters/rarity — there's nothing biome-specific left in the data model
 to visualize instead.
 
 **Remaining:**
-- Attach spawn variants to a tile (needs E3's spawn-node editor to exist
-  first — a tile variant *is* a spawn-node configuration per the design
-  doc, so this is blocked on E3, not purely an E1 gap).
+- ~~Attach spawn variants to a tile~~ — resolved, not by building a new
+  variant concept: `EncounterDef` (E2) already *is* a tile variant (its own
+  weighted-random-pick doc comment). Per-instance duplication (E3) is a
+  property of a hand-placed `EncounterUnit` within that encounter, not a
+  separate variant-attachment concept. See `shmup-editor.md`'s
+  "Per-instance scaling (E3)" section.
 - In-editor sketching of tile art (today's upload flow takes an existing
   image file; drawing new art from scratch in the tool is still future
   work).
@@ -106,9 +110,9 @@ to visualize instead.
   never renders two *different* tiles touching except in the Connection
   Viewer's single-column stack.
 
-### E2 — Unit + Encounter editor (#192) — shipped, minus scaling/layers
+### E2 — Unit + Encounter editor (#192) — shipped, minus per-param scaling curves
 
-**Revised four times.** The first pass put a full movement/dwell/attack
+**Revised six times.** The first pass put a full movement/dwell/attack
 node-graph directly on the enemy definition. That didn't match the
 intended content model, so it was corrected to enemy-is-stats-only with
 the graph moved onto the encounter. A second design pass (external
@@ -119,9 +123,17 @@ the **timeline scrubber** and cut the step-level Trigger system in favor of
 a plain `time` field once a real timeline existed to preview against. A
 fourth pass replaced per-Action movement kinds (straightLine/wave/spiral)
 with a single **bezier-curve** model driven by two plain Unit stats
-(`speed`/`turnRate`) — see below. See `shmup-editor.md`'s "Unit + Encounter
-editor (E2)" section for the full current design; this entry describes
-what actually shipped.
+(`speed`/`turnRate`). A fifth pass cut Actions entirely (`EncounterStep`
+carried a plain `visible: boolean`, no Action buffet). **A sixth pass
+reversed that cut — Actions are back**, reconciled against design-handoff
+v3 and real usage of the shipped Action-less editor: an `ActionDef` is now
+a fused movement%/facing/invincibility-toggle/optional-attack bundle,
+`WeaponDef` is gone (folded into `ActionDef.attack`), Layers/
+`defaultActionId`/`CollisionGroup`/per-Part hitboxes all shipped alongside
+it, and the Unit/Part/Action edit forms picked up the same tab+Dial
+treatment the Encounter editor got in the mobile-UX pass. See
+`shmup-editor.md`'s "Unit + Encounter editor (E2)" section for the full
+current design; this entry describes what actually shipped.
 
 **Done**:
 - **Units** are sprite + stats (HP, contact damage, score value, base
@@ -324,30 +336,153 @@ what actually shipped.
   `SAVE_VERSION` (7→8) and `TILE_SESSION_VERSION` (4→5), plus
   `tileStore.ts`'s `SAVE_VERSION` (5→6), all bumped — the usual "reset
   rather than silently carry a mismatched shape" reason.
+- ~~Actions cut entirely~~ — **reversed.** After building with the
+  Action-less editor for a while, Noah's call was that a plain step/attack
+  model was missing too much (reusable named behaviors, facing/rotation, a
+  reason for a bullet to be more than a straight line) to be worth
+  avoiding the indirection: "They seemed unnecessary before, but after
+  using the editor I realize they were just missing too much. So yeah,
+  Actions are back, baby!" The Action that came back is not the one
+  described above, though — it's a fused movement%/facing/invincibility-
+  toggle/optional-attack bundle, and it also absorbed `WeaponDef` entirely
+  (see the Parts/Weapon-track pass below) and gained Layers/per-Part
+  hitboxes/CollisionGroup at the same time. See `shmup-editor.md`'s
+  "Unit + Encounter editor (E2)" section (current, canonical) for the full
+  shape — the "Scope decisions"/"Remaining" bullets below that mention
+  Layers or per-Part hitboxes as deferred are stale as of this reversal.
 
 **Scope decisions**:
 - **Branch conditions remain cut entirely** — no conditional jump exists
-  anywhere in the step list.
-- **Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
-  time-locked) are deferred** — every step today is a plain canvas
-  position with no layer or frame-of-reference concept.
+  anywhere in the step list. `requiresInvincible` (an Action precondition,
+  added when Actions came back) is a narrow, orthogonal gate, not a branch.
+- ~~Layers (Ground/Air/Doodad) and reference frames (scroll-locked/
+  time-locked) are deferred~~ — **Layers shipped** when Actions came back:
+  `UnitDef.layer: "ground" | "air" | "doodad"`, chosen once per Unit, shown
+  as a filter in the Encounter editor's "+ Add" picker. Scroll-locked/
+  time-locked reference frames are still not a concept here. What the game
+  does with layers when picking which Encounters combine on a tile spawn
+  is a separate runtime concern this editor doesn't need to know about.
+  **Deliberate departure from v3 §6's model, confirmed by Noah, not an
+  oversight**: v3 describes layer as an *Encounter*-level concept (an
+  Encounter "can define up to 3 layers... and places one or more Unit
+  instances into each layer it defines," with a same-tile-spawn selection
+  algorithm that excludes other Encounters sharing an already-covered
+  layer). What shipped instead puts layer on the *Unit definition* — Noah:
+  "Layer is a Unit definition. In the editor, when adding a Unit you
+  choose which layer you're adding to." This means v3 §6's selection
+  algorithm (steps 1-4, picking one Encounter then excluding others by
+  shared layer) has no literal Encounter-level layer to key off anymore —
+  it needs re-deriving against "which layers do this Encounter's placed
+  Units happen to use" instead, or a different algorithm entirely. Not an
+  editor concern per Noah ("None of that is relevant to the editor... a
+  separate concern") but flagged here since it's real, unresolved
+  game-runtime design debt v3 as written doesn't actually cover anymore.
 - **Rendered Part sprites shipped in a follow-up UX pass (Noah's "a lot
   of numbers, zero defaults, nothing visual" feedback) — rotating/
   facing-mode Part sprites are still deferred.** A Part now has its own
   `spriteId`/`customSprite`, positioned visually (`PartPositionEditor.tsx`
   — drag over a dimmed reference of the Unit's body, or arrow-nudge) and
   rendered as its actual sprite on the encounter canvas's attack markers.
-  What's still not built is the design doc's §5.4 **facing modes**
-  (`fixedToBody`/`facePlayer`/`faceMovement`/`faceAttackTarget` — e.g. a
-  tank's turret visually *rotating* to track its aim at runtime) — a
-  Part's sprite renders statically at its authored offset, no rotation
-  transform; see Remaining below.
+  What's still not built is the design doc's §5.4 **facing modes** as a
+  *visual rotation* of the sprite itself — a Part's Action does carry a
+  logical `facing` (`fixed`/`faceMovement`/`facePlayer`, used for its
+  attack's aim) as of the Actions-are-back reversal, but the Part's
+  *sprite* still renders statically at its authored offset with no
+  rotation transform tracking that facing; see Remaining below.
+- ~~Per-Part hitboxes are reserved for hand-coded bosses only~~ —
+  **reversed, now general.** `UnitPart` gained `hasHitbox`/`hasHealth`/
+  `hp`/`damageMultiplier` when Actions came back — Noah: "we're 80% of the
+  way there with sprites and positions, let's just go for it." Hittability
+  cascades top-down only (AND-logic against the parent Unit's own
+  invincible state) — see `shmup-editor.md`'s "Invincibility" section.
 - **The recursive conserved-budget scaling system (§4.2) is deferred** —
-  `WeaponDef.spawnScale` is a plain flat multiplier, not budget-derived;
-  no Scaling panel, no count-range/power-split/spawn-delay/positioning-
-  shape UI exists. Weight is still a plain flat number.
+  `ActionAttack.spawnScale` (formerly `WeaponDef.spawnScale`) is a plain
+  flat multiplier, not budget-derived; no Scaling panel, no
+  count-range/power-split/spawn-delay/positioning-shape UI exists at the
+  Action-attack level (E3's per-*instance* Scaling tab, unrelated, does
+  exist — see `shmup-editor.md`'s "Per-instance scaling (E3)"). Weight is
+  still a plain flat number.
 
 **Remaining:**
+- **Air units are placed/scheduled exactly like ground units today — real
+  design gap, not yet resolved.** A ground Unit's `pos`/steps are naturally
+  tile-relative (it's driving/walking over the tile's own terrain); an air
+  Unit conceptually shouldn't be — Noah: "their positions are relative to
+  the camera, not the tile." The editor doesn't distinguish the two yet:
+  every instance's steps place/schedule against the same tile-relative
+  world space regardless of `UnitDef.layer`. Needs its own design pass
+  (does an air Unit's step `pos` become camera/viewport-relative instead of
+  tile-relative? does its clock run against scroll position rather than
+  the shared encounter `time`? how does that interact with the timeline
+  scrubber and E4's hitbox preview, both of which currently assume one
+  tile-relative coordinate space for everything) before it's built — flagged
+  here so it isn't lost, not attempted as part of the Actions-are-back pass.
+  **This is v3's §6 "Reference frame" concept** (`scrollLocked` for Ground,
+  `timeLocked` for Air) — v3 already names the two behaviors this needs;
+  what's missing is deciding how `timeLocked` interacts with this editor's
+  shared encounter clock and the timeline scrubber before building it.
+- ~~A Unit can't be authored with zero Parts, contradicting v3 §4~~ —
+  **resolved.** v3 §4: "A Unit does not require Parts... the simplest
+  case... is a Unit with zero Parts and a single Final Action on the Unit
+  itself." `UnitStatsForm.tsx`'s `validate()` no longer requires
+  `parts.length >= 1`, and the last Part can be deleted like any other —
+  the base Unit's own `actions` buffet already worked standalone, this was
+  just a leftover validation rule from before Actions came back. Fixed a
+  real bug found while verifying this: deleting a Part didn't visually
+  update the Parts list until navigating away and back (`onDeletePart`
+  only updated the parent `ShmupEditor.tsx`'s `editingUnit`, never
+  `UnitStatsForm`'s own separately-held `draft` state) — `deletePart()` now
+  updates both.
+- **Clone doesn't exist anywhere, despite being cited repeatedly as the
+  answer to "how do I author a variant" (v3 §8.1).** Genuinely easy to add
+  — a shallow-copy-with-a-fresh-id, same shape as `handleDuplicateUnit`'s
+  existing id-remapping in `ShmupEditor.tsx` — **deliberately backlogged,
+  not prioritized right now** (Noah, 2026-07-21: "It's easy to add, but
+  let's save it for later"). Both `unitTypes.ts`'s doc
+  comments and the in-app Help modal tell an author to "Clone the Action"
+  to get a fixed-angle/differently-tuned variant instead of a per-placement
+  override — that's the whole justification for cutting per-placement aim
+  overrides and per-step speed multipliers when Actions came back. No
+  Clone button exists on an Action, a Part, or a Unit. This is v3 §8.1's
+  "**Clone** should be a first-class operation here" — currently the only
+  way to get a variant is manually re-entering every field by hand. Worth
+  prioritizing since several other design decisions lean on it existing.
+- **No minimum-duration placement validation (v3 §8.2).** "The editor
+  should prevent placing a node earlier than the minimum duration of the
+  preceding node allows" — not built. A Part-track placement's `time` can
+  be set to land before the previous placement on that same track has
+  finished (per its own `computeAttackDurationMs`), with no warning. Low
+  priority (an authoring-quality-of-life check, not a data-integrity one)
+  but flagged since v3 calls it out explicitly.
+- **No color-coding by Action category on the timeline (v3 §8.2).**
+  `EncounterTimeline.tsx` renders every step as the same orange diamond and
+  every Part-track placement as the same 🔫 marker regardless of whether
+  the referenced Action is movement/attack/state — v3 asks for movement/
+  attack/state-toggle to "each read as visually distinct at a glance," with
+  invincible-setting Actions rendering as "a darker variant" of whatever
+  category color applies. Not built; low priority until the timeline is
+  busy enough for it to matter.
+- **No dedicated Unit/Part Action mini-timeline (v3 §8.1) — confirmed
+  intentional scope cut, not a gap.** Noah, during the Actions-are-back
+  design pass: "Let's talk about this in more detail... we don't need a
+  full timeline." Actions are authored via a flat list + inline form
+  (`ActionForm.tsx`) instead of v3's proposed nested piano-roll editor.
+  Revisit only if/when a Unit's own Actions need to be sequenced against
+  each other rather than referenced individually by encounter placements.
+- **Weapon strength doesn't pass down to spawned Units via the difficulty
+  system (v3 §4.2, §5.5).** `ActionAttack.spawnScale` is a flat multiplier
+  only — a spawned bullet Unit's stats don't scale with whatever
+  difficulty/power value produced the Action that fired it. Same root
+  cause as the "per-param scaling curves" item below: no per-param
+  difficulty-scaling-curve system exists yet for *any* Unit/Action stat,
+  weapon-spawned or not.
+- **No `Destroyed` Action auto-added when a Part's `hasHealth` is enabled
+  (v3 §4.1).** v3: "a `Destroyed` Action is automatically added to that
+  Part's buffet, used to set the corpse/wreck sprite once the Part's HP
+  reaches zero." Correctly out of scope for now — there's no animation/
+  alternate-sprite system to hang a corpse sprite on yet (same reason
+  invincible currently just hides the sprite as a documented stand-in) —
+  revisit once real sprite-swapping exists.
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —
   deferred. `enemies-and-bullets.spec.todo.md` never defines a curve shape
   beyond "flat" as one option, so there was nothing concrete to build
@@ -373,8 +508,10 @@ what actually shipped.
   sheet instead of just frame 1, and (c) a small animation-player
   component. Reasonable to fold into E4 (Preview/playtest mode) rather
   than block E2 on it.
-- Unit variants aren't attachable to a tile yet — still blocked on E3's
-  spawn-node editor (same dependency E1's tile-variant gap already notes).
+- ~~Unit variants aren't attachable to a tile yet~~ — resolved: a Unit
+  instance is placed via `EncounterUnit` (E2) inside an `EncounterDef`
+  exactly as before; E3 (per-instance scaling) added procedural
+  duplication of that instance, not a new attachment mechanism.
 - **Deferred: rotating/facing Part sprites (turret tracking its aim at
   runtime).** A Part now has its own sprite and a visually-authored
   position (shipped in the "visual authoring pass" follow-up — see
@@ -419,12 +556,118 @@ what actually shipped.
   right" reason the bezier preview exists); and whether it needs its own
   per-Action or per-step override (e.g. "don't wobble while attacking").
 
-### E3 — Spawn node editor (#193)
+### E3 — Per-instance scaling (#193) — shipped, minus per-param scaling curves
 
-Attach one or more spawn nodes to a tile variant (origin/shape/direction/
-mirror/timing/scaling), referencing enemy definitions built in E2.
-Outputs spawn-node JSON matching `spawn-and-warnings.spec.todo.md`'s data
-model.
+See `shmup-editor.md`'s "Per-instance scaling (E3)" section for the full
+design.
+
+**Corrected mid-flight.** A first pass built this as a standalone
+"spawn node" concept (`SpawnNodeDef`) parallel to `EncounterUnit`, with its
+own origin/marker/picker on the canvas and a `flat`/`linear`/`capped`/
+`stepped` curve-type picker. Both were wrong reads of the original "Design
+Handoff v2" doc's actual §6/§4.2 (Noah's correction: place a Unit and
+author it via the *existing* timeline exactly as before; Scaling is a tab
+on that instance, not a new kind of thing; one scaling mechanism, not a
+curve-type picker). The standalone code (`spawnTypes.ts`, `spawnShapes.ts`,
+`spawnNodes.ts`, `difficultyCurve.ts`, `CurveField.tsx`, `SpawnNodePanel.tsx`,
+`SpawnScalingPreview.tsx`) was deleted outright, not kept around unused —
+see git history. **Done/Remaining below describe what actually shipped
+after the correction.**
+
+**Done**:
+- **`EncounterUnit` gained `scaling: UnitScaling`** (`unitScaling.ts`) —
+  every instance has one; `maxCount: 1` (the default) is a no-op, so an
+  instance behaves exactly as it did before E3 until scaling is opened and
+  raised. A duplicate replays the instance's *entire* step/attack sequence
+  independently, anchored to its own slot — no per-individual authoring.
+- **One scaling algorithm** (`resolveScaling()`): a single incoming
+  Difficulty value spreads evenly, not split by a separate weighting field.
+  `count = min(floor(D / minCostPerInstance), maxCount)` (floored at 0 —
+  an unaffordable instance simply doesn't spawn, doubling as elite/late-
+  game gating with no separate system needed), then
+  `power = floor(D / count)` — the *whole* remaining Difficulty divided
+  evenly across however many instances actually spawned, not each
+  instance's own cost. Rounds in the player's favor (floor, never up). No
+  `minCount` (true floor is zero) and no `powerSplit` (an earlier version
+  of this formula split budget between count and power as separate
+  currencies before conserving it across `maxCount` saturation — dropped
+  after worked examples showed it silently discarded budget once the
+  count cap bound). No curve shape to pick anywhere.
+- **Real draggable canvas handles per positioning shape**
+  (`unitScalingShapes.ts`'s `resolveScalingSlots`, pure/unit-tested):
+  Curve (variable-point polyline), V (fixed apex at the instance's own
+  position + draggable tip + width field), Grid (two draggable width/depth
+  handles), Ring (draggable center + draggable radius handle). All handle
+  fields are offsets from the instance's own position, same convention as
+  `EncounterStep.handleIn`/`handleOut`.
+- **Canvas integration** (`EncounterEditor.tsx`): a 5th control button, ⚖️
+  (top-center — the 4 corners are already move/add/attack/delete), on an
+  instance's first step opens/closes its Scaling tab, selecting that
+  shape's handles on canvas and swapping `StepPanel`/`AttackPanel` for
+  `UnitScalingPanel` below. A ⚖️ badge marks any instance with
+  `maxCount > 1` even when the tab is closed.
+- **`UnitScalingPanel.tsx`**: max count and min cost/instance as
+  FL-Studio-style vertical-drag `Dial` controls (`src/components/Dial/`,
+  new reusable component — right-click/long-press to reset, tap-to-type,
+  optional nudge buttons), spawn delay, shape + its numeric fields,
+  ping-pong, and a **preview Difficulty slider** (0-100, editor-preview-
+  only) whose live count/power readout ("N instances, N Difficulty passed
+  to whatever each one spawns") also drives the canvas's ghost-slot dots
+  (`resolveScalingSlots`/`applyPingPong`) in the same frame — the closest
+  E3 gets to §8.3's difficulty-preview slider, scoped per-instance rather
+  than encounter-wide (see Remaining).
+- Saves as part of the owning `EncounterUnit` in `TILES.DAT`; a **required**
+  field, validated strictly (not purely-additive) — `tileStore.ts`'s
+  `SAVE_VERSION` (6→7) and `unitStore.ts`'s `TILE_SESSION_VERSION` (5→6)
+  both bumped, same precedent as the Parts/attack-track pass. Rides along
+  in the existing `TILE-DRAFT.DAT` session for free.
+
+**Scope decisions**:
+- **Per-param scaling-curve retrofit onto Unit/Weapon stats is
+  deliberately NOT built** — §1's broader vision (flat/linear/capped/
+  stepped curves attachable to HP, fire rate, damage...) would mean
+  reopening E2's already-shipped `UnitStatsForm`/`WeaponForm`, a materially
+  larger, separate piece of work, and isn't what §6's actual Scaling panel
+  calls for. `resolveScaling()`'s `power` is the Difficulty value handed
+  down to whatever the instance itself spawns — a representative preview
+  number only for now, not wired to any real Unit/Weapon stat.
+- **Spawn-node-level concepts from the reverted first pass (origin
+  point/region/shape-with-span, distribution, direction, mirror-as-a-
+  standalone-field, timing delay/interval/count-mode) do not exist** —
+  those were properties of the wrong data model. What ships instead:
+  ping-pong mirroring (a Scaling-shape feature, per spec) and the four
+  positioning shapes above; there's no "region scatter" or "point origin"
+  concept anymore since duplicates always originate from the instance's
+  own already-authored position.
+- **The preview-budget slider is per-instance, not a single encounter-wide
+  slider** — §8.3 describes one slider previewing every scaled instance at
+  once; E3 shipped one slider per open Scaling tab instead (simpler, no
+  new state threading across instances). See Remaining.
+
+**Remaining:**
+- **Encounter-wide difficulty-preview slider** (§8.3) — one slider driving
+  every scaled instance's ghost preview simultaneously, replacing the
+  current per-instance-tab slider. Needed to sanity-check a whole
+  encounter's readability at once ("does a full-count line still fit the
+  tile *and* still read clearly alongside the other scaled instances").
+- **Per-param scaling curves on Unit/Weapon stats** (see Scope decisions) —
+  the eventual home for §1's broader curve-type vision, if/when there's
+  appetite to reopen E2's stat forms.
+- **Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
+  itself.** `UnitScaling.spawnDelayMs` used to be a stored-but-never-read
+  field (every duplicate appeared to spawn simultaneously in the preview,
+  regardless of this value — Noah caught this). `EncounterEditor.tsx`'s
+  hitbox-preview computation now maps each duplicate slot's own local
+  clock forward by `slotIndex * spawnDelayMs` before evaluating its
+  position/attacks, so duplicates stagger in visibly one at a time when
+  scrubbing/playing with the preview on. `EncounterTimeline.tsx`'s ruler
+  itself still shows only one set of step/attack markers per instance,
+  not one per duplicate's shifted copy — the delay is real and simulated,
+  just not drawn on the timeline UI yet.
+- **Encounter difficulty-range gating** (carried over from E2's Remaining
+  list) — still blocked on nothing concrete left to build against beyond
+  what shipped here; `EncounterDef.weight` remains the only
+  difficulty-adjacent authored field.
 
 ### E4 — Preview/playtest mode (#194)
 
@@ -432,12 +675,63 @@ Preview a tile or a short generated sequence in-browser without a full
 game import round-trip — validates readability/fairness (warning lead
 times, bullet density) before export.
 
+**Status: low-fi hitbox/boundary preview shipped; multi-tile chaining and
+warning-indicator surfacing not started.** `hitboxPreview.ts` +
+`EncounterEditor.tsx`'s "Hitbox preview" toggle is editor-side timeline
+playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
+`playing`) — not a separate playback engine, and not real Phaser.
+
+**What shipped**:
+- Toggling "Hitbox preview" swaps the canvas's big touch-friendly authoring
+  icons for real-scale reference geometry at the current scrub position:
+  red boxes for enemies (and their scaled duplicates, per E3) at their
+  authored `UnitDef.size`, red dots for bullets in flight (reusing
+  `weaponPreview.ts`'s per-shot math — arc offsets, sweep, travel speed/
+  life — via a new `computeAttackBullets` that fires an attack exactly as
+  authored instead of looping forever the way the standalone
+  `WeaponForm.tsx` preview does for demo purposes), a static green
+  reference circle standing in for the player's own hitbox (radius 6,
+  documented against `games/shmup`'s real `TUNING.combat.hitboxRadiusNormal`
+  — no live player exists at authoring time, same approximation the rest
+  of the editor already accepts for `turnRate`/`trackPlayer`), a thick
+  yellow border for the tile's real bounds, and a dotted border for a
+  static "how much of the tile is visible on screen at once" reference
+  rectangle (`computeCameraBoundsRect` — width matches the tile's own
+  width per `levels-and-tiles.spec.todo.md` §4's "camera shows more/less
+  active width" framing, height derived from `games/shmup`'s real 720x1280
+  aspect ratio, centered on the tile; does **not** animate/ease between
+  sections the way the real playable-bounds box does — a static
+  approximation, not a simulation).
+- **Ships the previously-deferred "encounter-wide difficulty-preview
+  slider"** (§8.3, listed above as E3 Remaining) as the toggle's own
+  Difficulty slider — every scaled instance's duplicate count/positions in
+  the preview resolve against this one shared value, not the per-instance
+  Scaling-tab slider (which still exists separately, driving only that
+  tab's own static ghost-slot dots while open).
+- A `"player"`-aimed weapon's bullets aim at the reference player marker in
+  this preview — a real improvement over `WeaponForm.tsx`'s isolated
+  preview, which has no reference point available at all while just
+  browsing the picker.
+
+**Explicitly not built**:
+- **Multi-tile chaining** (§'s "optionally chain a few tiles via L1's
+  edge-matcher") — this preview is scoped to one encounter at a time,
+  matching where `EncounterEditor.tsx` already lives; chaining tiles
+  together would need the L2 JIT-streaming/edge-matching system
+  (`levels-and-tiles.spec.todo.md`) to exist first.
+- **Warning-indicator lead-time surfacing** (L6 #188,
+  `spawn-and-warnings.spec.todo.md` §3) — not built anywhere yet, so
+  there's nothing for this preview to surface.
+- **A literal camera simulation** — the dotted bounds rectangle is static
+  (see above), not an animated/scrolling camera tracking a moving
+  reference point.
+
 ### E5 — Export/import pipeline (#195)
 
 The versioned JSON schema for every authored type, the concrete landing
 path inside `games/shmup/src/` (e.g. a `content/levels/` directory), and
-in-editor structural + referential validation (a spawn node's enemy
-reference must resolve, etc.) so a malformed export fails loudly in the
+in-editor structural + referential validation (an `EncounterUnit`'s
+`unitDefId` must resolve, etc.) so a malformed export fails loudly in the
 editor rather than crashing the game at runtime.
 
 ## Open questions (resolve before/during E5)
@@ -462,5 +756,5 @@ editor rather than crashing the game at runtime.
 
 ## Reminders
 
-- `shmup-editor.md` now tracks current (partial-E1) behavior; keep
-  promoting sections here into it as E1's remaining gaps and E2-E5 ship.
+- `shmup-editor.md` now tracks current (partial-E1, E2, E3) behavior; keep
+  promoting sections here into it as E1's remaining gaps and E4-E5 ship.

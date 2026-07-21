@@ -16,7 +16,7 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_UNITS_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import type { EncounterDef } from "./encounterTypes";
-import { createDefaultUnitLibrary, type UnitDef, type UnitPart, type WeaponDef } from "./unitTypes";
+import { createDefaultUnitLibrary, type ActionDef, type CollisionGroup, type UnitDef, type UnitPart } from "./unitTypes";
 import type { TileDef } from "./types";
 
 // v6: Attacks moved off ActionDef entirely and onto a Unit's Parts
@@ -33,7 +33,12 @@ import type { TileDef } from "./types";
 // v8: ActionDef/UnitDef.actions cut entirely — the only functional field,
 // `visible`, moved directly onto EncounterStep (see encounterTypes.ts).
 // Bumping for the same reason.
-const SAVE_VERSION = 8;
+// v9: Actions are back — a real reversal, not a purely-additive change.
+// WeaponDef is gone (folded into ActionDef.attack); UnitPart gained
+// hasHitbox/hasHealth/hp/damageMultiplier/actions (dropped `weapons`);
+// UnitDef gained layer/defaultActionId/actions. Bumping for the same
+// "required shape changed, don't try to backfill" reasoning as v6/v8.
+const SAVE_VERSION = 9;
 
 interface SavedLibrary {
   version: number;
@@ -65,26 +70,44 @@ function isVec2(v: unknown): v is { x: number; y: number } {
   return typeof v === "object" && v !== null && isNumber((v as Record<string, unknown>).x) && isNumber((v as Record<string, unknown>).y);
 }
 
-function isWeaponDef(v: unknown): v is WeaponDef {
+const COLLISION_GROUPS: CollisionGroup[] = ["enemy", "friendly", "enemyProjectile", "friendlyProjectile"];
+
+function isCollisionGroup(v: unknown): v is CollisionGroup {
+  return typeof v === "string" && (COLLISION_GROUPS as string[]).includes(v);
+}
+
+function isActionAttack(v: unknown): boolean {
   if (typeof v !== "object" || v === null) return false;
-  const w = v as Record<string, unknown>;
+  const a = v as Record<string, unknown>;
   return (
-    typeof w.id === "string" &&
-    typeof w.name === "string" &&
-    (w.aimMode === "fixed" || w.aimMode === "player") &&
-    typeof w.trackPlayer === "boolean" &&
-    isNumber(w.fixedAngleDeg) &&
-    isNumber(w.arcStartDeg) &&
-    isNumber(w.arcEndDeg) &&
-    isNumber(w.count) &&
-    (w.spacing === "even" || w.spacing === "random") &&
-    isNumber(w.perShotDelayMs) &&
-    isNumber(w.sweepSpeedDeg) &&
-    typeof w.pingPong === "boolean" &&
-    isNumber(w.fireIntervalMs) &&
-    isNumber(w.telegraphMs) &&
-    (w.spawnUnitId === null || typeof w.spawnUnitId === "string") &&
-    isNumber(w.spawnScale)
+    isNumber(a.arcStartDeg) &&
+    isNumber(a.arcEndDeg) &&
+    isNumber(a.count) &&
+    (a.spacing === "even" || a.spacing === "random") &&
+    isNumber(a.perShotDelayMs) &&
+    isNumber(a.sweepSpeedDeg) &&
+    typeof a.pingPong === "boolean" &&
+    isNumber(a.burstIntervalMs) &&
+    isNumber(a.telegraphMs) &&
+    (a.repeatCount === null || isNumber(a.repeatCount)) &&
+    (a.spawnUnitId === null || typeof a.spawnUnitId === "string") &&
+    isNumber(a.spawnScale) &&
+    isCollisionGroup(a.spawnGroup)
+  );
+}
+
+function isActionDef(v: unknown): v is ActionDef {
+  if (typeof v !== "object" || v === null) return false;
+  const a = v as Record<string, unknown>;
+  return (
+    typeof a.id === "string" &&
+    typeof a.name === "string" &&
+    isNumber(a.movementPercent) &&
+    (a.facing === "fixed" || a.facing === "faceMovement" || a.facing === "facePlayer") &&
+    isNumber(a.fixedFacingDeg) &&
+    (a.setsInvincible === null || typeof a.setsInvincible === "boolean") &&
+    typeof a.requiresInvincible === "boolean" &&
+    (a.attack === null || isActionAttack(a.attack))
   );
 }
 
@@ -97,8 +120,12 @@ function isUnitPart(v: unknown): v is UnitPart {
     isVec2(p.offset) &&
     typeof p.spriteId === "string" &&
     (p.customSprite === null || typeof p.customSprite === "string") &&
-    Array.isArray(p.weapons) &&
-    p.weapons.every(isWeaponDef)
+    typeof p.hasHitbox === "boolean" &&
+    typeof p.hasHealth === "boolean" &&
+    isNumber(p.hp) &&
+    isNumber(p.damageMultiplier) &&
+    Array.isArray(p.actions) &&
+    p.actions.every(isActionDef)
   );
 }
 
@@ -117,6 +144,10 @@ function isValidUnitDef(v: unknown): v is UnitDef {
     typeof u.speed === "number" &&
     typeof u.turnRate === "number" &&
     typeof u.size === "number" &&
+    (u.layer === "ground" || u.layer === "air" || u.layer === "doodad") &&
+    (u.defaultActionId === null || typeof u.defaultActionId === "string") &&
+    Array.isArray(u.actions) &&
+    u.actions.every(isActionDef) &&
     Array.isArray(u.parts) &&
     u.parts.every(isUnitPart)
   );
@@ -189,7 +220,16 @@ export function clearUnitDraft(): void {
 // pass) — bumping for the same reason.
 // v5: EncounterStep's `actionId` was replaced by a plain `visible: boolean`
 // (Actions cut entirely) — bumping for the same reason.
-const TILE_SESSION_VERSION = 5;
+// v6: EncounterUnit gained `scaling: UnitScaling` (E3 #193, a required
+// object, not a purely-additive optional field) — bumping for the same
+// reason as tileStore.ts's matching SAVE_VERSION bump.
+// v7: UnitScaling's `minCount`/`powerSplit` fields were removed (corrected
+// count/power algorithm) — bumping for the same reason as tileStore.ts's
+// matching SAVE_VERSION bump.
+// v8: EncounterStep dropped `visible`/`speedMultiplier`, gained `actionId`;
+// EncounterAttack was replaced by PartActionPlacement (`encounterTypes.ts`)
+// — Actions are back. Bumping for the same reason as SAVE_VERSION's v9.
+const TILE_SESSION_VERSION = 8;
 
 export interface TileEditSession {
   tile: TileDef;

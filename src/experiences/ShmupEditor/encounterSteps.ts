@@ -18,17 +18,18 @@
  * predecessor.
  */
 import { makeStepId, type EncounterStep, type EncounterUnit, type Vec2 } from "./encounterTypes";
+import { TILE_UNIT } from "./editorScale";
 
-const DEFAULT_NEXT_OFFSET: Vec2 = { x: 130, y: 0 };
+const DEFAULT_NEXT_OFFSET: Vec2 = { x: TILE_UNIT, y: 0 };
 /** Default gap (seconds) between a newly appended step and the one before it. */
 const DEFAULT_STEP_DURATION = 2;
 
-/** Appends a new visible step, defaulting its position to an offset from the last step (or the given `pos` if this is the first step) and its time to `DEFAULT_STEP_DURATION` after the last step (or 0). */
-export function addStep(instance: EncounterUnit, pos?: Vec2): EncounterUnit {
+/** Appends a new step, defaulting its position to an offset from the last step (or the given `pos` if this is the first step) and its time to `DEFAULT_STEP_DURATION` after the last step (or 0). `actionId` is the caller's responsibility to resolve (this file deliberately has no idea what a UnitDef's Action buffet contains) — pass null if there's nothing sensible to default to yet. */
+export function addStep(instance: EncounterUnit, actionId: string | null, pos?: Vec2): EncounterUnit {
   const last = instance.steps[instance.steps.length - 1];
   const stepPos = pos ?? (last ? { x: last.pos.x + DEFAULT_NEXT_OFFSET.x, y: last.pos.y + DEFAULT_NEXT_OFFSET.y } : { x: 0, y: 0 });
   const time = last ? last.time + DEFAULT_STEP_DURATION : 0;
-  const step: EncounterStep = { id: makeStepId(), pos: stepPos, visible: true, time, speedMultiplier: 1, handleIn: null, handleOut: null };
+  const step: EncounterStep = { id: makeStepId(), pos: stepPos, actionId, time, handleIn: null, handleOut: null };
   return { ...instance, steps: [...instance.steps, step] };
 }
 

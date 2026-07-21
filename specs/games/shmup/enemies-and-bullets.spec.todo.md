@@ -9,6 +9,21 @@
 > and settled on a materially different content shape (see "What changed"
 > below). L3/L4/L8 were never implemented against the original draft, so
 > this reconciliation is a plan update, not a migration.
+>
+> **Stale as of 2026-07-21: the editor reversed its "cut Actions
+> entirely" pass and reintroduced them in a new shape, which also folded
+> `WeaponDef` into the reintroduced `ActionDef` and added Layers/
+> CollisionGroup/per-Part hitboxes.** Every `WeaponDef`/`weapons: WeaponDef[]`
+> reference below describes the editor's shape as of the 2026-07-16
+> reconciliation, not its current one — see `shmup-editor.md`'s "Unit +
+> Encounter editor (E2)" section (the canonical, current source) for the
+> real shape: a Unit's/Part's `weapons` buffet is now `actions:
+> ActionDef[]`, and what used to be `WeaponDef`'s fields now live under
+> `ActionDef.attack`. Since L3/L4/L8 are still unimplemented, this is
+> another plan update rather than a migration — the mechanics below (arc/
+> count/spacing/sweep, a Weapon-spawns-a-Unit-by-id bullet model, per-Part
+> attack tracks) are still substantively accurate, just relocated one
+> level of indirection over.
 
 ## What changed since the original node-graph draft
 
@@ -174,15 +189,21 @@ zero-length bezier segment has nothing to travel along, so
 `shmup-editor.md`'s timing system already special-cases this (the step's
 `time` stays manually authored rather than derived from a curve).
 
-**The `scrollLocked`/`screenLocked` distinction (holding position against
-scroll vs. drifting with it) is deferred, not built.** Every step today is
-a plain canvas position with no reference-frame concept —
-`shmup-editor.todo.md`'s Scope decisions explicitly lists "layers
-(Ground/Air/Doodad) and reference frames (scroll-locked/time-locked)" as
-deferred. Until that lands, whether a dwelling enemy holds screen position
-or scrolls with the terrain is presumably a runtime-only decision (e.g.
-per enemy archetype) rather than something the editor lets an author
-choose per-step.
+**The `scrollLocked`/`timeLocked` reference-frame distinction (holding
+position against scroll vs. drifting with it) is still deferred, not
+built — this is unaffected by Layers shipping.** `UnitDef.layer`
+(Ground/Air/Doodad) shipped as an authored, Unit-level field — a fixed
+property of the Unit definition itself, chosen once when authoring the
+Unit, **not** an Encounter-level concept and **not** the same thing as the
+reference-frame question. Every step today is still a plain tile-relative
+canvas position regardless of which layer its Unit belongs to — there's no
+`scrollLocked`/`timeLocked` concept anywhere yet, so a Ground Unit and an
+Air Unit are scheduled identically even though an Air Unit's position
+conceptually shouldn't be tile-relative. Until that lands, whether a
+dwelling enemy holds screen position or scrolls with the terrain is
+presumably a runtime-only decision (e.g. per enemy archetype) rather than
+something the editor lets an author choose per-step. See
+`shmup-editor.todo.md`'s E2 Remaining list for the tracked gap.
 
 ## 4. Exit
 

@@ -1,29 +1,42 @@
-import type { EncounterAttack } from "./encounterTypes";
+import { Dial } from "../../components/Dial/Dial";
+import { computeAttackDurationMs } from "./hitboxPreview";
+import type { PartActionPlacement } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
 interface AttackPanelProps {
   unit: UnitDef | undefined;
-  attack: EncounterAttack;
-  onChange: (patch: Partial<EncounterAttack>) => void;
+  attack: PartActionPlacement;
+  onChange: (patch: Partial<PartActionPlacement>) => void;
+}
+
+function durationReadout(unit: UnitDef | undefined, placement: PartActionPlacement): string | null {
+  const part = unit?.parts.find((p) => p.id === placement.partId);
+  const action = part?.actions.find((a) => a.id === placement.actionId);
+  if (!action?.attack) return null;
+  const ms = computeAttackDurationMs(action.attack);
+  return ms === null ? "fires indefinitely" : `${(ms / 1000).toFixed(2)}s`;
 }
 
 /**
- * Below-canvas settings for a selected attack-track placement (mirrors
- * StepPanel.tsx's role for steps) — which Part/Weapon fires, when, for how
- * long, and (for a fixed-aim weapon) its angle override, which also has a
- * draggable handle on the canvas itself (EncounterEditor.tsx) — this field
- * and that handle write the same value, same pairing as a step's Speed
- * Multiplier field and the timeline's retime-drag.
+ * Below-canvas settings for a selected Part-action placement, rendered
+ * inside the Attack tab (EncounterEditor.tsx) — mirrors StepPanel.tsx's
+ * role for steps. Full behavior notes live in the Help menu, not inline.
+ *
+ * **No more aim-angle override or authored duration.** Aim is just
+ * whichever way the referenced Action's own `facing` resolves — Cloning
+ * the Action (on the Part) is how you'd author a fixed-angle variant, not
+ * a per-placement override. Duration is computed from the Action's own
+ * attack fields (`hitboxPreview.ts`'s `computeAttackDurationMs`), shown
+ * below as a read-only readout, not a field to edit.
  */
 export default function AttackPanel({ unit, attack, onChange }: AttackPanelProps) {
   const part = unit?.parts.find((p) => p.id === attack.partId);
-  const weapon = part?.weapons.find((w) => w.id === attack.weaponId);
-  const showAimOverride = weapon?.aimMode === "fixed";
+  const duration = durationReadout(unit, attack);
 
   function handlePartChange(partId: string) {
     const nextPart = unit?.parts.find((p) => p.id === partId);
-    const nextWeaponId = nextPart?.weapons[0]?.id ?? "";
-    onChange({ partId, weaponId: nextWeaponId });
+    const nextActionId = nextPart?.actions[0]?.id ?? null;
+    onChange({ partId, actionId: nextActionId });
   }
 
   return (
@@ -42,60 +55,33 @@ export default function AttackPanel({ unit, attack, onChange }: AttackPanelProps
       )}
 
       <label className="shmup-field shmup-field--inline">
-        <span>Weapon</span>
+        <span>Action</span>
         {part ? (
-          part.weapons.length > 0 ? (
-            <select className="shmup-input" value={attack.weaponId} onChange={(e) => onChange({ weaponId: e.target.value })}>
-              {part.weapons.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
+          part.actions.length > 0 ? (
+            <select className="shmup-input" value={attack.actionId ?? ""} onChange={(e) => onChange({ actionId: e.target.value === "" ? null : e.target.value })}>
+              <option value="">(none)</option>
+              {part.actions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
                 </option>
               ))}
             </select>
           ) : (
-            <span className="shmup-error">(this Part has no Weapons yet)</span>
+            <span className="shmup-error">(no Actions on this Part)</span>
           )
         ) : (
           <span className="shmup-error">(missing Part)</span>
         )}
       </label>
 
-      <div className="shmup-field-row">
-        <label className="shmup-field shmup-field--inline">
-          <span>Time (sec)</span>
-          <input
-            type="number"
-            min={0}
-            step={0.1}
-            className="shmup-input shmup-input--small"
-            value={Number(attack.time.toFixed(2))}
-            onChange={(e) => onChange({ time: Number(e.target.value) })}
-          />
-        </label>
-        <label className="shmup-field shmup-field--inline">
-          <span>Duration (ms)</span>
-          <input
-            type="number"
-            min={0}
-            className="shmup-input shmup-input--small"
-            value={attack.durationMs}
-            onChange={(e) => onChange({ durationMs: Number(e.target.value) })}
-          />
-        </label>
+      <div className="shmup-dial-grid">
+        <Dial label="Time (s)" value={attack.time} onChange={(v) => onChange({ time: Math.max(0, v) })} step={0.1} showNudgeButtons />
       </div>
-      <p className="shmup-hint">Duration keeps a repeating weapon (nonzero fire interval) firing after the placement's start time; 0 = a single burst.</p>
-
-      {showAimOverride && (
-        <label className="shmup-field shmup-field--inline">
-          <span>Aim angle override (deg)</span>
-          <input
-            type="number"
-            className="shmup-input shmup-input--small"
-            placeholder={String(weapon!.fixedAngleDeg)}
-            value={attack.aimAngleOverride ?? ""}
-            onChange={(e) => onChange({ aimAngleOverride: e.target.value === "" ? null : Number(e.target.value) })}
-          />
-        </label>
+      {duration && (
+        <p className="shmup-readout">
+          <span className="shmup-readout__label">Duration</span>
+          <span className="shmup-readout__value">{duration}</span>
+        </p>
       )}
     </div>
   );

@@ -13,21 +13,25 @@
  * manually authored when there's no preceding step (the first step of an
  * instance — this is *when the unit spawns*, nothing to derive) or the
  * predecessor is at the *same position* (dwelling has no destination, so
- * there's nothing to derive a duration from — this replaced the old "the
- * predecessor's Action is stationary" check once movement stopped being
- * an Action-level concept at all).
+ * there's nothing to derive a duration from).
  *
- * Dragging a *derived* step on the timeline (EncounterTimeline.tsx) doesn't
- * set its `time` directly — it solves for the `speedMultiplier` the
- * *preceding* step would need to arrive exactly there
- * (`speedMultiplierForDuration`), and writes that onto the preceding step's
- * `EncounterStep`, never onto the shared `UnitDef` — the whole point of
- * the per-step override fields is tuning pacing without mutating a Unit's
- * reusable stats. `recomputeStepTimes` is the actual derivation pass; call
- * it after any change that could affect distances, handles, or speed
- * (position drag, handle drag, speedMultiplier change) to keep every
- * derived step's stored `time` in sync — `EncounterEditor.tsx` does this by
- * wrapping its `updateInstance` helper rather than calling it at every
+ * **Dragging a derived step on the timeline to retime it is gone.** It
+ * used to solve for the *preceding* step's own `speedMultiplier` and
+ * write that back onto the step — safe, because `speedMultiplier` was a
+ * per-placement field. Now that "how fast" lives on the *Action*
+ * (`movementPercent`, unitTypes.ts) — a reusable, shared thing referenced
+ * by potentially many placements — solving-and-writing-back would quietly
+ * rewrite every other placement of that same Action too. There's no
+ * longer a safe place to stash a per-placement retime. Retiming a
+ * movement segment now means picking a different (or Cloned, differently-
+ * tuned) Action for that step, not dragging its timeline marker — the
+ * drag-retime gesture survives only for Part-action placements
+ * (`partActions.ts`), whose `time` is still freely per-placement authored.
+ * `recomputeStepTimes` is the actual derivation pass; call it after any
+ * change that could affect distances, handles, or which Action a step
+ * references (position drag, handle drag, Action swap) to keep every
+ * derived step's stored `time` in sync — `EncounterEditor.tsx` does this
+ * by wrapping its `updateInstance` helper rather than calling it at every
  * individual site.
  */
 import { cubicBezierLength, distanceBetween, resolveSegment } from "./bezier";
@@ -38,21 +42,16 @@ import type { UnitDef } from "./unitTypes";
 export const MIN_STEP_DURATION = 0.1;
 /** Below this straight-line distance, a step is treated as dwelling at its predecessor's position rather than traveling — see file header. */
 const POSITION_EPSILON = 0.5;
-const MIN_MULTIPLIER = 0.05;
-const MAX_MULTIPLIER = 20;
+/** Floor for the *effective* movementPercent used in duration math — a segment with a real destination but a ~0% (or unresolved) Action still needs a finite, if very long, duration rather than NaN/Infinity. */
+const MIN_EFFECTIVE_MOVEMENT_PERCENT = 1;
+/** What a step's duration assumes when its Action can't be resolved (null actionId, or a stale/deleted reference) — full speed, so an unconfigured step doesn't silently stall the timeline. Rendering (movementPreview.ts) is free to treat "no Action" more strictly (e.g. not actually moving); this is purely about keeping the derived `time` math sane. */
+const UNRESOLVED_ACTION_MOVEMENT_PERCENT = 100;
 
-/** How long (real seconds) traversing `arcLength` at `speed`/`speedMultiplier` takes. */
-export function segmentDuration(arcLength: number, speed: number, speedMultiplier: number): number {
-  const effectiveSpeed = speed > 0 ? speed * (speedMultiplier > 0 ? speedMultiplier : 1) : 1;
+/** How long (real seconds) traversing `arcLength` at `speed`, moving at `movementPercent` (0–100) of it, takes. */
+export function segmentDuration(arcLength: number, speed: number, movementPercent: number): number {
+  const effectivePercent = Math.max(MIN_EFFECTIVE_MOVEMENT_PERCENT, movementPercent);
+  const effectiveSpeed = speed > 0 ? speed * (effectivePercent / 100) : 1;
   return Math.max(MIN_STEP_DURATION, arcLength / effectiveSpeed);
-}
-
-/** Inverse of segmentDuration — the speedMultiplier that covers `arcLength` at `speed` in exactly `desiredDuration`. Used when a derived step is dragged on the timeline. */
-export function speedMultiplierForDuration(arcLength: number, speed: number, desiredDuration: number): number {
-  const duration = Math.max(MIN_STEP_DURATION, desiredDuration);
-  const effectiveSpeed = arcLength / duration;
-  const multiplier = speed > 0 ? effectiveSpeed / speed : 1;
-  return Math.min(MAX_MULTIPLIER, Math.max(MIN_MULTIPLIER, multiplier));
 }
 
 /** The bezier arc length (bezier.ts) of the segment from `prev` to `cur`, resolved against `unitDef`'s turnRate. */
@@ -67,6 +66,12 @@ export function isStepTimeDerived(instance: EncounterUnit, stepId: string, unitD
   const idx = instance.steps.findIndex((s) => s.id === stepId);
   if (idx <= 0) return false;
   return distanceBetween(instance.steps[idx - 1].pos, instance.steps[idx].pos) > POSITION_EPSILON;
+}
+
+/** `step`'s own Action's `movementPercent`, or the unresolved-fallback if its `actionId` is null or doesn't match anything in `unitDef.actions`. */
+function movementPercentFor(step: EncounterStep, unitDef: UnitDef): number {
+  const action = step.actionId ? unitDef.actions.find((a) => a.id === step.actionId) : undefined;
+  return action?.movementPercent ?? UNRESOLVED_ACTION_MOVEMENT_PERCENT;
 }
 
 /**
@@ -85,7 +90,7 @@ export function recomputeStepTimes(instance: EncounterUnit, unitDef: UnitDef | u
     const cur = steps[i];
     if (distanceBetween(prev.pos, cur.pos) > POSITION_EPSILON) {
       const arcLength = segmentArcLength(prev, cur, unitDef);
-      cur.time = prev.time + segmentDuration(arcLength, unitDef.speed, prev.speedMultiplier);
+      cur.time = prev.time + segmentDuration(arcLength, unitDef.speed, movementPercentFor(prev, unitDef));
     } else {
       cur.time = Math.max(cur.time, prev.time + MIN_STEP_DURATION);
     }
