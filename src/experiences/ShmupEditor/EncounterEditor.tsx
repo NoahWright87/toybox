@@ -19,7 +19,7 @@ import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
-import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
+import type { ActionAttack, ActionDef, UnitDef, UnitLayer } from "./unitTypes";
 
 interface EncounterEditorProps {
   tile: TileDef;
@@ -83,12 +83,29 @@ function deleteKey(instanceId: string, stepId: string): string {
   return `${instanceId}:${stepId}`;
 }
 
-/** A Part-action placement's anchor position in world space — wherever the instance's bezier path (via computeInstancePreview) puts it at the placement's own time, plus the firing Part's offset. Falls back to the instance's first step (still positionally meaningful, even before the instance has technically "spawned") rather than nothing. */
-function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: PartActionPlacement): Vec2 | null {
+/**
+ * A Part-action placement's anchor position in world space — wherever the
+ * instance's bezier path (via computeInstancePreview) puts it at `atTime`,
+ * plus the firing Part's offset. Falls back to the instance's first step
+ * (still positionally meaningful, even before the instance has technically
+ * "spawned") rather than nothing.
+ *
+ * **`atTime` defaults to the placement's own authored `time`**, which is
+ * the right anchor for the *static* canvas marker (🔫) — "where does this
+ * attack originate in the authored sequence." A *live* preview (the E4
+ * hitbox preview's bullet origin) must instead pass the current scrub/
+ * local time explicitly — a burst that repeats for several seconds should
+ * keep emitting from wherever the instance actually is *right now*, not
+ * stay frozen at its position back when the attack was first placed. Using
+ * the placement's fixed `attack.time` for both was a real bug: shots
+ * always looked like they came from the unit's spawn point regardless of
+ * how far it had traveled since.
+ */
+function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: PartActionPlacement, atTime: number = attack.time): Vec2 | null {
   if (!unitDef) return null;
   const part = unitDef.parts.find((p) => p.id === attack.partId);
   if (!part) return null;
-  const basePos = computeInstancePreview(instance, unitDef, attack.time)?.pos ?? instance.steps[0]?.pos;
+  const basePos = computeInstancePreview(instance, unitDef, atTime)?.pos ?? instance.steps[0]?.pos;
   if (!basePos) return null;
   return { x: basePos.x + part.offset.x, y: basePos.y + part.offset.y };
 }
@@ -154,6 +171,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [playing, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("basics");
   const [embiggen, setEmbiggen] = useState(false);
+  // Which roster the "+ Add" tab's Unit picker shows — Layer is a Unit
+  // definition (unitTypes.ts), not a placement, so this only filters the
+  // picker; it isn't saved anywhere.
+  const [addLayerFilter, setAddLayerFilter] = useState<UnitLayer>("ground");
   // E4 low-fi hitbox/boundary preview mode (specs/shmup-editor.todo.md) —
   // an alternate rendering of the same scrubTime/playing timeline already
   // above, not a separate playback engine. Ephemeral viewing aid, same
@@ -337,7 +358,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     // label doesn't render directly on top of the previous one's — still
     // just a default, since the move handle can reposition either.
     const startPos: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
-    const instance = addStep(createEncounterUnit(unitDefId), null, startPos);
+    const unitDef = units.find((u) => u.id === unitDefId);
+    // Defaults to the Unit's own defaultActionId (unitTypes.ts) rather than
+    // null — a freshly-placed Unit should already do *something* sensible
+    // (fly/patrol/idle-and-shoot, whatever its author set as the default)
+    // instead of sitting inert until you dig into the Step tab.
+    const instance = addStep(createEncounterUnit(unitDefId), unitDef?.defaultActionId ?? null, startPos);
     updateDraft({ ...draft, units: [...draft.units, instance] });
     const added = instance.steps[0];
     if (added) selectStep(instance.id, added.id);
@@ -353,7 +379,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function addNextStep(instanceId: string) {
     const before = draft.units.find((u) => u.id === instanceId);
     if (!before) return;
-    const after = addStep(before, null);
+    // Carries forward the previous step's own Action rather than defaulting
+    // to null/inert — most sequences keep doing the same thing (e.g. "keep
+    // flying and shooting") across several waypoints, so continuing is a
+    // far more useful default than making every new step opt back in.
+    const carriedActionId = before.steps[before.steps.length - 1]?.actionId ?? null;
+    const after = addStep(before, carriedActionId);
     updateInstance(instanceId, () => after);
     const added = after.steps[after.steps.length - 1];
     if (added) selectStep(instanceId, added.id);
@@ -856,11 +887,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           pushAttackBullets(`${instance.id}-${slotIdx}-base`, activeAction, activeAction.attack, dupPos, (dupLocalTime - dupPreview.step.time) * 1000);
         }
 
-        // Every Part's independent attack track.
+        // Every Part's independent attack track — anchored at the instance's
+        // *current* (dupLocalTime) position, not the placement's own fixed
+        // `attack.time`, so a still-firing burst tracks the unit as it
+        // keeps moving instead of appearing to shoot from its spawn point.
         for (const attack of instance.partActions) {
           const part = unitDef.parts.find((p) => p.id === attack.partId);
           const action = part?.actions.find((a) => a.id === attack.actionId);
-          const baseAnchor = part && action?.attack ? attackAnchorWorld(instance, unitDef, attack) : null;
+          const baseAnchor = part && action?.attack ? attackAnchorWorld(instance, unitDef, attack, dupLocalTime) : null;
           if (!part || !action?.attack || !baseAnchor) continue;
           const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y };
           pushAttackBullets(`${instance.id}-${slotIdx}-${attack.id}`, action, action.attack, anchor, (dupLocalTime - attack.time) * 1000);
@@ -1311,21 +1345,39 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           )}
 
           {effectiveTab === "add" && (
-            <div className="shmup-tile-picker">
-              {units.length === 0 ? (
-                <p className="shmup-readout">No Units yet — create one via the Units menu.</p>
-              ) : (
-                units.map((u) => {
-                  const url = resolveSpriteUrl(u.spriteId, u.customSprite);
-                  return (
-                    <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addUnitInstance(u.id)} title={u.name}>
-                      <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
-                        {!url && <span>{u.name}</span>}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+            <div className="shmup-panel">
+              <div className="shmup-btn-row">
+                {(["ground", "air", "doodad"] as UnitLayer[]).map((layer) => (
+                  <button
+                    key={layer}
+                    type="button"
+                    className={`shmup-btn shmup-btn--small ${addLayerFilter === layer ? "shmup-btn--active" : ""}`}
+                    onClick={() => setAddLayerFilter(layer)}
+                  >
+                    {layer[0].toUpperCase() + layer.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="shmup-tile-picker">
+                {units.filter((u) => u.layer === addLayerFilter).length === 0 ? (
+                  <p className="shmup-readout">
+                    No {addLayerFilter} Units yet — create one via the Units menu (set its Layer to {addLayerFilter}).
+                  </p>
+                ) : (
+                  units
+                    .filter((u) => u.layer === addLayerFilter)
+                    .map((u) => {
+                      const url = resolveSpriteUrl(u.spriteId, u.customSprite);
+                      return (
+                        <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addUnitInstance(u.id)} title={u.name}>
+                          <div className="shmup-enemy-picker-thumb" style={url ? { backgroundImage: `url(${url})` } : undefined}>
+                            {!url && <span>{u.name}</span>}
+                          </div>
+                        </button>
+                      );
+                    })
+                )}
+              </div>
             </div>
           )}
 

@@ -381,6 +381,19 @@ what actually shipped.
   still a plain flat number.
 
 **Remaining:**
+- **Air units are placed/scheduled exactly like ground units today — real
+  design gap, not yet resolved.** A ground Unit's `pos`/steps are naturally
+  tile-relative (it's driving/walking over the tile's own terrain); an air
+  Unit conceptually shouldn't be — Noah: "their positions are relative to
+  the camera, not the tile." The editor doesn't distinguish the two yet:
+  every instance's steps place/schedule against the same tile-relative
+  world space regardless of `UnitDef.layer`. Needs its own design pass
+  (does an air Unit's step `pos` become camera/viewport-relative instead of
+  tile-relative? does its clock run against scroll position rather than
+  the shared encounter `time`? how does that interact with the timeline
+  scrubber and E4's hitbox preview, both of which currently assume one
+  tile-relative coordinate space for everything) before it's built — flagged
+  here so it isn't lost, not attempted as part of the Actions-are-back pass.
 - **Per-param scaling curves** (flat vs. scales-with-difficulty) —
   deferred. `enemies-and-bullets.spec.todo.md` never defines a curve shape
   beyond "flat" as one option, so there was nothing concrete to build
