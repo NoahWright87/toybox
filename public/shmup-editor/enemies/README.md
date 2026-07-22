@@ -70,9 +70,9 @@ are multi-part enemies and get their own subfolder, same reasoning as
 
 | Folder | Files | Notes |
 |---|---|---|
-| `battleship/` | `hull.png`, `turret.png` | Ship hull + one of 8 turret variants on the source sheet |
+| `battleship/` | `hull.png`, `turret.png` | Ship hull + one of 8 turret variants on the source sheet — the hull has 4 obvious circular turret barbettes, so the default "Battleship" Unit (`unitTypes.ts`) places this same `turret.png` as 4 separate Parts, one per mount |
 | `missile-truck/` | `body.png`, `turret.png` | Truck body + missile-pod turret |
-| `train/` | `front.png`, `gun-car-body.png`, `gun-car-turret.png`, `rear.png` | Three-car armored train — front and rear cars are single sprites, the gun car is body + one of 6 turret variants |
+| `train/` | `front.png`, `gun-car-body.png`, `gun-car-turret.png`, `rear.png` | Three-car armored train — front and rear cars are single sprites, the gun car is body + one of 6 turret variants — the gun car's roof has 3 obvious circular turret rings, so the default "Train (Gun Car)" Unit places `gun-car-turret.png` as 3 separate Parts |
 
 Flat (single-sprite, no Parts split) additions:
 

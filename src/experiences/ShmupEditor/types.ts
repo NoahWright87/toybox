@@ -203,13 +203,13 @@ export function createDefaultTileLibrary(): TileDef[] {
     // Vertical (east/west) biome transition — north/south hardwalled.
     makeDefaultTile(verticalSplitTile("Forest / Grass", "grass-forest", "forest", "grass")),
 
-    // Diagonal corner — the two "pure" edges (west/south) are tagged, the two mixed edges (north/east) are hardwalled.
+    // Diagonal corner — water fills the NW half (touching north+west), grass fills the SE half (touching south+east); every edge gets a real tag, nothing hardwalled.
     makeDefaultTile({
       name: "Water / Grass Corner",
       footprint: 1,
-      north: [edgeSlot("", true)],
+      north: [edgeSlot("water")],
       south: [edgeSlot("grass")],
-      east: edgeSlot("", true),
+      east: edgeSlot("grass"),
       west: edgeSlot("water"),
       isConnector: false,
       weight: 1,
@@ -218,12 +218,12 @@ export function createDefaultTileLibrary(): TileDef[] {
       encounters: [],
     }),
 
-    // Roads — grass on both sides, "road" tag continues the path north/south.
+    // Roads — grass on both sides, "grass-road" tag continues the path north/south. Tagged by biome (not just "road") since desert/concrete roads etc. are a different, non-matching tag.
     makeDefaultTile({
       name: "Road (Straight)",
       footprint: 1,
-      north: [edgeSlot("road")],
-      south: [edgeSlot("road")],
+      north: [edgeSlot("grass-road")],
+      south: [edgeSlot("grass-road")],
       east: edgeSlot("grass"),
       west: edgeSlot("grass"),
       isConnector: false,
@@ -235,8 +235,8 @@ export function createDefaultTileLibrary(): TileDef[] {
     makeDefaultTile({
       name: "Road (Curve)",
       footprint: 1,
-      north: [edgeSlot("road")],
-      south: [edgeSlot("road")],
+      north: [edgeSlot("grass-road")],
+      south: [edgeSlot("grass-road")],
       east: edgeSlot("grass"),
       west: edgeSlot("grass"),
       isConnector: false,
@@ -248,7 +248,7 @@ export function createDefaultTileLibrary(): TileDef[] {
     makeDefaultTile({
       name: "Road (Trailhead)",
       footprint: 1,
-      north: [edgeSlot("road")],
+      north: [edgeSlot("grass-road")],
       south: [edgeSlot("grass")],
       east: edgeSlot("grass"),
       west: edgeSlot("grass"),
@@ -258,6 +258,6 @@ export function createDefaultTileLibrary(): TileDef[] {
       customImage: null,
       encounters: [],
     }),
-    makeDefaultTile(horizontalSplitTile("Road / Concrete Gate", "grass-road-concrete", "concrete", "road")),
+    makeDefaultTile(horizontalSplitTile("Road / Concrete Gate", "grass-road-concrete", "concrete", "grass-road")),
   ];
 }

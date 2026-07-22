@@ -521,7 +521,8 @@ interface TurretedEnemySpec {
   name: string;
   bodySpriteId: string;
   turretSpriteId: string;
-  turretOffset: Vec2;
+  /** One entry per turret mount — most vehicles have one, but battleship/train-gun-car have several obvious circular gun mounts baked into their hull/body art (see enemies/README.md), so each gets its own independently-firing Turret Part. */
+  turretOffsets: Vec2[];
   layer: UnitLayer;
   hp: number;
   contactDamage: number;
@@ -532,22 +533,24 @@ interface TurretedEnemySpec {
   fireIntervalMs: number;
 }
 
-/** Vehicles split into a body + turret sprite (see enemies/README.md's "incoming" batch and the pre-existing armored-truck/battle-tank Parts-demo set) — the turret is its own Part, offset from center, carrying the Attack Action. */
+/** Vehicles split into a body + turret sprite (see enemies/README.md's "incoming" batch and the pre-existing armored-truck/battle-tank Parts-demo set) — each turret mount is its own Part, offset from center, carrying the Attack Action. */
 const TURRETED_ENEMY_SPECS: TurretedEnemySpec[] = [
-  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffset: { x: 0, y: 0 }, layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, speed: 90, turnRate: 0.8, size: 20, fireIntervalMs: 1000 },
-  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffset: { x: 0, y: 0 }, layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, speed: 70, turnRate: 0.6, size: 22, fireIntervalMs: 900 },
-  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffset: { x: 0, y: -10 }, layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, speed: 40, turnRate: 0.3, size: 34, fireIntervalMs: 1100 },
-  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffset: { x: 0, y: -6 }, layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, speed: 85, turnRate: 0.8, size: 20, fireIntervalMs: 1300 },
-  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffset: { x: 0, y: -8 }, layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, speed: 60, turnRate: 0.4, size: 24, fireIntervalMs: 850 },
+  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, speed: 90, turnRate: 0.8, size: 20, fireIntervalMs: 1000 },
+  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, speed: 70, turnRate: 0.6, size: 22, fireIntervalMs: 900 },
+  // Battleship hull art has 4 obvious circular turret barbettes (2 fore, 2 aft of the bridge) — one Turret Part each.
+  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffsets: [{ x: 0, y: -43 }, { x: 0, y: -25 }, { x: 0, y: 22 }, { x: 0, y: 39 }], layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, speed: 40, turnRate: 0.3, size: 34, fireIntervalMs: 1100 },
+  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffsets: [{ x: 0, y: -6 }], layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, speed: 85, turnRate: 0.8, size: 20, fireIntervalMs: 1300 },
+  // Train gun car body art has 3 obvious circular turret rings running down the roof.
+  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffsets: [{ x: 0, y: -41 }, { x: 0, y: -4 }, { x: 0, y: 33 }], layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, speed: 60, turnRate: 0.4, size: 24, fireIntervalMs: 850 },
 ];
 
 function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef {
   const moveAction = createMoveAction(spec.speed > 0);
   const main = createDefaultPart();
-  const turret: UnitPart = {
+  const turrets: UnitPart[] = spec.turretOffsets.map((offset, i) => ({
     id: makePartId(),
-    name: "Turret",
-    offset: spec.turretOffset,
+    name: spec.turretOffsets.length > 1 ? `Turret ${i + 1}` : "Turret",
+    offset,
     spriteId: spec.turretSpriteId,
     customSprite: null,
     hasHitbox: false,
@@ -555,7 +558,7 @@ function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef 
     hp: 10,
     damageMultiplier: 1,
     actions: [createAttackAction(spec.fireIntervalMs)],
-  };
+  }));
   return {
     id: enemyUnitId(spec.slug),
     name: spec.name,
@@ -570,7 +573,7 @@ function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef 
     layer: spec.layer,
     defaultActionId: moveAction.id,
     actions: [moveAction],
-    parts: [main, turret],
+    parts: [main, ...turrets],
     createdAt: now,
     modifiedAt: now,
   };
