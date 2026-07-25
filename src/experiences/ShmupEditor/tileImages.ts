@@ -4,6 +4,11 @@
  * art import/sketching is still future work. Each image is a whole 1x1
  * tile's art, scaled to fit its square (not a small repeating pattern) —
  * a footprint > 1 tile shows one full copy of the image per column.
+ *
+ * **The game mirrors this table** in
+ * `games/shmup/src/sprites/editorArt.ts`, so an authored tile's background
+ * renders in the real engine. Add an image here and add it there too. See
+ * enemySprites.ts's matching note.
  */
 export interface TileImageOption {
   id: string;

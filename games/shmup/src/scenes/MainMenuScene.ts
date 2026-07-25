@@ -95,6 +95,14 @@ export class MainMenuScene extends Phaser.Scene {
         onSelect: () => this.scene.start(SCENE_KEYS.map),
       },
       {
+        // Sits above Settings deliberately: while `/shmup-editor` content
+        // is the thing being built out, "play what I just authored" is a
+        // first-class door into the game, not a buried debug affordance.
+        labelKey: "menu.encounterTest",
+        enabled: true,
+        onSelect: () => this.scene.start(SCENE_KEYS.encounterSelect),
+      },
+      {
         labelKey: "menu.settings",
         enabled: true,
         onSelect: () => this.scene.start(SCENE_KEYS.settings),

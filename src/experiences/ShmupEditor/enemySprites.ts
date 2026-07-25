@@ -10,6 +10,12 @@
  * a transparent surround — see imageUpload.ts's loadSpriteImageFile, which
  * contain-fits an upload instead of cover-cropping it for exactly this
  * reason.
+ *
+ * **The game mirrors this table.** `games/shmup/src/sprites/editorArt.ts`
+ * carries the same id -> path map so the Phaser bundle can load authored
+ * art directly (the two packages share no runtime code, only data shapes —
+ * see specs/games/shmup/authored-encounters.spec.md). Add a sprite here and
+ * add it there too, or the game falls back to a placeholder for it.
  */
 export interface SpriteOption {
   id: string;

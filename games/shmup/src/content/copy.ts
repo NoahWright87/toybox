@@ -18,8 +18,21 @@ export const COPY = {
   "menu.settings": "SETTINGS",
   "menu.hallOfFame": "HALL OF FAME",
   "menu.hint": "Arrows or Tap to select · Enter/Tap to confirm",
+  "menu.encounterTest": "TEST ENCOUNTER",
   "menu.stub.comingSoon": "Coming soon.",
   "menu.stub.back": "PRESS ANY KEY OR TAP TO GO BACK",
+
+  // ---- Encounter playtest (playing /shmup-editor content in the engine) ----
+  "encounter.title": "TEST ENCOUNTER",
+  "encounter.subtitle": "Pick a tile authored in Shmup Editor",
+  "encounter.empty":
+    "No authored tiles with encounters found.\n\nBuild one in Shmup Editor (Doors 97 > Start > Game Dev), then come back.",
+  "encounter.difficulty": "DIFFICULTY {difficulty}",
+  "encounter.more": "+{count} more",
+  "encounter.back": "BACK",
+  "encounter.result.complete": "PLAYED THROUGH · Score {score}",
+  "encounter.result.death": "SHOT DOWN · Score {score}",
+  "play.encounter.remaining": "ENEMIES {count}",
 
   // ---- Season / Finale / Syndication flavor (run-structure.spec.todo.md) ----
   "season.finale.title": "SEASON FINALE",

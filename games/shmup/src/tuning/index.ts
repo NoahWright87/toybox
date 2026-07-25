@@ -428,6 +428,46 @@ export const TUNING = {
       spawnIntervalMs: 0,
     },
   },
+  // Authored encounters (`systems/encounters`) — playing `/shmup-editor`
+  // content in the real engine. These govern presentation and safety
+  // ceilings only: everything about *what* an authored encounter does comes
+  // from the authored data itself, never from here.
+  encounters: {
+    // How far above the bottom of the screen the player ship sits. Also
+    // what `frame.ts` pins an authored tile's player-reference marker to,
+    // so the editor canvas and the opening game frame line up exactly.
+    playerLineOffsetY: 90,
+    // Display size (longest side, px) per unit of a Unit's authored hitbox
+    // RADIUS — see spriteScale.ts on why display size is derived from the
+    // one authored number that actually describes how big a thing is.
+    // 3 puts a `size: 16` helicopter at 48px against a 720-wide screen and
+    // a `size: 34` battleship at ~102px, keeping the shmup-standard
+    // "hitbox comfortably smaller than the ship" relationship.
+    artToHitboxRatio: 3,
+    // Pool ceiling for authored units. Sized well above `maxEnemies` (40)
+    // because in this model a projectile IS a Unit — one bullet-heavy
+    // encounter can have hundreds of live instances.
+    maxAuthoredUnits: 400,
+    // How far off-screen an authored instance travels before it despawns.
+    // Generous, so a wide authored path that loops out and back doesn't get
+    // culled mid-manoeuvre.
+    despawnMarginPx: 220,
+    // Backstop lifespan (sec) for a dynamically spawned instance (a
+    // projectile). Off-screen culling handles the normal case; this catches
+    // an authored Unit that hangs around on screen doing nothing.
+    spawnedLifespanSec: 12,
+    // Grace period (sec) after the last authored moment before an encounter
+    // with nothing left alive counts as played through — long enough for
+    // in-flight projectiles to clear.
+    completionGraceSec: 1.5,
+    // Difficulty the encounter playtest starts at, and the step its +/-
+    // buttons move by. Note this can never sensibly be 0: `resolveScaling`
+    // floors count at zero, so a Difficulty below an instance's
+    // `minCostPerInstance` spawns nothing at all.
+    playtestDifficultyDefault: 10,
+    playtestDifficultyStep: 5,
+    playtestDifficultyMax: 200,
+  },
   // Purely cosmetic — background scroll / starfield drift — but still tuning,
   // not magic numbers inline in PlayScene.
   visuals: {

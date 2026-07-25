@@ -4,7 +4,8 @@ import { GAME_HEIGHT } from "../config";
 import { reflexMoveSpeedMult } from "../systems/combat";
 import type { EnemyArchetypeId, ScaledEnemyStats } from "../systems/difficulty";
 import type { Polarity } from "../systems/chassis";
-import type { ShmupPlayScene } from "./types";
+import { nextSpawnId } from "./spawnId";
+import type { PlayerTarget, ShmupPlayScene } from "./types";
 
 /**
  * Pooled enemy (run-structure.spec.todo.md's Difficulty (D) scaling, F8
@@ -13,9 +14,7 @@ import type { ShmupPlayScene } from "./types";
  * (per-stat curves + per-archetype emphasis) at the current D, so this class
  * has no D/curve math of its own — it just carries the numbers.
  */
-export class Enemy extends Phaser.Physics.Arcade.Sprite {
-  private static nextSpawnId = 1;
-
+export class Enemy extends Phaser.Physics.Arcade.Sprite implements PlayerTarget {
   hp = 0;
   maxHp = 0;
   archetype: EnemyArchetypeId = "drone";
@@ -25,6 +24,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   bulletSpeed = 0;
   /** Assigned every spawn regardless of the equipped chassis (chassis.spec.md's Ikaruga flagship example) — inert unless the player's chassis actually declares a `polarity` mechanic, in which case it gates damage from player shots. */
   polarity: Polarity = "red";
+  /** A built-in enemy has no authored armor zones — every hit lands at face value. Present to satisfy `PlayerTarget`, which authored Parts do use. */
+  readonly damageMultiplier = 1;
   private moveSpeedValue = 0;
   /** Identifies this enemy's current life, not the pooled object — bullets must track hits by this, not by object reference, since the underlying sprite is reused across spawns (Group.get() recycling). */
   spawnId = 0;
@@ -46,7 +47,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.moveSpeedValue = stats.speed;
     this.fireIntervalMs = stats.fireIntervalMs;
     this.fireCooldownMs = stats.fireIntervalMs;
-    this.spawnId = Enemy.nextSpawnId++;
+    this.spawnId = nextSpawnId();
     this.polarity = Math.random() < 0.5 ? "red" : "blue";
     this.applyPolarityTint();
     this.setPosition(x, y);
@@ -73,6 +74,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;
+  }
+
+  /** A built-in enemy owns its own HP, so it's always the thing that dies. */
+  applyDamage(amount: number): PlayerTarget | null {
+    this.hp -= amount;
+    if (this.hp > 0) return null;
+    this.recycle();
+    return this;
   }
 
   /** True if this enemy's fire cooldown elapsed this frame (and resets it). */

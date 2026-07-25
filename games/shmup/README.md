@@ -29,7 +29,24 @@ games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.to
     sprites/         sprite registry — placeholder primitives + manifest.json (F5)
     assets/sprites/  bundled sprite art, wired by path from sprites/manifest.json (F5)
     save/            SaveStore — swappable save/settings persistence (S1)
+    systems/encounters/  loads /shmup-editor content and plays it (authored-encounters.spec.md)
 ```
+
+## Authored content
+
+Tiles, Units and Encounters built in `/shmup-editor` load straight into the
+game — no export step. The editor persists into the Doors 97 virtual
+filesystem; this bundle reads the same same-origin `ns97_fs_v1` blob back
+(`src/systems/encounters/authoredContent.ts`) and plays an Encounter with
+the real ship, weapons, Hype and economy around it. Main Menu → **TEST
+ENCOUNTER**. See
+[`specs/games/shmup/authored-encounters.spec.md`](../../specs/games/shmup/authored-encounters.spec.md).
+
+Two version constants must move in lockstep with the editor's stores:
+`AUTHORED_TILES_VERSION` / `AUTHORED_UNITS_VERSION` mirror
+`tileStore.ts` / `unitStore.ts`'s `SAVE_VERSION`. A mismatch means the game
+sees no authored content at all — that is deliberate, but bump both sides
+together.
 
 ## Save storage
 
