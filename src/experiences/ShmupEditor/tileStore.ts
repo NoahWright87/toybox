@@ -8,7 +8,7 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID } from "./tileImages";
-import type { EdgeSlot, TileDef } from "./types";
+import { createDefaultTileLibrary, type EdgeSlot, type TileDef } from "./types";
 
 // v2: `color` swatch replaced by `imageId` (tileImages.ts) — bumping so a
 // pre-v2 save (missing imageId) is discarded rather than half-loaded.
@@ -90,15 +90,31 @@ function normalizeTile(tile: TileDef): TileDef {
   return clean;
 }
 
+/**
+ * A brand-new install (`content` empty) or a version-mismatched/corrupt
+ * save both land here — seeded with the default tile library (one TileDef
+ * per built-in image in tileImages.ts, see types.ts's
+ * createDefaultTileLibrary) rather than a truly empty one, so the editor's
+ * tile picker isn't blank the first time it's opened. Mirrors
+ * unitStore.ts's seedAndPersistDefaultLibrary. The seed is saved
+ * immediately so it's a real, editable/deletable library entry from the
+ * next load onward, not silently regenerated every time.
+ */
+function seedAndPersistDefaultLibrary(): TileDef[] {
+  const tiles = createDefaultTileLibrary();
+  saveTiles(tiles);
+  return tiles;
+}
+
 export function loadTiles(): TileDef[] {
   const content = fsStore.getFile(SHMUP_EDITOR_TILES_ID)?.content;
-  if (!content) return [];
+  if (!content) return seedAndPersistDefaultLibrary();
   try {
     const parsed = JSON.parse(content) as SavedLibrary;
-    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return [];
+    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return seedAndPersistDefaultLibrary();
     return parsed.tiles.filter(isValidTileDef).map(normalizeTile);
   } catch {
-    return [];
+    return seedAndPersistDefaultLibrary();
   }
 }
 

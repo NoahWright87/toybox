@@ -97,3 +97,167 @@ export function resizeSlots(slots: EdgeSlot[], footprint: Footprint): EdgeSlot[]
   if (slots.length > footprint) return slots.slice(0, footprint);
   return [...slots, ...Array.from({ length: footprint - slots.length }, () => edgeSlot())];
 }
+
+// ── Default tile library (specs/shmup-editor.todo.md follow-up — the
+// built-in tile art in tileImages.ts previously had no matching TileDef
+// instances at all, so the editor's tile picker started completely empty
+// even though a full set of biome art shipped alongside it) ────────────
+
+/** Every tile below is footprint 1 — the built-in art is a whole 1x1 square, not a wide multi-column piece. */
+function plainTile(name: string, imageId: string, tag: EdgeTag): Omit<TileDef, "id" | "createdAt" | "modifiedAt"> {
+  return {
+    name,
+    footprint: 1,
+    north: [edgeSlot(tag)],
+    south: [edgeSlot(tag)],
+    east: edgeSlot(tag),
+    west: edgeSlot(tag),
+    isConnector: false,
+    weight: 1,
+    imageId,
+    customImage: null,
+    encounters: [],
+  };
+}
+
+/**
+ * A tile whose art splits the biome top (north) / bottom (south) across
+ * the square — the natural or "wall"/gate-decorated variants alike. Either
+ * way the east/west edges show both biomes at once (a gradient, or a
+ * fence/gate straddling the seam), which no single tag can represent
+ * correctly, so they're hardwalled per root CLAUDE.md's tile-tagging rule.
+ */
+function horizontalSplitTile(name: string, imageId: string, north: EdgeTag, south: EdgeTag): Omit<TileDef, "id" | "createdAt" | "modifiedAt"> {
+  return {
+    name,
+    footprint: 1,
+    north: [edgeSlot(north)],
+    south: [edgeSlot(south)],
+    east: edgeSlot("", true),
+    west: edgeSlot("", true),
+    isConnector: false,
+    weight: 1,
+    imageId,
+    customImage: null,
+    encounters: [],
+  };
+}
+
+/** Mirror of horizontalSplitTile for art that splits the biome left (west) / right (east) instead — north/south hardwalled instead. */
+function verticalSplitTile(name: string, imageId: string, west: EdgeTag, east: EdgeTag): Omit<TileDef, "id" | "createdAt" | "modifiedAt"> {
+  return {
+    name,
+    footprint: 1,
+    north: [edgeSlot("", true)],
+    south: [edgeSlot("", true)],
+    east: edgeSlot(east),
+    west: edgeSlot(west),
+    isConnector: false,
+    weight: 1,
+    imageId,
+    customImage: null,
+    encounters: [],
+  };
+}
+
+function makeDefaultTile(spec: Omit<TileDef, "id" | "createdAt" | "modifiedAt">): TileDef {
+  const now = Date.now();
+  return { ...spec, id: makeTileId(), createdAt: now, modifiedAt: now };
+}
+
+/**
+ * The full default tile library a brand-new/reset session starts with —
+ * one TileDef per image in tileImages.ts, tagged per root CLAUDE.md's
+ * shmup-editor rule: biome-named tiles get edges tagged for what's
+ * visually there, and any edge with an obvious wall/seam (a fence, gate,
+ * or an edge that mixes two biomes with no single tag to describe it)
+ * gets hardwalled instead. Mirrors unitTypes.ts's createDefaultUnitLibrary.
+ */
+export function createDefaultTileLibrary(): TileDef[] {
+  return [
+    // Plain biomes — every edge open to more of the same.
+    makeDefaultTile(plainTile("Water", "water", "water")),
+    makeDefaultTile(plainTile("Grass", "grass", "grass")),
+    makeDefaultTile(plainTile("Sand", "sand", "sand")),
+    makeDefaultTile(plainTile("Swamp", "swamp", "swamp")),
+    makeDefaultTile(plainTile("Lava", "lava", "lava")),
+    makeDefaultTile(plainTile("Rocky", "rocky", "rocky")),
+    makeDefaultTile(plainTile("Concrete", "concrete", "concrete")),
+    makeDefaultTile(plainTile("Forest", "forest", "forest")),
+
+    // Horizontal (north/south) biome transitions — east/west hardwalled.
+    makeDefaultTile(horizontalSplitTile("Grass / Water Shore", "grass-water", "water", "grass")),
+    makeDefaultTile(horizontalSplitTile("Grass / Sand", "grass-sand", "sand", "grass")),
+    makeDefaultTile(horizontalSplitTile("Grass / Sand (Natural)", "grass-sand-natural", "sand", "grass")),
+    makeDefaultTile(horizontalSplitTile("Grass / Swamp", "grass-swamp", "swamp", "grass")),
+    makeDefaultTile(horizontalSplitTile("Sand / Rocky", "sand-rocky", "rocky", "sand")),
+    makeDefaultTile(horizontalSplitTile("Sand / Water", "sand-water-natural", "sand", "water")),
+    makeDefaultTile(horizontalSplitTile("Sand / Concrete", "sand-concrete", "concrete", "sand")),
+    makeDefaultTile(horizontalSplitTile("Sand / Concrete Gate", "sand-concrete-wall", "concrete", "sand")),
+    makeDefaultTile(horizontalSplitTile("Concrete / Water", "concrete-water", "water", "concrete")),
+    makeDefaultTile(horizontalSplitTile("Concrete / Water Pier", "concrete-water-wall", "water", "concrete")),
+    makeDefaultTile(horizontalSplitTile("Concrete / Lava", "concrete-lava", "concrete", "lava")),
+    makeDefaultTile(horizontalSplitTile("Concrete / Lava Barrier", "concrete-lava-wall", "concrete", "lava")),
+    makeDefaultTile(horizontalSplitTile("Forest / Water", "forest-water", "forest", "water")),
+
+    // Vertical (east/west) biome transition — north/south hardwalled.
+    makeDefaultTile(verticalSplitTile("Forest / Grass", "grass-forest", "forest", "grass")),
+
+    // Diagonal corner — water fills the NW half (touching north+west), grass fills the SE half (touching south+east); every edge gets a real tag, nothing hardwalled.
+    makeDefaultTile({
+      name: "Water / Grass Corner",
+      footprint: 1,
+      north: [edgeSlot("water")],
+      south: [edgeSlot("grass")],
+      east: edgeSlot("grass"),
+      west: edgeSlot("water"),
+      isConnector: false,
+      weight: 1,
+      imageId: "grass-water-diag",
+      customImage: null,
+      encounters: [],
+    }),
+
+    // Roads — grass on both sides, "grass-road" tag continues the path north/south. Tagged by biome (not just "road") since desert/concrete roads etc. are a different, non-matching tag.
+    makeDefaultTile({
+      name: "Road (Straight)",
+      footprint: 1,
+      north: [edgeSlot("grass-road")],
+      south: [edgeSlot("grass-road")],
+      east: edgeSlot("grass"),
+      west: edgeSlot("grass"),
+      isConnector: false,
+      weight: 1,
+      imageId: "grass-road-straight",
+      customImage: null,
+      encounters: [],
+    }),
+    makeDefaultTile({
+      name: "Road (Curve)",
+      footprint: 1,
+      north: [edgeSlot("grass-road")],
+      south: [edgeSlot("grass-road")],
+      east: edgeSlot("grass"),
+      west: edgeSlot("grass"),
+      isConnector: false,
+      weight: 1,
+      imageId: "grass-road-curve",
+      customImage: null,
+      encounters: [],
+    }),
+    makeDefaultTile({
+      name: "Road (Trailhead)",
+      footprint: 1,
+      north: [edgeSlot("grass-road")],
+      south: [edgeSlot("grass")],
+      east: edgeSlot("grass"),
+      west: edgeSlot("grass"),
+      isConnector: false,
+      weight: 1,
+      imageId: "grass-road-start",
+      customImage: null,
+      encounters: [],
+    }),
+    makeDefaultTile(horizontalSplitTile("Road / Concrete Gate", "grass-road-concrete", "concrete", "grass-road")),
+  ];
+}

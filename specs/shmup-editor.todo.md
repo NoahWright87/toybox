@@ -492,22 +492,20 @@ current design; this entry describes what actually shipped.
   enemies"); weight shipped (plain number, default 1), but gating an
   encounter to a difficulty-budget range depends on the difficulty-budget
   system (`spawn-and-warnings.spec.todo.md`), which doesn't exist yet.
-- **Built-in sprites**: four "skull" Mad-Max-style vehicles (buggy,
-  technical, motorcycle, helicopter — see `public/shmup-editor/enemies/README.md`
-  and `scripts/prepare-skull-sprites.mjs`), each only the idle-pose frame.
-  Custom upload also works for authoring any other Unit today.
-- **Animation preview is deferred.** Each skull sheet actually has 16
-  frames (4 states x 4 frames: idle/moving/attacking/dying —
-  `scripts/assets/skull-sprites-source/README.md`), but the editor only
-  ever shows a static idle sprite — there's no per-Unit concept of "the
-  other 15 frames" yet, and no player/preview UI to flip through them.
-  Real, moderate-sized follow-up work: (a) a data-model decision for how
-  frame sets attach to a sprite (a built-in vs. a custom upload have very
-  different provenance for this), (b) re-running the background-removal
-  step from `prepare-skull-sprites.mjs` against the other 15 frames per
-  sheet instead of just frame 1, and (c) a small animation-player
-  component. Reasonable to fold into E4 (Preview/playtest mode) rather
-  than block E2 on it.
+- **Built-in sprites**: a growing set of single-pose vehicle/turret/
+  projectile art (see `public/shmup-editor/enemies/README.md` and
+  `public/shmup-editor/projectiles/README.md`) — every built-in today is
+  a static idle-pose sprite, no multi-frame sheets in the mix. Custom
+  upload also works for authoring any other Unit today.
+- **Animation preview is deferred.** There's no per-Unit concept of
+  alternate frames (moving/attacking/dying) yet, and no player/preview UI
+  to flip through them — the editor only ever shows a static sprite. Real,
+  moderate-sized follow-up work if/when animated built-in art shows up:
+  (a) a data-model decision for how frame sets attach to a sprite (a
+  built-in vs. a custom upload have very different provenance for this),
+  (b) a background-removal step for the extra frames, and (c) a small
+  animation-player component. Reasonable to fold into E4 (Preview/playtest
+  mode) rather than block E2 on it.
 - ~~Unit variants aren't attachable to a tile yet~~ — resolved: a Unit
   instance is placed via `EncounterUnit` (E2) inside an `EncounterDef`
   exactly as before; E3 (per-instance scaling) added procedural

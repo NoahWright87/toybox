@@ -7,16 +7,14 @@ pass — a `UnitPart` needs its own sprite to be a useful standalone test
 case, e.g. a battleship/tank turret rendered and positioned separately
 from its hull).
 
-Each sheet is a 1254x1254 PNG on a **solid magenta background**
-(unlike the skull sprite sheets' baked-in checkerboard — see
-`../skull-sprites-source/README.md`), containing **two separate objects
-side by side**: a vehicle body (left, larger) and its turret (right,
-smaller). `scripts/prepare-parts-demo-sprites.mjs` chroma-keys the
-magenta out and splits each sheet into two separate built-in sprites —
-see that script's header comment for why a global color test was needed
-instead of the skull script's border flood fill (the turret's ring shape
-encloses an interior "lake" of background color unreachable from the
-canvas edge).
+Each sheet is a 1254x1254 PNG on a **solid magenta background**, containing
+**two separate objects side by side**: a vehicle body (left, larger) and
+its turret (right, smaller). `scripts/prepare-parts-demo-sprites.mjs`
+chroma-keys the magenta out and splits each sheet into two separate
+built-in sprites — see that script's header comment for why a global
+color test was needed instead of a simple border flood fill (the turret's
+ring shape encloses an interior "lake" of background color unreachable
+from the canvas edge).
 
 | File | SHA-256 | Vehicle |
 |---|---|---|
