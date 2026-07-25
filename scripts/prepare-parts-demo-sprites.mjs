@@ -9,25 +9,22 @@
  * and its independently-selectable turret, split apart so each can be
  * assigned to its own `UnitPart`.
  *
- * Unlike the skull sprite sheets (prepare-skull-sprites.mjs), these have a
- * **solid magenta background** (not a baked-in checkerboard), and each
- * sheet contains **two distinct objects side by side** (body, turret) that
- * need to become two separate output files, not one. Approach:
+ * Each sheet has a **solid magenta background**, and contains **two
+ * distinct objects side by side** (body, turret) that need to become two
+ * separate output files, not one. Approach:
  *   1. Chroma-key the magenta out with a **global** per-pixel color test,
  *      not a border flood fill — the turret art has a closed ring shape
  *      whose interior is a magenta "lake" fully enclosed by opaque
- *      pixels, unreachable from the canvas edge. A flood fill (right
- *      choice for the skull sheets, where near-gray art pixels could
- *      false-positive against the checkerboard and needed connectivity to
- *      stay safe) would miss that lake entirely; a solid, saturated
- *      magenta never appears in either vehicle's actual paint, so a plain
- *      global color test is both simpler and correct here.
+ *      pixels, unreachable from the canvas edge. A flood fill would miss
+ *      that lake entirely; a solid, saturated magenta never appears in
+ *      either vehicle's actual paint, so a plain global color test is
+ *      both simpler and correct here.
  *   2. Once the background is real transparency, find each disjoint
  *      opaque connected component (a flood fill, over alpha this time) —
  *      the body and turret are two separate components since a wide
  *      magenta gap always separates them with no opaque bridge.
- *   3. Sort components by size (body is always the larger one) and crop/
- *      trim/pad/resize each exactly like the skull script does.
+ *   3. Sort components by size (body is always the larger one) and
+ *      crop/trim/pad/resize each into its own square icon.
  *
  * Usage:
  *   node scripts/prepare-parts-demo-sprites.mjs

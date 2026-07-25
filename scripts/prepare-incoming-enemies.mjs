@@ -4,20 +4,19 @@
  * One-time processing of the "incoming" enemy sprite batch (Noah-supplied,
  * see scripts/assets/incoming-enemies-source/README.md) into the built-in
  * sprites used by src/experiences/ShmupEditor/enemySprites.ts. Mirrors
- * prepare-skull-sprites.mjs / prepare-parts-demo-sprites.mjs's approach
- * (chroma-key background removal, trim to content, pad to square, downsize)
- * but generalizes the background color instead of hardcoding a checkerboard
- * gray or a fixed magenta — this batch mixes magenta-keyed sheets with one
- * near-white-keyed single sprite (heli.png), so the reference color is
- * sampled from each source image's own corner pixel.
+ * prepare-parts-demo-sprites.mjs's approach (chroma-key background
+ * removal, trim to content, pad to square, downsize) but generalizes the
+ * background color instead of hardcoding a fixed magenta — this batch
+ * mixes magenta-keyed sheets with one near-white-keyed single sprite
+ * (heli.png), so the reference color is sampled from each source image's
+ * own corner pixel.
  *
  * Three sheets (battleship, missile-truck, train-gun-car) bundle a body
  * plus several turret variants on one canvas — only one representative
- * turret is extracted from each (the rest of the sheet is unused, same
- * "idle frame only" simplification prepare-skull-sprites.mjs already made
- * for its 4x4 animation sheets). These three become multi-part enemies
- * (their own subfolder under public/shmup-editor/enemies/), consistent
- * with the armored-truck/battle-tank Parts-demo precedent.
+ * turret is extracted from each (the rest of the sheet is unused). These
+ * three become multi-part enemies (their own subfolder under
+ * public/shmup-editor/enemies/), consistent with the armored-truck/
+ * battle-tank Parts-demo precedent.
  *
  * Usage:
  *   node scripts/prepare-incoming-enemies.mjs

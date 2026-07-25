@@ -795,9 +795,9 @@ attack together instead of a standalone Weapon.)
     `hp`/`speed`/`size`/`contactDamage`, giving any attack's `spawnUnitId`
     picker real variety instead of one option;
   - a full roster of enemy Units built from every sprite in
-    `enemySprites.ts` (the pre-existing skull-\*/armored-truck/battle-tank
-    set plus a new "incoming" vehicle batch — helicopters, jets, trucks,
-    turrets, a battleship, and a 3-car armored train, see
+    `enemySprites.ts` (the pre-existing armored-truck/battle-tank
+    Parts-demo set plus a new "incoming" vehicle batch — helicopters, jets,
+    trucks, turrets, a battleship, and a 3-car armored train, see
     `public/shmup-editor/enemies/README.md`), each pre-wired with a
     "Move" Action (100% movement facing the direction of travel, or
     stationary/fixed-facing for the two turret Units) on the Unit's own
@@ -1211,24 +1211,23 @@ inline" convention the Encounter editor's own tab pass established.
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
 Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly.
-Built-in set: four "skull" Mad-Max-style vehicles Noah supplied
-(ChatGPT-generated) — dune buggy, gunner "technical," motorcycle,
-helicopter (`public/shmup-editor/enemies/README.md`). Each source sheet is
-actually a 4x4 idle/move/attack/die grid
-(`scripts/assets/skull-sprites-source/`), but only the idle frame is
-extracted for the built-in today, via `scripts/prepare-skull-sprites.mjs`
-— a one-time Jimp-based script that crops the idle cell, flood-fills real
-alpha transparency in (the source sheets bake a fake checkerboard into
-opaque near-gray pixels rather than using real alpha), trims to content,
-and pads to a square icon. Custom upload reuses the same
+Built-in set: a body-split-from-turret Parts-demo pair (armored truck,
+battle tank) Noah supplied directly, plus a growing "incoming" vehicle
+batch and a curated projectile set (see
+`public/shmup-editor/enemies/README.md` and
+`public/shmup-editor/projectiles/README.md` for sourcing/processing
+details) — every built-in is a single static pose, no animation frames.
+Processing is a one-time Jimp-based script per batch that chroma-key
+flood-fills real alpha transparency in, trims to content, and pads to a
+square icon. Custom upload reuses the same
 `paletteQuantize.ts`/`indexedPng.ts` pipeline as tile art, generalized in
 `imageUpload.ts` into `decodeUpload`/`canvasToIndexedPngDataUrl` helpers
 shared by both `loadTileImageFile` (cover-fit crop, opaque — fills a whole
 square) and `loadSpriteImageFile` (**contain**-fit, transparent surround —
 a sprite must stay fully visible against a see-through background rather
-than being cropped to fill a square). Animating through the other 15
-frames per skull sheet (idle/move/attack/die preview) is deferred — see
-`shmup-editor.todo.md`'s Remaining list.
+than being cropped to fill a square). An animation preview (idle/move/
+attack/die frames) is deferred — see `shmup-editor.todo.md`'s Remaining
+list.
 
 ### Persistence
 

@@ -471,10 +471,6 @@ interface SimpleEnemySpec {
 }
 
 const SIMPLE_ENEMY_SPECS: SimpleEnemySpec[] = [
-  { slug: "skull-buggy", name: "Skull Buggy", spriteId: "skull-buggy", layer: "ground", hp: 15, contactDamage: 2, scoreValue: 150, speed: 140, turnRate: 1.2, size: 14, fireIntervalMs: 1100 },
-  { slug: "skull-technical", name: "Skull Technical", spriteId: "skull-technical", layer: "ground", hp: 20, contactDamage: 2, scoreValue: 180, speed: 110, turnRate: 1, size: 16, fireIntervalMs: 900 },
-  { slug: "skull-motorcycle", name: "Skull Motorcycle", spriteId: "skull-motorcycle", layer: "ground", hp: 10, contactDamage: 2, scoreValue: 120, speed: 170, turnRate: 1.5, size: 12, fireIntervalMs: 1300 },
-  { slug: "skull-helicopter", name: "Skull Helicopter", spriteId: "skull-helicopter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 200, speed: 130, turnRate: 1.3, size: 16, fireIntervalMs: 1000 },
   { slug: "heli", name: "Attack Helicopter", spriteId: "heli", layer: "air", hp: 30, contactDamage: 3, scoreValue: 220, speed: 140, turnRate: 1.2, size: 16, fireIntervalMs: 950 },
   { slug: "heli-transport", name: "Transport Helicopter", spriteId: "heli-transport", layer: "air", hp: 50, contactDamage: 2, scoreValue: 260, speed: 100, turnRate: 0.8, size: 20, fireIntervalMs: 1400 },
   { slug: "jet-bomber", name: "Jet Bomber", spriteId: "jet-bomber", layer: "air", hp: 45, contactDamage: 4, scoreValue: 300, speed: 160, turnRate: 0.9, size: 20, fireIntervalMs: 1200 },
