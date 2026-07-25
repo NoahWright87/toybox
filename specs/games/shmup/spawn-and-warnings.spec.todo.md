@@ -94,30 +94,52 @@ step/attack sequence independently once spawned.
 
 ## 3. Warning indicators (L6)
 
+> **Reconciled 2026-07-25** — this is, and always was, a `games/shmup`
+> runtime concern, not something `/shmup-editor` builds or surfaces (see
+> `shmup-editor.todo.md`'s E4 entry, corrected the same day — its preview
+> mode explicitly does not try to build toward this). More importantly,
+> the concept itself was too narrow: framing this purely as "spawns are
+> predetermined, so telegraph them ahead of time" undersells what's
+> actually needed. The real system is **generic**, covering anything
+> currently off-screen — not just a not-yet-spawned enemy — especially
+> something actively moving toward the play area (an enemy that entered
+> the tile off-camera and is closing in, not only the moment-of-spawn
+> case). Spawn-triggered warnings (below) are the scripted-timing special
+> case of this general system, not the whole of it.
+
 Because all spawn timing is predetermined (part of the hidden
 difficulty-budget-driven schedule, not literally random), the game always
-knows N seconds ahead of a spawn that it's coming. Warnings are
-**automatically triggered off spawn timing**, never manually authored
-per-enemy:
+knows N seconds ahead of a spawn that it's coming — this is the
+spawn-triggered slice of the generic off-screen/approaching-threat system
+described above, automatically driven by schedule data, never manually
+authored per-enemy:
 
 - **Edge marker**: an arrow/bubble at the screen edge pointing toward an
   off-screen spawn location, for anything entering via lateral movement
-  from outside the visible field.
+  from outside the visible field. The same marker generalizes to any
+  currently off-screen threat closing on the play area, not just one
+  that hasn't spawned yet — a fast air Unit that's already alive but still
+  outside the camera's bounds needs the identical treatment.
 - **On-field marker**: an exclamation/flash at the exact on-field spawn
   point, for `appear`/static-entrance enemies (factories, turrets,
   hazards) that materialize inside the visible tile.
 - **`warningLead`** (how far ahead of actual spawn the indicator appears)
   is tunable per enemy/Unit instance, not a single global constant —
   faster-entering enemies need more lead time than slow ones, since the
-  goal is equal *reaction time*, not equal *warning time*.
+  goal is equal *reaction time*, not equal *warning time*. For the
+  generic off-screen case (not a fresh spawn), the equivalent lead isn't a
+  fixed delay but a distance/time-to-arrival threshold computed from the
+  threat's actual position and speed.
 - `teleport`'s `telegraphAtDestination` toggle and beam attacks'
   `onTrigger` telegraph phase (both `enemies-and-bullets.spec.todo.md`)
   are the same underlying concept applied at smaller scale — a visible
   warning before a state change becomes live.
 
-This system exists specifically so predictable/scripted spawns never feel
-like a cheap shot — nothing should become dangerous without a preceding,
-readable signal.
+This system exists specifically so predictable/scripted spawns — and
+anything else currently outside the visible play area — never feel like a
+cheap shot. Nothing should become dangerous without a preceding, readable
+signal, whether it's about to spawn or is already alive and closing in
+from off-screen.
 
 ## Related
 

@@ -168,6 +168,11 @@ export function createBlankAction(existingCount: number): ActionDef {
   };
 }
 
+/** Clone button (design-handoff v3 §8.1) for a single Action row — fresh id, "<name> copy", and a fresh `attack` object rather than a shared reference, so editing the copy's attack fields never mutates the original's. */
+export function cloneAction(action: ActionDef): ActionDef {
+  return { ...action, id: makeActionId(), name: `${action.name} copy`, attack: action.attack ? { ...action.attack } : null };
+}
+
 /** Defaults to spawning the seeded default Bullet Unit rather than `null` — a brand-new attack does something visible/testable immediately instead of silently firing nothing. */
 export function createBlankAttack(): ActionAttack {
   return {
@@ -219,6 +224,11 @@ export function createDefaultPart(): UnitPart {
 
 export function createBlankPart(existingCount: number): UnitPart {
   return { id: makePartId(), name: `Part ${existingCount + 1}`, offset: { x: 0, y: 0 }, spriteId: "none", customSprite: null, hasHitbox: false, hasHealth: false, hp: 10, damageMultiplier: 1, actions: [] };
+}
+
+/** Clone button (design-handoff v3 §8.1) for a single Part row — fresh Part id plus every one of its own Actions cloned too (fresh ids), so the copy shares no mutable state with the original. */
+export function clonePart(part: UnitPart): UnitPart {
+  return { ...part, id: makePartId(), name: `${part.name} copy`, actions: part.actions.map(cloneAction) };
 }
 
 // ── Unit ───────────────────────────────────────────────────────────────────

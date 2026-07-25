@@ -6,7 +6,7 @@ import {
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
   SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
-  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_EXE_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID,
 } from "./types";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
 import { seedFileSystem } from "./seed";
@@ -421,6 +421,21 @@ export class FileSystemStore {
           parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "text/plain",
           system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Shmup Editor.exe exists (existing sessions predating its Doors 97
+    // window registration — the folder used to hold data files only)
+    if (!this.nodes.has(SHMUP_EDITOR_EXE_ID)) {
+      const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_EXE_ID, {
+          id: SHMUP_EDITOR_EXE_ID, kind: "file", name: "Shmup Editor.exe",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "exe", content: "", mimeType: "application/octet-stream",
+          system: false, readonly: false, appId: "shmup-editor",
         } as FSFile);
         changed = true;
       }

@@ -4,7 +4,7 @@ import SpritePicker from "./SpritePicker";
 import PartPositionEditor from "./PartPositionEditor";
 import ActionForm from "./ActionForm";
 import { resolveSpriteUrl } from "./enemySprites";
-import { createBlankAction, type ActionDef, type UnitDef, type UnitPart } from "./unitTypes";
+import { cloneAction, createBlankAction, type ActionDef, type UnitDef, type UnitPart } from "./unitTypes";
 
 interface PartEditorProps {
   part: UnitPart;
@@ -69,6 +69,11 @@ export default function PartEditor({ part, unit, units, excludeUnitId, onSave, o
     const action = createBlankAction(draft.actions.length);
     update({ actions: [...draft.actions, action] });
     setExpandedActionId(action.id);
+  }
+
+  /** Clone button (design-handoff v3 §8.1) — the intended way to author a fixed-angle/differently-tuned variant of an existing Action without re-entering every field by hand. */
+  function handleCloneAction(action: ActionDef) {
+    update({ actions: [...draft.actions, cloneAction(action)] });
   }
 
   function deleteAction(actionId: string) {
@@ -158,6 +163,9 @@ export default function PartEditor({ part, unit, units, excludeUnitId, onSave, o
                       <div className="shmup-btn-row">
                         <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setExpandedActionId(expandedActionId === action.id ? null : action.id)}>
                           {expandedActionId === action.id ? "Collapse" : "Edit"}
+                        </button>
+                        <button type="button" className="shmup-btn shmup-btn--small" onClick={() => handleCloneAction(action)}>
+                          Clone
                         </button>
                         {pendingDeleteActionId === action.id ? (
                           <>

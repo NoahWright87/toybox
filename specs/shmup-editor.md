@@ -6,11 +6,16 @@
 
 ## What it is
 
-A standalone browser tool at **`/shmup-editor`** (a normal main-app React
-route, wrapped in `StandaloneWindow` like MIDI Editor — not embedded in
-an NS Doors 97 window yet) for authoring **tiles** for the shmup game's
-data-driven level system. It is intentionally decoupled from
-`games/shmup/`:
+A browser tool for authoring **tiles** for the shmup game's data-driven
+level system, reachable two ways: the standalone `/shmup-editor` route (a
+normal main-app React route, wrapped in `StandaloneWindow` like MIDI
+Editor) and, as of 2026-07-25, an NS Doors 97 window (Start Menu > **Game
+Dev** > Shmup Editor, or `C:\Programs\Accessories\Shmup Editor\Shmup
+Editor.exe` from the file browser — `NsDoors97.tsx`'s `"shmup-editor"`
+window type). Both paths render the same `ShmupEditor.tsx`, which already
+registered its own Help menu via `useWindowMenus` in anticipation of
+Doors 97 hosting before that hosting existed. It is intentionally
+decoupled from `games/shmup/`:
 
 - **No shared code.** The editor's tile types and rotation/matching logic
   (`src/experiences/ShmupEditor/types.ts`, `orientation.ts`) are a fresh,
@@ -118,8 +123,11 @@ shows a plain heading for whichever view is active.
     live thumbnail of the upload to the picker row (selectable like any
     built-in, so switching back to a built-in and back to the custom
     upload doesn't require re-uploading); "Remove Custom Art" clears it
-    and falls back to `none` if it was the active selection. Real
-    in-editor sketching (vs. upload of existing art) is still deferred.
+    and falls back to `none` if it was the active selection. In-editor
+    sketching from scratch is out of scope, on purpose — that was never an
+    actual requirement (it crept into an earlier revision of the TODOs
+    without a real ask behind it), and NS Art already covers freehand image
+    creation; upload is this tool's only intended art-input path.
   - **No biome field, on purpose.** An earlier revision of this tool had
     a per-tile `biome` field (`BiomeSelect.tsx`/`biomeRegistry.ts`,
     removed) that let a tile declare which biome tile-set it belonged to.

@@ -87,15 +87,20 @@ clusters/rarity — there's nothing biome-specific left in the data model
 to visualize instead.
 
 **Remaining:**
-- ~~Attach spawn variants to a tile~~ — resolved, not by building a new
-  variant concept: `EncounterDef` (E2) already *is* a tile variant (its own
-  weighted-random-pick doc comment). Per-instance duplication (E3) is a
+- ~~Attach spawn variants to a tile~~ — resolved, and confirmed (2026-07-25,
+  Noah): `TileDef.encounters` *is* the spawn-variant mechanism, full stop —
+  "different words, same idea." Not a naming coincidence to double-check
+  later: `EncounterDef` (E2) already is a tile variant (its own
+  weighted-random-pick doc comment), and per-instance duplication (E3) is a
   property of a hand-placed `EncounterUnit` within that encounter, not a
   separate variant-attachment concept. See `shmup-editor.md`'s
-  "Per-instance scaling (E3)" section.
-- In-editor sketching of tile art (today's upload flow takes an existing
-  image file; drawing new art from scratch in the tool is still future
-  work).
+  "Per-instance scaling (E3)" section. No further verification needed here.
+- ~~In-editor sketching of tile art~~ — **not a real requirement, removed.**
+  This was never actually asked for; it crept into an earlier revision of
+  this doc without a real ask behind it (Noah, 2026-07-25: "that got
+  hallucinated, and it can be removed entirely"). NS Art already covers
+  image creation from scratch — upload (`imageUpload.ts`) is this tool's
+  only intended art-input path, and stays that way on purpose.
 - The tile-edit form's in-progress draft (`TileEditorForm`'s `draft`
   state, including a freshly-uploaded `customImage`) only persists on
   explicit Save — unlike root `CLAUDE.md`'s mandatory in-progress-session
@@ -433,20 +438,20 @@ current design; this entry describes what actually shipped.
   only updated the parent `ShmupEditor.tsx`'s `editingUnit`, never
   `UnitStatsForm`'s own separately-held `draft` state) — `deletePart()` now
   updates both.
-- **Clone doesn't exist anywhere, despite being cited repeatedly as the
-  answer to "how do I author a variant" (v3 §8.1).** Genuinely easy to add
-  — a shallow-copy-with-a-fresh-id, same shape as `handleDuplicateUnit`'s
-  existing id-remapping in `ShmupEditor.tsx` — **deliberately backlogged,
-  not prioritized right now** (Noah, 2026-07-21: "It's easy to add, but
-  let's save it for later"). Both `unitTypes.ts`'s doc
-  comments and the in-app Help modal tell an author to "Clone the Action"
-  to get a fixed-angle/differently-tuned variant instead of a per-placement
-  override — that's the whole justification for cutting per-placement aim
-  overrides and per-step speed multipliers when Actions came back. No
-  Clone button exists on an Action, a Part, or a Unit. This is v3 §8.1's
-  "**Clone** should be a first-class operation here" — currently the only
-  way to get a variant is manually re-entering every field by hand. Worth
-  prioritizing since several other design decisions lean on it existing.
+- ~~Clone doesn't exist anywhere~~ — **shipped (2026-07-25).** A Unit
+  already had Duplicate (`UnitList.tsx`'s "Duplicate" button →
+  `handleDuplicateUnit` in `ShmupEditor.tsx`) from earlier work; Action and
+  Part rows were the actual gap. Both now have a "Clone" button —
+  `cloneAction()`/`clonePart()` (`unitTypes.ts`) do a fresh-id shallow copy
+  (`"<name> copy"`, and for a Part, its own Action buffet cloned too, each
+  with fresh ids) wired into `UnitStatsForm.tsx`'s Actions/Parts tabs and
+  `PartEditor.tsx`'s Actions tab. This is v3 §8.1's "**Clone** should be a
+  first-class operation here" — both `unitTypes.ts`'s doc comments and the
+  in-app Help modal already told an author to "Clone the Action" to get a
+  fixed-angle/differently-tuned variant instead of a per-placement
+  override (the whole justification for cutting per-placement aim
+  overrides and per-step speed multipliers when Actions came back), so this
+  closes a real gap several other design decisions were already leaning on.
 - **No minimum-duration placement validation (v3 §8.2).** "The editor
   should prevent placing a node earlier than the minimum duration of the
   preceding node allows" — not built. A Part-track placement's `time` can
@@ -718,8 +723,16 @@ playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
   together would need the L2 JIT-streaming/edge-matching system
   (`levels-and-tiles.spec.todo.md`) to exist first.
 - **Warning-indicator lead-time surfacing** (L6 #188,
-  `spawn-and-warnings.spec.todo.md` §3) — not built anywhere yet, so
-  there's nothing for this preview to surface.
+  `spawn-and-warnings.spec.todo.md` §3) — **confirmed out of scope for this
+  editor, not a gap in this preview** (Noah, 2026-07-25): warning
+  indicators are a `games/shmup` runtime concern, not something for this
+  editor to surface. The real remaining work is broader than "wire up L6's
+  spawn-triggered warnings" too — it needs to be a **generic system for
+  anything currently off-screen, especially something moving toward the
+  play area**, not narrowly triggered off scripted spawn timing the way §3
+  currently describes it. See `spawn-and-warnings.spec.todo.md` §3's
+  updated framing. Nothing for this editor's preview mode to build toward
+  until that runtime system exists.
 - **A literal camera simulation** — the dotted bounds rectangle is static
   (see above), not an animated/scrolling camera tracking a moving
   reference point.
@@ -740,9 +753,22 @@ editor rather than crashing the game at runtime.
   manifest convention (`content-and-assets.spec.md`) directly, or needs
   its own lighter-weight asset-reference scheme suited to sketch/import
   workflows.
-- Whether this tool ever gets a Doors 97 window/Taskbar entry (full
-  `NsDoors97/CLAUDE.md` registration checklist) or stays a standalone-only
-  dev route indefinitely, like Hell Map Editor.
+
+~~Whether this tool ever gets a Doors 97 window/Taskbar entry... or stays
+standalone-only indefinitely~~ — **resolved (2026-07-25): it gets one.**
+Registered per the full `NsDoors97/CLAUDE.md` checklist — a new **Game
+Dev** Start Menu category (`Taskbar.tsx`'s `GAME_DEV_ITEMS`, sibling to
+Games/Tools) launches it as a real Window (`"shmup-editor"` in
+`AppAction`/`APP_REGISTRY`/`WindowContent`/`openWindow`/the window render
+block, all in `NsDoors97.tsx`), and the existing `C:\Programs\Accessories\
+Shmup Editor` data folder (`TILES.DAT`/`UNITS.DAT`/the two `*-DRAFT.DAT`
+files) picked up a `Shmup Editor.exe` (`SHMUP_EDITOR_EXE_ID`) so
+double-clicking it from the file browser opens the same window. The
+standalone `/shmup-editor` route is unaffected — both paths render the
+same `ShmupEditor.tsx`, which already handled being hosted in a Doors 97
+Window (`useWindowMenus`) even before this, it just wasn't reachable that
+way yet. Hell Map Editor remains standalone-only; this was scoped to
+Shmup Editor only, not a decision to also register Hell Map Editor.
 
 ## Related
 
