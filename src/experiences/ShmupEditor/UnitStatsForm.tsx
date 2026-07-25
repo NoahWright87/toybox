@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dial } from "../../components/Dial/Dial";
 import SpritePicker from "./SpritePicker";
 import ActionForm from "./ActionForm";
-import { createBlankAction, type ActionDef, type UnitDef, type UnitLayer, type UnitPart } from "./unitTypes";
+import { cloneAction, clonePart, createBlankAction, type ActionDef, type UnitDef, type UnitLayer, type UnitPart } from "./unitTypes";
 
 interface UnitStatsFormProps {
   unit: UnitDef;
@@ -75,6 +75,11 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
     setExpandedActionId(action.id);
   }
 
+  /** Clone button (design-handoff v3 §8.1) — the intended way to author a fixed-angle/differently-tuned variant of an existing Action without re-entering every field by hand. */
+  function handleCloneAction(action: ActionDef) {
+    update({ actions: [...draft.actions, cloneAction(action)] });
+  }
+
   function deleteAction(actionId: string) {
     update({
       actions: draft.actions.filter((a) => a.id !== actionId),
@@ -97,6 +102,11 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
     update({ parts: draft.parts.filter((p) => p.id !== partId) });
     onDeletePart(partId);
     setPendingDeletePartId(null);
+  }
+
+  /** Clone button (design-handoff v3 §8.1) — copies the Part and its own Action buffet in one step, same rationale as handleCloneAction above. */
+  function handleClonePart(part: UnitPart) {
+    update({ parts: [...draft.parts, clonePart(part)] });
   }
 
   function handleSave() {
@@ -177,6 +187,9 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
                         <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setExpandedActionId(expandedActionId === action.id ? null : action.id)}>
                           {expandedActionId === action.id ? "Collapse" : "Edit"}
                         </button>
+                        <button type="button" className="shmup-btn shmup-btn--small" onClick={() => handleCloneAction(action)}>
+                          Clone
+                        </button>
                         {pendingDeleteActionId === action.id ? (
                           <>
                             <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={() => deleteAction(action.id)}>
@@ -216,6 +229,9 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
                     <div className="shmup-btn-row">
                       <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onEditPart(part)}>
                         Edit
+                      </button>
+                      <button type="button" className="shmup-btn shmup-btn--small" onClick={() => handleClonePart(part)}>
+                        Clone
                       </button>
                       {pendingDeletePartId === part.id ? (
                         <>

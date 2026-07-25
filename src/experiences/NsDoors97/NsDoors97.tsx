@@ -29,6 +29,7 @@ import DuckHunt from "../DuckHunt/DuckHunt";
 import NumberMuncher from "../NumberMuncher/NumberMuncher";
 import SoundRecorder from "./SoundRecorder";
 import MidiEditor from "../MidiEditor/MidiEditor";
+import ShmupEditor from "../ShmupEditor/ShmupEditor";
 import ChainReaction from "../ChainReaction/ChainReaction";
 import PegSolitaire from "../PegSolitaire/PegSolitaire";
 import GooberDressup from "../GooberDressup/GooberDressup";
@@ -95,7 +96,8 @@ type AppAction =
   | "mahjong-solitaire"
   | "jazzball"
   | "brick-breaker"
-  | "jigsaw-puzzle";
+  | "jigsaw-puzzle"
+  | "shmup-editor";
 
 interface AppDef {
   title: string;
@@ -132,6 +134,7 @@ const APP_REGISTRY: Record<string, AppDef> = {
   "jazzball":        { title: "Jazzball",            icon: "🟧", action: "jazzball"        },
   "brick-breaker":   { title: "Brick Breaker",      icon: "🧱", action: "brick-breaker"   },
   "jigsaw-puzzle":   { title: "Jigsaw Puzzle",      icon: "🧩", action: "jigsaw-puzzle"   },
+  "shmup-editor":    { title: "Shmup Editor",       icon: "🧩", action: "shmup-editor"    },
 };
 
 // ── Desktop icon helpers ───────────────────────────────────────────────────────
@@ -147,6 +150,7 @@ const APP_ICON_MAP: Record<string, string> = {
   "about":          "ℹ️",
   "screensavers":   "💤",
   "midi-editor":    "🎹",
+  "shmup-editor":   "🧩",
 };
 
 function desktopNodeIcon(node: FSNode): string {
@@ -192,7 +196,8 @@ type WindowContent =
   | { type: "mahjong-solitaire" }
   | { type: "jazzball" }
   | { type: "brick-breaker" }
-  | { type: "jigsaw-puzzle" };
+  | { type: "jigsaw-puzzle" }
+  | { type: "shmup-editor" };
 
 interface OpenWindow {
   id: string;
@@ -526,6 +531,7 @@ export default function NsDoors97() {
         case "jazzball":        content = { type: "jazzball" as const };          width = 500; break;
         case "brick-breaker":   content = { type: "brick-breaker" as const };     width = 480; break;
         case "jigsaw-puzzle":   content = { type: "jigsaw-puzzle" as const };     width = 700; break;
+        case "shmup-editor":    content = { type: "shmup-editor" as const };      width = 900; break;
         case "experience": {
           const experience = experiences.find((e) => e.id === id)!;
           content = { type: "app-launcher", experience };
@@ -1093,6 +1099,9 @@ export default function NsDoors97() {
           )}
           {win.content.type === "jigsaw-puzzle" && (
             <JigsawPuzzle onQuit={() => closeWindow(win.id)} />
+          )}
+          {win.content.type === "shmup-editor" && (
+            <ShmupEditor />
           )}
           {win.content.type === "desktop-display" && (
             <DisplayApp

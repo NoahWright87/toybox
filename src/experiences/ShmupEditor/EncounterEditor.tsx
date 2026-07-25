@@ -1407,7 +1407,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           )}
 
           {effectiveTab === "attack" && selectedInstance && selectedAttack && (
-            <AttackPanel unit={selectedUnitDef} attack={selectedAttack} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updatePartAction(i, selectedAttack.id, patch))} />
+            <AttackPanel unit={selectedUnitDef} instance={selectedInstance} attack={selectedAttack} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updatePartAction(i, selectedAttack.id, patch))} />
           )}
 
           {effectiveTab === "scaling" && selectedInstance && scalingPanelOpen && (

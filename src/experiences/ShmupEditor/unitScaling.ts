@@ -138,3 +138,15 @@ export function resolveScaling(scaling: UnitScaling, difficulty: number): Scalin
   const power = count > 0 ? Math.floor(d / count) : 0;
   return { count, power };
 }
+
+/**
+ * Seconds each duplicate slot's own local clock trails slot 0 (the base
+ * instance) by — `[0, delay, 2*delay, ...]` for `count` slots. Pure timing
+ * helper factored out of `EncounterEditor.tsx`'s hitbox-preview
+ * `dupLocalTime` math so `EncounterTimeline.tsx`'s ghost-duplicate markers
+ * (shmup-editor.todo.md's "spawn delay ... not drawn on the timeline UI
+ * yet") use the identical formula rather than a second hand-copied one.
+ */
+export function spawnDelayOffsetsSec(scaling: Pick<UnitScaling, "spawnDelayMs">, count: number): number[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => (i * scaling.spawnDelayMs) / 1000);
+}

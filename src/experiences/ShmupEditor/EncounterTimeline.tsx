@@ -2,6 +2,8 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { partActionsForPart } from "./partActions";
 import { isStepTimeDerived } from "./encounterTiming";
 import { resolveInvincibleAt } from "./actionState";
+import { actionCategoryColors } from "./actionCategory";
+import { spawnDelayOffsetsSec } from "./unitScaling";
 import type { EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
@@ -126,6 +128,16 @@ export default function EncounterTimeline({
 
           {units.map((instance) => {
             const unitDef = unitDefs.find((u) => u.id === instance.unitDefId);
+            // Scaled duplicates beyond the base instance (slot 0, already drawn
+            // below) spawn staggered by spawnDelayMs — ghost markers show
+            // where each later slot's copy of the same step/attack lands,
+            // per shmup-editor.todo.md's "spawn delay ... not drawn on the
+            // timeline UI yet." Zero delay means every slot lands on slot 0
+            // exactly, so there's nothing distinct to ghost.
+            const ghostOffsets =
+              instance.scaling.maxCount > 1 && instance.scaling.spawnDelayMs > 0
+                ? spawnDelayOffsetsSec(instance.scaling, instance.scaling.maxCount).slice(1)
+                : [];
             return (
               <div key={instance.id} className="shmup-timeline__track">
                 <div className="shmup-timeline__track-label">{unitDef?.name ?? "?"}</div>
@@ -143,17 +155,21 @@ export default function EncounterTimeline({
                     const left = stepTime(instance.id, step) * PX_PER_SEC + STAGE_PADDING_LEFT;
                     const invincible = unitDef ? resolveInvincibleAt(instance.steps, unitDef.actions, step.time) : false;
                     const derived = isStepTimeDerived(instance, step.id, unitDef);
+                    const action = unitDef?.actions.find((a) => a.id === step.actionId);
+                    const colors = actionCategoryColors(action);
+                    const setsInvincible = action?.setsInvincible != null;
                     return (
                       <div key={step.id} className="shmup-timeline__step-wrap" style={{ left }}>
                         <button
                           type="button"
-                          className={`shmup-timeline__step ${isSelected ? "shmup-timeline__step--selected" : ""} ${invincible ? "shmup-timeline__step--hidden" : ""}`}
+                          className={`shmup-timeline__step ${isSelected ? "shmup-timeline__step--selected" : ""} ${invincible ? "shmup-timeline__step--hidden" : ""} ${setsInvincible ? "shmup-timeline__marker--sets-invincible" : ""}`}
+                          style={{ backgroundColor: colors.fill, borderColor: isSelected ? undefined : colors.border }}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectStep(instance.id, step.id);
                           }}
-                          title={invincible ? "Invincible" : undefined}
+                          title={[action?.name, invincible ? "Invincible" : null].filter(Boolean).join(" — ") || undefined}
                         />
                         {isSelected && !derived && (
                           <button
@@ -168,6 +184,19 @@ export default function EncounterTimeline({
                       </div>
                     );
                   })}
+                  {/* Ghost copies of every step for each scaled duplicate slot beyond the base instance — see ghostOffsets above. Non-interactive: a ghost isn't a distinct authored object to select/retime, just a preview of where slot N's copy of this step lands once spawnDelayMs staggers it in. */}
+                  {ghostOffsets.flatMap((offset, slotIdx) =>
+                    instance.steps.map((step) => {
+                      const action = unitDef?.actions.find((a) => a.id === step.actionId);
+                      const colors = actionCategoryColors(action);
+                      const left = (stepTime(instance.id, step) + offset) * PX_PER_SEC + STAGE_PADDING_LEFT;
+                      return (
+                        <div key={`ghost-${slotIdx}-${step.id}`} className="shmup-timeline__step-wrap" style={{ left }} title={`Duplicate slot ${slotIdx + 2} of ${instance.scaling.maxCount}`}>
+                          <div className="shmup-timeline__step shmup-timeline__marker--ghost" style={{ backgroundColor: colors.fill, borderColor: colors.border }} />
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
                 {/* One extra lane per Part that has at least one placed Action — independent per-part tracks, so a battleship's three turrets show up as three separate rows, not merged into one. */}
@@ -180,12 +209,14 @@ export default function EncounterTimeline({
                         const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === placement.id;
                         const action = part.actions.find((a) => a.id === placement.actionId);
                         const left = placement.time * PX_PER_SEC + STAGE_PADDING_LEFT;
+                        const colors = actionCategoryColors(action);
+                        const setsInvincible = action?.setsInvincible != null;
                         return (
                           <button
                             key={placement.id}
                             type="button"
-                            className={`shmup-timeline__attack ${isSelected ? "shmup-timeline__attack--selected" : ""}`}
-                            style={{ left }}
+                            className={`shmup-timeline__attack ${isSelected ? "shmup-timeline__attack--selected" : ""} ${setsInvincible ? "shmup-timeline__marker--sets-invincible" : ""}`}
+                            style={{ left, backgroundColor: colors.fill, borderColor: isSelected ? undefined : colors.border }}
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -195,6 +226,21 @@ export default function EncounterTimeline({
                           />
                         );
                       })}
+                      {ghostOffsets.flatMap((offset, slotIdx) =>
+                        partActionsForPart(instance, part.id).map((placement) => {
+                          const action = part.actions.find((a) => a.id === placement.actionId);
+                          const colors = actionCategoryColors(action);
+                          const left = (placement.time + offset) * PX_PER_SEC + STAGE_PADDING_LEFT;
+                          return (
+                            <div
+                              key={`ghost-${slotIdx}-${placement.id}`}
+                              className="shmup-timeline__attack shmup-timeline__marker--ghost"
+                              style={{ left, backgroundColor: colors.fill, borderColor: colors.border }}
+                              title={`Duplicate slot ${slotIdx + 2} of ${instance.scaling.maxCount}`}
+                            />
+                          );
+                        })
+                      )}
                     </div>
                   ))}
               </div>

@@ -87,21 +87,31 @@ clusters/rarity — there's nothing biome-specific left in the data model
 to visualize instead.
 
 **Remaining:**
-- ~~Attach spawn variants to a tile~~ — resolved, not by building a new
-  variant concept: `EncounterDef` (E2) already *is* a tile variant (its own
-  weighted-random-pick doc comment). Per-instance duplication (E3) is a
+- ~~Attach spawn variants to a tile~~ — resolved, and confirmed (2026-07-25,
+  Noah): `TileDef.encounters` *is* the spawn-variant mechanism, full stop —
+  "different words, same idea." Not a naming coincidence to double-check
+  later: `EncounterDef` (E2) already is a tile variant (its own
+  weighted-random-pick doc comment), and per-instance duplication (E3) is a
   property of a hand-placed `EncounterUnit` within that encounter, not a
   separate variant-attachment concept. See `shmup-editor.md`'s
-  "Per-instance scaling (E3)" section.
-- In-editor sketching of tile art (today's upload flow takes an existing
-  image file; drawing new art from scratch in the tool is still future
-  work).
-- The tile-edit form's in-progress draft (`TileEditorForm`'s `draft`
-  state, including a freshly-uploaded `customImage`) only persists on
-  explicit Save — unlike root `CLAUDE.md`'s mandatory in-progress-session
-  rule, a mid-edit reload/rotation loses it. Pre-existing gap (predates
-  custom art), but worth closing alongside a future E1 pass since a
-  lost upload is a worse loss than a lost edge-tag pick.
+  "Per-instance scaling (E3)" section. No further verification needed here.
+- ~~In-editor sketching of tile art~~ — **not a real requirement, removed.**
+  This was never actually asked for; it crept into an earlier revision of
+  this doc without a real ask behind it (Noah, 2026-07-25: "that got
+  hallucinated, and it can be removed entirely"). NS Art already covers
+  image creation from scratch — upload (`imageUpload.ts`) is this tool's
+  only intended art-input path, and stays that way on purpose.
+- ~~The tile-edit form's in-progress draft only persists on explicit
+  Save~~ — **stale, not an actual gap (verified 2026-07-25).**
+  `TileEditorForm.tsx` already calls `onDraftChange(draft)` in a
+  `useEffect` after every change (including the initial mount), and
+  `ShmupEditor.tsx`'s `handleTileDraftChange` already writes that straight
+  to `TILE-DRAFT.DAT` via `saveTileSession()` — this has been in place
+  since the E2 #192 pass, this doc's note just never got updated after.
+  Confirmed live in a real browser: typed a name into a brand-new tile,
+  reloaded mid-edit, the name (and by the same code path, a freshly-
+  uploaded `customImage`, since the whole `draft` object round-trips
+  identically either way) was still there. No fix needed.
 - (Side quest, not scoped yet) Some way to soften visibly-mismatched art
   seams between adjacent AI-generated tiles at the actual seam — this is
   a `games/shmup` runtime-rendering concern (a feathered edge-blend
@@ -433,35 +443,47 @@ current design; this entry describes what actually shipped.
   only updated the parent `ShmupEditor.tsx`'s `editingUnit`, never
   `UnitStatsForm`'s own separately-held `draft` state) — `deletePart()` now
   updates both.
-- **Clone doesn't exist anywhere, despite being cited repeatedly as the
-  answer to "how do I author a variant" (v3 §8.1).** Genuinely easy to add
-  — a shallow-copy-with-a-fresh-id, same shape as `handleDuplicateUnit`'s
-  existing id-remapping in `ShmupEditor.tsx` — **deliberately backlogged,
-  not prioritized right now** (Noah, 2026-07-21: "It's easy to add, but
-  let's save it for later"). Both `unitTypes.ts`'s doc
-  comments and the in-app Help modal tell an author to "Clone the Action"
-  to get a fixed-angle/differently-tuned variant instead of a per-placement
-  override — that's the whole justification for cutting per-placement aim
-  overrides and per-step speed multipliers when Actions came back. No
-  Clone button exists on an Action, a Part, or a Unit. This is v3 §8.1's
-  "**Clone** should be a first-class operation here" — currently the only
-  way to get a variant is manually re-entering every field by hand. Worth
-  prioritizing since several other design decisions lean on it existing.
-- **No minimum-duration placement validation (v3 §8.2).** "The editor
-  should prevent placing a node earlier than the minimum duration of the
-  preceding node allows" — not built. A Part-track placement's `time` can
-  be set to land before the previous placement on that same track has
-  finished (per its own `computeAttackDurationMs`), with no warning. Low
-  priority (an authoring-quality-of-life check, not a data-integrity one)
-  but flagged since v3 calls it out explicitly.
-- **No color-coding by Action category on the timeline (v3 §8.2).**
-  `EncounterTimeline.tsx` renders every step as the same orange diamond and
-  every Part-track placement as the same 🔫 marker regardless of whether
-  the referenced Action is movement/attack/state — v3 asks for movement/
-  attack/state-toggle to "each read as visually distinct at a glance," with
-  invincible-setting Actions rendering as "a darker variant" of whatever
-  category color applies. Not built; low priority until the timeline is
-  busy enough for it to matter.
+- ~~Clone doesn't exist anywhere~~ — **shipped (2026-07-25).** A Unit
+  already had Duplicate (`UnitList.tsx`'s "Duplicate" button →
+  `handleDuplicateUnit` in `ShmupEditor.tsx`) from earlier work; Action and
+  Part rows were the actual gap. Both now have a "Clone" button —
+  `cloneAction()`/`clonePart()` (`unitTypes.ts`) do a fresh-id shallow copy
+  (`"<name> copy"`, and for a Part, its own Action buffet cloned too, each
+  with fresh ids) wired into `UnitStatsForm.tsx`'s Actions/Parts tabs and
+  `PartEditor.tsx`'s Actions tab. This is v3 §8.1's "**Clone** should be a
+  first-class operation here" — both `unitTypes.ts`'s doc comments and the
+  in-app Help modal already told an author to "Clone the Action" to get a
+  fixed-angle/differently-tuned variant instead of a per-placement
+  override (the whole justification for cutting per-placement aim
+  overrides and per-step speed multipliers when Actions came back), so this
+  closes a real gap several other design decisions were already leaning on.
+- ~~No minimum-duration placement validation (v3 §8.2)~~ — **shipped
+  (2026-07-25), as a warning, not a hard block.** New `attackValidation.ts`
+  (unit-tested, `attackValidation.test.ts`) walks a Part-track's placements
+  (`partActionsForPart`) to find the one immediately preceding the
+  placement being edited, and — if that preceding Action's own attack has
+  a computable finite duration (`computeAttackDurationMs`) that the current
+  placement's `time` lands inside — surfaces how many seconds too early it
+  is. An indefinite-repeat preceding attack (`computeAttackDurationMs`
+  returns `null`) warns unconditionally, since there's no end to land
+  after. `AttackPanel.tsx` renders it below the Time Dial via a new
+  `.shmup-warning` style (amber, distinct from `.shmup-error`'s red —
+  deliberately non-blocking: duration is only ever an estimate, and an
+  author may have a real reason to want two bursts to overlap, so nothing
+  clamps or disables Save).
+- ~~No color-coding by Action category on the timeline (v3 §8.2)~~ —
+  **shipped (2026-07-25).** New `actionCategory.ts` (unit-tested,
+  `actionCategory.test.ts`) derives movement/attack/state from an Action's
+  own `attack`/`movementPercent` fields — attack takes priority over
+  movement, movement over state — and maps each to a distinct fill/border
+  color, movement keeping the existing orange so the common case looks
+  unchanged. `EncounterTimeline.tsx`'s step diamonds and Part-track
+  attack markers both resolve their referenced Action and apply that
+  color inline (falls back to the existing `--selected` border so
+  selection stays visible). An invincible-setting Action (`setsInvincible
+  !== null`) gets a `filter: brightness(0.6)` modifier class — "a darker
+  variant of whatever category color applies," literally, rather than a
+  second hand-picked color triple per category.
 - **No dedicated Unit/Part Action mini-timeline (v3 §8.1) — confirmed
   intentional scope cut, not a gap.** Noah, during the Actions-are-back
   design pass: "Let's talk about this in more detail... we don't need a
@@ -651,17 +673,21 @@ after the correction.**
 - **Per-param scaling curves on Unit/Weapon stats** (see Scope decisions) —
   the eventual home for §1's broader curve-type vision, if/when there's
   appetite to reopen E2's stat forms.
-- **Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
-  itself.** `UnitScaling.spawnDelayMs` used to be a stored-but-never-read
-  field (every duplicate appeared to spawn simultaneously in the preview,
-  regardless of this value — Noah caught this). `EncounterEditor.tsx`'s
-  hitbox-preview computation now maps each duplicate slot's own local
-  clock forward by `slotIndex * spawnDelayMs` before evaluating its
-  position/attacks, so duplicates stagger in visibly one at a time when
-  scrubbing/playing with the preview on. `EncounterTimeline.tsx`'s ruler
-  itself still shows only one set of step/attack markers per instance,
-  not one per duplicate's shifted copy — the delay is real and simulated,
-  just not drawn on the timeline UI yet.
+- ~~Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
+  itself~~ — **shipped (2026-07-25).** `EncounterEditor.tsx`'s hitbox-preview
+  computation already mapped each duplicate slot's own local clock forward
+  by `slotIndex * spawnDelayMs`; that formula moved into a new pure,
+  unit-tested helper (`unitScaling.ts`'s `spawnDelayOffsetsSec`) so
+  `EncounterTimeline.tsx` uses the identical math rather than a second
+  hand-copied one. When `maxCount > 1` and `spawnDelayMs > 0`, the ruler
+  now draws a faded, non-interactive "ghost" copy of every step diamond and
+  Part-track attack marker for each duplicate slot beyond the base
+  instance, shifted right by that slot's own offset — visually the same
+  "trailing echoes" effect the hitbox preview already showed, just legible
+  on the timeline without scrubbing/playing. Ghosts use the same
+  category-derived colors as the real markers (`actionCategory.ts`) at
+  reduced opacity, and aren't selectable — they're a preview of where a
+  duplicate's copy lands, not a distinct authored object.
 - **Encounter difficulty-range gating** (carried over from E2's Remaining
   list) — still blocked on nothing concrete left to build against beyond
   what shipped here; `EncounterDef.weight` remains the only
@@ -718,8 +744,16 @@ playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
   together would need the L2 JIT-streaming/edge-matching system
   (`levels-and-tiles.spec.todo.md`) to exist first.
 - **Warning-indicator lead-time surfacing** (L6 #188,
-  `spawn-and-warnings.spec.todo.md` §3) — not built anywhere yet, so
-  there's nothing for this preview to surface.
+  `spawn-and-warnings.spec.todo.md` §3) — **confirmed out of scope for this
+  editor, not a gap in this preview** (Noah, 2026-07-25): warning
+  indicators are a `games/shmup` runtime concern, not something for this
+  editor to surface. The real remaining work is broader than "wire up L6's
+  spawn-triggered warnings" too — it needs to be a **generic system for
+  anything currently off-screen, especially something moving toward the
+  play area**, not narrowly triggered off scripted spawn timing the way §3
+  currently describes it. See `spawn-and-warnings.spec.todo.md` §3's
+  updated framing. Nothing for this editor's preview mode to build toward
+  until that runtime system exists.
 - **A literal camera simulation** — the dotted bounds rectangle is static
   (see above), not an animated/scrolling camera tracking a moving
   reference point.
@@ -740,9 +774,22 @@ editor rather than crashing the game at runtime.
   manifest convention (`content-and-assets.spec.md`) directly, or needs
   its own lighter-weight asset-reference scheme suited to sketch/import
   workflows.
-- Whether this tool ever gets a Doors 97 window/Taskbar entry (full
-  `NsDoors97/CLAUDE.md` registration checklist) or stays a standalone-only
-  dev route indefinitely, like Hell Map Editor.
+
+~~Whether this tool ever gets a Doors 97 window/Taskbar entry... or stays
+standalone-only indefinitely~~ — **resolved (2026-07-25): it gets one.**
+Registered per the full `NsDoors97/CLAUDE.md` checklist — a new **Game
+Dev** Start Menu category (`Taskbar.tsx`'s `GAME_DEV_ITEMS`, sibling to
+Games/Tools) launches it as a real Window (`"shmup-editor"` in
+`AppAction`/`APP_REGISTRY`/`WindowContent`/`openWindow`/the window render
+block, all in `NsDoors97.tsx`), and the existing `C:\Programs\Accessories\
+Shmup Editor` data folder (`TILES.DAT`/`UNITS.DAT`/the two `*-DRAFT.DAT`
+files) picked up a `Shmup Editor.exe` (`SHMUP_EDITOR_EXE_ID`) so
+double-clicking it from the file browser opens the same window. The
+standalone `/shmup-editor` route is unaffected — both paths render the
+same `ShmupEditor.tsx`, which already handled being hosted in a Doors 97
+Window (`useWindowMenus`) even before this, it just wasn't reachable that
+way yet. Hell Map Editor remains standalone-only; this was scoped to
+Shmup Editor only, not a decision to also register Hell Map Editor.
 
 ## Related
 
