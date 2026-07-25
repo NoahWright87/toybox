@@ -13,8 +13,8 @@ import EncounterEditor from "./EncounterEditor";
 import { loadTiles, saveTiles } from "./tileStore";
 import { clearTileSession, clearUnitDraft, loadTileSession, loadUnitDraft, loadUnits, saveTileSession, saveUnitDraft, saveUnits } from "./unitStore";
 import { collectUsedTags } from "./tagRegistry";
-import { createBlankTile, makeTileId, type TileDef } from "./types";
-import { createBlankPart, createBlankUnit, makeActionId, makePartId, makeUnitId, type ActionDef, type UnitDef, type UnitPart } from "./unitTypes";
+import { createBlankTile, createDefaultTileLibrary, makeTileId, type TileDef } from "./types";
+import { createBlankPart, createBlankUnit, createDefaultUnitLibrary, makeActionId, makePartId, makeUnitId, type ActionDef, type UnitDef, type UnitPart } from "./unitTypes";
 import { createBlankEncounter, type EncounterDef } from "./encounterTypes";
 import "./ShmupEditor.css";
 
@@ -59,6 +59,35 @@ export default function ShmupEditor() {
   // standalone `/shmup-editor` route (StandaloneWindow would otherwise
   // append its own second "Help" label alongside this one).
   const [helpTopic, setHelpTopic] = useState<"tile" | "unit" | "encounter" | null>(null);
+
+  // A stale browser cache (an old TILES.DAT/UNITS.DAT saved before a
+  // built-in sprite/tile-image was renamed or removed) can leave the
+  // library pointing at art that no longer exists — Noah's ask after the
+  // skull-* sprite removal broke his already-seeded local data. This is
+  // the escape hatch: wipe both libraries and every in-progress draft,
+  // then reseed from the current code's defaults. Destructive and
+  // irreversible, so it's gated behind a confirmation modal rather than
+  // firing straight from the menu click.
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+
+  function handleResetToDefaults() {
+    const freshTiles = createDefaultTileLibrary();
+    const freshUnits = createDefaultUnitLibrary();
+    saveTiles(freshTiles);
+    saveUnits(freshUnits);
+    clearTileSession();
+    clearUnitDraft();
+    setTiles(freshTiles);
+    setUnits(freshUnits);
+    setExtraTags([]);
+    setEditingTile(null);
+    setEditingEncounter(null);
+    setEditingUnit(null);
+    setEditingPart(null);
+    setView("list");
+    setResetConfirmOpen(false);
+    setHelpTopic(null);
+  }
 
   const availableTags = useMemo(() => {
     const merged = new Set([...collectUsedTags(tiles), ...extraTags]);
@@ -308,6 +337,8 @@ export default function ShmupEditor() {
           { label: "Tile Editor", onClick: () => setHelpTopic("tile") },
           { label: "Units & Actions", onClick: () => setHelpTopic("unit") },
           { label: "Encounter Editor", onClick: () => setHelpTopic("encounter") },
+          { separator: true },
+          { label: "Reset to Defaults...", onClick: () => setResetConfirmOpen(true) },
         ],
       },
     ],
@@ -455,6 +486,30 @@ export default function ShmupEditor() {
                 <li>Dials: drag up/down to change, tap the number to type one, right-click or press-and-hold to reset.</li>
               </ul>
             )}
+          </div>
+        </div>
+      )}
+      {resetConfirmOpen && (
+        <div className="shmup-help-backdrop" onClick={() => setResetConfirmOpen(false)}>
+          <div className="shmup-help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shmup-help-modal__header">
+              <span>Reset to Defaults</span>
+              <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setResetConfirmOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <p className="shmup-help-modal__body">
+              This erases every tile and Unit you've authored (including any in-progress edits) and replaces the library with the
+              site's current defaults. This cannot be undone.
+            </p>
+            <div className="shmup-btn-row">
+              <button type="button" className="shmup-btn shmup-btn--small shmup-btn--danger" onClick={handleResetToDefaults}>
+                Reset to Defaults
+              </button>
+              <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setResetConfirmOpen(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

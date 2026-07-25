@@ -1611,6 +1611,21 @@ reachable only via the `/shmup-editor` route. The FS folder exists purely
 so `TILES.DAT`/`UNITS.DAT`/`UNIT-DRAFT.DAT`/`TILE-DRAFT.DAT` are
 hackable/discoverable in the file browser.
 
+**Help → "Reset to Defaults..." manually re-seeds both libraries.**
+Automatic reseeding (above) only fires when a save is empty or fails its
+version/shape check — a browser that already seeded before a built-in
+sprite/tile-image was renamed or removed (e.g. the skull-\* sprite
+removal) is left with a library that loads *successfully* but points at
+art that's gone (broken image icons, no crash). There's no version bump
+that would catch that case since the saved shape itself didn't change.
+`ShmupEditor.tsx`'s `handleResetToDefaults` is the manual escape hatch:
+gated behind a confirmation modal (same `.shmup-help-backdrop`/
+`.shmup-help-modal` markup the Help topics use, not a new component) since
+it's destructive and irreversible, it calls `createDefaultTileLibrary`/
+`createDefaultUnitLibrary` directly and overwrites `TILES.DAT`/`UNITS.DAT`,
+clears both draft session files, resets all in-memory editing state, and
+returns to the Tile List view.
+
 ## Related
 
 - [`shmup-editor.todo.md`](shmup-editor.todo.md) — remaining work (E1's

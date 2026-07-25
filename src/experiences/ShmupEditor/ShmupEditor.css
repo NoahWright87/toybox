@@ -1472,6 +1472,12 @@
 .shmup-help-modal__list li {
   margin-bottom: 8px;
 }
+.shmup-help-modal__body {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
 .shmup-tag-graph__panel-title {
   font-size: 8px;
   margin: 0 0 8px;
