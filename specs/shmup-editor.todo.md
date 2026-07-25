@@ -101,12 +101,17 @@ to visualize instead.
   hallucinated, and it can be removed entirely"). NS Art already covers
   image creation from scratch — upload (`imageUpload.ts`) is this tool's
   only intended art-input path, and stays that way on purpose.
-- The tile-edit form's in-progress draft (`TileEditorForm`'s `draft`
-  state, including a freshly-uploaded `customImage`) only persists on
-  explicit Save — unlike root `CLAUDE.md`'s mandatory in-progress-session
-  rule, a mid-edit reload/rotation loses it. Pre-existing gap (predates
-  custom art), but worth closing alongside a future E1 pass since a
-  lost upload is a worse loss than a lost edge-tag pick.
+- ~~The tile-edit form's in-progress draft only persists on explicit
+  Save~~ — **stale, not an actual gap (verified 2026-07-25).**
+  `TileEditorForm.tsx` already calls `onDraftChange(draft)` in a
+  `useEffect` after every change (including the initial mount), and
+  `ShmupEditor.tsx`'s `handleTileDraftChange` already writes that straight
+  to `TILE-DRAFT.DAT` via `saveTileSession()` — this has been in place
+  since the E2 #192 pass, this doc's note just never got updated after.
+  Confirmed live in a real browser: typed a name into a brand-new tile,
+  reloaded mid-edit, the name (and by the same code path, a freshly-
+  uploaded `customImage`, since the whole `draft` object round-trips
+  identically either way) was still there. No fix needed.
 - (Side quest, not scoped yet) Some way to soften visibly-mismatched art
   seams between adjacent AI-generated tiles at the actual seam — this is
   a `games/shmup` runtime-rendering concern (a feathered edge-blend
@@ -452,21 +457,33 @@ current design; this entry describes what actually shipped.
   override (the whole justification for cutting per-placement aim
   overrides and per-step speed multipliers when Actions came back), so this
   closes a real gap several other design decisions were already leaning on.
-- **No minimum-duration placement validation (v3 §8.2).** "The editor
-  should prevent placing a node earlier than the minimum duration of the
-  preceding node allows" — not built. A Part-track placement's `time` can
-  be set to land before the previous placement on that same track has
-  finished (per its own `computeAttackDurationMs`), with no warning. Low
-  priority (an authoring-quality-of-life check, not a data-integrity one)
-  but flagged since v3 calls it out explicitly.
-- **No color-coding by Action category on the timeline (v3 §8.2).**
-  `EncounterTimeline.tsx` renders every step as the same orange diamond and
-  every Part-track placement as the same 🔫 marker regardless of whether
-  the referenced Action is movement/attack/state — v3 asks for movement/
-  attack/state-toggle to "each read as visually distinct at a glance," with
-  invincible-setting Actions rendering as "a darker variant" of whatever
-  category color applies. Not built; low priority until the timeline is
-  busy enough for it to matter.
+- ~~No minimum-duration placement validation (v3 §8.2)~~ — **shipped
+  (2026-07-25), as a warning, not a hard block.** New `attackValidation.ts`
+  (unit-tested, `attackValidation.test.ts`) walks a Part-track's placements
+  (`partActionsForPart`) to find the one immediately preceding the
+  placement being edited, and — if that preceding Action's own attack has
+  a computable finite duration (`computeAttackDurationMs`) that the current
+  placement's `time` lands inside — surfaces how many seconds too early it
+  is. An indefinite-repeat preceding attack (`computeAttackDurationMs`
+  returns `null`) warns unconditionally, since there's no end to land
+  after. `AttackPanel.tsx` renders it below the Time Dial via a new
+  `.shmup-warning` style (amber, distinct from `.shmup-error`'s red —
+  deliberately non-blocking: duration is only ever an estimate, and an
+  author may have a real reason to want two bursts to overlap, so nothing
+  clamps or disables Save).
+- ~~No color-coding by Action category on the timeline (v3 §8.2)~~ —
+  **shipped (2026-07-25).** New `actionCategory.ts` (unit-tested,
+  `actionCategory.test.ts`) derives movement/attack/state from an Action's
+  own `attack`/`movementPercent` fields — attack takes priority over
+  movement, movement over state — and maps each to a distinct fill/border
+  color, movement keeping the existing orange so the common case looks
+  unchanged. `EncounterTimeline.tsx`'s step diamonds and Part-track
+  attack markers both resolve their referenced Action and apply that
+  color inline (falls back to the existing `--selected` border so
+  selection stays visible). An invincible-setting Action (`setsInvincible
+  !== null`) gets a `filter: brightness(0.6)` modifier class — "a darker
+  variant of whatever category color applies," literally, rather than a
+  second hand-picked color triple per category.
 - **No dedicated Unit/Part Action mini-timeline (v3 §8.1) — confirmed
   intentional scope cut, not a gap.** Noah, during the Actions-are-back
   design pass: "Let's talk about this in more detail... we don't need a
@@ -656,17 +673,21 @@ after the correction.**
 - **Per-param scaling curves on Unit/Weapon stats** (see Scope decisions) —
   the eventual home for §1's broader curve-type vision, if/when there's
   appetite to reopen E2's stat forms.
-- **Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
-  itself.** `UnitScaling.spawnDelayMs` used to be a stored-but-never-read
-  field (every duplicate appeared to spawn simultaneously in the preview,
-  regardless of this value — Noah caught this). `EncounterEditor.tsx`'s
-  hitbox-preview computation now maps each duplicate slot's own local
-  clock forward by `slotIndex * spawnDelayMs` before evaluating its
-  position/attacks, so duplicates stagger in visibly one at a time when
-  scrubbing/playing with the preview on. `EncounterTimeline.tsx`'s ruler
-  itself still shows only one set of step/attack markers per instance,
-  not one per duplicate's shifted copy — the delay is real and simulated,
-  just not drawn on the timeline UI yet.
+- ~~Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
+  itself~~ — **shipped (2026-07-25).** `EncounterEditor.tsx`'s hitbox-preview
+  computation already mapped each duplicate slot's own local clock forward
+  by `slotIndex * spawnDelayMs`; that formula moved into a new pure,
+  unit-tested helper (`unitScaling.ts`'s `spawnDelayOffsetsSec`) so
+  `EncounterTimeline.tsx` uses the identical math rather than a second
+  hand-copied one. When `maxCount > 1` and `spawnDelayMs > 0`, the ruler
+  now draws a faded, non-interactive "ghost" copy of every step diamond and
+  Part-track attack marker for each duplicate slot beyond the base
+  instance, shifted right by that slot's own offset — visually the same
+  "trailing echoes" effect the hitbox preview already showed, just legible
+  on the timeline without scrubbing/playing. Ghosts use the same
+  category-derived colors as the real markers (`actionCategory.ts`) at
+  reduced opacity, and aren't selectable — they're a preview of where a
+  duplicate's copy lands, not a distinct authored object.
 - **Encounter difficulty-range gating** (carried over from E2's Remaining
   list) — still blocked on nothing concrete left to build against beyond
   what shipped here; `EncounterDef.weight` remains the only

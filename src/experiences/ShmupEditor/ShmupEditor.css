@@ -132,6 +132,15 @@
   color: #aa2222;
   font-weight: bold;
 }
+/* Non-blocking, unlike .shmup-error — an authoring-quality-of-life nudge
+   (e.g. AttackPanel.tsx's min-duration check), not a Save-disabling
+   validation failure. */
+.shmup-warning {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #aa6600;
+  font-weight: bold;
+}
 
 /* ── Tile editor form layout ──────────────────────────────────────── */
 
@@ -1216,6 +1225,25 @@
 .shmup-timeline__step--hidden {
   opacity: 0.45;
   border-style: dashed;
+}
+
+/* A darker variant of whatever category color applies (design-handoff v3
+   §8.2) — marks the Action that actually flips invincibility, distinct
+   from --hidden above (which marks every step for as long as invincible
+   stays true, regardless of which Action set it). */
+.shmup-timeline__marker--sets-invincible {
+  filter: brightness(0.6);
+}
+
+/* Preview of where a scaled duplicate's own copy of this step/attack lands
+   once spawnDelayMs staggers it in (shmup-editor.todo.md's "spawn delay
+   ... not drawn on the timeline UI yet") — not a distinct authored object,
+   so no pointer cursor and no click handling, just a faded echo of the
+   base marker's own category color. */
+.shmup-timeline__marker--ghost {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
 }
 
 .shmup-timeline__step-handle {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createDefaultScaling, resolveScaling, type UnitScaling } from "./unitScaling";
+import { createDefaultScaling, resolveScaling, spawnDelayOffsetsSec, type UnitScaling } from "./unitScaling";
 
 function scaling(patch: Partial<UnitScaling>): UnitScaling {
   return { ...createDefaultScaling(), ...patch };
@@ -48,5 +48,28 @@ describe("resolveScaling", () => {
   it("negative Difficulty is treated as zero", () => {
     const s = scaling({ maxCount: 5, minCostPerInstance: 1 });
     expect(resolveScaling(s, -10)).toEqual({ count: 0, power: 0 });
+  });
+});
+
+describe("spawnDelayOffsetsSec", () => {
+  it("slot 0 always trails by 0 (the base instance, no delay)", () => {
+    const s = scaling({ spawnDelayMs: 500 });
+    expect(spawnDelayOffsetsSec(s, 3)[0]).toBe(0);
+  });
+
+  it("each successive slot trails by one more spawnDelayMs, in seconds", () => {
+    const s = scaling({ spawnDelayMs: 250 });
+    expect(spawnDelayOffsetsSec(s, 4)).toEqual([0, 0.25, 0.5, 0.75]);
+  });
+
+  it("returns an empty array for count 0 or negative", () => {
+    const s = scaling({ spawnDelayMs: 100 });
+    expect(spawnDelayOffsetsSec(s, 0)).toEqual([]);
+    expect(spawnDelayOffsetsSec(s, -2)).toEqual([]);
+  });
+
+  it("all offsets are 0 when spawnDelayMs is 0 (simultaneous spawns)", () => {
+    const s = scaling({ spawnDelayMs: 0 });
+    expect(spawnDelayOffsetsSec(s, 3)).toEqual([0, 0, 0]);
   });
 });

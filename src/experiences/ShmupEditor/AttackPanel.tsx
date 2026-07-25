@@ -1,10 +1,12 @@
 import { Dial } from "../../components/Dial/Dial";
 import { computeAttackDurationMs } from "./hitboxPreview";
-import type { PartActionPlacement } from "./encounterTypes";
+import { minDurationWarning } from "./attackValidation";
+import type { EncounterUnit, PartActionPlacement } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
 interface AttackPanelProps {
   unit: UnitDef | undefined;
+  instance: EncounterUnit;
   attack: PartActionPlacement;
   onChange: (patch: Partial<PartActionPlacement>) => void;
 }
@@ -29,9 +31,10 @@ function durationReadout(unit: UnitDef | undefined, placement: PartActionPlaceme
  * attack fields (`hitboxPreview.ts`'s `computeAttackDurationMs`), shown
  * below as a read-only readout, not a field to edit.
  */
-export default function AttackPanel({ unit, attack, onChange }: AttackPanelProps) {
+export default function AttackPanel({ unit, instance, attack, onChange }: AttackPanelProps) {
   const part = unit?.parts.find((p) => p.id === attack.partId);
   const duration = durationReadout(unit, attack);
+  const warning = minDurationWarning(instance, unit, attack);
 
   function handlePartChange(partId: string) {
     const nextPart = unit?.parts.find((p) => p.id === partId);
@@ -83,6 +86,7 @@ export default function AttackPanel({ unit, attack, onChange }: AttackPanelProps
           <span className="shmup-readout__value">{duration}</span>
         </p>
       )}
+      {warning && <p className="shmup-warning">{warning}</p>}
     </div>
   );
 }
