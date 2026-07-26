@@ -99,25 +99,35 @@ A shmup level scrolls **down**: the player advances north, terrain moves
 south across the screen, new tiles arrive at the top just before they're
 needed. Tiles are ordered by **depth** — depth 0 is the first one met.
 
-The clock is anchored so that **at a tile's own time zero, that tile's
-north edge sits exactly on the top edge of the screen**. So an encounter
-starts with its tile filling the top of the view and scrolling down out of
-it: no dead time waiting for content to arrive, and identical whether the
-tile is played alone or as depth 7 of a level. A single-tile playtest is
-therefore not a special case at all — it's a level of one.
+The clock is anchored so that **at a tile's own time zero the tile is
+entirely off the top of the screen, with its south edge exactly on the
+screen's top edge**. Nothing on it is visible yet; it scrolls down into
+view from there.
 
-That anchoring collapses the whole mapping to one depth-independent line:
+That last part is the whole point. An enemy authored above its tile
+genuinely spawns off-screen and flies in, the way a shmup's content
+arrives — rather than popping into existence mid-screen the instant the
+tile loads, which is what an earlier north-edge anchoring did.
 
-    screenY = localY + LEVEL_SCROLL_SPEED * t
+The anchoring collapses the whole mapping to one depth-independent line:
+
+    screenY = localY - TILE_UNIT + LEVEL_SCROLL_SPEED * t
 
 Everything else follows from it:
 
-- A tile hands over to the next after `TILE_UNIT / speed` = **4s**.
-- A tile stays on screen for `GAME_HEIGHT / speed` = **~7.1s** from
-  engaging. That, not the 4s handover, is the window an encounter gets.
+- A tile hands over to the next after `TILE_UNIT / speed` = **4s**, and the
+  handover is seamless: tile *d*'s south edge lands on the screen top at
+  the same moment tile *d-1*'s north edge does.
+- A tile lasts `(TILE_UNIT + GAME_HEIGHT) / speed` = **~11.1s** from
+  engaging to fully scrolled away. That, not the 4s handover, is the window
+  an encounter gets.
 - Consecutive tiles overlap, so ~1.8 tiles are visible at once.
 - The player's position *in tile-local coordinates* moves: the ship starts
-  below the tile and climbs through it as the tile scrolls past.
+  a screen-height below the tile and climbs through it as the tile scrolls
+  past.
+
+A single-tile playtest is therefore not a special case at all — it's a
+level of one, and looks exactly like that same tile played as depth 7.
 
 Because every authored position resolves through its tile's frame at the
 instant it touches a sprite, everything on a tile scrolls with it for free
@@ -187,6 +197,23 @@ clock** — the same clock the editor's timeline scrubber shows.
   anchored to its own slot.
 
 ## Levels
+
+The Connection Viewer can now **autogenerate** one (`generateLayout.ts`):
+one press grows the layout north by 8 tiles from whatever is already
+placed, picking a random starting tile if nothing is. Press it again for a
+longer level — the button *is* the length control, which is why there's no
+separate length field. Every placement goes through
+`candidatesForAddPoint`, the same matcher the manual "+ Add" uses, so a
+generated level is legal by identical rules and stays fully hand-editable
+(rotate, delete, extend) rather than being an opaque blob. It stops early
+at a dead end, and the partial level it leaves is the diagnostic.
+
+This is an authoring aid built on the viewer's own rules, *not* the game's
+L1 frontier generator (`systems/levels/generateLevel.ts`). That one streams
+forward from a single open edge with per-branch difficulty budgets, in its
+own coordinate model, with no notion of the free-form 2D grid the viewer
+builds in. The two should converge on the game's model when runtime
+generation lands.
 
 The Connection Viewer builds a real (row, col) grid but used to keep it in
 local component state, so there was nothing for the game to read.
@@ -275,15 +302,17 @@ has scrolled away.
 
 ## Not built yet
 
-- **Generated levels.** Today a level is hand-assembled in the Connection
-  Viewer. The next step Noah wants is "pick the starting tile, give it a
-  Difficulty, and it builds one for you" — which is exactly
-  `systems/levels`' existing frontier generator.
-  `authoredToGeneratorTile()` already projects an authored tile down to the
-  shape that generator consumes, so the remaining work is running it over
-  the authored library and feeding the result to `LevelRunner` in place of
-  a saved layout. `LevelRunner` needs no changes for it: a generated
-  `LevelLayout` is the same shape as a saved one.
+- **Runtime generation.** Autogeneration lives in the editor; a real
+  episode still needs the game to generate its own level from the node's
+  Difficulty. `authoredToGeneratorTile()` already projects an authored tile
+  into the shape `systems/levels`' generator consumes, and `LevelRunner`
+  needs no changes — a generated `LevelLayout` is the same shape as a saved
+  one. The open question is whether the editor's generator then folds into
+  the game's, or stays a separate authoring convenience.
+- **Difficulty doesn't drive level length.** It's the per-tile scaling
+  budget, which is what `D` means in the authored model; the number of
+  tiles is a press count. If longer-at-higher-D is wanted, that's a design
+  decision to make explicitly rather than a coincidence to lean on.
 - **JIT streaming.** Every tile in a level is built up front. Fine for a
   hand-assembled playtest, wrong for a long generated one —
   `levels-and-tiles.spec.todo.md` §3 is the real design.

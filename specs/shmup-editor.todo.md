@@ -783,9 +783,9 @@ rather than the game (testing content belongs next to the content):
 the Encounter editor's canvas-corner ▶ saves the encounter and plays *that*
 one; the Connection Viewer's "▶ Play Test Level" saves the assembled layout
 (`levelStore.ts` -> `LEVEL.DAT`) and plays the whole thing with a
-weighted-random Encounter per tile. Both navigate to `/shmup/` with the
-request in the query string; the game skips its menus and drops straight
-into the episode.
+weighted-random Encounter per tile, and "⚄ Autogenerate" builds that layout
+for you. Both play buttons navigate to `/shmup/` with the request in the
+query string; the game skips its menus and drops straight into the episode.
 
 **What survives from E5, and is still worth building:**
 
@@ -819,15 +819,22 @@ doesn't need it.
 state, so the game has nothing to read.~~ — **done:** `levelStore.ts` saves
 it to `LEVEL.DAT` and "▶ Play Test Level" plays it.
 
-- **Generated levels.** The next thing Noah wants: pick a starting tile,
-  give it a Difficulty, and have the tool build a level for you rather than
-  assembling it by hand. That's `games/shmup`'s existing frontier generator
+~~Generated levels — pick a starting tile and have the tool build one
+rather than assembling it by hand.~~ — **done, in the editor:**
+`generateLayout.ts` + the Connection Viewer's "⚄ Autogenerate" grows the
+layout north from whatever is placed (random starting tile if nothing is),
+through the viewer's own `candidatesForAddPoint` matcher so the result is
+legal by identical rules and stays hand-editable. Press again to extend.
+
+- **Runtime generation.** The editor generating a level is not the same as
+  a real episode generating its own from the node's Difficulty. That's
+  `games/shmup`'s L1 frontier generator
   (`systems/levels/generateLevel.ts`) run over the authored library —
   `authoredToGeneratorTile()` already projects an authored tile into the
   shape it consumes, and a generated `LevelLayout` is the same shape
-  `LevelRunner` already plays. Whether the generator runs in the editor (so
-  you can see the result before playing) or in the game (so a real episode
-  can use it) is the open question.
+  `LevelRunner` already plays. Whether the editor's generator then folds
+  into that one, or stays a separate authoring convenience that can build
+  the free-form 2D grids the viewer allows, is the open question.
 
 ~~Whether this tool ever gets a Doors 97 window/Taskbar entry... or stays
 standalone-only indefinitely~~ — **resolved (2026-07-25): it gets one.**

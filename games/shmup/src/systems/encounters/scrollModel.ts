@@ -24,16 +24,22 @@
  * are needed. Tiles are ordered by **depth** — depth 0 is the first one you
  * meet, depth 1 is behind it (further north), and so on.
  *
- * The clock is anchored so that **at a tile's own time zero, that tile's
- * north edge sits exactly on the top edge of the screen**. So an encounter
- * starts with its tile filling the top of the view and scrolling down out
- * of it — no dead time waiting for content to arrive, and identical whether
- * the tile is played alone or as depth 7 of a level.
+ * The clock is anchored so that **at a tile's own time zero, the tile sits
+ * entirely off the top of the screen, with its south edge exactly on the
+ * screen's top edge**. Nothing on it is visible yet; the tile then scrolls
+ * down into view. That's what makes content arrive the way a shmup's does —
+ * an enemy authored above its tile spawns genuinely off-screen and flies in,
+ * instead of popping into existence mid-screen the instant the tile loads.
+ *
+ * It also means a tile behaves identically played alone or as depth 7 of a
+ * level: consecutive tiles engage exactly one tile-height of scrolling
+ * apart, so tile *d*'s south edge lands on the screen top at the same
+ * moment tile *d-1*'s north edge does, and they abut seamlessly.
  *
  * That anchoring collapses the whole mapping to one line, independent of
  * depth (`tileLocalToScreenY`):
  *
- *     screenY = localY + LEVEL_SCROLL_SPEED * t
+ *     screenY = localY - TILE_UNIT + LEVEL_SCROLL_SPEED * t
  *
  * where `localY` is tile-local (0 = the tile's north edge, `TILE_UNIT` =
  * its south edge) and `t` is seconds since that tile engaged. Everything
@@ -51,10 +57,10 @@ export const TILE_UNIT = 720;
 /**
  * How fast the level scrolls past, px/sec. **This is the number.**
  *
- * At 180 a tile takes 4s to hand over to the next one and stays on screen
- * for ~7.1s from the moment it engages, which is the window an authored
- * encounter has to play out in. Raising it makes levels faster and gives
- * every encounter less room; lowering it does the opposite. Distinct from
+ * At 180 a tile takes 4s to hand over to the next one and lasts ~11.1s from
+ * engaging to fully scrolled away, which is the window an authored encounter
+ * has to play out in. Raising it makes levels faster and gives every
+ * encounter less room; lowering it does the opposite. Distinct from
  * `TUNING.visuals.bgScrollSpeed`, which is the cosmetic parallax drift of
  * the star backdrop and means nothing to gameplay.
  */
@@ -70,12 +76,12 @@ export function playerScreenY(): number {
 
 /** Screen y of a tile-local y, `t` seconds after that tile engaged. The whole model. */
 export function tileLocalToScreenY(localY: number, t: number): number {
-  return localY + LEVEL_SCROLL_SPEED * t;
+  return localY - TILE_UNIT + LEVEL_SCROLL_SPEED * t;
 }
 
 /** The inverse: which tile-local y is at a given screen y, `t` seconds in. */
 export function screenToTileLocalY(screenY: number, t: number): number {
-  return screenY - LEVEL_SCROLL_SPEED * t;
+  return screenY + TILE_UNIT - LEVEL_SCROLL_SPEED * t;
 }
 
 /**
@@ -112,13 +118,14 @@ export function secondsPerTile(): number {
 }
 
 /**
- * How long a tile stays on screen from the moment it engages. Its north
- * edge starts at the top of the screen and has to travel a full screen
- * height to clear the bottom — so this, not `secondsPerTile`, is the window
- * an encounter authored on that tile actually gets.
+ * How long a tile lasts from the moment it engages until it has scrolled
+ * entirely past the bottom of the screen. It starts a full tile-height
+ * above the view and has to travel that plus a whole screen height to
+ * clear — so this, not `secondsPerTile`, is the window an encounter
+ * authored on that tile actually gets.
  */
-export function tileVisibleSec(): number {
-  return GAME_HEIGHT / LEVEL_SCROLL_SPEED;
+export function tileLifespanSec(): number {
+  return (TILE_UNIT + GAME_HEIGHT) / LEVEL_SCROLL_SPEED;
 }
 
 /** True once the tile has scrolled entirely past the bottom of the screen, `t` seconds after engaging. */

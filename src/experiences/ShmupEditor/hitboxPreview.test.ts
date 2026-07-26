@@ -8,9 +8,9 @@ function attack(overrides: Partial<ReturnType<typeof createBlankAttack>> = {}) {
 }
 
 describe("computeCameraBoundsRect", () => {
-  it("starts with the tile flush against the top of the screen", () => {
+  it("starts entirely below the tile — at time zero the tile is still off the top of the screen", () => {
     const rect = computeCameraBoundsRect(1, 0);
-    expect(rect.y).toBe(0);
+    expect(rect.y).toBe(TILE_UNIT);
     expect(rect.height).toBe(1280);
   });
 
@@ -33,10 +33,10 @@ describe("computeCameraBoundsRect", () => {
 
 describe("computePlayerRefLocalY", () => {
   it("starts below the tile and climbs through it, matching the ship's real screen position", () => {
-    expect(computePlayerRefLocalY(0)).toBe(playerScreenY());
+    expect(computePlayerRefLocalY(0)).toBe(playerScreenY() + TILE_UNIT);
     expect(computePlayerRefLocalY(0)).toBeGreaterThan(TILE_UNIT);
-    const crossesTileAt = (playerScreenY() - TILE_UNIT / 2) / LEVEL_SCROLL_SPEED;
-    expect(computePlayerRefLocalY(crossesTileAt)).toBeCloseTo(TILE_UNIT / 2, 6);
+    const crossesTileMidpointAt = (playerScreenY() + TILE_UNIT / 2) / LEVEL_SCROLL_SPEED;
+    expect(computePlayerRefLocalY(crossesTileMidpointAt)).toBeCloseTo(TILE_UNIT / 2, 6);
   });
 });
 

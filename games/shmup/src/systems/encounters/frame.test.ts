@@ -35,25 +35,31 @@ describe("tileLocalSec", () => {
 });
 
 describe("tileFrameAt", () => {
-  it("puts the first tile flush against the top of the screen at level time zero", () => {
+  it("starts the first tile entirely above the screen, south edge on the top edge", () => {
     const frame = tileFrameAt(placement(0), 1, 1, 0);
-    expect(frame.originY).toBe(0);
+    expect(frame.originY).toBe(-TILE_UNIT);
+    expect(frame.originY + frame.heightPx).toBe(0);
     expect(frame.originX).toBe(0);
-    expect(frame.heightPx).toBe(TILE_UNIT);
   });
 
   it("scrolls it down at the shared level speed", () => {
     const frame = tileFrameAt(placement(0), 1, 1, 2);
-    expect(frame.originY).toBeCloseTo(2 * LEVEL_SCROLL_SPEED, 6);
+    expect(frame.originY).toBeCloseTo(-TILE_UNIT + 2 * LEVEL_SCROLL_SPEED, 6);
   });
 
-  it("holds a later tile above the screen until its turn", () => {
-    expect(tileFrameAt(placement(1), 1, 1, 0).originY).toBeCloseTo(-TILE_UNIT, 6);
+  it("holds a later tile further above the screen until its turn", () => {
+    expect(tileFrameAt(placement(1), 1, 1, 0).originY).toBeCloseTo(-2 * TILE_UNIT, 6);
   });
 
   it("puts a tile at depth d in exactly the same place at its own engage time as depth 0 was at zero", () => {
     const deep = tileFrameAt(placement(4), 1, 1, tileEngageSec(4));
-    expect(deep.originY).toBeCloseTo(0, 6);
+    expect(deep.originY).toBeCloseTo(-TILE_UNIT, 6);
+  });
+
+  it("stacks consecutive tiles with no gap or overlap", () => {
+    const first = tileFrameAt(placement(0), 1, 1, 1.3);
+    const second = tileFrameAt(placement(1), 1, 1, 1.3);
+    expect(second.originY + second.heightPx).toBeCloseTo(first.originY, 6);
   });
 
   it("offsets each column by one tile unit", () => {

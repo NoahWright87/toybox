@@ -26,6 +26,9 @@ export interface OrientedEdges {
 }
 
 /** Rotation angles alone (no flip) — footprint 2/3 tiles can't take 90/270 without becoming taller than wide. Shared so "cycle rotation" controls (ConnectionViewer) and validOrientations() (which additionally crosses in flip) agree on what a "rotation step" is. */
+/** No rotation, no flip — the orientation a freshly placed tile starts at. */
+export const IDENTITY_ORIENTATION: Orientation = { rotation: 0, flip: false };
+
 export function rotationAngles(footprint: Footprint): Array<0 | 90 | 180 | 270> {
   return footprint === 1 ? [0, 90, 180, 270] : [0, 180];
 }

@@ -5,7 +5,7 @@ import { EncounterRunner } from "./EncounterRunner";
 import { pickEncounter } from "./authoredLevel";
 import { tileFrameAt, tileLocalSec, type TileFrame } from "./frame";
 import type { LevelLayout, TilePlacement } from "./levelLayout";
-import { TILE_UNIT, tileEngageSec, tileFullyOffScreen, tileVisibleSec } from "./scrollModel";
+import { TILE_UNIT, tileEngageSec, tileFullyOffScreen, tileLifespanSec } from "./scrollModel";
 import type { AuthoredContent, AuthoredEncounter, AuthoredTile, Vec2 } from "./authoredTypes";
 import type { AuthoredUnit } from "../../entities/AuthoredUnit";
 
@@ -17,10 +17,12 @@ import type { AuthoredUnit } from "../../entities/AuthoredUnit";
  * south across the screen, and each tile arrives at the top just before it
  * is needed. Tiles are ordered by depth (`levelLayout.ts`), and depth alone
  * decides when a tile engages — `scrollModel.ts` anchors the clock so that
- * at a tile's own time zero its north edge sits exactly on the top edge of
- * the screen. A single-tile encounter playtest is therefore not a special
- * case at all: it's a level of one tile at depth 0, and it looks identical
- * to that same tile played as depth 7 of a real level.
+ * at a tile's own time zero the tile is entirely off the top of the screen,
+ * south edge flush with it, and scrolls in from there. Anything authored on
+ * (or above) the tile therefore starts off-screen and flies in, rather than
+ * appearing mid-screen the instant the tile loads. A single-tile encounter
+ * playtest is not a special case at all: it's a level of one tile at depth
+ * 0, and it looks identical to that same tile played as depth 7.
  *
  * A tile's encounter ends the moment **either** its authored content is
  * spent (`EncounterRunner.complete`) **or** the tile has scrolled entirely
@@ -94,7 +96,7 @@ export class LevelRunner {
       });
     }
 
-    this.lastExitSec = this.tiles.reduce((max, t) => Math.max(max, t.engageSec + tileVisibleSec()), tileVisibleSec());
+    this.lastExitSec = this.tiles.reduce((max, t) => Math.max(max, t.engageSec + tileLifespanSec()), tileLifespanSec());
   }
 
   get elapsedSec(): number {

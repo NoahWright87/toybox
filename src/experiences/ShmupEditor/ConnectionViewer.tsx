@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import TileArt from "./TileArt";
 import { canDeleteEntry, candidatesForAddPoint, computeAddPoints, orientationValidAt, type AddPoint, type GridEntry } from "./connectionGrid";
-import { rotationAngles, type Orientation } from "./orientation";
+import { IDENTITY_ORIENTATION, rotationAngles, type Orientation } from "./orientation";
+import { autoGenerateLayout } from "./generateLayout";
 import { saveLevel } from "./levelStore";
 import { DEFAULT_PLAYTEST_DIFFICULTY, playtestLevel } from "./playtestLaunch";
 import type { TileDef } from "./types";
@@ -10,7 +11,7 @@ interface ConnectionViewerProps {
   tiles: TileDef[];
 }
 
-const IDENTITY: Orientation = { rotation: 0, flip: false };
+const IDENTITY: Orientation = IDENTITY_ORIENTATION;
 
 /** Step the Difficulty stepper moves by, and its ceiling — matched to the Encounter editor's own preview dial. */
 const DIFFICULTY_STEP = 5;
@@ -33,6 +34,12 @@ const ADD_ARROW: Record<AddPoint["side"], string> = { north: "↑", south: "↓"
  * west, not just north/south — and only offers the FIRST orientation that
  * connects per tile (not every permutation); rotate/flip after placing
  * covers the rest. See connectionGrid.ts for the placement/alignment math.
+ *
+ * **Autogenerate** (`generateLayout.ts`) grows the layout north from
+ * whatever is already placed — or picks a random starting tile if nothing
+ * is — using the same matcher the manual "+ Add" uses, so the result is
+ * legal by identical rules and fully hand-editable afterwards. Press it
+ * again to make the level longer.
  *
  * **Play test** saves the assembled grid to `LEVEL.DAT` (`levelStore.ts`)
  * and hands off to the real game, which scrolls the whole thing past the
@@ -161,12 +168,17 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
     </div>
   );
 
+  // The empty grid gets the Autogenerate button too — "start me off with
+  // something" is exactly when you want it most.
   if (entries.length === 0) {
     return (
       <div className="shmup-connection-viewer">
         <div className="shmup-strip-add-row--initial">
           <button type="button" className="shmup-strip-add" onClick={openInitialPicker}>
             + Add
+          </button>
+          <button type="button" className="shmup-btn shmup-btn--small" onClick={handleAutoGenerate}>
+            ⚄ Autogenerate
           </button>
           {picker}
         </div>
@@ -179,11 +191,29 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
     playtestLevel(difficulty);
   }
 
+  function handleAutoGenerate() {
+    setAddTarget(null);
+    setSelectedKey(null);
+    setEntries(autoGenerateLayout(tiles, entries));
+  }
+
+  function handleClear() {
+    setAddTarget(null);
+    setSelectedKey(null);
+    setEntries([]);
+  }
+
   return (
     <div className="shmup-connection-viewer">
       <div className="shmup-connection-viewer__toolbar">
         <button type="button" className="shmup-btn shmup-btn--primary" onClick={handlePlaytest}>
           ▶ Play Test Level
+        </button>
+        <button type="button" className="shmup-btn shmup-btn--small" onClick={handleAutoGenerate} title="Grow this level by a few tiles">
+          ⚄ Autogenerate
+        </button>
+        <button type="button" className="shmup-btn shmup-btn--small" onClick={handleClear} title="Remove every placed tile">
+          Clear
         </button>
         <div className="shmup-connection-viewer__difficulty">
           <button

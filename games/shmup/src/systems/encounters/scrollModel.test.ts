@@ -12,16 +12,25 @@ import {
   tileEngageSec,
   tileFullyOffScreen,
   tileLocalToScreenY,
-  tileVisibleSec,
+  tileLifespanSec,
 } from "./scrollModel";
 
 describe("the anchoring", () => {
-  it("puts a tile's north edge exactly on the top of the screen at its own time zero", () => {
-    expect(tileLocalToScreenY(0, 0)).toBe(0);
+  it("puts the tile entirely off the top of the screen at its own time zero", () => {
+    // South edge flush with the screen top, north edge a full tile above it —
+    // so nothing authored on the tile is visible when it engages, and an
+    // enemy authored above the tile is further off still.
+    expect(tileLocalToScreenY(TILE_UNIT, 0)).toBe(0);
+    expect(tileLocalToScreenY(0, 0)).toBe(-TILE_UNIT);
+    expect(tileLocalToScreenY(-300, 0)).toBeLessThan(-TILE_UNIT);
+  });
+
+  it("brings the whole tile into view only after a tile-height of scrolling", () => {
+    expect(tileLocalToScreenY(0, secondsPerTile())).toBeCloseTo(0, 6);
   });
 
   it("scrolls down — a fixed point on the tile moves toward the bottom of the screen", () => {
-    expect(tileLocalToScreenY(0, 1)).toBeCloseTo(LEVEL_SCROLL_SPEED, 6);
+    expect(tileLocalToScreenY(0, 1) - tileLocalToScreenY(0, 0)).toBeCloseTo(LEVEL_SCROLL_SPEED, 6);
     expect(tileLocalToScreenY(0, 2)).toBeGreaterThan(tileLocalToScreenY(0, 1));
   });
 
@@ -43,27 +52,35 @@ describe("tile timing", () => {
     expect(tileEngageSec(0)).toBe(0);
   });
 
-  it("keeps a tile on screen for a whole screen height of travel, not just its own height", () => {
-    // This, not secondsPerTile, is the window an authored encounter gets.
-    expect(tileVisibleSec()).toBeCloseTo(GAME_HEIGHT / LEVEL_SCROLL_SPEED, 6);
-    expect(tileVisibleSec()).toBeGreaterThan(secondsPerTile());
+  it("lasts a tile height PLUS a screen height of travel — the window an authored encounter gets", () => {
+    expect(tileLifespanSec()).toBeCloseTo((TILE_UNIT + GAME_HEIGHT) / LEVEL_SCROLL_SPEED, 6);
+    expect(tileLifespanSec()).toBeGreaterThan(secondsPerTile());
   });
 
   it("reports a tile gone exactly when its north edge clears the bottom", () => {
     expect(tileFullyOffScreen(0)).toBe(false);
-    expect(tileFullyOffScreen(tileVisibleSec() - 0.01)).toBe(false);
-    expect(tileFullyOffScreen(tileVisibleSec())).toBe(true);
+    expect(tileFullyOffScreen(tileLifespanSec() - 0.01)).toBe(false);
+    expect(tileFullyOffScreen(tileLifespanSec())).toBe(true);
   });
 
   it("overlaps consecutive tiles, so more than one is visible at a time", () => {
-    expect(tileVisibleSec()).toBeGreaterThan(tileEngageSec(1));
+    expect(tileLifespanSec()).toBeGreaterThan(tileEngageSec(1));
+  });
+
+  it("abuts consecutive tiles seamlessly — the next tile's south edge arrives as this one's north edge does", () => {
+    const handover = tileEngageSec(1);
+    expect(tileLocalToScreenY(0, handover)).toBeCloseTo(tileLocalToScreenY(TILE_UNIT, 0), 6);
   });
 });
 
 describe("the camera band", () => {
-  it("starts on the tile and climbs it as the tile scrolls past", () => {
-    expect(cameraLocalBand(0)).toEqual({ top: 0, bottom: GAME_HEIGHT });
-    expect(cameraLocalBand(1).top).toBeCloseTo(-LEVEL_SCROLL_SPEED, 6);
+  it("starts entirely below the tile — nothing on it is on screen yet", () => {
+    expect(cameraLocalBand(0)).toEqual({ top: TILE_UNIT, bottom: TILE_UNIT + GAME_HEIGHT });
+  });
+
+  it("climbs the tile as the tile scrolls past", () => {
+    expect(cameraLocalBand(1).top).toBeCloseTo(TILE_UNIT - LEVEL_SCROLL_SPEED, 6);
+    expect(cameraLocalBand(2).top).toBeLessThan(cameraLocalBand(1).top);
   });
 
   it("is one screen wide however wide the tile is", () => {
@@ -76,7 +93,7 @@ describe("the camera band", () => {
 
 describe("the player's place on the tile", () => {
   it("starts below the tile and climbs through it", () => {
-    expect(playerTileLocalY(0)).toBe(playerScreenY());
+    expect(playerTileLocalY(0)).toBe(playerScreenY() + TILE_UNIT);
     expect(playerTileLocalY(0)).toBeGreaterThan(TILE_UNIT);
     expect(playerTileLocalY(4)).toBeLessThan(playerTileLocalY(0));
   });
@@ -84,7 +101,7 @@ describe("the player's place on the tile", () => {
   it("crosses the whole tile before the tile leaves the screen", () => {
     // If the ship left the tile behind before it scrolled off, content
     // authored near the tile's north edge could never be reached.
-    const passesNorthEdge = playerScreenY() / LEVEL_SCROLL_SPEED;
-    expect(passesNorthEdge).toBeLessThan(tileVisibleSec());
+    const passesNorthEdge = (playerScreenY() + TILE_UNIT) / LEVEL_SCROLL_SPEED;
+    expect(passesNorthEdge).toBeLessThan(tileLifespanSec());
   });
 });
