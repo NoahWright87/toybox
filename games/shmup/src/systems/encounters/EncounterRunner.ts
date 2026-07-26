@@ -3,7 +3,7 @@ import { TUNING } from "../../tuning";
 import { GAME_WIDTH, GAME_HEIGHT } from "../../config";
 import { AuthoredUnit } from "../../entities/AuthoredUnit";
 import { editorSpriteTextureKey } from "../../sprites/editorArt";
-import { dueShots, isTelegraphing } from "./attacks";
+import { advanceAttackTrack, freshAttackTrack, isTelegraphing, type AttackTrack } from "./attacks";
 import { instanceHeadingDegAt, instanceStateAt, invincibleAt, lastAuthoredTime, resolveFacingDeg } from "./movement";
 import { applyPingPong, resolveScaling, resolveScalingSlots, spawnDelayOffsetsSec } from "./scaling";
 import { toScreen, type TileFrame } from "./frame";
@@ -78,20 +78,6 @@ const PROJECTILE_DEPTH = 6;
 
 /** Alpha applied to a firing anchor during an attack's telegraph wind-up — the runtime read of the editor timeline's telegraph colour. */
 const TELEGRAPH_ALPHA = 0.55;
-
-/** Tracks how far through an Action's attack one firing anchor has already fired, so no shot is ever emitted twice. */
-interface AttackTrack {
-  /** Which Action is currently running here — a change restarts the schedule. */
-  actionId: string | null;
-  /** Encounter time (sec) the current Action started at. */
-  startedAtSec: number;
-  /** Milliseconds of that Action's own timeline already resolved into shots. */
-  firedThroughMs: number;
-}
-
-function freshTrack(): AttackTrack {
-  return { actionId: null, startedAtSec: 0, firedThroughMs: 0 };
-}
 
 interface LivePart {
   def: AuthoredPart;
@@ -318,12 +304,17 @@ export class EncounterRunner {
       power: p.power,
       scale: 1,
       facingDeg: 90,
-      track: freshTrack(),
+      track: freshAttackTrack(),
       parts: this.createParts(p.def, entity, "enemy", displaySize, p.placement.partActions),
       collisionGroup: "enemy",
     };
+    // Deliberately NOT updated here. `update()` pushes onto `this.live`
+    // before its own loop starts, so the loop picks this instance up on the
+    // very same frame — with the real frame-start `previousSec`. Updating it
+    // here too would advance its attack track using "now" as the frame
+    // start, which swallows every shot the Action schedules at t = 0. Its
+    // position is still resolved before anything renders.
     this.live.push(instance);
-    this.updatePlaced(instance, this.clockSec);
   }
 
   /**
@@ -376,7 +367,7 @@ export class EncounterRunner {
         def: part,
         entity,
         placements: placements.filter((p) => p.partId === part.id).sort((a, b) => a.time - b.time),
-        track: freshTrack(),
+        track: freshAttackTrack(),
         pos: { x: owner.x, y: owner.y },
       });
     }
@@ -483,17 +474,10 @@ export class EncounterRunner {
   // ── Firing ───────────────────────────────────────────────────────────────
 
   /**
-   * Advances one firing anchor's schedule. Switching to a different Action
-   * restarts that schedule, which is what makes an Action's
-   * `telegraphMs`/`burstIntervalMs` relative to *itself* rather than to the
-   * encounter clock — author a wind-up once and it reads the same wherever
-   * that Action is placed.
-   *
-   * On a switch, `firedThroughMs` jumps straight to however much of the new
-   * Action's timeline is already in the past. Normally that's ~0 (the
-   * switch lands within a frame of the authored moment); after a long
-   * frame hitch it's what stops the runner from replaying a whole backlog
-   * of bursts in one go.
+   * Resolves one firing anchor's shots for this frame and puts them on the
+   * field. The schedule bookkeeping itself is `advanceAttackTrack` — pure,
+   * and unit tested there, since getting `previousSec` wrong is silent and
+   * costs you exactly the shots an Action fires at its own t = 0.
    */
   private runAttackTrack(
     instance: LiveInstance,
@@ -504,23 +488,14 @@ export class EncounterRunner {
     previousSec: number,
     part?: LivePart
   ): void {
-    const actionId = action?.id ?? null;
-    if (track.actionId !== actionId) {
-      track.actionId = actionId;
-      track.startedAtSec = actionStartSec;
-      track.firedThroughMs = Math.max(0, (previousSec - actionStartSec) * 1000);
-    }
-    if (!action || !action.attack) return;
-    const attack = action.attack;
+    const attack = action?.attack ?? null;
+    const shots = advanceAttackTrack(track, attack, action?.id ?? null, actionStartSec, previousSec, this.clockSec);
+    if (!action || !attack) return;
 
-    const elapsedMs = (this.clockSec - track.startedAtSec) * 1000;
     const anchorEntity = part ? part.entity : instance.entity;
     if (anchorEntity?.active && anchorEntity.hittable) {
-      anchorEntity.setAlpha(isTelegraphing(attack, elapsedMs) ? TELEGRAPH_ALPHA : 1);
+      anchorEntity.setAlpha(isTelegraphing(attack, (this.clockSec - track.startedAtSec) * 1000) ? TELEGRAPH_ALPHA : 1);
     }
-
-    const shots = dueShots(attack, track.firedThroughMs, elapsedMs);
-    track.firedThroughMs = Math.max(track.firedThroughMs, elapsedMs);
     if (shots.length === 0) return;
 
     const baseFacing = part ? this.facingFor(action, anchor, instance.facingDeg) : instance.facingDeg;
@@ -571,7 +546,7 @@ export class EncounterRunner {
       power,
       scale,
       facingDeg: angleDeg,
-      track: freshTrack(),
+      track: freshAttackTrack(),
       parts: this.createParts(def, entity, attack.spawnGroup, displaySize, []),
       collisionGroup: attack.spawnGroup,
     });

@@ -35,6 +35,24 @@ export const SWEEP_PINGPONG_AMPLITUDE_DEG = 90;
  */
 export const MAX_SHOTS_PER_UPDATE = 64;
 
+/**
+ * How far through one Action's attack a single firing anchor has already
+ * fired. Owned by whatever is doing the firing (a Unit's base track, or one
+ * of its Parts'), advanced by `advanceAttackTrack`.
+ */
+export interface AttackTrack {
+  /** Which Action is currently running here — a change restarts the schedule. */
+  actionId: string | null;
+  /** Encounter time (sec) the current Action started at. */
+  startedAtSec: number;
+  /** Milliseconds of that Action's own timeline already resolved into shots. */
+  firedThroughMs: number;
+}
+
+export function freshAttackTrack(): AttackTrack {
+  return { actionId: null, startedAtSec: 0, firedThroughMs: 0 };
+}
+
 /** One resolved shot: which burst/shot it belongs to, when it fired, and its angle offset from the Action's resolved facing. */
 export interface ScheduledShot {
   burstIndex: number;
@@ -138,4 +156,46 @@ export function dueShots(attack: AuthoredAttack, fromMs: number, toMs: number): 
     }
   }
   return out;
+}
+
+/**
+ * Advances one firing anchor by a frame and returns the shots it owes.
+ *
+ * Switching to a different Action restarts the schedule, which is what
+ * makes an Action's `telegraphMs`/`burstIntervalMs` relative to *itself*
+ * rather than to the encounter clock — author a wind-up once and it reads
+ * the same wherever that Action is placed.
+ *
+ * **`previousSec` must be the moment the current frame began, not "now".**
+ * On a switch, the track skips straight to however much of the new Action's
+ * timeline was already in the past *as of the start of this frame*.
+ * Normally that's ~0 and the Action's opening shot fires immediately;
+ * after a long frame hitch it's what stops a whole backlog of bursts from
+ * being replayed in one go. Passing `nowSec` here instead silently swallows
+ * every shot scheduled at the very start of the Action, which is exactly
+ * what a `t = 0` shot is.
+ *
+ * Safe to call more than once in the same frame: the second call sees an
+ * unchanged `actionId` and an already-advanced `firedThroughMs`, so it
+ * neither re-fires nor skips.
+ */
+export function advanceAttackTrack(
+  track: AttackTrack,
+  attack: AuthoredAttack | null,
+  actionId: string | null,
+  actionStartSec: number,
+  previousSec: number,
+  nowSec: number
+): ScheduledShot[] {
+  if (track.actionId !== actionId) {
+    track.actionId = actionId;
+    track.startedAtSec = actionStartSec;
+    track.firedThroughMs = Math.max(0, (previousSec - actionStartSec) * 1000);
+  }
+  if (!attack) return [];
+
+  const elapsedMs = (nowSec - track.startedAtSec) * 1000;
+  const shots = dueShots(attack, track.firedThroughMs, elapsedMs);
+  track.firedThroughMs = Math.max(track.firedThroughMs, elapsedMs);
+  return shots;
 }

@@ -23,7 +23,15 @@ export type PlaytestRequest =
 /** Fallback when a request arrives with no usable Difficulty. Never 0 — `scaling.ts` spawns nothing there. */
 export const PLAYTEST_DEFAULT_DIFFICULTY = 10;
 
+/**
+ * An absent or unparseable `difficulty` falls back; an explicit `0` is
+ * honoured. The two have to be told apart by hand, because `Number(null)`
+ * and `Number("")` are both `0` — so a URL with no difficulty at all would
+ * otherwise read as Difficulty 0, which spawns nothing whatsoever
+ * (`scaling.ts`) and looks exactly like broken content.
+ */
 function parseDifficulty(raw: string | null): number {
+  if (raw === null || raw.trim() === "") return PLAYTEST_DEFAULT_DIFFICULTY;
   const value = Number(raw);
   return Number.isFinite(value) && value >= 0 ? value : PLAYTEST_DEFAULT_DIFFICULTY;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { burstCount, burstStartMs, dueShots, isTelegraphing, shotAngleOffsets, sweepOffsetDeg } from "./attacks";
+import { advanceAttackTrack, burstCount, burstStartMs, dueShots, freshAttackTrack, isTelegraphing, shotAngleOffsets, sweepOffsetDeg } from "./attacks";
 import type { AuthoredAttack } from "./authoredTypes";
 
 function attack(overrides: Partial<AuthoredAttack> = {}): AuthoredAttack {
@@ -138,5 +138,63 @@ describe("isTelegraphing", () => {
 
   it("stops once the last burst has fired", () => {
     expect(isTelegraphing(attack({ telegraphMs: 300, burstIntervalMs: 1000, repeatCount: 1 }), 1100)).toBe(false);
+  });
+});
+
+describe("advanceAttackTrack", () => {
+  it("fires the Action's opening shot on the very frame the Action begins", () => {
+    // The regression this guards: the runner used to advance a
+    // just-spawned instance twice in one frame, passing "now" as the frame
+    // start on the first pass. That set firedThroughMs past 0 before
+    // anything had fired, and the t = 0 shot was silently swallowed.
+    const track = freshAttackTrack();
+    const shots = advanceAttackTrack(track, attack(), "a1", 0, 0, 0.016);
+    expect(shots.map((s) => s.atMs)).toEqual([0]);
+  });
+
+  it("is idempotent within a frame — advancing twice neither re-fires nor skips", () => {
+    const a = attack({ burstIntervalMs: 100 });
+    const once = freshAttackTrack();
+    const twice = freshAttackTrack();
+
+    const first = advanceAttackTrack(once, a, "a1", 0, 0, 0.016);
+    const firstOfTwo = advanceAttackTrack(twice, a, "a1", 0, 0, 0.016);
+    const secondOfTwo = advanceAttackTrack(twice, a, "a1", 0, 0, 0.016);
+
+    expect(firstOfTwo).toEqual(first);
+    expect(secondOfTwo).toEqual([]);
+    expect(twice.firedThroughMs).toBe(once.firedThroughMs);
+  });
+
+  it("restarts the schedule when the Action changes, so a wind-up is relative to its own Action", () => {
+    const track = freshAttackTrack();
+    advanceAttackTrack(track, attack({ burstIntervalMs: 100 }), "a1", 0, 0, 1);
+    const shots = advanceAttackTrack(track, attack(), "a2", 1, 1, 1.016);
+    expect(track.startedAtSec).toBe(1);
+    expect(shots.map((s) => s.atMs)).toEqual([0]);
+  });
+
+  it("skips the backlog after a frame hitch instead of replaying every missed burst", () => {
+    // The Action began 5s ago but this is the first frame that has seen it:
+    // it should pick up from now, not dump 50 bursts onto the field.
+    const track = freshAttackTrack();
+    const shots = advanceAttackTrack(track, attack({ burstIntervalMs: 100 }), "a1", 0, 5, 5.016);
+    expect(shots.length).toBeLessThanOrEqual(1);
+  });
+
+  it("still does its bookkeeping for an Action that fires nothing", () => {
+    const track = freshAttackTrack();
+    expect(advanceAttackTrack(track, null, "a1", 2, 2, 2.016)).toEqual([]);
+    expect(track.actionId).toBe("a1");
+    expect(track.startedAtSec).toBe(2);
+  });
+
+  it("keeps firing across frames without gaps or repeats", () => {
+    const a = attack({ burstIntervalMs: 100 });
+    const track = freshAttackTrack();
+    let fired = 0;
+    for (let t = 0; t + 0.016 <= 1; t += 0.016) fired += advanceAttackTrack(track, a, "a1", 0, t, t + 0.016).length;
+    // Bursts at 0, 100, ... 900 — the same 10 dueShots resolves directly.
+    expect(fired).toBe(10);
   });
 });

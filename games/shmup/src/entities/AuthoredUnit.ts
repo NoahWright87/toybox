@@ -155,7 +155,16 @@ export class AuthoredUnit extends Phaser.Physics.Arcade.Sprite implements Player
     return !this.invincibleFlag && !(this.owner?.invincible ?? false);
   }
 
+  /**
+   * A destroyed Part stays in its hull's `parts` array (nothing removes it),
+   * so a later `setInvincible` on the hull reaches it. Bailing on an
+   * inactive sprite is what stops that from re-enabling the body of
+   * something already recycled — Arcade's overlap checks consult
+   * `body.enable`, not `gameObject.active`, so a re-enabled body on an
+   * invisible Part would keep scoring hits.
+   */
   private refreshHittable(): void {
+    if (!this.active) return;
     const hittable = this.hittable;
     this.setAlpha(hittable ? 1 : 0.45);
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;

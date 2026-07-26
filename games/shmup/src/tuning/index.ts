@@ -446,9 +446,15 @@ export const TUNING = {
     // a `size: 34` battleship at ~102px, keeping the shmup-standard
     // "hitbox comfortably smaller than the ship" relationship.
     artToHitboxRatio: 3,
-    // Pool ceiling for authored units. Sized well above `maxEnemies` (40)
-    // because in this model a projectile IS a Unit — one bullet-heavy
-    // encounter can have hundreds of live instances.
+    // Pool ceiling for authored units, applied **per collision bucket** —
+    // PlayScene builds a hostile group and a friendly group, each capped at
+    // this, so the true worst case is 2x. Not a global budget: the friendly
+    // bucket is empty in practice (the editor only authors enemy-side
+    // content, and `spawnGroup` defaults to "enemyProjectile"), so a shared
+    // ceiling would spend accounting on a pool nothing uses. Sized well
+    // above `maxEnemies` (40) because in this model a projectile IS a
+    // Unit — one bullet-heavy encounter can have hundreds of live
+    // instances.
     maxAuthoredUnits: 400,
     // How far off-screen an authored instance travels before it despawns.
     // Generous, so a wide authored path that loops out and back doesn't get
