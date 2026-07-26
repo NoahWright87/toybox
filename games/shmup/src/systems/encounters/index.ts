@@ -12,7 +12,10 @@
  */
 export * from "./authoredTypes";
 export * from "./authoredContent";
+export * from "./scrollModel";
 export * from "./frame";
+export * from "./levelLayout";
+export * from "./authoredLevel";
 export * from "./spriteScale";
 export * from "./movement";
 export * from "./attacks";
@@ -20,3 +23,5 @@ export * from "./scaling";
 export * from "./assets";
 export { EncounterRunner } from "./EncounterRunner";
 export type { EncounterRunnerConfig } from "./EncounterRunner";
+export { LevelRunner } from "./LevelRunner";
+export type { LevelRunnerConfig } from "./LevelRunner";

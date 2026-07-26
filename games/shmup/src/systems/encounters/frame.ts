@@ -1,51 +1,28 @@
 /**
- * The tile-local -> screen mapping. Authored encounter positions are all
- * **tile-local**: the tile's own north-west corner is (0, 0), +x runs east,
- * +y runs south, and one footprint column is `TILE_UNIT` across. This is
- * the one place that turns those into screen pixels.
+ * The tile-local -> screen mapping, at a given moment in a scrolling level.
  *
- * **Scale is 1:1** — `TILE_UNIT` is 720, deliberately the same number as
- * `GAME_WIDTH`, so a 1x1 tile is exactly one screen wide and an authored
- * pixel is a game pixel. The editor anchored its own `TILE_UNIT` to
- * `GAME_WIDTH` for precisely this reason (`editorScale.ts`); keeping the
- * runtime at 1:1 is what makes the editor's canvas a literal preview
- * instead of an approximation.
+ * Authored positions are all **tile-local**: the tile's own north-west
+ * corner is (0, 0), +x runs east, +y runs south, and one footprint column
+ * is `TILE_UNIT` across. Scale is 1:1 against game pixels — `TILE_UNIT` is
+ * deliberately `GAME_WIDTH`, so an authored pixel is a game pixel and the
+ * editor's canvas is a literal preview rather than an approximation.
  *
- * **Vertically the frame is pinned by the player reference marker**, not by
- * the tile's own edges: the editor draws a player stand-in at 85% down the
- * tile, and everything an author positions is read against that marker. So
- * `t = 0` puts that marker exactly where the player ship actually sits, and
- * the editor's static canvas and the game's opening frame agree pixel for
- * pixel. A tile is 720 tall against a 1280-tall screen, so the tile occupies
- * the lower ~56% of the view and authored lead-in positions above it
- * (negative local y, where the editor's own default entrance sits) land on
- * the upper part of the screen — off the tile, on screen, which is exactly
- * where an entering enemy should appear.
+ * A tile's frame **moves**, because the level scrolls (`scrollModel.ts`):
+ * its north edge starts on the top edge of the screen the moment the tile
+ * engages and travels down from there. Every authored position resolves
+ * through the frame at the instant it touches a sprite, so everything on a
+ * tile scrolls with it for free — which is exactly right for a turret
+ * bolted to the ground, and is what makes a level nothing more than
+ * several of these frames at staggered depths.
  *
- * A single-tile playtest holds this frame still. Scrolling it — so a level
- * of chained tiles moves past — is the level pass's job, and it belongs
- * here: give `TileFrame.originY` a velocity and everything authored moves
- * with its tile for free, because every position in the runner is resolved
- * through `toScreen` on the frame it belongs to.
+ * Horizontally the level is centred on the camera. A level (or tile) wider
+ * than one screen overflows both sides for now; the easing playable-bounds
+ * box that fixes that is `levels-and-tiles.spec.todo.md` §4's L2 work.
  */
-import { GAME_WIDTH, GAME_HEIGHT } from "../../config";
-import { TUNING } from "../../tuning";
+import { GAME_WIDTH } from "../../config";
+import { TILE_UNIT, tileEngageSec, tileLocalToScreenY } from "./scrollModel";
 import type { AuthoredFootprint, Vec2 } from "./authoredTypes";
-
-/**
- * How wide one footprint column is in authored units. Mirrors the editor's
- * `editorScale.ts` `TILE_UNIT`; both are anchored to `GAME_WIDTH`, and they
- * must move together or authored content silently changes size.
- */
-export const TILE_UNIT = 720;
-
-/** How far down the tile the editor draws its player reference marker (`EncounterEditor.tsx`'s `playerRefWorld`). */
-export const PLAYER_REF_FRACTION = 0.85;
-
-/** Where the player ship sits on screen — also `PlayScene`'s spawn position. */
-export function playerLineY(): number {
-  return GAME_HEIGHT - TUNING.encounters.playerLineOffsetY;
-}
+import type { TilePlacement } from "./levelLayout";
 
 export interface TileFrame {
   /** Screen x of the tile's west edge. */
@@ -56,13 +33,27 @@ export interface TileFrame {
   heightPx: number;
 }
 
-/** The frame a single-tile playtest runs in: horizontally centered, vertically pinned by the player reference marker. */
-export function staticTileFrame(footprint: AuthoredFootprint): TileFrame {
-  const widthPx = footprint * TILE_UNIT;
+/** Screen x of the level's westmost column, so a level of `columns` columns is centred. */
+export function levelOriginX(columns: number): number {
+  return (GAME_WIDTH - Math.max(1, columns) * TILE_UNIT) / 2;
+}
+
+/** Seconds this tile's own encounter clock reads at level time `levelSec`. Negative before it engages. */
+export function tileLocalSec(placement: TilePlacement, levelSec: number): number {
+  return levelSec - tileEngageSec(placement.depth);
+}
+
+/** Where a tile sits on screen at level time `levelSec`. */
+export function tileFrameAt(
+  placement: TilePlacement,
+  footprint: AuthoredFootprint,
+  columns: number,
+  levelSec: number
+): TileFrame {
   return {
-    originX: (GAME_WIDTH - widthPx) / 2,
-    originY: playerLineY() - TILE_UNIT * PLAYER_REF_FRACTION,
-    widthPx,
+    originX: levelOriginX(columns) + placement.column * TILE_UNIT,
+    originY: tileLocalToScreenY(0, tileLocalSec(placement, levelSec)),
+    widthPx: footprint * TILE_UNIT,
     heightPx: TILE_UNIT,
   };
 }
@@ -74,3 +65,5 @@ export function toScreen(frame: TileFrame, local: Vec2): Vec2 {
 export function toLocal(frame: TileFrame, screen: Vec2): Vec2 {
   return { x: screen.x - frame.originX, y: screen.y - frame.originY };
 }
+
+export { TILE_UNIT };

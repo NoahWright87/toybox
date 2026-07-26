@@ -1,22 +1,21 @@
 /**
  * "How big is one footprint slot, in editor world-coordinate units" — a
- * single shared constant every file that needs a default distance
- * relative to a tile reads, instead of each independently guessing a
- * number that happened to look right against whatever the others picked.
- * That's exactly how the editor drifted out of scale in the first place:
- * `EncounterEditor.tsx` had its own local `TILE_UNIT = 130`,
- * `encounterSteps.ts` had its own `DEFAULT_NEXT_OFFSET` tuned to match it
- * by hand, `unitScaling.ts` had its own default shape-handle sizes tuned
- * to match it by hand — nothing enforced they stayed in sync, and 130 was
- * never anchored to anything real to begin with. Noah's report: "units
- * are half their size" — a fixed 56px authoring icon reads as huge next
- * to a 130px-wide tile.
+ * single shared constant every file that needs a default distance relative
+ * to a tile reads (`encounterSteps.ts`'s default step offset,
+ * `unitScaling.ts`'s default shape handles, `EncounterEditor.tsx`'s
+ * canvas), instead of each independently guessing a number that happened to
+ * look right against whatever the others picked. That's exactly how the
+ * editor drifted out of scale in the first place: three files with three
+ * hand-matched constants and nothing enforcing they stayed in sync.
  *
- * Anchored to `games/shmup/src/config.ts`'s real `GAME_WIDTH` (720) — a
- * 1x1 tile now represents roughly one real screen's width, not an
- * arbitrary editor-only number, the same "tie the editor to real
- * gameplay scale" reasoning `hitboxPreview.ts` already applies to the
- * camera-bounds preview. Same "no shared code with the game" stance as
- * the rest of the editor: independently declared, not imported.
+ * It used to declare its own `720`, chosen by hand to match the game's
+ * `GAME_WIDTH`. It no longer declares anything — a number the editor picks
+ * to match the game is a number that drifts from the game, which is the
+ * same failure one level up. It now re-exports the game's own constant from
+ * `games/shmup/src/systems/encounters/scrollModel.ts`, the one module the
+ * two packages genuinely share (see its header for why the tile size and
+ * the level scroll speed in particular can't be mirrored). That module has
+ * no imports of its own beyond the playfield size, so pulling it into the
+ * Doors bundle costs nothing.
  */
-export const TILE_UNIT = 720;
+export { TILE_UNIT } from "../../../games/shmup/src/systems/encounters/scrollModel";

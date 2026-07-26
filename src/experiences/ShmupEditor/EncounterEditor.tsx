@@ -16,7 +16,7 @@ import { createEncounterUnit, type EncounterDef, type EncounterStep, type Encoun
 import { computeInstanceHeadingDeg, computeInstancePreview, LAST_STEP_PREVIEW_WINDOW } from "./movementPreview";
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
-import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
+import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, computePlayerRefLocalY, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
 import type { ActionAttack, ActionDef, UnitDef, UnitLayer } from "./unitTypes";
@@ -27,6 +27,8 @@ interface EncounterEditorProps {
   encounter: EncounterDef;
   onSave: (encounter: EncounterDef) => void;
   onCancel: () => void;
+  /** Saves this encounter and hands off to the real game to play it — see `playtestLaunch.ts`. The caller owns persisting, since the game reads TILES.DAT rather than this draft. */
+  onPlaytest: (encounter: EncounterDef, difficulty: number) => void;
   /** Called on every change so the caller can persist the in-progress draft — root CLAUDE.md's mandatory in-progress-session-survives-reload rule. */
   onDraftChange: (encounter: EncounterDef) => void;
 }
@@ -157,7 +159,7 @@ function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined
  * step/attack sequence anchored to its own slot, so scaling never needs
  * its own separate placement UI.
  */
-export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onDraftChange }: EncounterEditorProps) {
+export default function EncounterEditor({ tile, units, encounter, onSave, onCancel, onPlaytest, onDraftChange }: EncounterEditorProps) {
   const [draft, setDraft] = useState<EncounterDef>(encounter);
   const [selection, setSelection] = useState<Selection>(null);
   const [dragPos, setDragPos] = useState<{ instanceId: string; stepId: string; pos: Vec2 } | null>(null);
@@ -306,6 +308,18 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   function handleSave() {
     if (validate(draft)) return;
     onSave({ ...draft, name: draft.name.trim(), modifiedAt: Date.now() });
+  }
+
+  /**
+   * Hands this encounter to the real game. The preview's own Difficulty
+   * dial comes along, so what you were just looking at is what gets played
+   * — and since the game reads saved data rather than this draft, the
+   * caller saves first (Noah: "for simplicity's sake, this can save the
+   * encounter first").
+   */
+  function handlePlaytest() {
+    if (validate(draft)) return;
+    onPlaytest({ ...draft, name: draft.name.trim(), modifiedAt: Date.now() }, hitboxPreviewDifficulty);
   }
 
   function selectStep(instanceId: string, stepId: string) {
@@ -824,9 +838,18 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // time), placed low in the tile the same way a vertical shmup's own ship
   // sits near the bottom of the screen. World space, so it composes
   // directly with attack anchors/aim math below.
-  const playerRefWorld: Vec2 = { x: tileWidthPx / 2, y: TILE_UNIT * 0.85 };
+  // Both of these MOVE with the scrub, because the level scrolls: the tile
+  // enters at the top of the screen and slides down out of it, so the
+  // camera band climbs the tile and the player's ship climbs through it
+  // from below. A static marker (which is what this was) is only ever one
+  // frame of that. Geometry comes from the game's own shared scroll model.
+  const playerRefWorld: Vec2 = { x: tileWidthPx / 2, y: computePlayerRefLocalY(scrubTime) };
   const playerRefStage = toStage(playerRefWorld);
-  const cameraBoundsStage = computeCameraBoundsRect(tileRectStage);
+  const cameraRectWorld = computeCameraBoundsRect(tile.footprint, scrubTime);
+  const cameraBoundsTopLeft = toStage({ x: cameraRectWorld.x, y: cameraRectWorld.y });
+  // toStage is a pure translation (zoom is a CSS transform on the whole
+  // stage), so world sizes carry straight through.
+  const cameraBoundsStage = { x: cameraBoundsTopLeft.x, y: cameraBoundsTopLeft.y, width: cameraRectWorld.width, height: cameraRectWorld.height };
 
   const hitboxEnemyMarkers: { key: string; stage: Vec2; sizePx: number }[] = [];
   const hitboxBulletMarkers: { key: string; stage: Vec2; diameterPx: number; alpha: number }[] = [];
@@ -1265,6 +1288,15 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               )}
             </div>
             <div className="shmup-canvas-corner shmup-canvas-corner--top-right">
+              <button
+                type="button"
+                className="shmup-canvas-corner-btn shmup-canvas-corner-btn--play"
+                onClick={handlePlaytest}
+                disabled={Boolean(error)}
+                title="Play test — save and play this encounter in the game"
+              >
+                ▶
+              </button>
               <button type="button" className="shmup-canvas-corner-btn" onClick={() => setEmbiggen((v) => !v)} title={embiggen ? "Shrink" : "Embiggen — fullscreen"}>
                 {embiggen ? "⤡" : "⛶"}
               </button>

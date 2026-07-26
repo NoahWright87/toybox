@@ -590,6 +590,29 @@
    with no way to scroll to it. margin:auto on a width:max-content child
    collapses to 0 once the child is wider than its parent, so the overflow
    is entirely on the right and fully reachable by scrolling. */
+.shmup-connection-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.shmup-connection-viewer__difficulty {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shmup-connection-viewer__difficulty-value {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #2a1000;
+  min-width: 62px;
+  text-align: center;
+}
+
 .shmup-connection-viewer__scroll {
   overflow-x: auto;
   background: #000;
@@ -1383,6 +1406,21 @@
   border-color: #ffffff #808080 #808080 #ffffff;
   cursor: pointer;
   padding: 0;
+}
+
+/* Play Test — the one corner button that leaves the editor entirely, so it
+   gets the orange raised treatment rather than the neutral gray chrome. */
+.shmup-canvas-corner-btn--play {
+  background: #ff6b00;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #ffffff;
+}
+
+.shmup-canvas-corner-btn--play:disabled {
+  background: #c0c0c0;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #808080;
+  cursor: default;
 }
 
 .shmup-enc-tabbar {

@@ -35,6 +35,7 @@ export const SHMUP_EDITOR_TILES_ID  = "fs:shmup-editor-tiles";
 export const SHMUP_EDITOR_UNITS_ID = "fs:shmup-editor-units";
 export const SHMUP_EDITOR_UNIT_DRAFT_ID = "fs:shmup-editor-unit-draft";
 export const SHMUP_EDITOR_TILE_DRAFT_ID = "fs:shmup-editor-tile-draft";
+export const SHMUP_EDITOR_LEVEL_ID  = "fs:shmup-editor-level";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

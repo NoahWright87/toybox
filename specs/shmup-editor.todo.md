@@ -778,6 +778,15 @@ data URL in the saved record. Authored content also stays hackable in
 Notebook, like every other `*.DAT` in the OS. See
 `games/shmup/authored-encounters.spec.md`.
 
+**Playtesting is the loop this bought.** Two buttons, both in the editor
+rather than the game (testing content belongs next to the content):
+the Encounter editor's canvas-corner ▶ saves the encounter and plays *that*
+one; the Connection Viewer's "▶ Play Test Level" saves the assembled layout
+(`levelStore.ts` -> `LEVEL.DAT`) and plays the whole thing with a
+weighted-random Encounter per tile. Both navigate to `/shmup/` with the
+request in the query string; the game skips its menus and drops straight
+into the episode.
+
 **What survives from E5, and is still worth building:**
 
 - **In-editor referential validation** — an `EncounterUnit`'s `unitDefId`
@@ -806,11 +815,19 @@ URL off the main app. The manifest convention stays for the game's *own*
 bundled art, where placeholder-primitive fallback matters; authored art
 doesn't need it.
 
-- **Level assembly.** The Connection Viewer builds a real `GridEntry[]`
-  layout but keeps it in local component state — nothing persists it, so
-  the game has nothing to read. Persisting an assembled layout (a
-  `LEVELS.DAT` alongside `TILES.DAT`, same store pattern) is what unblocks
-  playing a whole level rather than one tile at a time.
+~~Level assembly — the Connection Viewer keeps its grid in local component
+state, so the game has nothing to read.~~ — **done:** `levelStore.ts` saves
+it to `LEVEL.DAT` and "▶ Play Test Level" plays it.
+
+- **Generated levels.** The next thing Noah wants: pick a starting tile,
+  give it a Difficulty, and have the tool build a level for you rather than
+  assembling it by hand. That's `games/shmup`'s existing frontier generator
+  (`systems/levels/generateLevel.ts`) run over the authored library —
+  `authoredToGeneratorTile()` already projects an authored tile into the
+  shape it consumes, and a generated `LevelLayout` is the same shape
+  `LevelRunner` already plays. Whether the generator runs in the editor (so
+  you can see the result before playing) or in the game (so a real episode
+  can use it) is the open question.
 
 ~~Whether this tool ever gets a Doors 97 window/Taskbar entry... or stays
 standalone-only indefinitely~~ — **resolved (2026-07-25): it gets one.**

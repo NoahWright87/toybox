@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import TileArt from "./TileArt";
 import { canDeleteEntry, candidatesForAddPoint, computeAddPoints, orientationValidAt, type AddPoint, type GridEntry } from "./connectionGrid";
 import { rotationAngles, type Orientation } from "./orientation";
+import { saveLevel } from "./levelStore";
+import { DEFAULT_PLAYTEST_DIFFICULTY, playtestLevel } from "./playtestLaunch";
 import type { TileDef } from "./types";
 
 interface ConnectionViewerProps {
@@ -9,6 +11,10 @@ interface ConnectionViewerProps {
 }
 
 const IDENTITY: Orientation = { rotation: 0, flip: false };
+
+/** Step the Difficulty stepper moves by, and its ceiling — matched to the Encounter editor's own preview dial. */
+const DIFFICULTY_STEP = 5;
+const DIFFICULTY_MAX = 200;
 
 function makeKey(tileId: string): string {
   return `${tileId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -27,11 +33,19 @@ const ADD_ARROW: Record<AddPoint["side"], string> = { north: "↑", south: "↓"
  * west, not just north/south — and only offers the FIRST orientation that
  * connects per tile (not every permutation); rotate/flip after placing
  * covers the rest. See connectionGrid.ts for the placement/alignment math.
+ *
+ * **Play test** saves the assembled grid to `LEVEL.DAT` (`levelStore.ts`)
+ * and hands off to the real game, which scrolls the whole thing past the
+ * player with a weighted-random Encounter picked per tile — the same roll a
+ * real level makes. Saving first is load-bearing: the game reads the
+ * filesystem, not this component's state, which until now kept its grid
+ * nowhere at all.
  */
 export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
   const [entries, setEntries] = useState<GridEntry[]>([]);
   const [addTarget, setAddTarget] = useState<AddTarget>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [difficulty, setDifficulty] = useState(DEFAULT_PLAYTEST_DIFFICULTY);
 
   // Close the picker / deselect a tile on a genuine outside click — anything
   // that isn't on a tile (for selection) or the picker/an add-point button
@@ -160,8 +174,40 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
     );
   }
 
+  function handlePlaytest() {
+    saveLevel(entries);
+    playtestLevel(difficulty);
+  }
+
   return (
     <div className="shmup-connection-viewer">
+      <div className="shmup-connection-viewer__toolbar">
+        <button type="button" className="shmup-btn shmup-btn--primary" onClick={handlePlaytest}>
+          ▶ Play Test Level
+        </button>
+        <div className="shmup-connection-viewer__difficulty">
+          <button
+            type="button"
+            className="shmup-btn shmup-btn--small"
+            onClick={() => setDifficulty((d) => Math.max(0, d - DIFFICULTY_STEP))}
+            aria-label="Lower difficulty"
+          >
+            −
+          </button>
+          {/* Difficulty is not decoration: an instance whose minCostPerInstance
+              exceeds it doesn't spawn at all, so a level played too low is
+              legitimately empty. */}
+          <span className="shmup-connection-viewer__difficulty-value">Diff. {difficulty}</span>
+          <button
+            type="button"
+            className="shmup-btn shmup-btn--small"
+            onClick={() => setDifficulty((d) => Math.min(DIFFICULTY_MAX, d + DIFFICULTY_STEP))}
+            aria-label="Raise difficulty"
+          >
+            +
+          </button>
+        </div>
+      </div>
       <div className="shmup-connection-viewer__scroll">
         <div
           className="shmup-connection-viewer__grid"

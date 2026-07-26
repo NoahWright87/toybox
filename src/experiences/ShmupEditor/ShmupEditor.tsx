@@ -11,6 +11,7 @@ import UnitStatsForm from "./UnitStatsForm";
 import PartEditor from "./PartEditor";
 import EncounterEditor from "./EncounterEditor";
 import { loadTiles, saveTiles } from "./tileStore";
+import { playtestEncounter } from "./playtestLaunch";
 import { clearTileSession, clearUnitDraft, loadTileSession, loadUnitDraft, loadUnits, saveTileSession, saveUnitDraft, saveUnits } from "./unitStore";
 import { collectUsedTags } from "./tagRegistry";
 import { createBlankTile, createDefaultTileLibrary, makeTileId, type TileDef } from "./types";
@@ -179,6 +180,30 @@ export default function ShmupEditor() {
     setEditingEncounter(null);
     saveTileSession({ tile: nextTile, activeEncounter: null });
     setView("edit");
+  }
+
+  /**
+   * Merges the encounter into its tile, persists the whole library, then
+   * leaves for the game. Persisting the *library* (not just the edit
+   * session) is the load-bearing part: the game reads `TILES.DAT` from the
+   * shared filesystem, so anything still sitting in an unsaved draft simply
+   * wouldn't be there to play.
+   */
+  function handlePlaytestEncounter(encounter: EncounterDef, difficulty: number) {
+    if (!editingTile) return;
+    const exists = editingTile.encounters.some((e) => e.id === encounter.id);
+    const nextTile: TileDef = {
+      ...editingTile,
+      encounters: exists ? editingTile.encounters.map((e) => (e.id === encounter.id ? encounter : e)) : [...editingTile.encounters, encounter],
+      modifiedAt: Date.now(),
+    };
+    const tileExists = tiles.some((t) => t.id === nextTile.id);
+    persist(tileExists ? tiles.map((t) => (t.id === nextTile.id ? nextTile : t)) : [...tiles, nextTile]);
+    // Keep the edit session so coming back from the game lands exactly where
+    // you left off, mid-encounter.
+    setEditingTile(nextTile);
+    saveTileSession({ tile: nextTile, activeEncounter: encounter });
+    playtestEncounter(nextTile.id, encounter.id, difficulty);
   }
 
   function handleCancelEncounterEdit() {
@@ -429,6 +454,7 @@ export default function ShmupEditor() {
               encounter={editingEncounter}
               onSave={handleSaveEncounter}
               onCancel={handleCancelEncounterEdit}
+              onPlaytest={handlePlaytestEncounter}
               onDraftChange={handleEncounterDraftChange}
             />
           </>

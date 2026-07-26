@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, resolveActionFacingDeg, resolveBulletRadius, DEFAULT_BULLET_HITBOX_RADIUS, GAME_ASPECT_RATIO } from "./hitboxPreview";
+import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, computePlayerRefLocalY, resolveActionFacingDeg, resolveBulletRadius, DEFAULT_BULLET_HITBOX_RADIUS } from "./hitboxPreview";
+import { LEVEL_SCROLL_SPEED, TILE_UNIT, playerScreenY } from "../../../games/shmup/src/systems/encounters/scrollModel";
 import { createBlankAttack, createBlankUnit } from "./unitTypes";
 
 function attack(overrides: Partial<ReturnType<typeof createBlankAttack>> = {}) {
@@ -7,13 +8,35 @@ function attack(overrides: Partial<ReturnType<typeof createBlankAttack>> = {}) {
 }
 
 describe("computeCameraBoundsRect", () => {
-  it("matches the tile's own width and centers vertically using the real game's aspect ratio", () => {
-    const tileRect = { x: 10, y: 20, width: 260, height: 130 };
-    const rect = computeCameraBoundsRect(tileRect);
-    expect(rect.x).toBe(10);
-    expect(rect.width).toBe(260);
-    expect(rect.height).toBeCloseTo(260 * GAME_ASPECT_RATIO);
-    expect(rect.y).toBeCloseTo(20 + (130 - rect.height) / 2);
+  it("starts with the tile flush against the top of the screen", () => {
+    const rect = computeCameraBoundsRect(1, 0);
+    expect(rect.y).toBe(0);
+    expect(rect.height).toBe(1280);
+  });
+
+  it("climbs the tile as the encounter plays, because the level scrolls", () => {
+    const early = computeCameraBoundsRect(1, 0);
+    const later = computeCameraBoundsRect(1, 2);
+    expect(later.y).toBeCloseTo(early.y - 2 * LEVEL_SCROLL_SPEED, 6);
+  });
+
+  it("is one screen wide whatever the footprint — the camera doesn't stretch to a wide tile", () => {
+    expect(computeCameraBoundsRect(1, 0).width).toBe(720);
+    expect(computeCameraBoundsRect(3, 0).width).toBe(720);
+  });
+
+  it("centres itself on a tile wider than the screen", () => {
+    const rect = computeCameraBoundsRect(3, 0);
+    expect(rect.x).toBeCloseTo((3 * TILE_UNIT - 720) / 2, 6);
+  });
+});
+
+describe("computePlayerRefLocalY", () => {
+  it("starts below the tile and climbs through it, matching the ship's real screen position", () => {
+    expect(computePlayerRefLocalY(0)).toBe(playerScreenY());
+    expect(computePlayerRefLocalY(0)).toBeGreaterThan(TILE_UNIT);
+    const crossesTileAt = (playerScreenY() - TILE_UNIT / 2) / LEVEL_SCROLL_SPEED;
+    expect(computePlayerRefLocalY(crossesTileAt)).toBeCloseTo(TILE_UNIT / 2, 6);
   });
 });
 

@@ -1,7 +1,8 @@
 # Shmup — Authored Encounters Spec (playing `/shmup-editor` content in the engine)
 
-> **Status:** single-tile encounter playback **implemented**. Multi-tile
-> level assembly is the next slice — see "Not built yet" at the bottom.
+> **Status:** scrolling playback of a single Encounter **and** of a whole
+> Connection Viewer level, launched from the editor — **implemented**. See
+> "Not built yet" at the bottom for what's left.
 > Related: `../../shmup-editor.md` (the authoring tool),
 > `levels-and-tiles.spec.todo.md` (L1/L2, the generator this feeds),
 > `enemies-and-bullets.spec.todo.md` (L3/L4, the model the editor authors).
@@ -13,8 +14,21 @@ other half of that loop: **the game loading that content and playing it**,
 with the real ship, real weapons, real Hype and real coins — not a preview
 of them.
 
-The entry point today is **Main Menu → TEST ENCOUNTER**: pick an authored
-tile, pick one of its Encounters, set a Difficulty, and play it through.
+**The entry points live in the editor, not the game.** Testing content
+belongs next to the content, and a picker inside the game would mean
+navigating a menu to find something you already have open:
+
+| Where | Button | What it plays |
+|---|---|---|
+| Encounter editor (canvas corner) | ▶ | Saves the encounter, then plays *that* one, on its own tile, at the preview's own Difficulty |
+| Connection Viewer (toolbar) | ▶ Play Test Level | Saves the assembled layout, then plays the whole thing with a weighted-random Encounter per tile |
+
+Both are a real page navigation into `/shmup/` with the request in the
+query string (`playtestRequest.ts`), the same crossing `SHMUP.EXE` already
+makes from NS-TOS. The game skips its title card and menus entirely on a
+playtest launch and drops straight into the episode; when the run ends it
+offers "play again" (a reload, so it picks up anything saved since) and
+"back to editor".
 
 ## How content gets from the editor to the game
 
@@ -43,13 +57,12 @@ It also means authored content stays **hackable** exactly like the rest of
 Doors 97: `TILES.DAT` is plaintext JSON, editable in Notebook, and the
 game picks up the edit on the next scene start.
 
-**The two packages still share no runtime code** (`shmup-editor.todo.md`'s
-standing rule). The data *shapes* are mirrored — `authoredTypes.ts`
-mirrors the editor's `types.ts`/`unitTypes.ts`/`encounterTypes.ts`,
-`editorArt.ts` mirrors its art tables, `frame.ts`'s `TILE_UNIT` mirrors
-`editorScale.ts` — in the same direction the editor already mirrors the
-game (its `hitboxPreview.ts` re-declares the game's aspect ratio and
-player hitbox radius rather than importing them).
+**The two packages share almost no runtime code** (`shmup-editor.todo.md`'s
+standing rule). The data *shapes* are mirrored — `authoredTypes.ts` mirrors
+the editor's `types.ts`/`unitTypes.ts`/`encounterTypes.ts`, `editorArt.ts`
+mirrors its art tables. The single deliberate exception is
+`scrollModel.ts`, which the editor imports outright; see the next section
+for why that one couldn't be mirrored.
 
 ### Save-version coupling
 
@@ -62,27 +75,65 @@ together.**
 Individual records are validated one at a time, though: a mangled Unit
 drops that Unit, not the library. These files are meant to be hand-edited.
 
-## Coordinates: the editor canvas is the game frame
+## The scroll model — the one thing both packages share
 
-Authored positions are **tile-local** — the tile's north-west corner is
-(0,0), +x east, +y south, one footprint column is `TILE_UNIT` (720) across.
-`frame.ts` is the only place that becomes screen pixels.
+Everywhere else the two packages share only data shapes. `scrollModel.ts`
+is the deliberate exception, imported directly by
+`src/experiences/ShmupEditor/*`, because these two numbers decide *what an
+authored encounter looks like when played*. Two copies means the editor
+showing you one thing and the game doing another, silently, forever — which
+had already happened once with the tile size.
 
-- **Scale is 1:1.** `TILE_UNIT` is deliberately `GAME_WIDTH`, so a 1x1 tile
-  is exactly one screen wide and an authored pixel is a game pixel.
-- **Vertically the frame is pinned by the player reference marker**, not by
-  the tile's edges. The editor draws a player stand-in 85% down the tile;
-  `t = 0` puts that marker exactly where the ship sits. The editor's static
-  canvas and the game's opening frame therefore agree pixel for pixel.
-- A tile is 720 tall against a 1280 screen, so it occupies the lower ~56%
-  and an entrance authored above the tile (negative local y, where the
-  editor's own default first step sits) lands on the upper part of the
-  screen — off the tile, on screen.
+| | |
+|---|---|
+| `TILE_UNIT` = 720 | One footprint column. Deliberately `GAME_WIDTH`, so a 1x1 tile is exactly one screen wide and an authored pixel is a game pixel. |
+| `LEVEL_SCROLL_SPEED` = 180 px/s | How fast the level scrolls past. Raising it makes levels faster and gives every encounter less room. |
 
-A single-encounter playtest **holds this frame still**. Scrolling it is
-what turns this into a level; because every position resolves through the
-frame at the moment it touches a sprite, giving `originY` a velocity moves
-everything authored with its tile for free.
+These two are the reason they aren't in `TUNING`: that's a large game-only
+object the editor has no business importing. `scrollModel.ts` is their
+tuning home.
+
+### How it's anchored
+
+A shmup level scrolls **down**: the player advances north, terrain moves
+south across the screen, new tiles arrive at the top just before they're
+needed. Tiles are ordered by **depth** — depth 0 is the first one met.
+
+The clock is anchored so that **at a tile's own time zero, that tile's
+north edge sits exactly on the top edge of the screen**. So an encounter
+starts with its tile filling the top of the view and scrolling down out of
+it: no dead time waiting for content to arrive, and identical whether the
+tile is played alone or as depth 7 of a level. A single-tile playtest is
+therefore not a special case at all — it's a level of one.
+
+That anchoring collapses the whole mapping to one depth-independent line:
+
+    screenY = localY + LEVEL_SCROLL_SPEED * t
+
+Everything else follows from it:
+
+- A tile hands over to the next after `TILE_UNIT / speed` = **4s**.
+- A tile stays on screen for `GAME_HEIGHT / speed` = **~7.1s** from
+  engaging. That, not the 4s handover, is the window an encounter gets.
+- Consecutive tiles overlap, so ~1.8 tiles are visible at once.
+- The player's position *in tile-local coordinates* moves: the ship starts
+  below the tile and climbs through it as the tile scrolls past.
+
+Because every authored position resolves through its tile's frame at the
+instant it touches a sprite, everything on a tile scrolls with it for free
+— which is what a turret bolted to the ground requires. Spawned
+projectiles are the deliberate exception: they're placed in screen space
+when fired and fly under their own power, because a bullet in the air isn't
+bolted to the ground.
+
+### The editor shows the scroll
+
+`computeCameraBoundsRect` and the player-reference marker both take a time
+now and read their geometry from the shared model. Scrubbing the timeline
+moves the dotted camera box up the tile and the player marker through it —
+where before both were static rectangles that quietly implied the tile just
+sits there. Fixing the width fell out of the same change: the camera is
+always one screen across, and no longer stretches to a 3-wide tile.
 
 ## Display size vs. hitbox size
 
@@ -135,6 +186,40 @@ clock** — the same clock the editor's timeline scrubber shows.
   `spawnDelayMs`. Every duplicate replays the whole authored sequence
   anchored to its own slot.
 
+## Levels
+
+The Connection Viewer builds a real (row, col) grid but used to keep it in
+local component state, so there was nothing for the game to read.
+`levelStore.ts` now saves it to `LEVEL.DAT` next to `TILES.DAT` — a thin
+list of tile **ids** plus where and how each sits, so everything else about
+a tile is resolved fresh at play time and editing a tile shows through in a
+layout saved earlier instead of being frozen into it.
+
+`layoutFromGrid` converts the editor's rows (which grow **south**) into
+play order: `depth = maxRow - row`, since the southernmost tile is where
+you fly in. Columns are normalised and the level is centred on the camera.
+
+Each tile rolls its own Encounter by `weight` when the level starts — the
+tile model's "a random one is picked when the tile spawns in a level."
+The Encounter editor's own Play Test pins that roll instead, since the
+whole point there is to see *that* encounter.
+
+### Orientation
+
+A tile may be rotated or flipped in the layout, and its authored encounter
+comes with it: step positions are transformed once up front, `fixed`
+facings are transformed as they're read, and a flip additionally reverses
+arc handedness so a spread authored to fan left fans right on the mirrored
+copy. The transform is **exact**, not approximate, because 90°/270° are
+only ever offered to footprint-1 (square) tiles — the same rule
+`systems/levels/orientation.ts` applies to edge tags, for the same reason.
+
+Scaling slots are resolved in *unoriented* space and each resulting
+position oriented afterwards. Doing it in that order keeps the transform
+exact for every shape; orienting a shape's own handles instead would have
+to swap a grid's width and depth on a quarter turn and get a ring's
+handedness right on a flip.
+
 ### Difficulty is never zero by accident
 
 `resolveScaling` floors an instance's count at **zero** — an instance whose
@@ -173,31 +258,38 @@ without their ids colliding.
 
 A playtest episode is a real episode — same `PlayScene`, same ship, HUD,
 Hype, coins — with two differences: the ambient spawner and survival timer
-are off (the encounter *is* the content, and it clears when it has played
-through), and the run returns to the picker instead of `ResolveScene`.
-That second one matters: Resolve applies Ratings, gold and EXP to the
-**persisted career**, and trying out an encounter you're mid-authoring must
-not be able to cost or pay a real run.
+are off (the level *is* the content), and the run returns to
+`PlaytestResultScene` instead of `ResolveScene`. That second one matters:
+Resolve applies Ratings, gold and EXP to the **persisted career**, and
+trying out content you're mid-authoring must not be able to cost or pay a
+real run.
 
-"Played through" means every authored moment has passed, the grace period
-for in-flight shots is over, and nothing hand-placed is left on the field.
-A placed instance whose final step parks it on screen keeps the encounter
-open on purpose — clearing the field is what playing one *through* means.
-The debug overlay's advance-stage control is the escape hatch when an
-authored unit can't be removed (an invincible one, say).
+A tile's encounter ends when **either** its authored content is spent
+(every authored moment passed, the grace period for in-flight shots over,
+nothing hand-placed left alive) **or** the tile has scrolled entirely off
+the bottom of the screen — whichever comes first. The second half is what
+stops an authored unit that parks itself on screen, or one the player
+can't kill, from stalling a level: the ground moves on regardless. The
+level as a whole ends when every tile is finished, or when the last one
+has scrolled away.
 
 ## Not built yet
 
-- **Multi-tile levels.** The Connection Viewer's grid is local component
-  state today — it isn't persisted, so there's nothing for the game to
-  read. The next slice is: persist an assembled layout, add a scroll
-  velocity to `TileFrame`, and stream tile frames as the camera advances.
-  `authoredToGeneratorTile()` already projects an authored tile down to
-  `systems/levels`' generator shape, so a *generated* (rather than
-  hand-assembled) level of authored tiles is the same seam.
-- **Camera bounds for multi-column tiles.** A footprint-2/3 tile is wider
-  than the screen; it's centred and overflows. The easing playable-bounds
-  box is `levels-and-tiles.spec.todo.md` §4's L2 work.
+- **Generated levels.** Today a level is hand-assembled in the Connection
+  Viewer. The next step Noah wants is "pick the starting tile, give it a
+  Difficulty, and it builds one for you" — which is exactly
+  `systems/levels`' existing frontier generator.
+  `authoredToGeneratorTile()` already projects an authored tile down to the
+  shape that generator consumes, so the remaining work is running it over
+  the authored library and feeding the result to `LevelRunner` in place of
+  a saved layout. `LevelRunner` needs no changes for it: a generated
+  `LevelLayout` is the same shape as a saved one.
+- **JIT streaming.** Every tile in a level is built up front. Fine for a
+  hand-assembled playtest, wrong for a long generated one —
+  `levels-and-tiles.spec.todo.md` §3 is the real design.
+- **Camera bounds for multi-column tiles.** A footprint-2/3 tile, or a
+  multi-column level, is wider than the screen; it's centred and overflows.
+  The easing playable-bounds box is §4's L2 work.
 - **`power` has no effect.** It's threaded from each instance down to what
   it spawns, per the authored model, but nothing consumes it yet — that
   lands as a data change when the per-stat scaling curves are designed.

@@ -1,40 +1,83 @@
 import { describe, expect, it } from "vitest";
 import { GAME_WIDTH } from "../../config";
-import { PLAYER_REF_FRACTION, TILE_UNIT, playerLineY, staticTileFrame, toLocal, toScreen } from "./frame";
+import { levelOriginX, tileFrameAt, tileLocalSec, toLocal, toScreen } from "./frame";
+import { IDENTITY_ORIENTATION, type TilePlacement } from "./levelLayout";
+import { LEVEL_SCROLL_SPEED, TILE_UNIT, tileEngageSec } from "./scrollModel";
 
-describe("staticTileFrame", () => {
-  it("makes a 1x1 tile exactly one screen wide, so an authored pixel is a game pixel", () => {
-    const frame = staticTileFrame(1);
-    expect(frame.widthPx).toBe(GAME_WIDTH);
+function placement(depth: number, column = 0): TilePlacement {
+  return { tileId: "t", depth, column, orientation: IDENTITY_ORIENTATION };
+}
+
+describe("levelOriginX", () => {
+  it("makes a one-column level exactly one screen wide, so an authored pixel is a game pixel", () => {
+    expect(levelOriginX(1)).toBe(0);
+    expect(TILE_UNIT).toBe(GAME_WIDTH);
+  });
+
+  it("centres a wider level, overflowing evenly on both sides", () => {
+    expect(levelOriginX(3)).toBe((GAME_WIDTH - 3 * TILE_UNIT) / 2);
+  });
+});
+
+describe("tileLocalSec", () => {
+  it("is zero for the first tile at the start of the level", () => {
+    expect(tileLocalSec(placement(0), 0)).toBe(0);
+  });
+
+  it("is negative for a tile that hasn't arrived yet", () => {
+    expect(tileLocalSec(placement(2), 0)).toBeLessThan(0);
+  });
+
+  it("reads the same on every tile once that tile has engaged", () => {
+    const depth = 3;
+    expect(tileLocalSec(placement(depth), tileEngageSec(depth) + 1.5)).toBeCloseTo(1.5, 6);
+  });
+});
+
+describe("tileFrameAt", () => {
+  it("puts the first tile flush against the top of the screen at level time zero", () => {
+    const frame = tileFrameAt(placement(0), 1, 1, 0);
+    expect(frame.originY).toBe(0);
     expect(frame.originX).toBe(0);
+    expect(frame.heightPx).toBe(TILE_UNIT);
   });
 
-  it("centres a wider tile horizontally", () => {
-    const frame = staticTileFrame(3);
-    expect(frame.widthPx).toBe(3 * TILE_UNIT);
-    expect(frame.originX).toBe((GAME_WIDTH - 3 * TILE_UNIT) / 2);
+  it("scrolls it down at the shared level speed", () => {
+    const frame = tileFrameAt(placement(0), 1, 1, 2);
+    expect(frame.originY).toBeCloseTo(2 * LEVEL_SCROLL_SPEED, 6);
   });
 
-  it("pins the authored player-reference marker to where the ship actually sits", () => {
-    const frame = staticTileFrame(1);
-    const marker = toScreen(frame, { x: TILE_UNIT / 2, y: TILE_UNIT * PLAYER_REF_FRACTION });
-    expect(marker.x).toBe(GAME_WIDTH / 2);
-    expect(marker.y).toBeCloseTo(playerLineY(), 6);
+  it("holds a later tile above the screen until its turn", () => {
+    expect(tileFrameAt(placement(1), 1, 1, 0).originY).toBeCloseTo(-TILE_UNIT, 6);
   });
 
-  it("puts an entrance authored above the tile on screen, not off the top of it", () => {
-    const frame = staticTileFrame(1);
-    // The editor's own default first step sits 0.6 tiles north of the tile.
-    const entrance = toScreen(frame, { x: TILE_UNIT / 2, y: -TILE_UNIT * 0.6 });
-    expect(entrance.y).toBeGreaterThan(0);
-    expect(entrance.y).toBeLessThan(playerLineY());
+  it("puts a tile at depth d in exactly the same place at its own engage time as depth 0 was at zero", () => {
+    const deep = tileFrameAt(placement(4), 1, 1, tileEngageSec(4));
+    expect(deep.originY).toBeCloseTo(0, 6);
+  });
+
+  it("offsets each column by one tile unit", () => {
+    const frame = tileFrameAt(placement(0, 2), 1, 3, 0);
+    expect(frame.originX).toBeCloseTo(levelOriginX(3) + 2 * TILE_UNIT, 6);
+  });
+
+  it("widens with the tile's footprint", () => {
+    expect(tileFrameAt(placement(0), 3, 3, 0).widthPx).toBe(3 * TILE_UNIT);
   });
 });
 
 describe("toScreen / toLocal", () => {
-  it("round-trips", () => {
-    const frame = staticTileFrame(2);
+  it("round-trips through a moving frame", () => {
+    const frame = tileFrameAt(placement(1, 1), 2, 3, 2.5);
     const local = { x: 123, y: -45 };
     expect(toLocal(frame, toScreen(frame, local))).toEqual(local);
+  });
+
+  it("carries an authored position down the screen with its tile", () => {
+    const local = { x: 360, y: 300 };
+    const early = toScreen(tileFrameAt(placement(0), 1, 1, 0), local);
+    const later = toScreen(tileFrameAt(placement(0), 1, 1, 1), local);
+    expect(later.y - early.y).toBeCloseTo(LEVEL_SCROLL_SPEED, 6);
+    expect(later.x).toBe(early.x);
   });
 });

@@ -7,9 +7,11 @@ import { dueShots, isTelegraphing } from "./attacks";
 import { instanceHeadingDegAt, instanceStateAt, invincibleAt, lastAuthoredTime, resolveFacingDeg } from "./movement";
 import { applyPingPong, resolveScaling, resolveScalingSlots, spawnDelayOffsetsSec } from "./scaling";
 import { toScreen, type TileFrame } from "./frame";
+import { orientAngleDeg, orientMirrorsArc, orientPoint, type TileOrientation } from "./levelLayout";
 import { EDITOR_PART_BOX, facingToRotation, partScaleFor, unitDisplaySize } from "./spriteScale";
 import type {
   AuthoredAction,
+  AuthoredFootprint,
   AuthoredAttack,
   AuthoredCollisionGroup,
   AuthoredContent,
@@ -51,9 +53,22 @@ import type {
  *    land as a data change later.)
  *
  * Positions are **tile-local** throughout, converted through `frame` only
- * at the point of touching a sprite. A single-tile playtest holds that
- * frame still; scrolling it is what turns this into a level, and nothing
- * else here has to change for that.
+ * at the point of touching a sprite — and that frame **moves**, because the
+ * level scrolls. Everything on the tile therefore scrolls with it for free,
+ * which is what a turret bolted to the ground requires and what makes a
+ * level nothing more than several of these runners at staggered depths.
+ * `LevelRunner` owns the clock and hands this one a fresh frame each tick.
+ *
+ * Spawned projectiles are the deliberate exception: they're placed in
+ * screen space at the moment they're fired and fly under their own power
+ * from there, rather than inheriting the terrain's motion — a bullet in the
+ * air isn't bolted to the ground.
+ *
+ * If the tile is rotated or flipped in the level, authored content comes
+ * with it (`levelLayout.ts`): step positions are oriented once up front,
+ * fixed facings are oriented as they're read, and a flip additionally
+ * mirrors arc offsets so a spread authored to fan left fans right on the
+ * mirrored copy.
  */
 
 /** Depth per authored layer, keeping ground clutter under air traffic and both under the player (depth 10). */
@@ -126,7 +141,11 @@ export interface EncounterRunnerConfig {
   encounter: AuthoredEncounter;
   /** Incoming Difficulty budget — the currency every instance's scaling resolves against. */
   difficulty: number;
+  /** Where the tile sits on screen right now. Replaced every tick by `setFrame` as the level scrolls. */
   frame: TileFrame;
+  /** How the tile is rotated/flipped in the level. Authored content is transformed to match. */
+  orientation: TileOrientation;
+  footprint: AuthoredFootprint;
   /** Groups the scene has already wired its collision overlaps against. */
   hostiles: Phaser.Physics.Arcade.Group;
   friendlies: Phaser.Physics.Arcade.Group;
@@ -138,6 +157,7 @@ export interface EncounterRunnerConfig {
 
 export class EncounterRunner {
   private readonly config: EncounterRunnerConfig;
+  private frame: TileFrame;
   private pending: PendingPlacement[];
   private readonly live: LiveInstance[] = [];
   private clockSec = 0;
@@ -146,6 +166,7 @@ export class EncounterRunner {
 
   constructor(config: EncounterRunnerConfig) {
     this.config = config;
+    this.frame = config.frame;
     this.pending = this.resolvePlacements();
     this.authoredEndSec = this.pending.reduce(
       (max, p) => Math.max(max, p.startSec + lastAuthoredTime(p.steps, p.placement.partActions)),
@@ -156,6 +177,11 @@ export class EncounterRunner {
   /** Encounter time in seconds — the same clock the editor's timeline scrubber shows. */
   get elapsedSec(): number {
     return this.clockSec;
+  }
+
+  /** Called by `LevelRunner` each tick, before `update`, as the tile scrolls down the screen. */
+  setFrame(frame: TileFrame): void {
+    this.frame = frame;
   }
 
   /** The last authored moment, for a progress readout. */
@@ -170,10 +196,12 @@ export class EncounterRunner {
 
   /**
    * True once every authored moment has passed, the grace period for
-   * in-flight shots is over, and nothing hand-placed is left on the field.
-   * A placed instance whose final step parks it on screen keeps this false
-   * on purpose — clearing the field is what playing an encounter *through*
-   * means.
+   * in-flight shots is over, and nothing hand-placed is left on the field —
+   * "there are no more enemy actions playing out."
+   *
+   * This is only half the end condition. The other half, "the tile has
+   * scrolled completely off screen," belongs to `LevelRunner`, which owns
+   * the scroll clock; either one finishes a tile's encounter.
    */
   get complete(): boolean {
     return (
@@ -201,7 +229,7 @@ export class EncounterRunner {
    * each slot's clock starts is staggered, by `spawnDelayMs`.
    */
   private resolvePlacements(): PendingPlacement[] {
-    const { content, encounter, difficulty, frame } = this.config;
+    const { content, encounter, difficulty } = this.config;
     const out: PendingPlacement[] = [];
 
     for (const placement of encounter.units) {
@@ -214,16 +242,21 @@ export class EncounterRunner {
       if (count <= 0) continue; // priced out at this Difficulty — see scaling.ts
 
       const origin = placement.steps[0].pos;
-      const slots = applyPingPong(resolveScalingSlots(placement.scaling, origin, count), placement.scaling, frame.widthPx);
+      const slots = applyPingPong(resolveScalingSlots(placement.scaling, origin, count), placement.scaling, this.frame.widthPx);
       const delays = spawnDelayOffsetsSec(placement.scaling, slots.length);
 
+      // Slots are resolved in UNORIENTED tile space and each resulting
+      // position is oriented afterwards. Doing it in that order keeps the
+      // transform exact for every shape — orienting the shape's own handles
+      // instead would have to swap a grid's width and depth on a quarter
+      // turn, and get a ring's handedness right on a flip.
       slots.forEach((slot, i) => {
         const dx = slot.x - origin.x;
         const dy = slot.y - origin.y;
         out.push({
           placement,
           def,
-          steps: placement.steps.map((s) => ({ ...s, pos: { x: s.pos.x + dx, y: s.pos.y + dy } })),
+          steps: placement.steps.map((s) => ({ ...s, pos: this.orient({ x: s.pos.x + dx, y: s.pos.y + dy }) })),
           startSec: delays[i] ?? 0,
           power,
         });
@@ -357,12 +390,12 @@ export class EncounterRunner {
     const state = instanceStateAt(steps, instance.def.turnRate, localT);
     if (!state) return;
 
-    const screen = toScreen(this.config.frame, state.pos);
+    const screen = toScreen(this.frame, state.pos);
     instance.entity.setPosition(screen.x, screen.y);
 
     const action = this.actionById(instance.def.actions, state.step.actionId);
     const heading = instanceHeadingDegAt(steps, instance.def.turnRate, localT);
-    instance.facingDeg = action ? resolveFacingDeg(action, screen, this.config.playerPos(), heading) : heading;
+    instance.facingDeg = action ? this.facingFor(action, screen, heading) : heading;
     instance.entity.setRotation(facingToRotation(instance.facingDeg));
     instance.entity.setInvincible(invincibleAt(steps, instance.def.actions, localT));
 
@@ -378,7 +411,7 @@ export class EncounterRunner {
       // A spawned instance has no authored path, so its facing IS its
       // direction of travel: "faceMovement" keeps whatever angle it was
       // fired at, and "facePlayer" turns it into a seeker for free.
-      instance.facingDeg = resolveFacingDeg(action, current, this.config.playerPos(), instance.facingDeg);
+      instance.facingDeg = this.facingFor(action, current, instance.facingDeg);
       const speed = instance.def.speed * (Math.max(0, action.movementPercent) / 100);
       if (speed > 0) {
         const rad = (instance.facingDeg * Math.PI) / 180;
@@ -405,7 +438,6 @@ export class EncounterRunner {
     const cos = Math.cos(rotation);
     const sin = Math.sin(rotation);
     const partScale = partScaleFor(unitDisplaySize(instance.def.size) * instance.scale);
-    const player = this.config.playerPos();
 
     for (const part of instance.parts) {
       const ox = part.def.offset.x * partScale;
@@ -416,7 +448,7 @@ export class EncounterRunner {
       const resolved = this.activePartAction(instance, part, localT);
       if (part.entity?.active) {
         if (resolved.action) {
-          part.entity.setRotation(facingToRotation(resolveFacingDeg(resolved.action, part.pos, player, instance.facingDeg)));
+          part.entity.setRotation(facingToRotation(this.facingFor(resolved.action, part.pos, instance.facingDeg)));
         }
         part.entity.setInvincible(invincibleAt(part.placements, part.def.actions, localT));
       }
@@ -491,11 +523,13 @@ export class EncounterRunner {
     track.firedThroughMs = Math.max(track.firedThroughMs, elapsedMs);
     if (shots.length === 0) return;
 
-    const baseFacing = part
-      ? resolveFacingDeg(action, anchor, this.config.playerPos(), instance.facingDeg)
-      : instance.facingDeg;
+    const baseFacing = part ? this.facingFor(action, anchor, instance.facingDeg) : instance.facingDeg;
+    // A mirrored tile mirrors the shape of a fan too, not just where it
+    // points — otherwise a spread authored to fan left fans right here
+    // while its base direction is correctly mirrored.
+    const arcSign = orientMirrorsArc(this.config.orientation) ? -1 : 1;
     for (const shot of shots) {
-      this.spawnProjectile(attack, anchor, baseFacing + shot.angleOffsetDeg, instance.power);
+      this.spawnProjectile(attack, anchor, baseFacing + arcSign * shot.angleOffsetDeg, instance.power);
     }
   }
 
@@ -586,6 +620,22 @@ export class EncounterRunner {
   private acquire(group: AuthoredCollisionGroup): AuthoredUnit | null {
     const target = group === "friendly" || group === "friendlyProjectile" ? this.config.friendlies : this.config.hostiles;
     return (target.get(0, 0, this.config.fallbackTexture) as AuthoredUnit | null) ?? null;
+  }
+
+  /** A tile-local point as it lands after the tile's own rotation/flip. */
+  private orient(pos: Vec2): Vec2 {
+    return orientPoint(pos, this.config.footprint, this.config.orientation);
+  }
+
+  /**
+   * An Action's facing, with the tile's orientation folded in. Only a
+   * `fixed` facing needs it: `faceMovement` reads the already-oriented
+   * path, and `facePlayer` is resolved in screen space, so both come out
+   * right on their own.
+   */
+  private facingFor(action: AuthoredAction, anchor: Vec2, movementHeadingDeg: number): number {
+    if (action.facing === "fixed") return orientAngleDeg(action.fixedFacingDeg, this.config.orientation);
+    return resolveFacingDeg(action, anchor, this.config.playerPos(), movementHeadingDeg);
   }
 
   private actionById(actions: readonly AuthoredAction[], id: string | null): AuthoredAction | null {

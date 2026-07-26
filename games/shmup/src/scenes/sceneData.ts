@@ -19,28 +19,34 @@ export const SCENE_KEYS = {
   chassisSelect: "ChassisSelect",
   settings: "Settings",
   hallOfFame: "HallOfFame",
-  encounterSelect: "EncounterSelect",
+  playtestResult: "PlaytestResult",
 } as const;
 
 /**
- * EncounterSelect -> Play: run one `/shmup-editor` Encounter instead of the
- * built-in ambient spawner. Present on `EpisodeLaunchData` as an optional
- * field rather than a separate launch shape because everything else about
- * an episode — the ship, the weapons, the HUD, Hype, coins — is meant to be
- * exactly the real thing. Only what puts enemies on the field changes.
+ * Editor -> Play: run `/shmup-editor` content instead of the built-in
+ * ambient spawner. Present on `EpisodeLaunchData` as an optional field
+ * rather than a separate launch shape because everything else about an
+ * episode — the ship, the weapons, the HUD, Hype, coins — is meant to be
+ * exactly the real thing. Only what puts content on the field changes.
+ *
+ * An `encounter` playtest plays one tile at depth 0; a `level` playtest
+ * plays the Connection Viewer's whole saved layout with a weighted-random
+ * Encounter per tile. Both run through the same `LevelRunner` — a single
+ * tile is just a level of one.
  */
-export interface EncounterPlaytestData {
-  tileId: string;
-  encounterId: string;
+export interface PlaytestData {
+  /** Which of a tile's Encounters to force. Absent on a level playtest, where each tile rolls its own. */
+  tileId?: string;
+  encounterId?: string;
   /** The Difficulty budget every placed instance's scaling resolves against. Never 0 — see `systems/encounters/scaling.ts`. */
   difficulty: number;
 }
 
-/** Play -> EncounterSelect: what to say about the run that just ended. Absent on a first visit. */
-export interface EncounterSelectLaunchData {
-  tileId: string;
-  encounterId: string;
+/** Play -> PlaytestResult: what to say about the run that just ended, and how to run it again. */
+export interface PlaytestResultData {
   difficulty: number;
+  tileId?: string;
+  encounterId?: string;
   outcome: "complete" | "death";
   score: number;
 }
@@ -65,12 +71,12 @@ export interface EpisodeLaunchData {
   /** True when this bossFinale node is the last Season's boss (Series Finale, not just a Season Finale). */
   isSeriesFinale: boolean;
   /**
-   * Set only by the encounter playtest path. When present PlayScene runs
-   * that one authored Encounter and returns to `EncounterSelect` when it
-   * ends — it never touches persisted career state, so playtesting can't
-   * cost (or pay) Ratings.
+   * Set only by the editor's playtest path. When present PlayScene runs
+   * authored content and returns to `PlaytestResult` when it ends — it
+   * never touches persisted career state, so playtesting can't cost (or
+   * pay) Ratings.
    */
-  playtest?: EncounterPlaytestData;
+  playtest?: PlaytestData;
 }
 
 export type EpisodeOutcome = "clear" | "death" | "special";

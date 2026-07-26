@@ -432,11 +432,13 @@ export const TUNING = {
   // content in the real engine. These govern presentation and safety
   // ceilings only: everything about *what* an authored encounter does comes
   // from the authored data itself, never from here.
+  //
+  // Two numbers that belong to this system are deliberately NOT here: the
+  // level scroll speed and the tile size live in
+  // `systems/encounters/scrollModel.ts`, because `/shmup-editor` imports
+  // them directly and has no business importing this whole object. See that
+  // file's header.
   encounters: {
-    // How far above the bottom of the screen the player ship sits. Also
-    // what `frame.ts` pins an authored tile's player-reference marker to,
-    // so the editor canvas and the opening game frame line up exactly.
-    playerLineOffsetY: 90,
     // Display size (longest side, px) per unit of a Unit's authored hitbox
     // RADIUS — see spriteScale.ts on why display size is derived from the
     // one authored number that actually describes how big a thing is.
@@ -458,15 +460,10 @@ export const TUNING = {
     spawnedLifespanSec: 12,
     // Grace period (sec) after the last authored moment before an encounter
     // with nothing left alive counts as played through — long enough for
-    // in-flight projectiles to clear.
+    // in-flight projectiles to clear. (The other half of the end condition,
+    // "the tile has scrolled off screen," is pure geometry and lives in
+    // scrollModel.ts.)
     completionGraceSec: 1.5,
-    // Difficulty the encounter playtest starts at, and the step its +/-
-    // buttons move by. Note this can never sensibly be 0: `resolveScaling`
-    // floors count at zero, so a Difficulty below an instance's
-    // `minCostPerInstance` spawns nothing at all.
-    playtestDifficultyDefault: 10,
-    playtestDifficultyStep: 5,
-    playtestDifficultyMax: 200,
   },
   // Purely cosmetic — background scroll / starfield drift — but still tuning,
   // not magic numbers inline in PlayScene.

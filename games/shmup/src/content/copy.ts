@@ -18,20 +18,19 @@ export const COPY = {
   "menu.settings": "SETTINGS",
   "menu.hallOfFame": "HALL OF FAME",
   "menu.hint": "Arrows or Tap to select · Enter/Tap to confirm",
-  "menu.encounterTest": "TEST ENCOUNTER",
   "menu.stub.comingSoon": "Coming soon.",
   "menu.stub.back": "PRESS ANY KEY OR TAP TO GO BACK",
 
   // ---- Encounter playtest (playing /shmup-editor content in the engine) ----
-  "encounter.title": "TEST ENCOUNTER",
-  "encounter.subtitle": "Pick a tile authored in Shmup Editor",
-  "encounter.empty":
-    "No authored tiles with encounters found.\n\nBuild one in Shmup Editor (Doors 97 > Start > Game Dev), then come back.",
-  "encounter.difficulty": "DIFFICULTY {difficulty}",
-  "encounter.more": "+{count} more",
-  "encounter.back": "BACK",
-  "encounter.result.complete": "PLAYED THROUGH · Score {score}",
-  "encounter.result.death": "SHOT DOWN · Score {score}",
+  "encounter.result.title.complete": "PLAYED THROUGH",
+  "encounter.result.title.death": "SHOT DOWN",
+  "encounter.result.score": "Score {score}",
+  "encounter.result.difficulty": "Difficulty {difficulty}",
+  "encounter.result.replay": "PLAY AGAIN",
+  "encounter.result.backToEditor": "BACK TO EDITOR",
+  "encounter.missing.title": "NOTHING TO PLAY",
+  "encounter.missing.body":
+    "That tile, encounter or level layout isn't in the Shmup Editor's saved data.\n\nSave it in the editor and try again.",
   "play.encounter.remaining": "ENEMIES {count}",
 
   // ---- Season / Finale / Syndication flavor (run-structure.spec.todo.md) ----

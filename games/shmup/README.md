@@ -37,10 +37,21 @@ games/shmup/         (design specs live at repo-root specs/games/shmup/*.spec.to
 Tiles, Units and Encounters built in `/shmup-editor` load straight into the
 game — no export step. The editor persists into the Doors 97 virtual
 filesystem; this bundle reads the same same-origin `ns97_fs_v1` blob back
-(`src/systems/encounters/authoredContent.ts`) and plays an Encounter with
-the real ship, weapons, Hype and economy around it. Main Menu → **TEST
-ENCOUNTER**. See
+(`src/systems/encounters/authoredContent.ts`) and plays it with the real
+ship, weapons, Hype and economy around it, scrolling past the player like
+any level.
+
+**Playtests launch from the editor**, not from a menu in here: the
+Encounter editor's ▶ plays one Encounter, the Connection Viewer's "▶ Play
+Test Level" plays a whole assembled layout. Both navigate to
+`/shmup/?playtest=...`; `src/scenes/playtestRequest.ts` parses it and
+`BootScene` drops straight into the episode. See
 [`specs/games/shmup/authored-encounters.spec.md`](../../specs/games/shmup/authored-encounters.spec.md).
+
+`src/systems/encounters/scrollModel.ts` is the **one module shared with the
+editor** — it owns the tile size and the level scroll speed, which decide
+what an authored encounter looks like when played and so can't be mirrored
+without drifting. The editor imports it directly.
 
 Two version constants must move in lockstep with the editor's stores:
 `AUTHORED_TILES_VERSION` / `AUTHORED_UNITS_VERSION` mirror

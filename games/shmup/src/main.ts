@@ -9,7 +9,7 @@ import { ShopScene } from "./scenes/ShopScene";
 import { ChassisSelectScene } from "./scenes/ChassisSelectScene";
 import { SettingsScene } from "./scenes/SettingsScene";
 import { HallOfFameScene } from "./scenes/HallOfFameScene";
-import { EncounterSelectScene } from "./scenes/EncounterSelectScene";
+import { PlaytestResultScene } from "./scenes/PlaytestResultScene";
 import { GAME_WIDTH, GAME_HEIGHT } from "./config";
 
 new Phaser.Game({
@@ -39,6 +39,6 @@ new Phaser.Game({
     ChassisSelectScene,
     SettingsScene,
     HallOfFameScene,
-    EncounterSelectScene,
+    PlaytestResultScene,
   ],
 });

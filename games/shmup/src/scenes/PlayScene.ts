@@ -35,14 +35,15 @@ import { coinValue, rollsTip, statPickMods } from "../systems/economy";
 import type { OwnedItem } from "../systems/effects";
 import { DebugOverlay } from "../debug/DebugOverlay";
 import { getDebugOverrides } from "../debug/debugSettings";
-import { EncounterRunner } from "../systems/encounters/EncounterRunner";
+import { LevelRunner } from "../systems/encounters/LevelRunner";
 import { collectEncounterTextures } from "../systems/encounters/assets";
 import { encounterById, loadAuthoredContent, tileById } from "../systems/encounters/authoredContent";
-import { staticTileFrame, playerLineY, type TileFrame } from "../systems/encounters/frame";
-import { editorTileImageUrl, editorTileTextureKey } from "../sprites/editorArt";
-import type { AuthoredContent, AuthoredEncounter, AuthoredTile } from "../systems/encounters/authoredTypes";
+import { loadAuthoredLevel } from "../systems/encounters/authoredLevel";
+import { singleTileLayout, type LevelLayout } from "../systems/encounters/levelLayout";
+import { LEVEL_SCROLL_SPEED, playerScreenY } from "../systems/encounters/scrollModel";
+import type { AuthoredContent } from "../systems/encounters/authoredTypes";
 import { SCENE_KEYS } from "./sceneData";
-import type { EncounterSelectLaunchData, EpisodeLaunchData, ResolveLaunchData } from "./sceneData";
+import type { EpisodeLaunchData, PlaytestResultData, ResolveLaunchData } from "./sceneData";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
 // Code never inlines a draw call or file path — it asks for one of these keys,
@@ -135,16 +136,14 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private isBossNode = false;
   private boss: Enemy | null = null;
 
-  // Authored-encounter mode (`systems/encounters`): the whole episode is one
-  // `/shmup-editor` Encounter instead of the ambient spawner. Everything
-  // else about the episode — ship, weapons, Hype, coins, HUD — is unchanged,
-  // which is the point: an author sees their content in the real game, not a
-  // preview of it. Null on every normal episode.
-  private encounterRunner: EncounterRunner | null = null;
+  // Authored-content mode (`systems/encounters`): the episode is a scrolling
+  // level of `/shmup-editor` tiles instead of the ambient spawner.
+  // Everything else about the episode — ship, weapons, Hype, coins, HUD — is
+  // unchanged, which is the point: an author sees their content in the real
+  // game, not a preview of it. Null on every normal episode.
+  private levelRunner: LevelRunner | null = null;
   private authoredContent: AuthoredContent | null = null;
-  private authoredTile: AuthoredTile | null = null;
-  private authoredEncounter: AuthoredEncounter | null = null;
-  private tileFrame: TileFrame | null = null;
+  private authoredLayout: LevelLayout | null = null;
   /** Authored hostiles (enemies, their hittable Parts, enemy projectiles) and the friendly-fire mirror of the same. */
   private authoredHostiles!: Phaser.Physics.Arcade.Group;
   private authoredFriendlies!: Phaser.Physics.Arcade.Group;
@@ -157,32 +156,57 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.episode = data;
     this.isBossNode = data.nodeType === "bossFinale";
     this.authoredContent = null;
-    this.authoredTile = null;
-    this.authoredEncounter = null;
+    this.authoredLayout = null;
     if (!data.playtest) return;
 
     // Resolved in init() rather than create() so preload() below knows which
     // authored art to queue. A reference that no longer resolves (the tile
-    // or encounter was deleted since the picker listed it) just falls back
-    // to a normal episode rather than failing to start.
+    // was deleted, or no layout has been saved) falls back to a normal
+    // episode rather than failing to start.
     const content = loadAuthoredContent();
-    const tile = tileById(content, data.playtest.tileId);
-    const encounter = tile ? encounterById(tile, data.playtest.encounterId) : undefined;
-    if (!tile || !encounter) return;
+    const layout = data.playtest.tileId ? singleTileLayout(data.playtest.tileId) : loadAuthoredLevel();
+    if (layout.placements.length === 0) return;
     this.authoredContent = content;
-    this.authoredTile = tile;
-    this.authoredEncounter = encounter;
+    this.authoredLayout = layout;
   }
 
-  /** True when this episode is running one authored Encounter rather than the ambient spawner. */
+  /** True when this episode is running authored content rather than the ambient spawner. */
   private get isEncounterEpisode(): boolean {
-    return this.authoredEncounter !== null;
+    return this.authoredLayout !== null;
+  }
+
+  /**
+   * Every Encounter this run could put on the field, so all of its art is
+   * queued in one pass. A level rolls its Encounter per tile at run time
+   * (`pickEncounter`), so every candidate has to be covered here rather
+   * than just the one that ends up chosen.
+   */
+  private encountersToPreload(): { tileId: string; encounterId: string }[] {
+    const content = this.authoredContent;
+    const layout = this.authoredLayout;
+    if (!content || !layout) return [];
+    const forcedEncounterId = this.episode.playtest?.encounterId;
+    const out: { tileId: string; encounterId: string }[] = [];
+    for (const placement of layout.placements) {
+      const tile = tileById(content, placement.tileId);
+      if (!tile) continue;
+      const candidates = forcedEncounterId
+        ? tile.encounters.filter((e) => e.id === forcedEncounterId)
+        : tile.encounters;
+      for (const encounter of candidates) out.push({ tileId: tile.id, encounterId: encounter.id });
+    }
+    return out;
   }
 
   preload() {
     preloadSprites(this);
-    if (this.authoredContent && this.authoredTile && this.authoredEncounter) {
-      for (const request of collectEncounterTextures(this.authoredContent, this.authoredTile, this.authoredEncounter)) {
+    const content = this.authoredContent;
+    if (!content) return;
+    for (const ref of this.encountersToPreload()) {
+      const tile = tileById(content, ref.tileId);
+      const encounter = tile ? encounterById(tile, ref.encounterId) : undefined;
+      if (!tile || !encounter) continue;
+      for (const request of collectEncounterTextures(content, tile, encounter)) {
         if (!this.textures.exists(request.key)) this.load.image(request.key, request.url);
       }
     }
@@ -209,14 +233,12 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.currentScoreMult = 1;
     this.ratings = this.episode.ratings;
 
-    this.encounterRunner?.destroy();
-    this.encounterRunner = null;
-    this.tileFrame = this.authoredTile ? staticTileFrame(this.authoredTile.footprint) : null;
+    this.levelRunner?.destroy();
+    this.levelRunner = null;
 
     this.background = this.add
       .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
       .setDepth(-20);
-    this.applyAuthoredTileBackground();
 
     // The drifting starfield belongs to the stock space backdrop; over an
     // authored tile's terrain art it would read as snow.
@@ -273,7 +295,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.player = new Player(
       this,
       GAME_WIDTH / 2,
-      playerLineY(),
+      playerScreenY(),
       TEX.ship,
       weapons,
       getDebugOverrides(),
@@ -333,7 +355,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     });
 
     this.enemySpawnCooldownMs = this.player.effectiveEnemySpawnIntervalMs;
-    this.startEncounter();
+    this.startLevel();
     if (this.isBossNode && !this.isEncounterEpisode) this.spawnBoss();
 
     // Depth 50: above every gameplay sprite (player is the highest at 10) so
@@ -417,44 +439,19 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     );
   }
 
-  /**
-   * Paints the authored tile's own art behind the encounter, repeated so
-   * the strip of screen above the tile (a tile is 720 tall against a 1280
-   * screen) reads as more of the same terrain rather than a black void.
-   * The repeat grid is aligned to the tile frame, so what's under the
-   * gameplay really is the tile the author drew, at 1:1.
-   */
-  private applyAuthoredTileBackground(): void {
-    const tile = this.authoredTile;
-    const frame = this.tileFrame;
-    if (!tile || !frame) return;
-    if (!editorTileImageUrl(tile.imageId, tile.customImage)) return;
-    const key = editorTileTextureKey(tile.imageId, tile.id);
-    if (!this.textures.exists(key)) return;
-
-    const source = this.textures.get(key).getSourceImage();
-    const scaleX = frame.widthPx / tile.footprint / source.width;
-    const scaleY = frame.heightPx / source.height;
-    this.background.setTexture(key);
-    this.background.setTileScale(scaleX, scaleY);
-    this.background.tilePositionX = -frame.originX / scaleX;
-    this.background.tilePositionY = -frame.originY / scaleY;
-  }
-
-  /** Stands the authored encounter up, once the player and groups exist for it to reference. */
-  private startEncounter(): void {
-    if (!this.authoredContent || !this.authoredTile || !this.authoredEncounter || !this.tileFrame) return;
-    this.encounterRunner = new EncounterRunner({
+  /** Stands the authored level up, once the player and groups exist for it to reference. */
+  private startLevel(): void {
+    if (!this.authoredContent || !this.authoredLayout) return;
+    this.levelRunner = new LevelRunner({
       scene: this,
       content: this.authoredContent,
-      tile: this.authoredTile,
-      encounter: this.authoredEncounter,
+      layout: this.authoredLayout,
       difficulty: this.episode.playtest?.difficulty ?? this.episode.D,
-      frame: this.tileFrame,
       hostiles: this.authoredHostiles,
       friendlies: this.authoredFriendlies,
       playerPos: () => ({ x: this.player.x, y: this.player.y }),
       fallbackTexture: TEX.bulletEnemy,
+      forceEncounterId: this.episode.playtest?.encounterId,
     });
   }
 
@@ -510,9 +507,9 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       this.enemySpawnCooldownMs -= delta;
       if (this.enemySpawnCooldownMs <= 0) this.spawnEnemy();
     }
-    if (this.encounterRunner) {
-      this.encounterRunner.update(dt);
-      if (this.encounterRunner.complete) {
+    if (this.levelRunner) {
+      this.levelRunner.update(dt);
+      if (this.levelRunner.complete) {
         this.clearEpisode();
         return;
       }
@@ -526,10 +523,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     tickHpRegen(this.player.defender, this.player.stats.maxHp, this.player.stats.hpRegen, dt);
     this.updateHud();
 
-    // The authored tile frame is held still for a single-encounter run —
-    // its background is a real place, not a parallax loop. Scrolling both is
-    // what turns this into a level.
-    if (!this.isEncounterEpisode) this.background.tilePositionY -= TUNING.visuals.bgScrollSpeed * dt;
+    // The parallax backdrop drifts with the level rather than at its own
+    // cosmetic rate while authored terrain is on screen, so the strip of
+    // void above and below the tiles moves at the same speed they do.
+    this.background.tilePositionY -= (this.isEncounterEpisode ? LEVEL_SCROLL_SPEED : TUNING.visuals.bgScrollSpeed) * dt;
     for (const star of this.stars.getChildren() as Phaser.GameObjects.Image[]) {
       star.y += (star.getData("speed") as number) * dt;
       if (star.y > GAME_HEIGHT) {
@@ -567,7 +564,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     // Authored enemy projectiles graze exactly like built-in ones — the
     // shared spawn-id counter (`entities/spawnId.ts`) is what lets both feed
     // one tracker without their ids colliding.
-    for (const projectile of this.encounterRunner?.hostileProjectiles() ?? []) {
+    for (const projectile of this.levelRunner?.hostileProjectiles() ?? []) {
       addGraze(projectile.x, projectile.y, projectile.spawnId);
     }
 
@@ -1139,15 +1136,15 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private finishPlaytest(outcome: "complete" | "death"): boolean {
     const playtest = this.episode.playtest;
     if (!playtest) return false;
-    this.encounterRunner?.destroy();
-    this.encounterRunner = null;
-    this.scene.start(SCENE_KEYS.encounterSelect, {
+    this.levelRunner?.destroy();
+    this.levelRunner = null;
+    this.scene.start(SCENE_KEYS.playtestResult, {
       tileId: playtest.tileId,
       encounterId: playtest.encounterId,
       difficulty: playtest.difficulty,
       outcome,
       score: Math.round(this.score),
-    } satisfies EncounterSelectLaunchData);
+    } satisfies PlaytestResultData);
     return true;
   }
 
@@ -1190,10 +1187,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     // Timer: countdown from episodeClearDurationSec in MM:SS — replaced by a
     // boss HP readout on a bossFinale node, which clears on defeat instead.
-    if (this.encounterRunner) {
+    if (this.levelRunner) {
       // An authored encounter has no survival timer: what's left to do is
       // however much of it hasn't been cleared yet.
-      this.timerText.setText(copy("play.encounter.remaining", { count: this.encounterRunner.liveEnemyCount }));
+      this.timerText.setText(copy("play.encounter.remaining", { count: this.levelRunner.liveEnemyCount }));
     } else if (this.isBossNode) {
       const hpFrac2 = this.boss ? Phaser.Math.Clamp(this.boss.hp / this.boss.maxHp, 0, 1) : 0;
       this.timerText.setText(`BOSS ${Math.round(hpFrac2 * 100)}%`);
