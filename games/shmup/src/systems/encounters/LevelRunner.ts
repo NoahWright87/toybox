@@ -24,11 +24,18 @@ import type { AuthoredUnit } from "../../entities/AuthoredUnit";
  * playtest is not a special case at all: it's a level of one tile at depth
  * 0, and it looks identical to that same tile played as depth 7.
  *
- * A tile's encounter ends the moment **either** its authored content is
- * spent (`EncounterRunner.complete`) **or** the tile has scrolled entirely
- * off the bottom of the screen — whichever comes first. The second half is
- * what stops an authored unit that parks itself on screen, or one the
- * player can't kill, from stalling a level: the ground moves on regardless.
+ * A tile is done the moment **either** its authored content is spent
+ * (`EncounterRunner.complete`) **or** it has scrolled entirely off the
+ * bottom of the screen — whichever comes first. The second half is what
+ * stops an authored unit that parks itself on screen, or one the player
+ * can't kill, from stalling a level: the ground moves on regardless.
+ *
+ * **A tile with no Encounter at all is ordinary terrain, not an instantly
+ * finished tile.** It has nothing to spend, so only the scrolled-off half
+ * applies to it — it draws and scrolls past like any other. Treating "no
+ * encounter" as "already complete" would retire it the instant it engaged
+ * and, since the level ends when every tile is done, could end a level
+ * while its last stretch of ground was still on screen.
  */
 
 /** Tile art sits above the parallax backdrop (-20) and below every gameplay sprite (1+). */
@@ -142,8 +149,10 @@ export class LevelRunner {
       }
 
       // Either half of the end condition finishes a tile: its content is
-      // spent, or the ground it was standing on is gone.
-      if (tileFullyOffScreen(localSec) || (tile.runner?.complete ?? true)) this.finishTile(tile);
+      // spent, or the ground it was standing on is gone. A tile with no
+      // Encounter has no content to spend, so only the second half applies.
+      const contentSpent = tile.encounter !== null && (tile.runner?.complete ?? false);
+      if (tileFullyOffScreen(localSec) || contentSpent) this.finishTile(tile);
     }
   }
 

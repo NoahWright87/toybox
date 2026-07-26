@@ -291,14 +291,27 @@ Resolve applies Ratings, gold and EXP to the **persisted career**, and
 trying out content you're mid-authoring must not be able to cost or pay a
 real run.
 
-A tile's encounter ends when **either** its authored content is spent
-(every authored moment passed, the grace period for in-flight shots over,
-nothing hand-placed left alive) **or** the tile has scrolled entirely off
-the bottom of the screen — whichever comes first. The second half is what
-stops an authored unit that parks itself on screen, or one the player
-can't kill, from stalling a level: the ground moves on regardless. The
-level as a whole ends when every tile is finished, or when the last one
-has scrolled away.
+A tile is done when **either** its authored content is spent (every
+authored moment passed, the grace period for in-flight shots over, nothing
+hand-placed left alive) **or** the tile has scrolled entirely off the
+bottom of the screen — whichever comes first. The second half is what stops
+an authored unit that parks itself on screen, or one the player can't kill,
+from stalling a level: the ground moves on regardless. The level as a whole
+ends when every tile is done, or when the last one has scrolled away.
+
+**A tile with no Encounter is ordinary terrain, not an instantly finished
+tile.** It has nothing to spend, so only the scrolled-off half applies — it
+draws and scrolls past like any other. Two things follow from that, and
+both were bugs before it was written down:
+
+- Its art has to be preloaded from the **layout**, not from a walk over
+  (tile, encounter) pairs. Collecting tile art inside the encounter walk
+  meant an encounter-less tile contributed nothing, its texture never
+  loaded, and it rendered as a hole in the level — which autogeneration
+  hits constantly, since it draws from the whole tile library.
+- Treating "no encounter" as "already complete" retired it the instant it
+  engaged, and since the level ends when every tile is done, could end a
+  level while its last stretch of ground was still on screen.
 
 ## Not built yet
 

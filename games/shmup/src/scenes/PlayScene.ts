@@ -36,8 +36,8 @@ import type { OwnedItem } from "../systems/effects";
 import { DebugOverlay } from "../debug/DebugOverlay";
 import { getDebugOverrides } from "../debug/debugSettings";
 import { LevelRunner } from "../systems/encounters/LevelRunner";
-import { collectEncounterTextures } from "../systems/encounters/assets";
-import { encounterById, loadAuthoredContent, tileById } from "../systems/encounters/authoredContent";
+import { collectLevelTextures } from "../systems/encounters/assets";
+import { loadAuthoredContent } from "../systems/encounters/authoredContent";
 import { loadAuthoredLevel } from "../systems/encounters/authoredLevel";
 import { singleTileLayout, type LevelLayout } from "../systems/encounters/levelLayout";
 import { LEVEL_SCROLL_SPEED, playerScreenY } from "../systems/encounters/scrollModel";
@@ -175,40 +175,13 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     return this.authoredLayout !== null;
   }
 
-  /**
-   * Every Encounter this run could put on the field, so all of its art is
-   * queued in one pass. A level rolls its Encounter per tile at run time
-   * (`pickEncounter`), so every candidate has to be covered here rather
-   * than just the one that ends up chosen.
-   */
-  private encountersToPreload(): { tileId: string; encounterId: string }[] {
-    const content = this.authoredContent;
-    const layout = this.authoredLayout;
-    if (!content || !layout) return [];
-    const forcedEncounterId = this.episode.playtest?.encounterId;
-    const out: { tileId: string; encounterId: string }[] = [];
-    for (const placement of layout.placements) {
-      const tile = tileById(content, placement.tileId);
-      if (!tile) continue;
-      const candidates = forcedEncounterId
-        ? tile.encounters.filter((e) => e.id === forcedEncounterId)
-        : tile.encounters;
-      for (const encounter of candidates) out.push({ tileId: tile.id, encounterId: encounter.id });
-    }
-    return out;
-  }
-
   preload() {
     preloadSprites(this);
-    const content = this.authoredContent;
-    if (!content) return;
-    for (const ref of this.encountersToPreload()) {
-      const tile = tileById(content, ref.tileId);
-      const encounter = tile ? encounterById(tile, ref.encounterId) : undefined;
-      if (!tile || !encounter) continue;
-      for (const request of collectEncounterTextures(content, tile, encounter)) {
-        if (!this.textures.exists(request.key)) this.load.image(request.key, request.url);
-      }
+    if (!this.authoredContent || !this.authoredLayout) return;
+    // Every placed tile's art plus every unit any of their Encounters could
+    // roll — see `assets.ts` on why those two walks have to be independent.
+    for (const request of collectLevelTextures(this.authoredContent, this.authoredLayout, this.episode.playtest?.encounterId)) {
+      if (!this.textures.exists(request.key)) this.load.image(request.key, request.url);
     }
   }
 
