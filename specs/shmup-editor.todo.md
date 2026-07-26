@@ -758,22 +758,83 @@ playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
   (see above), not an animated/scrolling camera tracking a moving
   reference point.
 
-### E5 — Export/import pipeline (#195)
+### E5 — Export/import pipeline (#195) — **superseded: there is no export**
 
-The versioned JSON schema for every authored type, the concrete landing
-path inside `games/shmup/src/` (e.g. a `content/levels/` directory), and
-in-editor structural + referential validation (an `EncounterUnit`'s
-`unitDefId` must resolve, etc.) so a malformed export fails loudly in the
-editor rather than crashing the game at runtime.
+The original plan was a versioned JSON export a human commits into
+`games/shmup/src/` as static content. **Dropped (2026-07-25.)** It is the
+wrong shape for what this tool is for: a commit-and-rebuild round trip
+between every edit and every playtest is the opposite of a tight authoring
+loop, and Noah's actual ask ("put together a level and play the whole
+thing") wants the loop, not the artifact.
 
-## Open questions (resolve before/during E5)
+The game now reads the editor's own saved files directly. Both apps are
+same-origin (`/shmup-editor` in the Doors bundle, `/shmup/` as its own
+bundle) and share the `ns97_fs_v1` localStorage blob, so
+`games/shmup/src/systems/encounters/authoredContent.ts` reads `TILES.DAT` /
+`UNITS.DAT` by their stable node ids — the same precedent
+`sprites/fsOverride.ts` and `save/doorsFsSaveStore.ts` already set. Art
+resolves straight off `/shmup-editor/...`, and a custom upload is already a
+data URL in the saved record. Authored content also stays hackable in
+Notebook, like every other `*.DAT` in the OS. See
+`games/shmup/authored-encounters.spec.md`.
 
-- Exact landing directory + filename convention inside `games/shmup/src/`
-  for exported tiles/enemies/spawn-nodes.
-- Whether tile/enemy art in the editor reuses the shmup sprite-registry
-  manifest convention (`content-and-assets.spec.md`) directly, or needs
-  its own lighter-weight asset-reference scheme suited to sketch/import
-  workflows.
+**Playtesting is the loop this bought.** Two buttons, both in the editor
+rather than the game (testing content belongs next to the content):
+the Encounter editor's canvas-corner ▶ saves the encounter and plays *that*
+one; the Connection Viewer's "▶ Play Test Level" saves the assembled layout
+(`levelStore.ts` -> `LEVEL.DAT`) and plays the whole thing with a
+weighted-random Encounter per tile, and "⚄ Autogenerate" builds that layout
+for you. Both play buttons navigate to `/shmup/` with the request in the
+query string; the game skips its menus and drops straight into the episode.
+
+**What survives from E5, and is still worth building:**
+
+- **In-editor referential validation** — an `EncounterUnit`'s `unitDefId`
+  must resolve, a step's `actionId` must exist on the owning Unit, a Part
+  placement's `partId` must exist. The runtime is defensive about all of
+  these (a dangling reference drops that one instance), but failing loudly
+  in the editor is still better than silently playing less content than
+  you authored.
+- **Save-version lockstep.** `AUTHORED_TILES_VERSION` /
+  `AUTHORED_UNITS_VERSION` in the game mirror `tileStore.ts` /
+  `unitStore.ts`'s `SAVE_VERSION`. A mismatch means the game sees *no*
+  authored content — deliberate, but easy to forget. Bump both together.
+
+## Open questions
+
+~~Exact landing directory + filename convention inside `games/shmup/src/`
+for exported tiles/enemies/spawn-nodes.~~ — **moot: nothing lands there,
+see E5 above.**
+
+~~Whether tile/enemy art in the editor reuses the shmup sprite-registry
+manifest convention (`content-and-assets.spec.md`) directly, or needs its
+own lighter-weight asset-reference scheme.~~ — **resolved: neither.** The
+editor keeps its own id-to-path tables and the game mirrors them
+(`games/shmup/src/sprites/editorArt.ts`), loading authored art by absolute
+URL off the main app. The manifest convention stays for the game's *own*
+bundled art, where placeholder-primitive fallback matters; authored art
+doesn't need it.
+
+~~Level assembly — the Connection Viewer keeps its grid in local component
+state, so the game has nothing to read.~~ — **done:** `levelStore.ts` saves
+it to `LEVEL.DAT` and "▶ Play Test Level" plays it.
+
+~~Generated levels — pick a starting tile and have the tool build one
+rather than assembling it by hand.~~ — **done, in the editor:**
+`generateLayout.ts` + the Connection Viewer's "⚄ Autogenerate" grows the
+layout north from whatever is placed (random starting tile if nothing is),
+through the viewer's own `candidatesForAddPoint` matcher so the result is
+legal by identical rules and stays hand-editable. Press again to extend.
+
+- **Runtime generation.** The editor generating a level is not the same as
+  a real episode generating its own from the node's Difficulty. That's
+  `games/shmup`'s L1 frontier generator
+  (`systems/levels/generateLevel.ts`) run over the authored library —
+  `authoredToGeneratorTile()` already projects an authored tile into the
+  shape it consumes, and a generated `LevelLayout` is the same shape
+  `LevelRunner` already plays. Whether the editor's generator then folds
+  into that one, or stays a separate authoring convenience that can build
+  the free-form 2D grids the viewer allows, is the open question.
 
 ~~Whether this tool ever gets a Doors 97 window/Taskbar entry... or stays
 standalone-only indefinitely~~ — **resolved (2026-07-25): it gets one.**

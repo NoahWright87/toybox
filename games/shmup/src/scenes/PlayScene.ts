@@ -4,8 +4,8 @@ import { TUNING } from "../tuning";
 import { copy, ratingsTierForScore, ratingsTierName, RATINGS_LADDER, weaponById, itemById, chassisById } from "../content";
 import { preloadSprites, ensurePlaceholderTextures } from "../sprites";
 import type { SpriteKey } from "../sprites";
-import { Player, Enemy, EnemyBullet, PlayerBullet, Coin } from "../entities";
-import type { PlayerFireRequest, ShmupPlayScene } from "../entities";
+import { Player, Enemy, EnemyBullet, PlayerBullet, Coin, AuthoredUnit } from "../entities";
+import type { PlayerFireRequest, PlayerTarget, ShmupPlayScene } from "../entities";
 import {
   absorbsBullet,
   applyDamage,
@@ -35,8 +35,15 @@ import { coinValue, rollsTip, statPickMods } from "../systems/economy";
 import type { OwnedItem } from "../systems/effects";
 import { DebugOverlay } from "../debug/DebugOverlay";
 import { getDebugOverrides } from "../debug/debugSettings";
+import { LevelRunner } from "../systems/encounters/LevelRunner";
+import { collectLevelTextures } from "../systems/encounters/assets";
+import { loadAuthoredContent } from "../systems/encounters/authoredContent";
+import { loadAuthoredLevel } from "../systems/encounters/authoredLevel";
+import { singleTileLayout, type LevelLayout } from "../systems/encounters/levelLayout";
+import { LEVEL_SCROLL_SPEED, playerScreenY } from "../systems/encounters/scrollModel";
+import type { AuthoredContent } from "../systems/encounters/authoredTypes";
 import { SCENE_KEYS } from "./sceneData";
-import type { EpisodeLaunchData, ResolveLaunchData } from "./sceneData";
+import type { EpisodeLaunchData, PlaytestResultData, ResolveLaunchData } from "./sceneData";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
 // Code never inlines a draw call or file path — it asks for one of these keys,
@@ -129,6 +136,18 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   private isBossNode = false;
   private boss: Enemy | null = null;
 
+  // Authored-content mode (`systems/encounters`): the episode is a scrolling
+  // level of `/shmup-editor` tiles instead of the ambient spawner.
+  // Everything else about the episode — ship, weapons, Hype, coins, HUD — is
+  // unchanged, which is the point: an author sees their content in the real
+  // game, not a preview of it. Null on every normal episode.
+  private levelRunner: LevelRunner | null = null;
+  private authoredContent: AuthoredContent | null = null;
+  private authoredLayout: LevelLayout | null = null;
+  /** Authored hostiles (enemies, their hittable Parts, enemy projectiles) and the friendly-fire mirror of the same. */
+  private authoredHostiles!: Phaser.Physics.Arcade.Group;
+  private authoredFriendlies!: Phaser.Physics.Arcade.Group;
+
   constructor() {
     super("Play");
   }
@@ -136,10 +155,34 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   init(data: EpisodeLaunchData) {
     this.episode = data;
     this.isBossNode = data.nodeType === "bossFinale";
+    this.authoredContent = null;
+    this.authoredLayout = null;
+    if (!data.playtest) return;
+
+    // Resolved in init() rather than create() so preload() below knows which
+    // authored art to queue. A reference that no longer resolves (the tile
+    // was deleted, or no layout has been saved) falls back to a normal
+    // episode rather than failing to start.
+    const content = loadAuthoredContent();
+    const layout = data.playtest.tileId ? singleTileLayout(data.playtest.tileId) : loadAuthoredLevel();
+    if (layout.placements.length === 0) return;
+    this.authoredContent = content;
+    this.authoredLayout = layout;
+  }
+
+  /** True when this episode is running authored content rather than the ambient spawner. */
+  private get isEncounterEpisode(): boolean {
+    return this.authoredLayout !== null;
   }
 
   preload() {
     preloadSprites(this);
+    if (!this.authoredContent || !this.authoredLayout) return;
+    // Every placed tile's art plus every unit any of their Encounters could
+    // roll — see `assets.ts` on why those two walks have to be independent.
+    for (const request of collectLevelTextures(this.authoredContent, this.authoredLayout, this.episode.playtest?.encounterId)) {
+      if (!this.textures.exists(request.key)) this.load.image(request.key, request.url);
+    }
   }
 
   create() {
@@ -163,12 +206,17 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.currentScoreMult = 1;
     this.ratings = this.episode.ratings;
 
+    this.levelRunner?.destroy();
+    this.levelRunner = null;
+
     this.background = this.add
       .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
       .setDepth(-20);
 
+    // The drifting starfield belongs to the stock space backdrop; over an
+    // authored tile's terrain art it would read as snow.
     this.stars = this.add.group();
-    for (let i = 0; i < TUNING.visuals.starCount; i++) {
+    for (let i = 0; i < (this.isEncounterEpisode ? 0 : TUNING.visuals.starCount); i++) {
       const s = this.add
         .image(Phaser.Math.Between(0, GAME_WIDTH), Phaser.Math.Between(0, GAME_HEIGHT), TEX.star)
         .setAlpha(Phaser.Math.FloatBetween(0.2, 1))
@@ -197,6 +245,17 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       maxSize: TUNING.performance.maxCoins,
       runChildUpdate: true,
     });
+    // Authored units drive their own position/facing from the encounter
+    // clock, so unlike the pooled groups above they deliberately do NOT use
+    // runChildUpdate — `EncounterRunner.update` is their update.
+    this.authoredHostiles = this.physics.add.group({
+      classType: AuthoredUnit,
+      maxSize: TUNING.encounters.maxAuthoredUnits,
+    });
+    this.authoredFriendlies = this.physics.add.group({
+      classType: AuthoredUnit,
+      maxSize: TUNING.encounters.maxAuthoredUnits,
+    });
 
     const weapons = this.episode.weapons.map((w) => ({ weapon: weaponById(w.weaponId), tier: w.tier }));
     const ownedItems: OwnedItem[] = this.episode.items
@@ -209,7 +268,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.player = new Player(
       this,
       GAME_WIDTH / 2,
-      GAME_HEIGHT - 90,
+      playerScreenY(),
       TEX.ship,
       weapons,
       getDebugOverrides(),
@@ -234,6 +293,20 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       this.onEnemyContactPlayer(enemyObj as Enemy)
     );
 
+    // The authored collision matrix: same group never checks itself, and the
+    // two projectile groups never check each other. That falls out of only
+    // wiring hostiles<->player-side and friendlies<->hostiles, with no
+    // spawner-lineage tracking anywhere.
+    this.physics.add.overlap(this.playerBullets, this.authoredHostiles, (bulletObj, targetObj) =>
+      this.onPlayerBulletHitTarget(bulletObj as PlayerBullet, targetObj as AuthoredUnit)
+    );
+    this.physics.add.overlap(this.authoredHostiles, this.player, (_player, targetObj) =>
+      this.onAuthoredContactPlayer(targetObj as AuthoredUnit)
+    );
+    this.physics.add.overlap(this.authoredFriendlies, this.authoredHostiles, (friendlyObj, hostileObj) =>
+      this.onAuthoredFriendlyHitHostile(friendlyObj as AuthoredUnit, hostileObj as AuthoredUnit)
+    );
+
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.keys = this.input.keyboard!.addKeys("W,A,S,D") as Record<string, Phaser.Input.Keyboard.Key>;
     this.focusKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
@@ -255,7 +328,8 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     });
 
     this.enemySpawnCooldownMs = this.player.effectiveEnemySpawnIntervalMs;
-    if (this.isBossNode) this.spawnBoss();
+    this.startLevel();
+    if (this.isBossNode && !this.isEncounterEpisode) this.spawnBoss();
 
     // Depth 50: above every gameplay sprite (player is the highest at 10) so
     // hitbox outlines aren't hidden beneath the sprites they outline, but
@@ -338,9 +412,32 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     );
   }
 
+  /** Stands the authored level up, once the player and groups exist for it to reference. */
+  private startLevel(): void {
+    if (!this.authoredContent || !this.authoredLayout) return;
+    this.levelRunner = new LevelRunner({
+      scene: this,
+      content: this.authoredContent,
+      layout: this.authoredLayout,
+      difficulty: this.episode.playtest?.difficulty ?? this.episode.D,
+      hostiles: this.authoredHostiles,
+      friendlies: this.authoredFriendlies,
+      playerPos: () => ({ x: this.player.x, y: this.player.y }),
+      fallbackTexture: TEX.bulletEnemy,
+      forceEncounterId: this.episode.playtest?.encounterId,
+    });
+  }
+
   /** Debug-only (C12 #151 follow-up): instantly resolves the current episode as a clear, regardless of node type — a boss node kills the boss outright (through the normal win path) rather than skipping it, so Ratings/score still come out right. */
   private debugAdvanceStage(): void {
     if (this.gameOver) return;
+    if (this.isEncounterEpisode) {
+      // An authored encounter can legitimately end with something parked on
+      // screen that the player can't remove (an invincible unit, say), so
+      // this is also the escape hatch out of one.
+      this.clearEpisode();
+      return;
+    }
     if (this.isBossNode && this.boss?.active) {
       this.damageEnemy(this.boss, this.boss.hp, 0);
       return;
@@ -377,9 +474,18 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       this.fireWeapon(req);
     }
 
-    if (!this.isBossNode) {
+    // An authored encounter IS the episode's content — the ambient spawner
+    // would just be noise on top of it.
+    if (!this.isBossNode && !this.isEncounterEpisode) {
       this.enemySpawnCooldownMs -= delta;
       if (this.enemySpawnCooldownMs <= 0) this.spawnEnemy();
+    }
+    if (this.levelRunner) {
+      this.levelRunner.update(dt);
+      if (this.levelRunner.complete) {
+        this.clearEpisode();
+        return;
+      }
     }
 
     for (const enemy of this.enemies.getChildren() as Enemy[]) {
@@ -390,7 +496,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     tickHpRegen(this.player.defender, this.player.stats.maxHp, this.player.stats.hpRegen, dt);
     this.updateHud();
 
-    this.background.tilePositionY -= TUNING.visuals.bgScrollSpeed * dt;
+    // The parallax backdrop drifts with the level rather than at its own
+    // cosmetic rate while authored terrain is on screen, so the strip of
+    // void above and below the tiles moves at the same speed they do.
+    this.background.tilePositionY -= (this.isEncounterEpisode ? LEVEL_SCROLL_SPEED : TUNING.visuals.bgScrollSpeed) * dt;
     for (const star of this.stars.getChildren() as Phaser.GameObjects.Image[]) {
       star.y += (star.getData("speed") as number) * dt;
       if (star.y > GAME_HEIGHT) {
@@ -399,7 +508,10 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       }
     }
 
-    if (!this.isBossNode) {
+    // Standard/elite nodes clear on the survival timer; a boss node clears
+    // on the boss dying; an authored encounter clears when it has played
+    // through (handled above), so no timer applies to it.
+    if (!this.isBossNode && !this.isEncounterEpisode) {
       this.elapsedEpisodeSec += dt;
       if (this.elapsedEpisodeSec >= this.player.effectiveEpisodeClearDurationSec) {
         this.clearEpisode();
@@ -414,11 +526,19 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
    */
   private updateGrazeAndHype(dt: number): void {
     const grazeMap = new Map<number, GrazeRingDef>();
-    for (const bullet of this.enemyBullets.getChildren() as EnemyBullet[]) {
-      if (!bullet.active) continue;
-      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, bullet.x, bullet.y);
+    const addGraze = (x: number, y: number, spawnId: number) => {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y);
       const ring = grazeRingAt(dist, this.player.stats.grazeRadius, TUNING.graze.rings);
-      if (ring) grazeMap.set(bullet.spawnId, ring);
+      if (ring) grazeMap.set(spawnId, ring);
+    };
+    for (const bullet of this.enemyBullets.getChildren() as EnemyBullet[]) {
+      if (bullet.active) addGraze(bullet.x, bullet.y, bullet.spawnId);
+    }
+    // Authored enemy projectiles graze exactly like built-in ones — the
+    // shared spawn-id counter (`entities/spawnId.ts`) is what lets both feed
+    // one tracker without their ids colliding.
+    for (const projectile of this.levelRunner?.hostileProjectiles() ?? []) {
+      addGraze(projectile.x, projectile.y, projectile.spawnId);
     }
 
     const grazeResult = this.grazeTracker.update(grazeMap);
@@ -611,7 +731,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     forkCount: number,
     forkProjectileSpeed: number,
     forkConeDeg: number,
-    inheritedHit: Enemy | undefined,
+    inheritedHit: PlayerTarget | undefined,
     shotPolarity: Polarity | null
   ): void {
     const bullet = this.playerBullets.get(x, y, TEX.bulletPlayer) as PlayerBullet | null;
@@ -648,24 +768,39 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
    * that flies past everything ends the chain early.
    */
   private onPlayerBulletHitEnemy(bullet: PlayerBullet, enemy: Enemy): void {
-    if (this.gameOver || !bullet.active || !enemy.active || bullet.hasHit(enemy)) return;
-    const fraction = bullet.registerHit(enemy);
+    this.onPlayerBulletHitTarget(bullet, enemy);
+  }
+
+  /**
+   * The one player-shot impact path, shared by built-in enemies and
+   * authored ones. Nothing here needs to know which it hit: `PlayerTarget`
+   * supplies the identity the pierce/fork hit-list keys on, the
+   * `damageMultiplier` of the exact spot that was struck (an authored weak
+   * point or armor plate; always 1 on a built-in enemy), and the routing
+   * rule for where the damage actually lands.
+   */
+  private onPlayerBulletHitTarget(bullet: PlayerBullet, target: PlayerTarget): void {
+    if (this.gameOver || !bullet.active || !target.active || bullet.hasHit(target)) return;
+    // An invincible authored unit isn't hit at all — not "hit for zero" —
+    // so it never consumes one of the bullet's pierce charges.
+    if (target instanceof AuthoredUnit && !target.hittable) return;
+    const fraction = bullet.registerHit(target);
     if (fraction === undefined) return;
 
     // "Current polarity gates which enemies take full damage from your
     // shots" (chassis.spec.md's Ikaruga flagship example) — a no-op
     // multiplier of 1 on any chassis without `polarity`.
-    const mult = polarityDamageMultiplier(this.player.chassis.polarity, bullet.shotPolarity, enemy.polarity);
-    this.damageEnemy(enemy, bullet.baseHit * fraction * mult, bullet.numCrits);
+    const mult = polarityDamageMultiplier(this.player.chassis.polarity, bullet.shotPolarity, target.polarity);
+    this.damageTarget(target, bullet.baseHit * fraction * mult * target.damageMultiplier, bullet.numCrits);
 
     if (bullet.blastRadius > 0) {
       const blastDamage = bullet.baseHit * bullet.blastDamageFraction;
-      for (const other of this.enemies.getChildren() as Enemy[]) {
-        if (other === enemy || !other.active) continue;
-        const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, other.x, other.y);
+      for (const other of this.playerTargets()) {
+        if (other === target || !other.active) continue;
+        const dist = Phaser.Math.Distance.Between(target.x, target.y, other.x, other.y);
         if (dist <= bullet.blastRadius) {
           const blastMult = polarityDamageMultiplier(this.player.chassis.polarity, bullet.shotPolarity, other.polarity);
-          this.damageEnemy(other, blastDamage * blastMult, bullet.numCrits);
+          this.damageTarget(other, blastDamage * blastMult * other.damageMultiplier, bullet.numCrits);
         }
       }
     }
@@ -691,28 +826,48 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         remainingForks - 1,
         bullet.forkProjectileSpeed,
         bullet.forkConeDeg,
-        enemy,
+        target,
         bullet.shotPolarity
       );
     }
   }
 
-  private damageEnemy(enemy: Enemy, damage: number, numCrits: number): void {
-    enemy.hp -= damage;
-    applyLifesteal(this.player.defender, this.player.stats.maxHp, damage, this.player.stats.lifesteal);
-    this.spawnDamageNumber(enemy.x, enemy.y, damage, numCrits);
-    if (enemy.hp <= 0) {
-      const wasBoss = enemy.archetype === "boss";
-      const x = enemy.x;
-      const y = enemy.y;
-      enemy.recycle();
-      this.gainScore(enemy.scoreValue);
-      this.gainExp(enemy.scoreValue);
-      this.spawnCoinDrop(x, y);
-      // Boss defeated is the bossFinale node's clear condition — standard/elite
-      // nodes clear on the survival timer instead (see update()).
-      if (wasBoss && !this.gameOver) this.clearEpisode();
+  /** Everything a player shot may currently hit — built-in enemies plus every live authored hostile. Also what homing searches. */
+  playerTargets(): PlayerTarget[] {
+    const out: PlayerTarget[] = [];
+    for (const enemy of this.enemies.getChildren() as Enemy[]) if (enemy.active) out.push(enemy);
+    for (const unit of this.authoredHostiles.getChildren() as AuthoredUnit[]) {
+      if (unit.active && unit.hittable) out.push(unit);
     }
+    return out;
+  }
+
+  private damageEnemy(enemy: Enemy, damage: number, numCrits: number): void {
+    this.damageTarget(enemy, damage, numCrits);
+  }
+
+  /**
+   * `applyDamage` returns whatever actually died — which is not always what
+   * was hit, since an authored Part without its own health passes damage
+   * through to the hull it's bolted to. Paying out against the returned
+   * entity is what puts the score, EXP and coin drop on the hull rather
+   * than on the turret.
+   */
+  private damageTarget(target: PlayerTarget, damage: number, numCrits: number): void {
+    applyLifesteal(this.player.defender, this.player.stats.maxHp, damage, this.player.stats.lifesteal);
+    this.spawnDamageNumber(target.x, target.y, damage, numCrits);
+    const defeated = target.applyDamage(damage);
+    if (!defeated) return;
+    // A destroyed Part scores 0 by construction — no payout, no coin, but
+    // it still came off the field.
+    if (defeated.scoreValue > 0) {
+      this.gainScore(defeated.scoreValue);
+      this.gainExp(defeated.scoreValue);
+      this.spawnCoinDrop(defeated.x, defeated.y);
+    }
+    // Boss defeated is the bossFinale node's clear condition — standard/elite
+    // nodes clear on the survival timer instead (see update()).
+    if (defeated instanceof Enemy && defeated.archetype === "boss" && !this.gameOver) this.clearEpisode();
   }
 
   /** EXP is gained automatically on kill, no collection (economy.spec.todo.md's hard rule) — batched into level-up picks only at the end-of-level break by ResolveScene/LevelUpScene, never mid-play. */
@@ -851,6 +1006,27 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     this.damagePlayer(contactDamage);
   }
 
+  /**
+   * An authored **projectile** is spent on contact, like any bullet. An
+   * authored **enemy** is not: it's walking an authored path, and having it
+   * evaporate the instant the player brushes it would delete content the
+   * author placed. The player's i-frames are what stop a lingering overlap
+   * from draining them.
+   */
+  private onAuthoredContactPlayer(unit: AuthoredUnit): void {
+    if (this.gameOver || !unit.active || !unit.hittable) return;
+    const contactDamage = unit.contactDamage;
+    if (unit.collisionGroup === "enemyProjectile") unit.recycle();
+    if (contactDamage > 0) this.damagePlayer(contactDamage);
+  }
+
+  /** A friendly authored unit (an authored Unit spawned into a friendly group) trading contact damage with a hostile one. */
+  private onAuthoredFriendlyHitHostile(friendly: AuthoredUnit, hostile: AuthoredUnit): void {
+    if (this.gameOver || !friendly.active || !hostile.active || !hostile.hittable) return;
+    if (friendly.collisionGroup === "friendlyProjectile") friendly.recycle();
+    if (friendly.contactDamage > 0) this.damageTarget(hostile, friendly.contactDamage * hostile.damageMultiplier, 0);
+  }
+
   private damagePlayer(hit: number): void {
     if (this.player.invulnerable) return;
     const result = applyDamage(this.player.defender, hit, this.player.stats.armor, this.player.stats.evasion);
@@ -876,6 +1052,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
   // ~nothing either way.
   private endEpisode(): void {
     this.gameOver = true;
+    if (this.finishPlaytest("death")) return;
     const stageProgress = this.isBossNode
       ? this.boss
         ? 1 - Math.max(0, this.boss.hp) / this.boss.maxHp
@@ -905,6 +1082,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
    */
   private clearEpisode(): void {
     this.gameOver = true;
+    if (this.finishPlaytest("complete")) return;
     const gain = ratingsGainOnClear(this.score);
     this.scene.start(SCENE_KEYS.resolve, {
       outcome: "clear",
@@ -918,6 +1096,29 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       goldCollected: Math.round(this.goldCollected),
       expGained: Math.round(this.expGained),
     } satisfies ResolveLaunchData);
+  }
+
+  /**
+   * A playtest run returns straight to the picker instead of routing
+   * through ResolveScene. That's the whole reason `playtest` is its own
+   * flag: Resolve applies Ratings, gold and EXP to the **persisted career**,
+   * and trying out an encounter you're in the middle of authoring must not
+   * be able to cost (or pay) a real run. Returns false on a normal episode,
+   * leaving the caller's usual path alone.
+   */
+  private finishPlaytest(outcome: "complete" | "death"): boolean {
+    const playtest = this.episode.playtest;
+    if (!playtest) return false;
+    this.levelRunner?.destroy();
+    this.levelRunner = null;
+    this.scene.start(SCENE_KEYS.playtestResult, {
+      tileId: playtest.tileId,
+      encounterId: playtest.encounterId,
+      difficulty: playtest.difficulty,
+      outcome,
+      score: Math.round(this.score),
+    } satisfies PlaytestResultData);
+    return true;
   }
 
   private updateHud(): void {
@@ -959,7 +1160,11 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     // Timer: countdown from episodeClearDurationSec in MM:SS — replaced by a
     // boss HP readout on a bossFinale node, which clears on defeat instead.
-    if (this.isBossNode) {
+    if (this.levelRunner) {
+      // An authored encounter has no survival timer: what's left to do is
+      // however much of it hasn't been cleared yet.
+      this.timerText.setText(copy("play.encounter.remaining", { count: this.levelRunner.liveEnemyCount }));
+    } else if (this.isBossNode) {
       const hpFrac2 = this.boss ? Phaser.Math.Clamp(this.boss.hp / this.boss.maxHp, 0, 1) : 0;
       this.timerText.setText(`BOSS ${Math.round(hpFrac2 * 100)}%`);
     } else {

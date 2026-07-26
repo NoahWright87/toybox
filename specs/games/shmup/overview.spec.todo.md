@@ -42,7 +42,11 @@ tile-based level populated by data-driven enemies — see
 edge tags, not a tracked value (see `levels-and-tiles.spec.todo.md` §5).
 **Epic 6 #182** is the companion `/shmup-editor` authoring tool (a main
 Doors 97 app route, not part of this Phaser workspace) that produces the
-JSON content Epic 5 consumes.
+content Epic 5 consumes. That content now loads **directly** — the editor
+saves into the Doors 97 filesystem and the game reads the same same-origin
+blob back, with no export/commit round trip in between (see
+`authored-encounters.spec.md`). Main Menu → TEST ENCOUNTER plays one
+authored Encounter with the real ship, weapons, Hype and economy.
 
 ## Spec map
 
@@ -64,6 +68,7 @@ JSON content Epic 5 consumes.
 | `content-and-assets.spec.todo.md` | copy registry | F2 #130 |
 | `save.spec.md` | swappable SaveStore, Doors-FS-backed default — **implemented** | S1 #171 |
 | `tuning.spec.todo.md` | the single home of every numeric lever | (all) |
+| `authored-encounters.spec.md` | loading `/shmup-editor` content and playing it in the engine — single-tile Encounter playback **implemented** | Epic 5 #181 / Epic 6 #182 |
 | `levels-and-tiles.spec.todo.md` | grid-fill tile generation, JIT streaming, camera bounds-box easing, biome emergence via tags | L1 #183, L2 #184, L7 #189 |
 | `enemies-and-bullets.spec.todo.md` | enemy node-graph model, bullets-as-enemies, boss tiles | L3 #185, L4 #186, L8 #190 |
 | `spawn-and-warnings.spec.todo.md` | generalized difficulty-budget scaling, spawn nodes, warning indicators | L5 #187, L6 #188 |

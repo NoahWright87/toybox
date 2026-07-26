@@ -8,7 +8,7 @@ import {
   SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
-  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_EXE_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_EXE_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_LEVEL_ID,
 } from "./types";
 
 // ── Text content (preserved from original fileSystem.ts) ─────────────────────
@@ -517,6 +517,8 @@ export function seedFileSystem(store: FileSystemStore): void {
   store.createFile(shmupEditorDir.id, "UNITS.DAT", { id: SHMUP_EDITOR_UNITS_ID, fileType: "dat", content: "" });
   store.createFile(shmupEditorDir.id, "UNIT-DRAFT.DAT", { id: SHMUP_EDITOR_UNIT_DRAFT_ID, fileType: "dat", content: "" });
   store.createFile(shmupEditorDir.id, "TILE-DRAFT.DAT", { id: SHMUP_EDITOR_TILE_DRAFT_ID, fileType: "dat", content: "" });
+  // The Connection Viewer's assembled layout — what "play test this level" hands to the game.
+  store.createFile(shmupEditorDir.id, "LEVEL.DAT", { id: SHMUP_EDITOR_LEVEL_ID, fileType: "dat", content: "" });
 
   // Programs > Internet
   const internetDir = store.createFolder(PROGRAMS_ID, "Internet");

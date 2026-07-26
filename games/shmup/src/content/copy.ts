@@ -21,6 +21,18 @@ export const COPY = {
   "menu.stub.comingSoon": "Coming soon.",
   "menu.stub.back": "PRESS ANY KEY OR TAP TO GO BACK",
 
+  // ---- Encounter playtest (playing /shmup-editor content in the engine) ----
+  "encounter.result.title.complete": "PLAYED THROUGH",
+  "encounter.result.title.death": "SHOT DOWN",
+  "encounter.result.score": "Score {score}",
+  "encounter.result.difficulty": "Difficulty {difficulty}",
+  "encounter.result.replay": "PLAY AGAIN",
+  "encounter.result.backToEditor": "BACK TO EDITOR",
+  "encounter.missing.title": "NOTHING TO PLAY",
+  "encounter.missing.body":
+    "That tile, encounter or level layout isn't in the Shmup Editor's saved data.\n\nSave it in the editor and try again.",
+  "play.encounter.remaining": "ENEMIES {count}",
+
   // ---- Season / Finale / Syndication flavor (run-structure.spec.todo.md) ----
   "season.finale.title": "SEASON FINALE",
   "season.finale.flavor": "The network's watching. Don't blow it.",

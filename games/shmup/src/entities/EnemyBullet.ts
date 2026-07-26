@@ -2,12 +2,11 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
 import type { Polarity } from "../systems/chassis";
+import { nextSpawnId } from "./spawnId";
 import type { ShmupPlayScene } from "./types";
 
 /** Pooled enemy bullet — fixed damage, no pierce/blast (those are player-weapon-only mechanics). */
 export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
-  private static nextSpawnId = 1;
-
   damage = 0;
   /** Inherited from the firing enemy (chassis.spec.md's Ikaruga flagship example) — inert unless the player's chassis declares a `polarity` mechanic, in which case a same-polarity bullet is absorbed instead of damaging the player. */
   polarity: Polarity = "red";
@@ -21,7 +20,7 @@ export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
   fire(x: number, y: number, vx: number, vy: number, damage: number, polarity: Polarity = "red"): void {
     this.damage = damage;
     this.polarity = polarity;
-    this.spawnId = EnemyBullet.nextSpawnId++;
+    this.spawnId = nextSpawnId();
     this.setPosition(x, y);
     this.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
     this.setActive(true);

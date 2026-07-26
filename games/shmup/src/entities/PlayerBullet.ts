@@ -2,8 +2,7 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
 import type { Polarity } from "../systems/chassis";
-import type { Enemy } from "./Enemy";
-import type { ShmupPlayScene } from "./types";
+import type { PlayerTarget, ShmupPlayScene } from "./types";
 
 /**
  * Pooled player projectile. One bullet is either:
@@ -53,12 +52,12 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   private fractionIndex = 0;
   private infinite = false;
   private hitsRemaining = 0;
-  /** Tracks `Enemy.spawnId`, not the `Enemy` object itself — enemy sprites are pooled and reused across spawns, so an object-reference Set would risk a later, logically-different enemy reusing the same pooled object and being skipped as "already hit". */
+  /** Tracks `PlayerTarget.spawnId`, not the object itself — target sprites are pooled and reused across spawns, so an object-reference Set would risk a later, logically-different target reusing the same pooled object and being skipped as "already hit". */
   private readonly hitSet = new Set<number>();
   /** Set once per shot; decays on finite pierce lines the same way damage decays (TUNING.homing doc comment). Forked "infinite" lines never decay it, same as they never decay damage. */
   private baseHomingStrength = 0;
   private homingStrength = 0;
-  private lockedTarget: Enemy | null = null;
+  private lockedTarget: PlayerTarget | null = null;
   /** How many more chain links remain after this one, drained once (by `takePendingForks`) on the first hit this bullet registers. Set on both `fireLine` and `fireForkedLine` so the fork chain can keep recursing across generations. */
   private pendingForkCount = 0;
 
@@ -105,7 +104,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     forkCount: number,
     forkProjectileSpeed: number,
     forkConeDeg: number,
-    inheritedHit?: Enemy,
+    inheritedHit?: PlayerTarget,
     shotPolarity: Polarity | null = null
   ): void {
     this.reset(x, y, vx, vy, baseHit, numCrits, blastRadius, blastDamageFraction, homingStrength, shotPolarity);
@@ -155,9 +154,9 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     else this.clearTint();
   }
 
-  /** True once this bullet has already damaged `enemy` — it should pass through without re-hitting it. */
-  hasHit(enemy: Enemy): boolean {
-    return this.hitSet.has(enemy.spawnId);
+  /** True once this bullet has already damaged `target` — it should pass through without re-hitting it. */
+  hasHit(target: PlayerTarget): boolean {
+    return this.hitSet.has(target.spawnId);
   }
 
   /** This shot's original Homing Strength, undecayed — what a fork spawned off this line should carry, since forked "infinite" lines never decay homing (same as they never decay damage). */
@@ -173,13 +172,13 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Registers a fresh impact against `enemy`. Returns the damage fraction
-   * (relative to `baseHit`) to apply, or undefined if `enemy` was already
+   * Registers a fresh impact against `target`. Returns the damage fraction
+   * (relative to `baseHit`) to apply, or undefined if `target` was already
    * hit by this bullet. Recycles the bullet once its pierce/hits are spent.
    */
-  registerHit(enemy: Enemy): number | undefined {
-    if (this.hitSet.has(enemy.spawnId)) return undefined;
-    this.hitSet.add(enemy.spawnId);
+  registerHit(target: PlayerTarget): number | undefined {
+    if (this.hitSet.has(target.spawnId)) return undefined;
+    this.hitSet.add(target.spawnId);
 
     if (this.infinite) {
       this.hitsRemaining -= 1;
@@ -248,7 +247,7 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     this.setRotation(newAngle + Math.PI / 2);
   }
 
-  private findTarget(body: Phaser.Physics.Arcade.Body, speed: number): Enemy | null {
+  private findTarget(body: Phaser.Physics.Arcade.Body, speed: number): PlayerTarget | null {
     const radius = Math.min(TUNING.homing.maxRadiusPx, speed * TUNING.homing.seekAheadSeconds * this.homingStrength);
     if (radius <= 0) return null;
     const dirX = body.velocity.x / speed;
@@ -256,15 +255,15 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     const centerX = this.x + dirX * radius;
     const centerY = this.y + dirY * radius;
 
-    let best: Enemy | null = null;
+    let best: PlayerTarget | null = null;
     let bestDist = Infinity;
-    for (const enemy of (this.scene as ShmupPlayScene).enemies.getChildren() as Enemy[]) {
+    for (const target of (this.scene as ShmupPlayScene).playerTargets()) {
       // Can't hit it again (it's already in this bullet's hit-list, same as
       // collision exclusion), so it shouldn't be seekable either.
-      if (!enemy.active || this.hitSet.has(enemy.spawnId)) continue;
-      const dist = Phaser.Math.Distance.Between(centerX, centerY, enemy.x, enemy.y);
+      if (!target.active || this.hitSet.has(target.spawnId)) continue;
+      const dist = Phaser.Math.Distance.Between(centerX, centerY, target.x, target.y);
       if (dist <= radius && dist < bestDist) {
-        best = enemy;
+        best = target;
         bestDist = dist;
       }
     }

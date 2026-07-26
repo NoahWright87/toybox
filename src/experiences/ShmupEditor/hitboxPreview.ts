@@ -24,11 +24,9 @@
  * than authored per-placement (`computeAttackDurationMs`).
  */
 import { PREVIEW_BULLET_LIFE_MS, PREVIEW_BULLET_SPEED, sweepOffsetDeg, shotAngleOffsets, type PreviewBullet } from "./actionPreview";
+import { cameraLocalBand, cameraLocalXBand, playerTileLocalY } from "../../../games/shmup/src/systems/encounters/scrollModel";
 import type { Vec2 } from "./encounterTypes";
 import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
-
-/** Mirrors games/shmup/src/config.ts's GAME_WIDTH/GAME_HEIGHT (720x1280, portrait) — the aspect ratio of what's actually visible on screen at once. Used to size the dotted "camera/playable bounds" overlay relative to the tile's own width, per levels-and-tiles.spec.todo.md §4 ("the camera framing... show[s] more/less active width", i.e. camera width tracks the tile, not a fixed independent value). */
-export const GAME_ASPECT_RATIO = 1280 / 720;
 
 /** Mirrors games/shmup/src/tuning/index.ts's TUNING.combat.hitboxRadiusNormal — the player ship's real collision radius at normal (non-Focus) speed. Independently maintained, not imported (see file header). */
 export const PLAYER_REFERENCE_HITBOX_RADIUS = 6;
@@ -37,19 +35,35 @@ export const PLAYER_REFERENCE_HITBOX_RADIUS = 6;
 export const DEFAULT_BULLET_HITBOX_RADIUS = 6;
 
 /**
- * A dotted "how much of the tile is visible on screen at once" reference
- * rectangle, in the same coordinate space as `tileRect` (world or stage —
- * whichever `tileRect` is already in). Width matches the tile's own width
- * (per the aspect-ratio note above); height is derived from the real
- * game's portrait aspect ratio and vertically centered on the tile. This
- * is a static approximation — the real game's playable-bounds box eases
- * between sections (levels-and-tiles.spec.todo.md §4), which this preview
- * doesn't attempt to animate.
+ * The dotted "what's actually on screen right now" rectangle, in tile-local
+ * world coordinates, at encounter time `t`.
+ *
+ * **It moves**, because the level scrolls: the tile enters at the top of
+ * the screen and slides down out of it, so the band of tile-local y the
+ * camera covers travels up the tile as the encounter plays. Scrubbing the
+ * timeline and watching this box climb is what portrays scrolling in the
+ * editor — the previous version was a static rectangle centred on the tile,
+ * which quietly implied the tile just sits there.
+ *
+ * The geometry comes from the game's own `scrollModel.ts`, imported rather
+ * than re-derived, so the box is the real camera and not an approximation
+ * of it. That also fixes the width: the camera is always one screen across,
+ * whatever the tile's footprint — it doesn't stretch to a 3-wide tile.
  */
-export function computeCameraBoundsRect(tileRect: { x: number; y: number; width: number; height: number }): { x: number; y: number; width: number; height: number } {
-  const height = tileRect.width * GAME_ASPECT_RATIO;
-  return { x: tileRect.x, y: tileRect.y + (tileRect.height - height) / 2, width: tileRect.width, height };
+export function computeCameraBoundsRect(footprint: number, t: number): { x: number; y: number; width: number; height: number } {
+  const band = cameraLocalBand(t);
+  const xBand = cameraLocalXBand(footprint);
+  return { x: xBand.left, y: band.top, width: xBand.right - xBand.left, height: band.bottom - band.top };
 }
+
+/**
+ * Where the player's ship sits in tile-local coordinates at encounter time
+ * `t`. It starts below the tile and climbs through it as the tile scrolls
+ * past — so a *static* marker can only ever be one frame of the truth,
+ * which is why this takes a time. Re-exported from the game's shared scroll
+ * model rather than re-derived here.
+ */
+export const computePlayerRefLocalY = playerTileLocalY;
 
 /**
  * Facing angle (degrees) for an Action, resolved the same way

@@ -428,6 +428,49 @@ export const TUNING = {
       spawnIntervalMs: 0,
     },
   },
+  // Authored encounters (`systems/encounters`) — playing `/shmup-editor`
+  // content in the real engine. These govern presentation and safety
+  // ceilings only: everything about *what* an authored encounter does comes
+  // from the authored data itself, never from here.
+  //
+  // Two numbers that belong to this system are deliberately NOT here: the
+  // level scroll speed and the tile size live in
+  // `systems/encounters/scrollModel.ts`, because `/shmup-editor` imports
+  // them directly and has no business importing this whole object. See that
+  // file's header.
+  encounters: {
+    // Display size (longest side, px) per unit of a Unit's authored hitbox
+    // RADIUS — see spriteScale.ts on why display size is derived from the
+    // one authored number that actually describes how big a thing is.
+    // 3 puts a `size: 16` helicopter at 48px against a 720-wide screen and
+    // a `size: 34` battleship at ~102px, keeping the shmup-standard
+    // "hitbox comfortably smaller than the ship" relationship.
+    artToHitboxRatio: 3,
+    // Pool ceiling for authored units, applied **per collision bucket** —
+    // PlayScene builds a hostile group and a friendly group, each capped at
+    // this, so the true worst case is 2x. Not a global budget: the friendly
+    // bucket is empty in practice (the editor only authors enemy-side
+    // content, and `spawnGroup` defaults to "enemyProjectile"), so a shared
+    // ceiling would spend accounting on a pool nothing uses. Sized well
+    // above `maxEnemies` (40) because in this model a projectile IS a
+    // Unit — one bullet-heavy encounter can have hundreds of live
+    // instances.
+    maxAuthoredUnits: 400,
+    // How far off-screen an authored instance travels before it despawns.
+    // Generous, so a wide authored path that loops out and back doesn't get
+    // culled mid-manoeuvre.
+    despawnMarginPx: 220,
+    // Backstop lifespan (sec) for a dynamically spawned instance (a
+    // projectile). Off-screen culling handles the normal case; this catches
+    // an authored Unit that hangs around on screen doing nothing.
+    spawnedLifespanSec: 12,
+    // Grace period (sec) after the last authored moment before an encounter
+    // with nothing left alive counts as played through — long enough for
+    // in-flight projectiles to clear. (The other half of the end condition,
+    // "the tile has scrolled off screen," is pure geometry and lives in
+    // scrollModel.ts.)
+    completionGraceSec: 1.5,
+  },
   // Purely cosmetic — background scroll / starfield drift — but still tuning,
   // not magic numbers inline in PlayScene.
   visuals: {

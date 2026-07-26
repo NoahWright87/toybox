@@ -4,4 +4,6 @@ export { Enemy } from "./Enemy";
 export { EnemyBullet } from "./EnemyBullet";
 export { PlayerBullet } from "./PlayerBullet";
 export { Coin } from "./Coin";
-export type { ShmupPlayScene } from "./types";
+export { AuthoredUnit } from "./AuthoredUnit";
+export { nextSpawnId } from "./spawnId";
+export type { PlayerTarget, ShmupPlayScene } from "./types";
