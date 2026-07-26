@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { eliteChance, eliteUnlocked, rollSpawnArchetype, scaledEnemyStats } from "./archetypes";
+import {
+  eliteChance,
+  eliteUnlocked,
+  rollSpawnArchetype,
+  rollSpawnArchetypeForDomain,
+  scaledEnemyStats,
+  swarmerChance,
+  turretChance,
+} from "./archetypes";
 import { TUNING } from "../../tuning";
 
 describe("eliteUnlocked / eliteChance", () => {
@@ -65,5 +73,71 @@ describe("scaledEnemyStats", () => {
     const at0 = scaledEnemyStats("drone", base, 0).scoreValue;
     const at50 = scaledEnemyStats("drone", base, 50).scoreValue;
     expect(at50).toBeGreaterThan(at0);
+  });
+
+  it("passes domain/movement/firePattern through unchanged regardless of D", () => {
+    const turretBase = TUNING.enemies.turret;
+    const scaled = scaledEnemyStats("turret", turretBase, 25);
+    expect(scaled.domain).toBe("ground");
+    expect(scaled.movement).toEqual(turretBase.movement);
+    expect(scaled.firePattern).toEqual(turretBase.firePattern);
+  });
+
+  it("swarmer leans harder into speed than drone at the same D (per-archetype emphasis)", () => {
+    const D = 20;
+    const droneSpeedMult = scaledEnemyStats("drone", TUNING.enemies.drone, D).speed / TUNING.enemies.drone.speed;
+    const swarmerSpeedMult = scaledEnemyStats("swarmer", TUNING.enemies.swarmer, D).speed / TUNING.enemies.swarmer.speed;
+    expect(swarmerSpeedMult).toBeGreaterThan(droneSpeedMult);
+  });
+
+  it("turret leans harder into HP than drone at the same D (per-archetype emphasis)", () => {
+    const D = 20;
+    const droneHpMult = scaledEnemyStats("drone", TUNING.enemies.drone, D).maxHp / TUNING.enemies.drone.maxHp;
+    const turretHpMult = scaledEnemyStats("turret", TUNING.enemies.turret, D).maxHp / TUNING.enemies.turret.maxHp;
+    expect(turretHpMult).toBeGreaterThan(droneHpMult);
+  });
+});
+
+describe("swarmerChance / turretChance", () => {
+  it("both are locked out below their own unlock D", () => {
+    expect(swarmerChance(TUNING.difficulty.swarmerUnlockD - 0.01)).toBe(0);
+    expect(turretChance(TUNING.difficulty.turretUnlockD - 0.01)).toBe(0);
+  });
+
+  it("both ramp up to their max chance and cap there", () => {
+    expect(swarmerChance(TUNING.difficulty.swarmerChanceMaxD)).toBeCloseTo(TUNING.difficulty.swarmerChanceMax, 10);
+    expect(swarmerChance(TUNING.difficulty.swarmerChanceMaxD + 1000)).toBe(TUNING.difficulty.swarmerChanceMax);
+    expect(turretChance(TUNING.difficulty.turretChanceMaxD)).toBeCloseTo(TUNING.difficulty.turretChanceMax, 10);
+    expect(turretChance(TUNING.difficulty.turretChanceMaxD + 1000)).toBe(TUNING.difficulty.turretChanceMax);
+  });
+});
+
+describe("rollSpawnArchetypeForDomain", () => {
+  it("still rolls elite first, regardless of domain, when the elite roll lands", () => {
+    const D = TUNING.difficulty.eliteChanceMaxD;
+    expect(rollSpawnArchetypeForDomain(D, "air", () => 0)).toBe("elite");
+    expect(rollSpawnArchetypeForDomain(D, "ground", () => 0)).toBe("elite");
+  });
+
+  it("air levels upgrade a non-elite roll to swarmer once unlocked and the flavor roll lands", () => {
+    const D = TUNING.difficulty.swarmerChanceMaxD;
+    // rng sequence: first call (elite gate) misses elite, second call (flavor gate) lands.
+    const rolls = [0.999, 0];
+    let i = 0;
+    const rng = () => rolls[i++];
+    expect(rollSpawnArchetypeForDomain(D, "air", rng)).toBe("swarmer");
+  });
+
+  it("ground levels upgrade a non-elite roll to turret once unlocked and the flavor roll lands", () => {
+    const D = TUNING.difficulty.turretChanceMaxD;
+    const rolls = [0.999, 0];
+    let i = 0;
+    const rng = () => rolls[i++];
+    expect(rollSpawnArchetypeForDomain(D, "ground", rng)).toBe("turret");
+  });
+
+  it("falls back to drone when the flavor roll misses", () => {
+    const D = TUNING.difficulty.swarmerChanceMaxD;
+    expect(rollSpawnArchetypeForDomain(D, "air", () => 0.999)).toBe("drone");
   });
 });

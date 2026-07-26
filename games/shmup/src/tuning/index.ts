@@ -160,6 +160,18 @@ export const TUNING = {
     eliteChanceAtUnlock: 0.15,
     eliteChanceMaxD: 40,
     eliteChanceMax: 0.6,
+    // Swarmer (C5 #144): unlocked earlier than elite — "more of them, harder
+    // to pin down" is meant to show up well before the bruiser does.
+    swarmerUnlockD: 2,
+    swarmerChanceAtUnlock: 0.2,
+    swarmerChanceMaxD: 30,
+    swarmerChanceMax: 0.5,
+    // Turret (C5 #144, the ground archetype): unlocked a bit later than the
+    // swarmer — emplacements read as a mid-run escalation, not day-one.
+    turretUnlockD: 5,
+    turretChanceAtUnlock: 0.15,
+    turretChanceMaxD: 35,
+    turretChanceMax: 0.45,
     // Boss HP gets an extra flat multiplier on top of hpCurve(D) — a Season
     // Finale is meant to be a real wall, not just another spawn.
     bossHpMult: 3,
@@ -402,10 +414,15 @@ export const TUNING = {
       contactDamage: 10,
       scoreValue: 10,
       spawnIntervalMs: 850,
+      domain: "air",
+      movement: { kind: "linear" },
+      firePattern: { kind: "straight" },
     },
     // Bruiser archetype (composition thresholds, run-structure.spec.todo.md):
     // locked out below TUNING.difficulty.eliteUnlockD, then rolled in at a
-    // rising chance. Leans HP/damage, trades away speed/fire-rate.
+    // rising chance. Leans HP/damage, trades away speed/fire-rate. Fires
+    // aimed shots (unlike drone's straight-down volleys) — the "nastier
+    // pattern" the difficulty todo spec calls for.
     elite: {
       maxHp: 60,
       speed: 100,
@@ -415,8 +432,14 @@ export const TUNING = {
       contactDamage: 16,
       scoreValue: 40,
       spawnIntervalMs: 2600,
+      domain: "air",
+      movement: { kind: "linear" },
+      firePattern: { kind: "aimed" },
     },
-    // Single Season/Series Finale boss (run-structure.spec.todo.md).
+    // Single Season/Series Finale boss (run-structure.spec.todo.md). Holds
+    // its lane and patrols side to side (movement.kind "patrol", generalized
+    // off the old `archetype === "boss"` special case in Enemy.ts) and fires
+    // a 3-way spread — a real wall, not just a bigger drone.
     boss: {
       maxHp: 900,
       speed: 40,
@@ -426,6 +449,42 @@ export const TUNING = {
       contactDamage: 24,
       scoreValue: 500,
       spawnIntervalMs: 0,
+      domain: "air",
+      movement: { kind: "patrol" },
+      firePattern: { kind: "spread", count: 3, spreadDeg: 50 },
+    },
+    // Swarmer (C5 #144): cheap, fast, weaves side to side while descending
+    // (movement.kind "sine") instead of streaming straight down — the "more
+    // of them, harder to pin down" lean expressed as motion. Air domain.
+    swarmer: {
+      maxHp: 10,
+      speed: 170,
+      fireIntervalMs: 1600,
+      bulletDamage: 4,
+      bulletSpeed: 240,
+      contactDamage: 8,
+      scoreValue: 14,
+      spawnIntervalMs: 700,
+      domain: "air",
+      movement: { kind: "sine", amplitudePx: 90, frequencyHz: 0.6 },
+      firePattern: { kind: "spread", count: 2, spreadDeg: 30 },
+    },
+    // Turret (C5 #144): the batch's ground archetype. Descends to
+    // holdYFrac*GAME_HEIGHT, holds position for holdDurationMs (movement.kind
+    // "hover"), then resumes a normal descent so it still exits and recycles
+    // like every other pooled enemy. Fires aimed shots at the player.
+    turret: {
+      maxHp: 34,
+      speed: 90,
+      fireIntervalMs: 1000,
+      bulletDamage: 8,
+      bulletSpeed: 260,
+      contactDamage: 12,
+      scoreValue: 22,
+      spawnIntervalMs: 1400,
+      domain: "ground",
+      movement: { kind: "hover", holdYFrac: 0.24, holdDurationMs: 4000 },
+      firePattern: { kind: "aimed" },
     },
   },
   // Purely cosmetic — background scroll / starfield drift — but still tuning,
@@ -435,6 +494,15 @@ export const TUNING = {
     starCount: 70,
     starMinSpeed: 40,
     starMaxSpeed: 180,
+    // Ground levels (C5 #144): chance a non-boss episode bakes a tiled dirt
+    // ground (sprites/manifest.json's "bgGround") instead of the starfield.
+    // Purely cosmetic today — a future pass could tie it to node/map content
+    // instead of a flat per-episode roll.
+    groundLevelChance: 0.35,
+    // Baked-mosaic grid size (groundGridSize x groundGridSize tiles, each
+    // "bgGround"'s frameWidth/frameHeight) — bigger than 1 tile so the
+    // repeating TileSprite unit itself already contains varied tiles.
+    groundBackgroundGridSize: 4,
   },
   // Debug-only (C12 #151 follow-up) — not gameplay tuning, but kept here so
   // every numeric constant still has one home. Per-entity-category outline

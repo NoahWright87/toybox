@@ -46,15 +46,19 @@
 
 ## Difficulty — composition depth
 
-- Only two enemy archetypes exist (`drone`, `elite`) plus a single boss
-  config — "denser formations, nastier patterns" beyond spawn-interval
-  density (`densityCurve`) is unexplored: multi-enemy formations, elite
-  attack patterns distinct from drone's, additional archetypes leaning into
-  speed/count (the swarmer's actual "more of them" lean, today only
-  expressed via spawn density, not e.g. simultaneous multi-spawns).
+- C5 #144 (batch 1) added `swarmer`/`turret` alongside `drone`/`elite`/`boss`,
+  each with its own movement/fire pattern and a ground/air `domain` tag
+  (`run-structure.spec.md`'s archetype table) — elite fires aimed shots
+  distinct from drone's straight-down volleys, and the swarmer's "more of
+  them" lean is partly expressed as motion (`sine` weave), but **simultaneous
+  multi-spawns** ("denser formations" beyond spawn-interval density,
+  `densityCurve`) are still unexplored — a future batch's job.
 - `itemModifiers` in the D formula is plumbed through
   (`DifficultyContext.itemModifiers`) but nothing ever sets it — risk items
   are items-and-brands.spec.todo.md's job.
+- Ground vs. air levels (`run-structure.spec.md`'s new section) are a flat
+  per-episode coin flip today — tying the roll to node/map content instead
+  is future work.
 
 ## Build persistence beyond the stub
 

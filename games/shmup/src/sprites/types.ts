@@ -24,6 +24,8 @@ export interface SpritePlaceholder {
   shape: PlaceholderShape;
   /** Hex color string, e.g. "#ff6b00". Color-codes the primitive by faction/type. */
   color: string;
+  /** Optional stroke color, e.g. "#1a1a1a" — for a fill that reads as too low-contrast against a busy background on its own (e.g. the turret's grey against the ground tiles). */
+  outline?: string;
 }
 
 export interface SpriteManifestEntry {

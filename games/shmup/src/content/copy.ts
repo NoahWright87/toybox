@@ -49,8 +49,16 @@ export const COPY = {
   "weapon.twin-blaster.description": "Two barrels, double the rate of fire.",
   "weapon.grease-gun.name": "Grease Gun",
   "weapon.grease-gun.description": "Sponsored slug-thrower. Punches through ground targets.",
-  "enemy.placeholder.name": "Drone",
-  "enemy.placeholder.description": "Cheap, expendable, everywhere.",
+  "enemy.drone.name": "Drone",
+  "enemy.drone.description": "Cheap, expendable, everywhere.",
+  "enemy.elite.name": "Bruiser",
+  "enemy.elite.description": "Armored up, packs a punch, and it's not in a hurry.",
+  "enemy.boss.name": "The Network Suit",
+  "enemy.boss.description": "Season's on the line. This one means it.",
+  "enemy.swarmer.name": "Swarmer",
+  "enemy.swarmer.description": "Cheap, fast, and never alone for long.",
+  "enemy.turret.name": "Turret",
+  "enemy.turret.description": "Bolted to the ground. Doesn't dodge, doesn't run.",
 
   // ---- Chassis (chassis.spec.md, F10 #138 / C7 #146) ----
   "chassis.default.name": "Roadrunner Mk. I",
