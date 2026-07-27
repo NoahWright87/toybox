@@ -26,6 +26,17 @@ export const BB_SCORES_ID      = "fs:scores-bb";
 export const JP_SCORES_ID      = "fs:scores-jp";
 export const JP_STATE_ID       = "fs:jp-state";
 export const JP_IMAGE_ID       = "fs:jp-custom-image";
+export const SHMUP_FOLDER_ID   = "fs:shmup";
+export const SHMUP_EXE_ID      = "fs:shmup-exe";
+export const SHMUP_SPRITES_ID  = "fs:shmup-sprites";
+export const SHMUP_SAVES_ID    = "fs:shmup-saves";
+export const SHMUP_EDITOR_FOLDER_ID = "fs:shmup-editor";
+export const SHMUP_EDITOR_EXE_ID    = "fs:shmup-editor-exe";
+export const SHMUP_EDITOR_TILES_ID  = "fs:shmup-editor-tiles";
+export const SHMUP_EDITOR_UNITS_ID = "fs:shmup-editor-units";
+export const SHMUP_EDITOR_UNIT_DRAFT_ID = "fs:shmup-editor-unit-draft";
+export const SHMUP_EDITOR_TILE_DRAFT_ID = "fs:shmup-editor-tile-draft";
+export const SHMUP_EDITOR_LEVEL_ID  = "fs:shmup-editor-level";
 
 export type FSFileType =
   | "text" | "exe" | "bat" | "sys" | "scr" | "drv"

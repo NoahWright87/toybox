@@ -443,6 +443,26 @@ export default function NsToS() {
           break;
         }
 
+        case "SHMUP.EXE": {
+          addLines([
+            { text: "" },
+            { text: "NOAHSOFT presents: SHMUP" },
+            { text: "Loading... (placeholder build)" },
+            { text: "" },
+          ]);
+          setTimeout(() => { window.location.href = "/shmup/"; }, 800);
+          break;
+        }
+
+        case "SHMUP": {
+          addLines([
+            { text: `Bad command or file name - "${trimmed}"` },
+            { text: `Did you mean: SHMUP.EXE` },
+            { text: "" },
+          ]);
+          break;
+        }
+
         default: {
           addLines([{ text: `Bad command or file name - "${trimmed}"` }, { text: "" }]);
           break;

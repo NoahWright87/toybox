@@ -17,6 +17,8 @@
  * looking smooth.
  */
 
+import { loadImage } from "../../utils/loadImage";
+
 const DOWNSCALE_FACTOR = 0.35; // 35% → ~2.9× pixel blocks when upscaled
 const BITS_PER_CHANNEL = 4;    // 16 levels per R/G/B — max error ~8.5 units
 const MAX_INPUT_DIM    = 1024; // cap before processing to stay in memory
@@ -82,15 +84,6 @@ function floydSteinberg(data: Uint8ClampedArray, width: number, height: number):
       }
     }
   }
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload  = () => resolve(img);
-    img.onerror = () => reject(new Error("Failed to load image"));
-    img.src = src;
-  });
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────

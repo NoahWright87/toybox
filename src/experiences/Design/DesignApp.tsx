@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import TitleBar from "../../components/Window/TitleBar";
 import MenuBar, { type MenuBarMenu } from "../../components/MenuBar/MenuBar";
 import ResizeHandles from "../../components/Window/ResizeHandles";
+import { Dial } from "../../components/Dial/Dial";
 import { useWindowMenus } from "../../components/Window/useWindowMenus";
 import {
   THEME_TOKENS,
@@ -36,6 +37,7 @@ const NAV: NavGroup[] = [
       { id: "resize", label: "Resize Handles" },
       { id: "dialog", label: "Dialog" },
       { id: "buttons", label: "Buttons" },
+      { id: "dial", label: "Dial" },
     ],
   },
   {
@@ -61,6 +63,8 @@ const NOTES: Record<string, string> = {
     "The OS alert dialog (shown here inline). In the live OS it appears as a modal overlay via OsDialogProvider / useOsDialog.",
   buttons:
     "Gray and orange beveled buttons. The pressed state simply swaps the raised bevel for a sunken one — no separate art needed.",
+  dial:
+    "An FL-Studio-style rotary knob. The gesture is a vertical drag (up = more), not a circular trace. Clamped mode sweeps a fixed 270° arc between min/max; unclamped mode free-spins and only reads out the number. Right-click (or long-press) resets; click the number to type a value. Reused by the Shmup Editor.",
   animations:
     "A few representative keyframe animations. Each experience names its own (no shared duplicates), but they share the snappy, slightly mechanical CRT-era timing.",
 };
@@ -109,6 +113,12 @@ export default function DesignApp({ onQuit }: { onQuit?: () => void }) {
   // Resize demo box
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ x: 24, y: 24, w: 220, h: 120 });
+
+  // Dial demo values
+  const [dialClamped, setDialClamped] = useState(50);
+  const [dialUnclamped, setDialUnclamped] = useState(0);
+  const [dialNudge, setDialNudge] = useState(4);
+  const [dialPercent, setDialPercent] = useState(30);
 
   function setToken(cssVar: string, value: string) {
     const next = { ...theme, [cssVar]: value };
@@ -296,6 +306,15 @@ export default function DesignApp({ onQuit }: { onQuit?: () => void }) {
               <button className="design-btn design-btn--pressed">Pressed</button>
               <button className="design-btn design-btn--orange">Orange button</button>
               <button className="design-btn design-btn--orange design-btn--orange-pressed">Pressed</button>
+            </div>
+          )}
+
+          {selected === "dial" && (
+            <div className="design-dials">
+              <Dial label="Clamped 0–100" value={dialClamped} onChange={setDialClamped} min={0} max={100} />
+              <Dial label="Unclamped" value={dialUnclamped} onChange={setDialUnclamped} step={1} />
+              <Dial label="Nudge buttons" value={dialNudge} onChange={setDialNudge} min={0} max={10} showNudgeButtons />
+              <Dial label="Custom format" value={dialPercent} onChange={setDialPercent} min={0} max={100} formatValue={(v) => `${v}%`} />
             </div>
           )}
 

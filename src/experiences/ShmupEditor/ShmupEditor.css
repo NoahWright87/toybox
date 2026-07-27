@@ -1,0 +1,1552 @@
+.shmup-editor {
+  display: flex;
+  flex-direction: column;
+  /* StandaloneWindow's content area centers its child by default (align-items:
+     center), which sizes flex items to their own content width -- without
+     this, a wide tile diagram further down would pull the whole window wide
+     instead of scrolling internally. */
+  align-self: stretch;
+  min-width: 0;
+  gap: 8px;
+  height: 100%;
+  padding: 10px;
+  background: #c0c0c0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: #000;
+  overflow-y: auto;
+}
+
+.shmup-editor__heading {
+  margin: 0 0 10px;
+  font-size: 11px;
+}
+
+.shmup-editor__body {
+  flex: 1;
+  min-width: 0;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 10px;
+}
+
+/* ── Buttons / inputs ─────────────────────────────────────────────── */
+
+.shmup-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #000;
+}
+.shmup-btn:active,
+.shmup-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #b0b0b0;
+}
+.shmup-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+.shmup-btn--small {
+  padding: 3px 6px;
+  font-size: 8px;
+}
+.shmup-btn--big {
+  padding: 20px 28px;
+  font-size: 14px;
+}
+.shmup-btn--primary {
+  color: #fff;
+  background: #cc4400;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.shmup-btn--primary:active {
+  border-color: #664400 #ffcc88 #ffcc88 #664400;
+}
+.shmup-btn--danger {
+  color: #fff;
+  background: #aa2222;
+}
+.shmup-btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.shmup-input,
+.shmup-input-color {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+}
+.shmup-input--small {
+  width: 80px;
+}
+.shmup-input-color {
+  width: 50px;
+  height: 26px;
+  padding: 2px;
+}
+
+.shmup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.shmup-field-row {
+  display: flex;
+  gap: 16px;
+  /* Movement/attack-payload forms (E2 #192) pack several fields into one
+     row -- without wrap, a phone-width viewport clips the trailing fields
+     off the right edge instead of stacking them. */
+  flex-wrap: wrap;
+}
+
+.shmup-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.shmup-hint {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #444;
+}
+.shmup-error {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #aa2222;
+  font-weight: bold;
+}
+/* Non-blocking, unlike .shmup-error — an authoring-quality-of-life nudge
+   (e.g. AttackPanel.tsx's min-duration check), not a Save-disabling
+   validation failure. */
+.shmup-warning {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #aa6600;
+  font-weight: bold;
+}
+
+/* ── Tile editor form layout ──────────────────────────────────────── */
+
+.shmup-tile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 720px;
+}
+.shmup-tile-form__toolbar {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.shmup-field--inline {
+  margin-bottom: 0;
+}
+
+/* ── Encounters list (inside the tile form) ───────────────────────────── */
+.shmup-encounter-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-encounter-list__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 6px 8px;
+  font-size: 8px;
+}
+/* A row that can expand to show inline fields below it (e.g. a Part's
+   Weapon list, WeaponForm expanded in place) rather than navigating away —
+   stacks its header row above the expanded content instead of the header's
+   own flex layout trying to wrap around it. */
+.shmup-encounter-list__row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.shmup-encounter-list__row-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shmup-weapon-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #808080;
+}
+
+/* ── Weapon pattern preview (WeaponPreview.tsx) ───────────────────────
+   A live animated canvas, not a static number readout — shmup bullet
+   patterns are hard to picture from arc/count/spacing fields alone. */
+.shmup-weapon-preview {
+  display: block;
+  margin: 0 auto 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  image-rendering: pixelated;
+}
+
+/* ── Part position editor (PartPositionEditor.tsx) ────────────────────
+   Dimmed body sprite as a reference frame, the Part's own sprite
+   draggable on top, plus arrow-nudge buttons for pixel-precise placement
+   without needing a steady thumb on mobile. */
+.shmup-part-position {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.shmup-part-position__stage {
+  position: relative;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  touch-action: none;
+}
+.shmup-part-position__body {
+  position: absolute;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.45;
+  filter: grayscale(0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24px;
+  pointer-events: none;
+}
+.shmup-part-position__crosshair {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px dashed #66ffee;
+  pointer-events: none;
+}
+.shmup-part-position__part {
+  position: absolute;
+  background-color: rgba(123, 61, 190, 0.35);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 2px solid #7b3dbe;
+  border-radius: 50%;
+  color: #fff;
+  cursor: grab;
+  touch-action: none;
+}
+.shmup-part-position__nudge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.shmup-image-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shmup-image-picker__option {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  color: #444;
+}
+.shmup-image-picker__option--active {
+  border-color: #cc4400;
+  border-width: 3px;
+  box-shadow: 0 0 0 1px #cc4400;
+}
+
+/* ── Tile schematic preview ───────────────────────────────────────── */
+
+.shmup-tile-preview {
+  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shmup-tile-preview__grid {
+  display: grid;
+  grid-template-rows: auto 70px auto;
+  gap: 2px;
+  background: #808080;
+  padding: 2px;
+  width: max-content;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__grid {
+  grid-template-rows: auto min(50vw, 220px) auto;
+}
+
+.shmup-tile-preview__corner {
+  background: #808080;
+}
+
+.shmup-tile-preview__edge {
+  background: #ffffcc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  text-align: center;
+  overflow: hidden;
+  word-break: break-all;
+  padding: 4px 2px;
+  min-height: 24px;
+}
+.shmup-tile-preview__edge--hardwall {
+  background: #333;
+  color: #fff;
+}
+.shmup-tile-preview__edge--editable {
+  padding: 3px;
+  background: #fff;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__edge--editable {
+  padding: 5px;
+}
+/* West/east cells are a narrow column -- writing-mode (not transform:rotate)
+   turns the text/control sideways so it's actually legible. transform:rotate
+   was tried first but a select's *unrotated* width has to be huge to read
+   as tall once rotated, which overflows a flex-centered cell and rotates
+   around a badly-offset center -- writing-mode lays it out correctly the
+   first time, no oversized-then-rotated box to mis-position. */
+.shmup-tile-preview__edge--vertical {
+  overflow: hidden;
+}
+.shmup-tile-preview__edge-text--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+}
+
+.shmup-edge-select {
+  width: 100%;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  padding: 3px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #fff;
+  color: #000;
+}
+.shmup-tile-preview--edit .shmup-edge-select {
+  font-size: 14px;
+  padding: 6px;
+}
+.shmup-edge-select--adding {
+  background: #ffffcc;
+}
+/* Sideways so the full tag/option text is legible in a narrow west/east
+   column. width/height 100% fills the cell naturally -- no per-size magic
+   numbers needed, unlike the transform:rotate approach this replaced.
+   Padding is cut down from the base/edit rules: the column is only
+   26-40px wide (now the *inline* direction), so the normal 3-6px padding
+   ate most of the space, leaving room for only the dropdown arrow. */
+.shmup-edge-select--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 100%;
+  height: 100%;
+}
+.shmup-edge-select.shmup-edge-select--vertical,
+.shmup-tile-preview--edit .shmup-edge-select.shmup-edge-select--vertical {
+  padding: 2px 1px;
+}
+
+.shmup-tile-preview__body {
+  position: relative;
+  display: flex;
+}
+.shmup-tile-preview__body--empty {
+  background-color: #999;
+}
+
+/* One cell per footprint column -- each shows a full copy of the tile's
+   art, scaled to fill its own square (not a small repeating pattern). */
+.shmup-tile-preview__cell {
+  flex: 1 1 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.shmup-tile-preview__body--empty .shmup-tile-preview__cell {
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
+}
+
+.shmup-tile-preview__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+  font-size: 8px;
+  text-align: center;
+  pointer-events: none;
+}
+.shmup-tile-preview--edit .shmup-tile-preview__label {
+  font-size: 11px;
+}
+.shmup-tile-preview__name {
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 4px;
+}
+.shmup-tile-preview__badge {
+  font-size: 6px;
+  background: #000;
+  padding: 2px 4px;
+}
+
+/* ── Tile list: visual-checker grid ───────────────────────────────────
+   Tiles tile edge-to-edge (no gap) at their real footprint width, so
+   neighboring art's seams are actually checkable — this is deliberately
+   NOT a metadata card grid. */
+
+.shmup-tile-list__grid {
+  /* Single source of truth for the grid's column unit — TileArt's --grid
+     cell size (below) must match exactly or footprint spans stop lining up. */
+  --shmup-tile-grid-unit: 56px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--shmup-tile-grid-unit));
+  gap: 0;
+  background: #000;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-tile-list__cell {
+  position: relative;
+}
+/* Grid variant: no border/gap between cells, sized to the grid's column unit so footprint spans line up exactly. */
+.shmup-tile-art--grid .shmup-tile-art__row {
+  border: none;
+}
+.shmup-tile-art--grid .shmup-tile-art__cell {
+  width: var(--shmup-tile-grid-unit, 56px);
+  height: var(--shmup-tile-grid-unit, 56px);
+}
+/* Strip variant (Connection Viewer): no border either, sized large — the
+   whole point is judging art at real size, not a small schematic thumbnail. */
+.shmup-tile-art--strip .shmup-tile-art__row {
+  border: none;
+}
+.shmup-tile-art--strip .shmup-tile-art__cell {
+  width: var(--shmup-connection-grid-unit, min(84vw, 480px));
+  height: var(--shmup-connection-grid-unit, min(84vw, 480px));
+}
+.shmup-tile-list__menu-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.shmup-tile-list__menu {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  min-width: 180px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shmup-tile-list__menu-name {
+  font-size: 7px;
+  word-break: break-word;
+}
+
+/* ── Tile art (Connection Tester) ─────────────────────────────────────
+   Art-only rendering, no edge labels -- just what the tile looks like. */
+
+.shmup-tile-art {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.shmup-tile-art__row {
+  display: flex;
+  border: 2px solid #808080;
+}
+.shmup-tile-art__cell {
+  width: 70px;
+  height: 70px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.shmup-tile-art--thumb .shmup-tile-art__cell {
+  width: 40px;
+  height: 40px;
+}
+.shmup-tile-art__cell--empty {
+  background-color: #999;
+  background-image: repeating-linear-gradient(45deg, #888 0, #888 8px, #999 8px, #999 16px);
+}
+.shmup-tile-art__image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+.shmup-tile-art__name {
+  font-size: 7px;
+  text-align: center;
+  max-width: 140px;
+  word-break: break-word;
+}
+
+/* ── Connection viewer: a strip, tiles literally touching ────────────
+   Everything here optimizes for "the art fills the screen" — the point is
+   seeing whether tiles actually tile, not reading labels or controls. */
+
+.shmup-tile-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 14px;
+  max-width: min(84vw, 480px);
+  background: #fff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-tile-picker__option {
+  position: relative;
+  background: none;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 4px;
+  cursor: pointer;
+}
+.shmup-tile-picker__option:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+/* Scrolls horizontally; the grid inside is centered via margin:auto rather
+   than justify-content:center on the scroll container itself. When content
+   is wider than the viewport, a centered flex/grid container's overflow is
+   split evenly on both sides but a scrollable ancestor can only reach the
+   RIGHT side of that overflow (scrollLeft can't go negative) -- the left
+   portion becomes permanently unreachable, cutting off part of a wide tile
+   with no way to scroll to it. margin:auto on a width:max-content child
+   collapses to 0 once the child is wider than its parent, so the overflow
+   is entirely on the right and fully reachable by scrolling. */
+.shmup-connection-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.shmup-connection-viewer__difficulty {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shmup-connection-viewer__difficulty-value {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #2a1000;
+  min-width: 62px;
+  text-align: center;
+}
+
+.shmup-connection-viewer__scroll {
+  overflow-x: auto;
+  background: #000;
+}
+
+.shmup-connection-viewer__grid {
+  /* Single source of truth for the grid's cell size — TileArt's --strip
+     variant (above) must match exactly or tiles placed north/south/east/
+     west of each other stop lining up. Row/column track sizes themselves
+     come from an inline gridTemplateRows/Columns style (ConnectionViewer.tsx):
+     only rows/columns that actually hold a placed tile use this unit size —
+     an add-only row/column sizes to its own content instead, otherwise every
+     "+ Add" button or open picker would render inside a giant tile-sized
+     empty cell. grid-auto-* below is just a safety net for any track outside
+     that explicit template. */
+  --shmup-connection-grid-unit: min(84vw, 480px);
+  display: grid;
+  grid-auto-columns: auto;
+  grid-auto-rows: auto;
+  align-content: start;
+  width: max-content;
+  margin: 0 auto;
+  /* The 1px is the whole point — enough to see two tiles are two tiles,
+     not enough to hide a seam that doesn't actually line up. */
+  gap: 1px;
+}
+
+.shmup-strip-add {
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  padding: 14px 24px;
+  margin: 6px 0;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+}
+.shmup-strip-add:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-strip-add-row--initial {
+  display: flex;
+  justify-content: center;
+}
+
+.shmup-strip-entry {
+  position: relative;
+  cursor: pointer;
+}
+.shmup-strip-entry__btn {
+  position: absolute;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 16px;
+  cursor: pointer;
+}
+.shmup-strip-entry__btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+.shmup-strip-entry__btn--delete {
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(153, 0, 0, 0.75);
+}
+.shmup-strip-entry__btn--flip {
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.shmup-strip-entry__btn--rotate-left {
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.shmup-strip-entry__btn--rotate-right {
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.shmup-grid-add {
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px dashed #808080;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 16px 20px;
+  min-width: 48px;
+  min-height: 48px;
+}
+.shmup-grid-add:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+.shmup-connection-viewer__picker-slot {
+  /* Hosts the picker directly next to whichever add-point was tapped,
+     rather than always at the bottom regardless of which direction/side
+     is being extended. */
+  padding: 4px;
+}
+
+/* ── Enemy editor (E2 #192) ───────────────────────────────────────────
+   Free-form node-graph canvas: nodes are absolutely-positioned circular
+   buttons, edges are SVG lines underneath. Tap-driven (no drag-to-connect,
+   see specs/shmup-editor.md) -- tapping a node/edge reveals small on-canvas
+   quick-action buttons plus a below-canvas settings panel. */
+
+.shmup-enemy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 720px;
+}
+
+/* Fixed-size viewport (pan/zoom navigator, EncounterEditor.tsx) — replaces
+   the old native-`overflow: auto` scrolling container. Native scroll used
+   to fight dragging directly: the stage's own size was derived from
+   content including whatever was mid-drag, so a drag near an edge could
+   grow/shrink the stage and shift the whole coordinate frame under the
+   pointer. Panning/zooming is now a `transform` on `.shmup-enemy-canvas-stage`,
+   fully decoupled from unit/handle dragging — this viewport just clips
+   whatever's currently visible. `touch-action: none` hands pinch/pan
+   entirely to the custom pointer handlers instead of the browser's native
+   page-zoom/scroll gestures. */
+.shmup-enemy-canvas-viewport {
+  position: relative;
+  overflow: hidden;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  height: 50vh;
+  min-height: 220px;
+  touch-action: none;
+}
+/* Embiggen mode (EncounterEditor.tsx) fills its fixed-positioned wrapper instead of the fixed 50vh. */
+.shmup-enc-viewport-pin--embiggen .shmup-enemy-canvas-viewport {
+  height: 100%;
+  min-height: 0;
+}
+
+.shmup-enemy-canvas-stage {
+  position: relative;
+  min-height: 200px;
+  touch-action: none;
+}
+
+.shmup-enemy-canvas-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.shmup-enemy-canvas-svg line {
+  pointer-events: stroke;
+}
+
+.shmup-canvas-zoom-btns {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 3;
+}
+.shmup-canvas-zoom-btn {
+  width: 26px;
+  height: 26px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-canvas-zoom-btn:active {
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+.shmup-canvas-zoom-btn:disabled {
+  color: #808080;
+  cursor: default;
+}
+
+/* Minimap (EncounterMinimap.tsx) — click/drag to pan, same corner-overlay convention as the zoom buttons. */
+.shmup-minimap {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  cursor: pointer;
+  touch-action: none;
+  z-index: 3;
+  image-rendering: pixelated;
+}
+
+.shmup-enemy-node-wrap {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+}
+
+/* Bezier handle drag target (EncounterEditor.tsx) — a real HTML button
+   (not an SVG shape) positioned directly on the canvas stage, same
+   coordinate space as .shmup-enemy-node-wrap. Smaller than the 28px
+   move/add/delete node controls, but still a real touch target — an
+   earlier SVG-circle version was both too small (~12px) and unreliable
+   to hit on mobile. */
+.shmup-handle-btn {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #66ffee;
+  border: 2px solid #0a3330;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.shmup-enemy-node {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #cc4400;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #ffcc88;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+.shmup-enemy-node--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+/* Action.visible === false — Disappear/teleport-out/pop-down steps read as ghosted rather than fully solid. */
+.shmup-enemy-node--hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.shmup-enemy-node__badges {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.shmup-enemy-node__controls {
+  position: absolute;
+  inset: -30px;
+  pointer-events: none;
+}
+.shmup-enemy-node__btn {
+  position: absolute;
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 14px;
+  cursor: pointer;
+}
+.shmup-enemy-node__btn--move {
+  top: 0;
+  left: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.shmup-enemy-node__btn--add {
+  top: 0;
+  right: 0;
+  background: rgba(34, 136, 51, 0.75);
+}
+.shmup-enemy-node__btn--attack {
+  bottom: 0;
+  left: 0;
+  background: rgba(204, 68, 0, 0.75);
+  font-size: 11px;
+}
+.shmup-enemy-node__btn--attack:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.shmup-enemy-node__btn--delete {
+  bottom: 0;
+  right: 0;
+  background: rgba(153, 0, 0, 0.75);
+}
+/* First-step-only, top-center — the 5th control, positioned clear of
+   --move/--add (a lone single-step instance is both first AND last, so
+   --add already claims top-right; top-center avoids that collision). */
+.shmup-enemy-node__btn--scaling {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(123, 61, 190, 0.75);
+}
+.shmup-enemy-node__btn--scaling.shmup-enemy-node__btn--active {
+  background: rgba(123, 61, 190, 1);
+  border-color: #ff6b00;
+}
+
+/* Small Part picker shown under a step's node when adding an attack to a
+   multi-Part Unit (mirrors the "+ Add Unit" picker's look, but anchored to
+   the node instead of the toolbar since it's a per-step action). */
+.shmup-part-picker {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: 220px;
+}
+
+.shmup-enemy-node__label {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Live scrub/play preview marker (movementPreview.ts) — smaller and a
+   different color than an authored waypoint node so it reads as "where the
+   unit actually is right now," not another step to tap. */
+.shmup-enemy-preview-dot {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #22bbaa;
+  background-size: cover;
+  background-position: center;
+  border: 3px solid #66ffee;
+  box-shadow: 0 0 8px #22bbaa;
+  pointer-events: none;
+}
+
+/* E4 low-fi hitbox/boundary preview mode (hitboxPreview.ts,
+   specs/shmup-editor.todo.md) — real-scale reference geometry shown
+   instead of the (deliberately oversized, touch-friendly) authoring
+   icons above, so bullet density/hitbox overlap reads honestly. All
+   pointer-events: none — this is a read-only overlay, never a drag
+   target. */
+.shmup-hitbox-tile-bounds {
+  position: absolute;
+  border: 4px solid #ffdd33;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.shmup-hitbox-camera-bounds {
+  position: absolute;
+  border: 2px dotted #ffffff;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.shmup-hitbox-player {
+  position: absolute;
+  border-radius: 50%;
+  background-color: rgba(34, 221, 68, 0.35);
+  border: 2px solid #22dd44;
+  pointer-events: none;
+}
+.shmup-hitbox-enemy {
+  position: absolute;
+  background-color: rgba(255, 51, 51, 0.25);
+  border: 2px solid #ff3333;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.shmup-hitbox-bullet {
+  position: absolute;
+  border-radius: 50%;
+  background-color: #ff3333;
+  pointer-events: none;
+}
+
+/* Attack-track placement marker — an independent event on the timeline,
+   not a movement waypoint, so it's deliberately smaller/differently
+   colored than .shmup-enemy-node (same "reads as secondary" reasoning as
+   the preview dot above) and anchored wherever the unit's bezier path
+   puts it at the attack's own time (EncounterEditor.tsx's attackAnchorWorld). */
+.shmup-attack-marker-wrap {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+}
+.shmup-attack-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(153, 0, 0, 0.85);
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #ff8844;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.shmup-attack-marker--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+
+/* ── Scaling handles + ghost slots (UnitScalingPanel.tsx, E3 #193) ────
+   A scaling positioning shape's draggable handles reuse .shmup-handle-btn's
+   button-not-SVG pattern (same mobile-hit-testing reasoning as bezier
+   handles) with a distinct purple/orange color so they read as a different
+   kind of handle from the teal bezier ones. Ghost slots preview where
+   duplicates would land at the panel's current preview-budget count — dim
+   and non-interactive, same "reference geometry" language as a region box
+   or tile frame. */
+.shmup-handle-btn--scaling {
+  background: #ffbb33;
+  border-color: #7b3dbe;
+}
+.shmup-scaling-ghost-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: rgba(255, 187, 51, 0.55);
+  border: 1px solid #7b3dbe;
+  pointer-events: none;
+}
+
+/* ── Encounter editor's tile reference frame ──────────────────────────
+   A read-only silhouette of the tile's real footprint/edges, so an
+   enemy's entrance/exit can be placed meaningfully against where the
+   tile actually connects to its neighbors (specs/shmup-editor.md). */
+.shmup-encounter-frame {
+  position: relative;
+  border: 2px dashed #7b3dbe;
+  background-color: rgba(123, 61, 190, 0.12);
+  background-size: cover;
+  background-position: center;
+  box-sizing: border-box;
+}
+.shmup-encounter-frame__edge {
+  position: absolute;
+  display: flex;
+  font-size: 6px;
+  color: #ffcc88;
+  text-shadow: 1px 1px 0 #000;
+  gap: 4px;
+  pointer-events: none;
+}
+.shmup-encounter-frame__edge--north {
+  top: -12px;
+  left: 0;
+  right: 0;
+  justify-content: space-around;
+}
+.shmup-encounter-frame__edge--south {
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  justify-content: space-around;
+}
+.shmup-encounter-frame__edge--east {
+  right: -4px;
+  top: 50%;
+  transform: translate(100%, -50%);
+}
+.shmup-encounter-frame__edge--west {
+  left: -4px;
+  top: 50%;
+  transform: translate(-100%, -50%);
+}
+
+.shmup-enemy-picker-thumb {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6px;
+  color: #444;
+  text-align: center;
+}
+
+.shmup-panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shmup-panel--confirm {
+  border-color: #aa2222;
+}
+
+.shmup-bullet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Encounter timeline scrubber (EncounterTimeline.tsx) ──────────────
+   One shared ruler for the whole encounter, one track per Unit instance.
+   Step markers are diamonds positioned by `time`; a drag handle appears
+   only when a step is selected, mirroring the canvas's own move-handle
+   pattern. Dragging/tapping the ruler background scrubs the playhead. */
+
+.shmup-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shmup-timeline__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shmup-timeline__readout {
+  font-size: 10px;
+  color: #ffcc88;
+}
+
+.shmup-timeline__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #180800;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.shmup-timeline__stage {
+  position: relative;
+  padding: 20px 10px 12px;
+  touch-action: none;
+}
+
+.shmup-timeline__ruler {
+  position: relative;
+  height: 16px;
+}
+
+.shmup-timeline__tick {
+  position: absolute;
+  top: 0;
+  height: 16px;
+  border-left: 1px solid #444;
+  padding-left: 3px;
+  font-size: 8px;
+  color: #999;
+  white-space: nowrap;
+}
+
+.shmup-timeline__track {
+  position: relative;
+  padding-top: 6px;
+}
+
+.shmup-timeline__track-label {
+  font-size: 8px;
+  color: #ffcc88;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.shmup-timeline__lane {
+  position: relative;
+  height: 28px;
+}
+
+.shmup-timeline__lane-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.shmup-timeline__step-wrap {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+}
+
+.shmup-timeline__step {
+  width: 18px;
+  height: 18px;
+  transform: rotate(45deg);
+  background-color: #cc4400;
+  border: 2px solid #ffcc88;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-timeline__step--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+.shmup-timeline__step--hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+/* A darker variant of whatever category color applies (design-handoff v3
+   §8.2) — marks the Action that actually flips invincibility, distinct
+   from --hidden above (which marks every step for as long as invincible
+   stays true, regardless of which Action set it). */
+.shmup-timeline__marker--sets-invincible {
+  filter: brightness(0.6);
+}
+
+/* Preview of where a scaled duplicate's own copy of this step/attack lands
+   once spawnDelayMs staggers it in (shmup-editor.todo.md's "spawn delay
+   ... not drawn on the timeline UI yet") — not a distinct authored object,
+   so no pointer cursor and no click handling, just a faded echo of the
+   base marker's own category color. */
+.shmup-timeline__marker--ghost {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.shmup-timeline__step-handle {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: 2px solid #ffcc88;
+  font-size: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+/* One extra lane per Part with placed attacks, below the movement lane —
+   independent per-part tracks so a multi-turret Unit's schedules are
+   visually separate rows, not merged markers on one lane. */
+.shmup-timeline__lane--attack {
+  position: relative;
+  height: 20px;
+  margin-top: 2px;
+  padding-left: 3px;
+}
+.shmup-timeline__track-sublabel {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  font-size: 6px;
+  color: #ff8844;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.shmup-timeline__attack {
+  position: absolute;
+  top: 8px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: rgba(153, 0, 0, 0.85);
+  border: 2px solid #ff8844;
+  cursor: pointer;
+  padding: 0;
+}
+.shmup-timeline__attack--selected {
+  border-color: #ff6b00;
+  box-shadow: 0 0 0 2px #ff6b00;
+}
+
+.shmup-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff3333;
+  pointer-events: none;
+}
+
+/* ── Tag graph ─────────────────────────────────────────────────────── */
+
+.shmup-tag-graph__canvas-wrap {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #180800;
+  margin-bottom: 10px;
+}
+.shmup-tag-graph__canvas {
+  display: block;
+  width: 100%;
+  height: 380px;
+  touch-action: none; /* dragging a node shouldn't also scroll the page */
+  cursor: grab;
+}
+.shmup-tag-graph__panel {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 8px;
+}
+
+/* ── Encounter editor: pinned head + tabs (mobile scroll-and-deselect fix) ──
+   EncounterTimeline + the canvas viewport stick to the top of the scroll
+   container as one unit; everything else (Basics/Add/Step/Attack/Scaling)
+   is a tab below, so there's rarely anything to scroll past to reach a
+   selected node's settings. */
+.shmup-enc-sticky-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #c0c0c0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #808080;
+}
+
+.shmup-enc-viewport-pin {
+  position: relative;
+}
+.shmup-enc-viewport-pin--embiggen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #180800;
+  padding: 4px;
+}
+
+.shmup-canvas-corner {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.shmup-canvas-corner--top-left {
+  top: 6px;
+  left: 6px;
+}
+.shmup-canvas-corner--top-right {
+  top: 6px;
+  right: 6px;
+}
+.shmup-canvas-corner-btn {
+  width: 26px;
+  height: 26px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Play Test — the one corner button that leaves the editor entirely, so it
+   gets the orange raised treatment rather than the neutral gray chrome. */
+.shmup-canvas-corner-btn--play {
+  background: #ff6b00;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+  color: #ffffff;
+}
+
+.shmup-canvas-corner-btn--play:disabled {
+  background: #c0c0c0;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  color: #808080;
+  cursor: default;
+}
+
+.shmup-enc-tabbar {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.shmup-enc-tab-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 7px 9px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  color: #000;
+}
+.shmup-enc-tab-btn--active {
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #d4d0c8;
+}
+.shmup-enc-tab-content {
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 8px;
+  min-height: 70px;
+}
+
+.shmup-dial-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.shmup-dial-with-clear {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.shmup-dial-clear-btn {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+  line-height: 1;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.shmup-readout {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  margin: 4px 0;
+}
+.shmup-readout__label {
+  opacity: 0.7;
+  margin-right: 8px;
+}
+.shmup-readout__value {
+  font-weight: bold;
+}
+
+.shmup-enc-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: #c0c0c0;
+  padding-top: 6px;
+  border-top: 2px solid #808080;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Help modal (ShmupEditor.tsx) ─────────────────────────────────── */
+.shmup-help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.shmup-help-modal {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 10px;
+}
+.shmup-help-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #808080;
+}
+.shmup-help-modal__list {
+  margin: 0;
+  padding-left: 16px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.shmup-help-modal__list li {
+  margin-bottom: 8px;
+}
+.shmup-help-modal__body {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.shmup-tag-graph__panel-title {
+  font-size: 8px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  color: #cc4400;
+}

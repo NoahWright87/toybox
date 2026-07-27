@@ -129,7 +129,11 @@ const TOOLS_ITEMS = [
   { id: "midi-editor",    icon: "🎹", label: "MIDI Editor"    },
 ] as const;
 
-type OpenSubmenu = "games" | "tools" | "settings" | null;
+const GAME_DEV_ITEMS = [
+  { id: "shmup-editor",   icon: "🧩", label: "Shmup Editor"   },
+] as const;
+
+type OpenSubmenu = "games" | "tools" | "gameDev" | "settings" | null;
 type OpenGamesSubmenu = "word-games" | null;
 
 // ── Taskbar ───────────────────────────────────────────────────────────────────
@@ -299,6 +303,33 @@ export default function Taskbar({ windows, activeWindowId, onWindowFocus, onRest
                 {openSubmenu === "tools" && (
                   <div className="ns-start-submenu" ref={submenuRef}>
                     {TOOLS_ITEMS.map((item) => (
+                      <button
+                        key={item.id}
+                        className="ns-start-menu__item"
+                        onClick={() => handleOpenApp(item.id)}
+                      >
+                        <span className="ns-start-menu__item-icon">{item.icon}</span>
+                        <span className="ns-start-menu__item-label">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Game Dev */}
+              <div
+                className="ns-start-menu__item-wrapper"
+                onMouseEnter={() => setOpenSubmenu("gameDev")}
+                onMouseLeave={() => setOpenSubmenu(null)}
+              >
+                <button className="ns-start-menu__item">
+                  <span className="ns-start-menu__item-icon">🛠️</span>
+                  <span className="ns-start-menu__item-label">Game Dev</span>
+                  <span className="ns-start-menu__item-arrow">▶</span>
+                </button>
+                {openSubmenu === "gameDev" && (
+                  <div className="ns-start-submenu" ref={submenuRef}>
+                    {GAME_DEV_ITEMS.map((item) => (
                       <button
                         key={item.id}
                         className="ns-start-menu__item"

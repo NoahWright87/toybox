@@ -1,7 +1,9 @@
 node_modules/
 dist/
+public/shmup/
 .claude/worktrees/
 .claude/launch.json
 playwright-report/
 test-results/
 *.tsbuildinfo
+.claude/settings.local.json

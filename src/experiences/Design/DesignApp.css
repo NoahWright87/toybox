@@ -243,6 +243,14 @@
   border-color: var(--orange-bevel-dark) var(--orange-bevel-light) var(--orange-bevel-light) var(--orange-bevel-dark);
 }
 
+/* ── Dial ── */
+.design-dials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  padding: 8px;
+}
+
 /* ── Animations ── */
 .design-anim {
   display: flex;

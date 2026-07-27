@@ -5,8 +5,10 @@ import {
   NS_ART_BACKUP_ID, DH_SCORES_ID, TR_SCORES_ID, SYSTEM_INI_ID, THEME_INI_ID,
   GOOBER_FOLDER_ID, GOOBER_SPRITES_ID, CK_SCORES_ID,
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_EXE_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_LEVEL_ID,
 } from "./types";
 import { THEME_INI } from "../themeTokens";
 
@@ -379,6 +381,22 @@ export function seedFileSystem(store: FileSystemStore): void {
   store.createFile(hellDir.id, "HELL.EXE",   { fileType: "exe", appId: "tos-only" });
   store.createFile(hellDir.id, "README.TXT", { fileType: "text", content: HELL_README, readonly: true });
 
+  const shmupDir = store.createFolder(GAMES_ID, "SHMUP", { id: SHMUP_FOLDER_ID });
+  store.createFile(shmupDir.id, "SHMUP.EXE", { id: SHMUP_EXE_ID, fileType: "exe", appId: "tos-only" });
+  store.createFile(shmupDir.id, "README.TXT", {
+    fileType: "text", readonly: true,
+    content: "SHMUP - Noahsoft (placeholder build)\nLaunch from NS-TOS: type SHMUP.EXE\n",
+  });
+  // Sprite asset-override drop zone — a non-empty PNG here wins over the
+  // bundled art for the matching manifest key (games/shmup/src/sprites/README.md).
+  const shmupSpritesDir = store.createFolder(shmupDir.id, "Sprites", { id: SHMUP_SPRITES_ID });
+  store.createFolder(shmupSpritesDir.id, "ships");
+  store.createFolder(shmupSpritesDir.id, "enemies");
+  store.createFolder(shmupSpritesDir.id, "effects");
+  store.createFolder(shmupSpritesDir.id, "projectiles");
+  // SaveStore's Doors-FS adapter writes save/settings files here (S1 #171).
+  store.createFolder(shmupDir.id, "Saves", { id: SHMUP_SAVES_ID });
+
   const tttDir = store.createFolder(GAMES_ID, "Tic-Tac-Toe");
   store.createFile(tttDir.id, "Tic-Tac-Toe.exe", { fileType: "exe", appId: "tictactoe" });
   store.createFile(tttDir.id, "SCORES.DAT",       { fileType: "dat", content: "" });
@@ -482,6 +500,26 @@ export function seedFileSystem(store: FileSystemStore): void {
 
   const midiDir = store.createFolder(ACC_ID, "MIDI Editor");
   store.createFile(midiDir.id, "MIDI Editor.exe", { fileType: "exe", appId: "midi-editor" });
+
+  // SHMUP Editor's authored tile/Unit libraries — also a Doors 97 window
+  // now (Start Menu > Game Dev > Shmup Editor, Taskbar.tsx) alongside the
+  // standalone /shmup-editor route. TILES.DAT/UNITS.DAT are hackable like
+  // any other SAVE.DAT/SCORES.DAT. UNIT-DRAFT.DAT/TILE-DRAFT.DAT hold
+  // whichever Unit/tile-plus-encounters is mid-edit (root CLAUDE.md's
+  // mandatory in-progress-session-survives-reload rule) — separate from the
+  // saved libraries so an unsaved draft never corrupts them.
+  const shmupEditorDir = store.createFolder(ACC_ID, "Shmup Editor", { id: SHMUP_EDITOR_FOLDER_ID });
+  store.createFile(shmupEditorDir.id, "Shmup Editor.exe", { id: SHMUP_EDITOR_EXE_ID, fileType: "exe", appId: "shmup-editor" });
+  store.createFile(shmupEditorDir.id, "README.TXT", {
+    fileType: "text", readonly: true,
+    content: "Shmup Editor - Noahsoft (in development)\nOpen the tile/Unit editor from Start > Game Dev > Shmup Editor, or at /shmup-editor.\nTILES.DAT and UNITS.DAT hold your authored libraries as JSON. Each tile's ENCOUNTERS live nested inside its TILES.DAT entry.\n",
+  });
+  store.createFile(shmupEditorDir.id, "TILES.DAT", { id: SHMUP_EDITOR_TILES_ID, fileType: "dat", content: "" });
+  store.createFile(shmupEditorDir.id, "UNITS.DAT", { id: SHMUP_EDITOR_UNITS_ID, fileType: "dat", content: "" });
+  store.createFile(shmupEditorDir.id, "UNIT-DRAFT.DAT", { id: SHMUP_EDITOR_UNIT_DRAFT_ID, fileType: "dat", content: "" });
+  store.createFile(shmupEditorDir.id, "TILE-DRAFT.DAT", { id: SHMUP_EDITOR_TILE_DRAFT_ID, fileType: "dat", content: "" });
+  // The Connection Viewer's assembled layout — what "play test this level" hands to the game.
+  store.createFile(shmupEditorDir.id, "LEVEL.DAT", { id: SHMUP_EDITOR_LEVEL_ID, fileType: "dat", content: "" });
 
   // Programs > Internet
   const internetDir = store.createFolder(PROGRAMS_ID, "Internet");

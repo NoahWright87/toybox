@@ -5,6 +5,8 @@ import {
   MJ_SCORES_ID, MJ_TILES_FOLDER_ID, MJ_STATE_ID,
   JB_SCORES_ID, BB_SCORES_ID,
   JP_SCORES_ID, JP_STATE_ID, JP_IMAGE_ID,
+  SHMUP_FOLDER_ID, SHMUP_EXE_ID, SHMUP_SPRITES_ID, SHMUP_SAVES_ID,
+  SHMUP_EDITOR_FOLDER_ID, SHMUP_EDITOR_EXE_ID, SHMUP_EDITOR_TILES_ID, SHMUP_EDITOR_UNITS_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_LEVEL_ID,
 } from "./types";
 import { THEME_INI } from "../themeTokens";
 import { StorageAdapter, LocalStorageAdapter } from "./StorageAdapter";
@@ -326,6 +328,175 @@ export class FileSystemStore {
           parentId: nsArtDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
           fileType: "dat", content: "", mimeType: "application/json",
           system: false, readonly: false, appId: "nsart",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure SHMUP folder + SHMUP.EXE exist (existing sessions)
+    if (!this.nodes.has(SHMUP_EXE_ID)) {
+      let shmupDir = this.getNodeByPath("C:\\Programs\\Games\\SHMUP");
+      if (!shmupDir) {
+        const gamesDir = this.getNodeByPath("C:\\Programs\\Games");
+        if (gamesDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: SHMUP_FOLDER_ID, kind: "folder", name: "SHMUP",
+            parentId: gamesDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          shmupDir = folder;
+        }
+      }
+      if (shmupDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EXE_ID, {
+          id: SHMUP_EXE_ID, kind: "file", name: "SHMUP.EXE",
+          parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "exe", content: "", mimeType: "application/octet-stream",
+          system: false, readonly: false, appId: "tos-only",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure SHMUP's sprite asset-override folders exist (existing sessions)
+    if (!this.nodes.has(SHMUP_SPRITES_ID)) {
+      const shmupDir = this.getNodeByPath("C:\\Programs\\Games\\SHMUP");
+      if (shmupDir?.kind === "folder") {
+        const spritesFolder: FSFolder = {
+          id: SHMUP_SPRITES_ID, kind: "folder", name: "Sprites",
+          parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        };
+        this.nodes.set(spritesFolder.id, spritesFolder);
+        for (const name of ["ships", "enemies", "effects", "projectiles"]) {
+          const folder: FSFolder = {
+            id: genId(), kind: "folder", name,
+            parentId: spritesFolder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+        }
+        changed = true;
+      }
+    }
+
+    // Ensure SHMUP's Saves folder exists (existing sessions) — DoorsFsSaveStore's target
+    if (!this.nodes.has(SHMUP_SAVES_ID)) {
+      const shmupDir = this.getNodeByPath("C:\\Programs\\Games\\SHMUP");
+      if (shmupDir?.kind === "folder") {
+        this.nodes.set(SHMUP_SAVES_ID, {
+          id: SHMUP_SAVES_ID, kind: "folder", name: "Saves",
+          parentId: shmupDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          system: false,
+        } as FSFolder);
+        changed = true;
+      }
+    }
+
+    // Ensure Shmup Editor's folder + TILES.DAT exist (existing sessions)
+    if (!this.nodes.has(SHMUP_EDITOR_TILES_ID)) {
+      let shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (!shmupEditorDir) {
+        const accDir = this.getNodeByPath("C:\\Programs\\Accessories");
+        if (accDir?.kind === "folder") {
+          const folder: FSFolder = {
+            id: SHMUP_EDITOR_FOLDER_ID, kind: "folder", name: "Shmup Editor",
+            parentId: accDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            system: false,
+          };
+          this.nodes.set(folder.id, folder);
+          this.nodes.set("fs:shmup-editor-readme", {
+            id: "fs:shmup-editor-readme", kind: "file", name: "README.TXT",
+            parentId: folder.id, createdAt: Date.now(), modifiedAt: Date.now(),
+            fileType: "text",
+            content: "Shmup Editor - Noahsoft (in development)\nOpen the tile editor at /shmup-editor.\nTILES.DAT holds your authored tile library as JSON.\n",
+            mimeType: "text/plain", system: false, readonly: true,
+          } as FSFile);
+          shmupEditorDir = folder;
+        }
+      }
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_TILES_ID, {
+          id: SHMUP_EDITOR_TILES_ID, kind: "file", name: "TILES.DAT",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure Shmup Editor.exe exists (existing sessions predating its Doors 97
+    // window registration — the folder used to hold data files only)
+    if (!this.nodes.has(SHMUP_EDITOR_EXE_ID)) {
+      const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_EXE_ID, {
+          id: SHMUP_EDITOR_EXE_ID, kind: "file", name: "Shmup Editor.exe",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "exe", content: "", mimeType: "application/octet-stream",
+          system: false, readonly: false, appId: "shmup-editor",
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure UNITS.DAT exists (E2 #192's Unit library, existing sessions predating it)
+    if (!this.nodes.has(SHMUP_EDITOR_UNITS_ID)) {
+      const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_UNITS_ID, {
+          id: SHMUP_EDITOR_UNITS_ID, kind: "file", name: "UNITS.DAT",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure UNIT-DRAFT.DAT exists (in-progress Unit edit session — root
+    // CLAUDE.md's mandatory in-progress-session-survives-reload rule)
+    if (!this.nodes.has(SHMUP_EDITOR_UNIT_DRAFT_ID)) {
+      const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_UNIT_DRAFT_ID, {
+          id: SHMUP_EDITOR_UNIT_DRAFT_ID, kind: "file", name: "UNIT-DRAFT.DAT",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure TILE-DRAFT.DAT exists (in-progress tile-plus-encounters edit
+    // session — same mandatory rule, separate slot since tile and Unit
+    // editing are mutually exclusive contexts)
+    if (!this.nodes.has(SHMUP_EDITOR_TILE_DRAFT_ID)) {
+      const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_TILE_DRAFT_ID, {
+          id: SHMUP_EDITOR_TILE_DRAFT_ID, kind: "file", name: "TILE-DRAFT.DAT",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
+        } as FSFile);
+        changed = true;
+      }
+    }
+
+    // Ensure LEVEL.DAT exists (the Connection Viewer's assembled layout —
+    // what the game reads when you play test a whole level)
+    if (!this.nodes.has(SHMUP_EDITOR_LEVEL_ID)) {
+      const shmupEditorDir = this.getNodeByPath("C:\\Programs\\Accessories\\Shmup Editor");
+      if (shmupEditorDir?.kind === "folder") {
+        this.nodes.set(SHMUP_EDITOR_LEVEL_ID, {
+          id: SHMUP_EDITOR_LEVEL_ID, kind: "file", name: "LEVEL.DAT",
+          parentId: shmupEditorDir.id, createdAt: Date.now(), modifiedAt: Date.now(),
+          fileType: "dat", content: "", mimeType: "text/plain",
+          system: false, readonly: false,
         } as FSFile);
         changed = true;
       }
