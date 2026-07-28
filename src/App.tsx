@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import HomePage from "./pages/HomePage";
 import StarfieldPage from "./pages/StarfieldPage";
 import FireworksPage from "./pages/FireworksPage";
 import BouncingShapesPage from "./pages/BouncingShapesPage";
@@ -16,7 +15,7 @@ import NsToSPage from "./pages/NsToSPage";
 import DuckHuntPage from "./pages/DuckHuntPage";
 import NsArtPage from "./pages/NsArtPage";
 import HellPage from "./pages/HellzonePage";
-import ComponentTestPage from "./pages/ComponentTestPage";
+import DesignPage from "./pages/DesignPage";
 import PoolPage from "./pages/PoolPage";
 import MidiEditorPage from "./pages/MidiEditorPage";
 import WordsPage from "./pages/WordsPage";
@@ -36,7 +35,6 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<NsDoors97Page />} />
-        <Route path="/toybox" element={<HomePage />} />
         <Route path="/starfield" element={<StarfieldPage />} />
         <Route path="/fireworks" element={<FireworksPage />} />
         <Route path="/bouncing-shapes" element={<BouncingShapesPage />} />
@@ -56,7 +54,8 @@ export default function App() {
         <Route path="/pool" element={<PoolPage />} />
         <Route path="/midi-editor" element={<MidiEditorPage />} />
         <Route path="/words" element={<WordsPage />} />
-        <Route path="/component-test" element={<ComponentTestPage />} />
+        <Route path="/design" element={<DesignPage />} />
+        <Route path="/component-test" element={<DesignPage />} />
         <Route path="/chain-reaction" element={<ChainReactionPage />} />
         <Route path="/peg-solitaire" element={<PegSolitairePage />} />
         <Route path="/goober-dressup" element={<GooberDressupPage />} />

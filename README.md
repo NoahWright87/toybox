@@ -14,7 +14,7 @@ Everything has a Win9X aesthetic: `#c0c0c0` chrome, beveled borders, pixel fonts
 
 - **React 18 + TypeScript + Vite**
 - **react-router-dom** for client-side routing
-- **@noahwright/design** for the shared design system (Layout, Card, etc.)
+- **In-repo design system** — CSS tokens in `src/theme.css`, reusable chrome in `src/components/`, browsable/editable at `/design`
 - **react-draggable** for OS windows
 - **Playwright** for end-to-end tests
 

@@ -19,7 +19,7 @@ The default UX is in-OS app windows: experiences are expected to launch inside N
 ## Stack
 
 - **React 18 + Vite + TypeScript** — static-site friendly, hosted as built output
-- **`@noahwright/design`** (`npm i @noahwright/design`) — shared design system; provides `Layout`, `Card`, `CardGrid`, and CSS theme tokens
+- **In-repo design system** — CSS tokens in `src/theme.css` and reusable chrome in `src/components/`; documented and live-editable in the Design app (`/design`). See `specs/design-system.md`.
 - **`react-router-dom`** — client-side routing between the OS (`/`) and individual experiences (`/{name}`)
 - **`react-draggable`** — powers draggable windows in NS Doors 97
 
@@ -53,8 +53,8 @@ src/
   data/
     experiences.ts                # static registry of available experiences
   pages/
-    HomePage.tsx / .css           # retro card grid launcher at /toybox
     NsDoors97Page.tsx             # wraps NS Doors 97 (mounted at /)
+    DesignPage.tsx                # design-system gallery at /design
     TicTacToePage.tsx / .css      # standalone wrapper
     WordWhirlwindPage.tsx / .css  # standalone wrapper
     TypingRacerPage.tsx / .css    # standalone wrapper
@@ -83,7 +83,7 @@ src/
 |---|---|---|
 | `/` | NS Doors 97 | Main entry — the fake OS desktop |
 | `/doors97` | NS Doors 97 | Alias |
-| `/toybox` | HomePage | Secondary retro card grid launcher |
+| `/design` | Design | Design-system gallery + live theme editor (→ design.doors97.com) |
 | `/tic-tac-toe` | Tic-Tac-Toe | |
 | `/word-whirlwind` | Word Whirlwind | |
 | `/typing-racer` | Typing Racer | |
@@ -92,13 +92,11 @@ src/
 | `/fireworks` | Fireworks | |
 | `/bouncing-shapes` | Bouncing Shapes | |
 
-## Homepage (`/toybox`)
+## Design app (`/design`)
 
-- Renders a `Layout` (Header + Footer from `@noahwright/design`) wrapping a `CardGrid` of experience `Card`s.
-- Card data is driven by `src/data/experiences.ts` — add a new entry to add a new toy to the grid.
-- Cards navigate to the experience route on click.
-- Category filter bar above the grid: pill-style toggle buttons (`All` + one per category); filters the card grid by `experience.category`. Categories derive dynamically from the registry.
-- Footer shows a rotating AI credit cycling every 4 seconds.
+- Two-pane Win95 Control-Panel layout: a left nav tree of token groups and components, a right panel showing a live preview + controls + notes for the selection. See `specs/design-system.md`.
+- Also opens as a window inside NS Doors 97 (Start → Programs → Design).
+- Color edits persist to `C:\System\theme.ini` and re-skin the whole OS live.
 
 ## Experiences
 

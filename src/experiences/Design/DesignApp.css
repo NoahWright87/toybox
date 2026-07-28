@@ -1,0 +1,286 @@
+/* Design app — Win95 two-pane Control-Panel layout (Storybook's shape). */
+
+.design-app {
+  display: flex;
+  height: 100%;
+  min-height: 420px;
+  background: var(--win95-gray);
+  font-family: var(--font-ui);
+  color: #000;
+}
+
+/* ── Left nav tree ── */
+.design-app__nav {
+  width: 168px;
+  flex-shrink: 0;
+  padding: 8px 6px;
+  background: var(--white);
+  border: 2px solid;
+  border-color: var(--win95-dark) var(--white) var(--white) var(--win95-dark);
+  overflow-y: auto;
+}
+
+.design-app__nav-group {
+  margin-bottom: 12px;
+}
+
+.design-app__nav-heading {
+  font-size: 7px;
+  color: var(--orange-primary);
+  letter-spacing: 0.06em;
+  padding: 2px 4px 4px;
+  text-transform: uppercase;
+}
+
+.design-app__nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: 8px;
+  padding: 5px 6px;
+  margin: 1px 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #000;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.design-app__nav-item:hover {
+  background: var(--win95-warm-gray);
+}
+
+.design-app__nav-item--active {
+  background: var(--orange-primary);
+  color: var(--white);
+}
+
+/* ── Right main panel ── */
+.design-app__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  min-width: 0;
+}
+
+.design-app__crumb {
+  font-size: 10px;
+  padding-bottom: 8px;
+  color: var(--purple);
+}
+
+.design-app__preview {
+  flex: 1;
+  padding: 14px;
+  background: var(--win95-warm-gray);
+  border: 2px solid;
+  border-color: var(--win95-dark) var(--white) var(--white) var(--win95-dark);
+  overflow: auto;
+}
+
+.design-app__notes {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--white);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: #222;
+}
+
+/* ── Color swatches ── */
+.design-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.design-swatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.design-swatch__chip {
+  width: 34px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.design-swatch__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.design-swatch__label { font-size: 8px; }
+.design-swatch__var {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--win95-dark);
+}
+
+.design-swatch__picker {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.design-swatch__hex {
+  width: 86px;
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 4px;
+  background: var(--white);
+  color: #000;
+}
+
+/* ── Typography ── */
+.design-type__row {
+  margin: 0 0 14px;
+  color: #000;
+}
+
+/* ── Bevels ── */
+.design-bevels {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.design-bevel-tile {
+  background: var(--win95-gray);
+  padding: 18px 10px;
+  text-align: center;
+  font-size: 8px;
+  font-family: var(--font-body);
+}
+
+.design-bevel-tile.bevel-orange-raised,
+.design-bevel-tile.bevel-orange-sunken {
+  background: var(--orange-primary);
+  color: var(--white);
+}
+
+/* ── Chrome demos ── */
+.design-chrome-demo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.design-knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-body);
+}
+
+.design-knobs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ── Resize demo ── */
+.design-resize-stage {
+  position: relative;
+  height: 240px;
+  background: var(--win95-gray);
+  border: 2px solid;
+  border-color: var(--win95-dark) var(--white) var(--white) var(--win95-dark);
+  overflow: hidden;
+}
+
+.design-resize-box {
+  position: absolute;
+  background: var(--win95-warm-gray);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-family: var(--font-body);
+}
+
+/* ── Buttons ── */
+.design-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.design-btn {
+  font-family: var(--font-ui);
+  font-size: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  background: var(--win95-gray);
+  color: #000;
+  border: 2px solid;
+  border-color: var(--white) var(--win95-dark) var(--win95-dark) var(--white);
+}
+.design-btn:active,
+.design-btn--pressed {
+  border-color: var(--win95-dark) var(--white) var(--white) var(--win95-dark);
+}
+.design-btn--orange {
+  background: var(--orange-primary);
+  color: var(--white);
+  border-color: var(--orange-bevel-light) var(--orange-bevel-dark) var(--orange-bevel-dark) var(--orange-bevel-light);
+}
+.design-btn--orange-pressed {
+  border-color: var(--orange-bevel-dark) var(--orange-bevel-light) var(--orange-bevel-light) var(--orange-bevel-dark);
+}
+
+/* ── Dial ── */
+.design-dials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  padding: 8px;
+}
+
+/* ── Animations ── */
+.design-anim {
+  display: flex;
+  gap: 16px;
+}
+
+.design-anim__tile {
+  width: 70px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: var(--white);
+  background: var(--purple);
+}
+
+.design-anim--pulse { animation: design-pulse 1.2s ease-in-out infinite; }
+.design-anim--pop   { animation: design-pop 1.4s ease-in-out infinite; }
+.design-anim--spin  { animation: design-spin 2.4s linear infinite; background: var(--orange-primary); }
+
+@keyframes design-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+@keyframes design-pop {
+  0%, 100% { transform: scale(0.85); }
+  50%      { transform: scale(1.08); }
+}
+@keyframes design-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

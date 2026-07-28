@@ -41,7 +41,7 @@
 .ns-start-menu__sidebar {
   width: 26px;
   flex-shrink: 0;
-  background: linear-gradient(0deg, #5b2d8e 0%, #2a0060 100%);
+  background: linear-gradient(0deg, var(--purple) 0%, color-mix(in srgb, var(--purple), black 45%) 100%);
   display: flex;
   align-items: flex-end;
   padding-bottom: 8px;
@@ -82,7 +82,7 @@
 }
 
 .ns-start-menu__item:hover {
-  background: linear-gradient(90deg, #cc4400 0%, #ff6b00 100%);
+  background: linear-gradient(90deg, var(--orange-primary) 0%, var(--orange-bright) 100%);
   color: #ffffff;
 }
 
@@ -150,7 +150,7 @@
   gap: 6px;
   padding: 3px 12px 3px 8px;
   height: 32px;
-  background: linear-gradient(180deg, #ff7a1a 0%, #cc4400 100%);
+  background: linear-gradient(180deg, var(--orange-bright) 0%, var(--orange-primary) 100%);
   border: 2px solid;
   border-color: #ffcc88 #664400 #664400 #ffcc88;
   cursor: pointer;
@@ -165,13 +165,13 @@
 }
 
 .ns-taskbar__start:hover {
-  background: linear-gradient(180deg, #ff8a2a 0%, #dd5500 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--orange-bright), white 12%) 0%, color-mix(in srgb, var(--orange-primary), black 12%) 100%);
 }
 
 .ns-taskbar__start:active,
 .ns-taskbar__start--active {
   border-color: #664400 #ffcc88 #ffcc88 #664400;
-  background: linear-gradient(180deg, #cc4400 0%, #ff7a1a 100%);
+  background: linear-gradient(180deg, var(--orange-primary) 0%, var(--orange-bright) 100%);
 }
 
 .ns-taskbar__start-logo {

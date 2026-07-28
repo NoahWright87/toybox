@@ -1,0 +1,64 @@
+/* ===========================================================================
+   Toy Box design tokens — the single source of truth for the retro aesthetic.
+   Imported once in main.tsx, before index.css. Every experience should
+   reference these vars (and the bevel utility classes) instead of hardcoding
+   hex literals, so the NS Doors 97 theme can be re-skinned live by editing
+   C:\System\theme.ini (see themeSettings.ts).
+   =========================================================================== */
+
+:root {
+  /* --- Win95 chrome palette --- */
+  --win95-gray: #c0c0c0;       /* primary panel background */
+  --win95-warm-gray: #d4d0c8;  /* inset / recessed areas */
+  --win95-dark: #808080;       /* shadows, borders */
+  --white: #ffffff;            /* highlights */
+
+  /* --- Brand colors --- */
+  --orange-primary: #cc4400;   /* X player, active/hover, buttons */
+  --orange-bright: #ff6b00;
+  --purple: #5b2d8e;           /* O player, accents */
+  --purple-bright: #7b3dbe;
+  --green-win: #228833;        /* draws / success states */
+
+  /* --- Orange bevel pair (raised/sunken orange buttons) --- */
+  --orange-bevel-light: #ffcc88;
+  --orange-bevel-dark: #664400;
+
+  /* --- Surfaces & backdrops --- */
+  --page-bg: radial-gradient(ellipse at center, #2a1000 0%, #180800 55%, #0c0400 100%);
+  --background: #0c0400;       /* body backdrop (was @noahwright/design) */
+  --foreground: #e8e8e8;       /* body text (was @noahwright/design) */
+
+  /* --- Typography --- */
+  --font-ui: "Press Start 2P", monospace;   /* labels, headings, chrome */
+  --font-body: "Courier New", Courier, monospace; /* body / content text */
+
+  /* --- Spacing (was @noahwright/design) --- */
+  --spacing-md: 16px;
+}
+
+/* ===========================================================================
+   Win95 bevel utility classes — the three repeated border recipes.
+   Apply alongside a background to get a raised/sunken element without
+   re-declaring the four-color border each time.
+   =========================================================================== */
+
+.bevel-raised {
+  border: 2px solid;
+  border-color: var(--white) var(--win95-dark) var(--win95-dark) var(--white);
+}
+
+.bevel-sunken {
+  border: 2px solid;
+  border-color: var(--win95-dark) var(--white) var(--white) var(--win95-dark);
+}
+
+.bevel-orange-raised {
+  border: 2px solid;
+  border-color: var(--orange-bevel-light) var(--orange-bevel-dark) var(--orange-bevel-dark) var(--orange-bevel-light);
+}
+
+.bevel-orange-sunken {
+  border: 2px solid;
+  border-color: var(--orange-bevel-dark) var(--orange-bevel-light) var(--orange-bevel-light) var(--orange-bevel-dark);
+}

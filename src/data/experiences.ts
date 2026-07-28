@@ -204,6 +204,13 @@ export const experiences: Experience[] = [
     path: "/jigsaw-puzzle",
   },
   {
+    id: "design",
+    title: "Design",
+    description: "The NS Doors 97 design system — browse the window chrome and color tokens, and re-skin the whole OS by editing the live theme.",
+    category: "toy",
+    path: "/design",
+  },
+  {
     id: "shmup-editor",
     title: "Shmup Editor",
     description: "Author tiles for the SHMUP level generator: footprints, edge tags, hard walls, connectors, and a connection tester. In development.",
