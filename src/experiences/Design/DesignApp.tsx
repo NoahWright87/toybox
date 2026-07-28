@@ -10,6 +10,7 @@ import {
   loadThemeSettings,
   saveThemeSettings,
   applyTheme,
+  isValidHex,
   type ThemeValues,
 } from "../NsDoors97/themeSettings";
 import "../NsDoors97/OsDialog.css";
@@ -120,11 +121,16 @@ export default function DesignApp({ onQuit }: { onQuit?: () => void }) {
   const [dialNudge, setDialNudge] = useState(4);
   const [dialPercent, setDialPercent] = useState(30);
 
-  function setToken(cssVar: string, value: string) {
+  // Update the swatch as the user types; only push a valid hex to :root, and
+  // only write theme.ini when persist=true (color picker, or text-field blur) —
+  // avoids a filesystem write per keystroke and never persists partials like "#12".
+  function setToken(cssVar: string, value: string, persist: boolean) {
     const next = { ...theme, [cssVar]: value };
     setTheme(next);
-    applyTheme(next);      // live :root update
-    saveThemeSettings(next); // persist to theme.ini
+    if (isValidHex(value)) {
+      applyTheme(next);
+      if (persist) saveThemeSettings(next);
+    }
   }
 
   function resetTheme() {
@@ -191,14 +197,15 @@ export default function DesignApp({ onQuit }: { onQuit?: () => void }) {
                     type="color"
                     className="design-swatch__picker"
                     value={toColorInput(theme[tok.cssVar])}
-                    onChange={(e) => setToken(tok.cssVar, e.target.value)}
+                    onChange={(e) => setToken(tok.cssVar, e.target.value, true)}
                   />
                   <input
                     type="text"
                     className="design-swatch__hex bevel-sunken"
                     value={theme[tok.cssVar]}
                     spellCheck={false}
-                    onChange={(e) => setToken(tok.cssVar, e.target.value)}
+                    onChange={(e) => setToken(tok.cssVar, e.target.value, false)}
+                    onBlur={(e) => setToken(tok.cssVar, e.target.value, true)}
                   />
                 </label>
               ))}

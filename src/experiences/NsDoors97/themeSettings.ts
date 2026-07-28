@@ -15,13 +15,21 @@ import { THEME_TOKENS, DEFAULT_THEME, type ThemeValues } from "./themeTokens";
 export type { ThemeValues } from "./themeTokens";
 export { THEME_TOKENS, DEFAULT_THEME } from "./themeTokens";
 
+// Only the hex lengths CSS actually supports (#rgb, #rgba, #rrggbb, #rrggbbaa).
+// Notably excludes 5- and 7-digit strings, which are never valid CSS colors.
+const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+export function isValidHex(value: string): boolean {
+  return HEX_RE.test(value.trim());
+}
+
 function parseThemeFromIni(content: string): ThemeValues {
   const ini = parseIni(content);
   const t = ini["Theme"] ?? {};
   const out: ThemeValues = { ...DEFAULT_THEME };
   for (const tok of THEME_TOKENS) {
     const v = t[tok.iniKey];
-    if (v && /^#[0-9a-fA-F]{3,8}$/.test(v.trim())) out[tok.cssVar] = v.trim();
+    if (v && isValidHex(v)) out[tok.cssVar] = v.trim();
   }
   return out;
 }
@@ -37,7 +45,8 @@ export function saveThemeSettings(values: ThemeValues): void {
   if (!file) return;
   const kvs: Record<string, string> = {};
   for (const tok of THEME_TOKENS) {
-    kvs[tok.iniKey] = values[tok.cssVar] ?? tok.default;
+    const v = (values[tok.cssVar] ?? "").trim();
+    kvs[tok.iniKey] = isValidHex(v) ? v : tok.default;
   }
   const updated = updateIniSection(file.content, "Theme", kvs);
   fsStore.writeFile(THEME_INI_ID, updated);
