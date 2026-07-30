@@ -27,18 +27,27 @@ export default function UnitScalingPanel({ scaling, previewDifficulty, onPreview
 
   return (
     <div className="shmup-panel">
+      {/* Max count sits ALONE in its grid on purpose. It used to share a
+          wrapping flex row with Min cost / Spawn delay, so turning scaling on
+          re-flowed the very dial you were touching. Its own row means the
+          control under your finger cannot move. */}
       <div className="shmup-dial-grid">
         <Dial label="Max count" value={scaling.maxCount} onChange={(v) => onChange({ maxCount: v })} min={1} max={MAX_COUNT_CEILING} showNudgeButtons />
-        {scalingEnabled && (
-          <>
-            <Dial label="Min cost" value={scaling.minCostPerInstance} onChange={(v) => onChange({ minCostPerInstance: Math.max(0.01, v) })} step={1} showNudgeButtons />
-            <Dial label="Spawn delay (ms)" value={scaling.spawnDelayMs} onChange={(v) => onChange({ spawnDelayMs: Math.max(0, v) })} step={50} showNudgeButtons />
-          </>
-        )}
       </div>
 
+      {/* Everything gated behind maxCount > 1 appears as ONE labelled section
+          rather than as ~12 controls materialising inline at various depths —
+          "if spawn number goes from 1 to >1 everything jumps around". Grouping
+          it makes the reveal read as a section opening below the dial you just
+          turned, which is also why the section header is here. */}
       {scalingEnabled && (
-        <>
+        <div className="shmup-scaling-more">
+          <div className="shmup-scaling-more__title">Group of {scaling.maxCount}</div>
+          <div className="shmup-dial-grid">
+            <Dial label="Min cost" value={scaling.minCostPerInstance} onChange={(v) => onChange({ minCostPerInstance: Math.max(0.01, v) })} step={1} showNudgeButtons />
+            <Dial label="Spawn delay (ms)" value={scaling.spawnDelayMs} onChange={(v) => onChange({ spawnDelayMs: Math.max(0, v) })} step={50} showNudgeButtons />
+          </div>
+
           <label className="shmup-field shmup-field--inline">
             <span>Shape</span>
             <select className="shmup-input" value={scaling.shape} onChange={(e) => onChange({ shape: e.target.value as ScalingShapeKind })}>
@@ -49,35 +58,42 @@ export default function UnitScalingPanel({ scaling, previewDifficulty, onPreview
             </select>
           </label>
 
-          {scaling.shape === "curve" && (
-            <div className="shmup-field-row">
-              <span>{scaling.curvePoints.length} point{scaling.curvePoints.length === 1 ? "" : "s"}</span>
-              <button type="button" className="shmup-btn shmup-btn--small" onClick={onAddCurvePoint}>
-                + Point
-              </button>
-              {scaling.curvePoints.length > 0 && (
-                <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onRemoveCurvePoint(scaling.curvePoints.length - 1)}>
-                  − Point
+          {/* Fixed-height slot: Curve/V/Grid/Ring each need a different number
+              of controls (0 dials + a point row, 1 dial, 2 dials, 1 dial), and
+              swapping between them used to shove Ping-pong / Difficulty /
+              readout down or up by 68px. Reserving one dial-row of height means
+              changing shape never moves anything below it. */}
+          <div className="shmup-scaling-shape-slot">
+            {scaling.shape === "curve" && (
+              <div className="shmup-field-row">
+                <span>{scaling.curvePoints.length} point{scaling.curvePoints.length === 1 ? "" : "s"}</span>
+                <button type="button" className="shmup-btn shmup-btn--small" onClick={onAddCurvePoint}>
+                  + Point
                 </button>
-              )}
-            </div>
-          )}
-          {scaling.shape === "v" && (
-            <div className="shmup-dial-grid">
-              <Dial label="Width" value={scaling.vWidth} onChange={(v) => onChange({ vWidth: Math.max(0, v) })} step={5} showNudgeButtons />
-            </div>
-          )}
-          {scaling.shape === "grid" && (
-            <div className="shmup-dial-grid">
-              <Dial label="Width" value={scaling.gridWidth} onChange={(v) => onChange({ gridWidth: Math.max(0, v) })} step={5} showNudgeButtons />
-              <Dial label="Depth" value={scaling.gridDepth} onChange={(v) => onChange({ gridDepth: Math.max(0, v) })} step={5} showNudgeButtons />
-            </div>
-          )}
-          {scaling.shape === "ring" && (
-            <div className="shmup-dial-grid">
-              <Dial label="Radius" value={scaling.ringRadius} onChange={(v) => onChange({ ringRadius: Math.max(1, v) })} step={5} showNudgeButtons />
-            </div>
-          )}
+                {scaling.curvePoints.length > 0 && (
+                  <button type="button" className="shmup-btn shmup-btn--small" onClick={() => onRemoveCurvePoint(scaling.curvePoints.length - 1)}>
+                    − Point
+                  </button>
+                )}
+              </div>
+            )}
+            {scaling.shape === "v" && (
+              <div className="shmup-dial-grid">
+                <Dial label="Width" value={scaling.vWidth} onChange={(v) => onChange({ vWidth: Math.max(0, v) })} step={5} showNudgeButtons />
+              </div>
+            )}
+            {scaling.shape === "grid" && (
+              <div className="shmup-dial-grid">
+                <Dial label="Width" value={scaling.gridWidth} onChange={(v) => onChange({ gridWidth: Math.max(0, v) })} step={5} showNudgeButtons />
+                <Dial label="Depth" value={scaling.gridDepth} onChange={(v) => onChange({ gridDepth: Math.max(0, v) })} step={5} showNudgeButtons />
+              </div>
+            )}
+            {scaling.shape === "ring" && (
+              <div className="shmup-dial-grid">
+                <Dial label="Radius" value={scaling.ringRadius} onChange={(v) => onChange({ ringRadius: Math.max(1, v) })} step={5} showNudgeButtons />
+              </div>
+            )}
+          </div>
 
           <label className="shmup-checkbox">
             <input type="checkbox" checked={scaling.pingPong} onChange={(e) => onChange({ pingPong: e.target.checked, pingPongOverride: e.target.checked ? scaling.pingPongOverride : null })} />
@@ -92,7 +108,7 @@ export default function UnitScalingPanel({ scaling, previewDifficulty, onPreview
           <p className="shmup-readout">
             <strong>{resolution.count}</strong> instance{resolution.count === 1 ? "" : "s"} · <strong>{resolution.power}</strong> Difficulty each
           </p>
-        </>
+        </div>
       )}
     </div>
   );

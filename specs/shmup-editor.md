@@ -821,6 +821,31 @@ attack together instead of a standalone Weapon.)
     made-up placeholder numbers loosely scaled to each vehicle's apparent
     size/role, not balanced gameplay data.
 
+    **Two seeding bugs, since fixed** (`createSimpleEnemyUnit`, plus
+    `repairSeededSimpleEnemies` for already-saved libraries). Noah's report:
+    "placed turrets don't have a default Action, so I have to place them, set
+    the action, repeat for any other placements."
+    1. Single-sprite enemies got their Attack on the *Unit's* buffet but their
+       one "Main" Part was left `actions: []`. The encounter editor's 🔫+ node
+       control gates on `parts.some(p => p.actions.length > 0)`, so it was
+       permanently disabled for all twelve of them — you could never place an
+       attack without detouring through the Units editor first.
+    2. A stationary enemy (a Turret, `speed: 0`) took
+       `createMoveAction(false)` as its `defaultActionId`, which is inert by
+       construction — `movementPercent: 0`, `attack: null`. So a freshly placed
+       turret stood there doing nothing until you hand-picked an Action, once
+       per placement. Stationary units now default to their **Attack** Action;
+       anything that can move still defaults to Move.
+
+    `repairSeededSimpleEnemies` applies both fixes in place on every
+    `loadUnits`, deliberately **instead of** a `SAVE_VERSION` bump: the stored
+    *type* shape never changed, only the seeded content, and bumping the
+    version resets the whole library — discarding any Units the user authored
+    themselves. It matches only ids `createSimpleEnemyUnit` owns, only
+    redirects a default that is genuinely the inert Move (a `null` default is
+    "(none — holds position)", a real authoring choice that must survive a
+    repair that runs on every load), and is idempotent.
+
   All of the above use stable (not random) ids
   (`unit-default-<slug>`/`unit-default-proj-<slug>`) so reseeding never
   duplicates them. `unitStore.ts`'s `loadUnits` seeds-and-persists this
@@ -975,6 +1000,46 @@ or Part — not typing a per-placement override.
 
 ### Canvas (`EncounterEditor.tsx`, `EncounterTileFrame.tsx`, `encounterSteps.ts`)
 
+#### Touch targets on a zoomed canvas
+
+**Every on-canvas control used to shrink with the zoom, because it lived
+inside the stage's `transform: scale(zoom)`.** Measured on a 390x664 phone:
+the authored 28px node controls rendered at **9.5px** at the fit-to-view zoom,
+and 4.3px zoomed out — physically untappable. Worse, the five-button cluster
+sat within ~5px of the stage's own top edge, and the old deselect rule treated
+anything outside `.shmup-enemy-canvas-stage` as "tapped away". Simulating a
+6px-sd aim error against the app's real handlers: **38% of taps hit the
+intended button, ~40% did nothing, and ~16% silently deselected the unit** —
+which is what made "reselect the enemy, then tap the scaling thing again" a
+constant tax. After the changes below the same simulation gives **91–98% hits
+and ~1% deselects**.
+
+- **A selected step's control cluster renders in screen space**
+  (`.shmup-enc-node-hud`), as a sibling of the transformed stage rather than a
+  child of it, anchored at the node's viewport position
+  (`selectedNodeHud = stagePos * zoom + pan`). Counter-scaling the cluster in
+  place does *not* work: one uniform scale inflates the ring's *spread* along
+  with the buttons, which pushes the outer controls past the viewport's clip
+  edge and makes them unhittable. Screen space lets button size (28px) and ring
+  spread (76px) be chosen independently, both in real pixels. The anchor is
+  clamped by `NODE_HUD_MARGIN` so the whole cluster stays inside the canvas
+  even for a node at (or panned past) an edge.
+- **Because of that**, the node/handle/scaling drag handlers live on the
+  **viewport**, not the stage: `beginDrag` calls `setPointerCapture` on the
+  button it was fired from, so a HUD button's pointermove events bubble
+  through the HUD and would never reach a handler bound to the stage. The
+  viewport is the nearest common ancestor of both, and `toWorld` works off
+  absolute client coords, so nothing else changes.
+- **Single elements still counter-scale in place** against the stage's
+  `--enc-counter-scale` custom property (`min(1 / zoom, COUNTER_SCALE_MAX)`),
+  since one button has no ring spread to inflate: bezier/scaling
+  `.shmup-handle-btn`s, the selected attack marker's ✕, and the selected node's
+  own sprite (capped at 3x, so the unit you're editing stays visible under a
+  cluster that is now much larger than it).
+- **The deselect rule keys off `.shmup-enemy-canvas-viewport`, not the stage.**
+  The stage is only as big as its content, so at a fit-to-view zoom it leaves a
+  margin of visible-but-off-stage canvas that used to count as "outside".
+
 Same tap-driven interaction model as earlier passes (tap a node to select
 it, overlay quick-action buttons, a settings tab for the real fields — see
 "Layout" below), simplified by the graph-to-array collapse: consecutive steps
@@ -1008,6 +1073,20 @@ to drag (see "Movement" above).
   pass — it also affected the pre-existing step position-drag handle, not
   just the new bezier handles. Fixed by a `toWorld(clientX, clientY)`
   helper that correctly inverts `toStage()`.
+
+- **A newly appended step lands a fixed *screen* distance from its parent,
+  continuing that instance's heading** (`nextStepPos`, called by
+  `addNextStep`). `encounterSteps.ts`'s own `DEFAULT_NEXT_OFFSET` is a flat
+  `TILE_UNIT` (720 world units) to the right, which is zoom-blind: at a
+  phone's fit-to-view zoom that put the new node ~244px right inside a
+  ~342px-wide canvas, so it landed off the visible edge more often than not
+  and you had to pan around hunting for the thing you'd just created before
+  you could drag it anywhere. Dividing `NEW_STEP_SCREEN_GAP` (76px) by the
+  live zoom keeps it the same comfortable, always-visible distance at every
+  zoom level. Direction follows the previous segment so appending extends a
+  path rather than kinking it back toward +x; a lone first step has no
+  heading yet, so "onward" is down-screen. `addStep`'s own flat default
+  survives for callers (and tests) that don't care about the viewport.
 
 - **`EncounterTileFrame.tsx`** is unchanged from the graph-based pass — a
   read-only dashed rectangle sized to the tile's real footprint, labeled
@@ -1114,20 +1193,44 @@ them.** The original layout stacked everything in one long scrolling
 column (toolbar, canvas, timeline, Add-Unit picker, Step/Attack/Scaling
 panel, Save/Cancel) — fine on desktop, a trap on mobile.
 
-- **`EncounterTimeline` + the canvas viewport now live in one `position:
-  sticky` head** (`.shmup-enc-sticky-head`, `top: 0`) pinned to the top of
-  the scroll container, stuck together as a single unit so the viewport
+- **`EncounterTimeline` + the canvas viewport live in one head**
+  (`.shmup-enc-sticky-head`), stuck together as a single unit so the viewport
   doesn't need to know the timeline's own (variable, track-count-dependent)
   height to position itself under it.
+- **The editor column is height-locked, and the tab panel is the only
+  vertical scroller.** The head was originally `position: sticky; top: 0`,
+  which never actually engaged: `.shmup-editor` sets `overflow-y: auto` and
+  is therefore the head's nearest scrollport, while the element that really
+  scrolls is `.standalone-page`, further out — and sticky only reacts to its
+  own scrollport. Measured on a 390x664 phone, the "pinned" 421px head was
+  entirely gone by 600px of scroll, so you ended up editing dials with no map
+  on screen, while the page grew to ~1400px and two nested vertical scrolls
+  fought over one gesture. Now `.standalone-page:has(.shmup-enc-fill)` (and
+  the Doors 97 `.window__content` equivalent) hands the editor a definite
+  height, the head is an ordinary non-sticky flex child that cannot scroll
+  away, and `.shmup-enc-tab-content` is `flex: 1; overflow-y: auto;
+  overscroll-behavior: contain`. `:has()` is a progressive enhancement —
+  without it the chain falls back to the old content-height behaviour.
+- **The ▲/▼ button at the right of the tab strip trades map height for panel
+  height** (`panelExpanded`). Even height-locked, a phone can't give both a
+  useful map and a useful panel: the head took 39% of the viewport and left
+  the panel 35%, against Scaling panels that are taller than that. ▲ shrinks
+  the map to a reference strip and lifts the panel to ~47% of the viewport;
+  `embiggen` (below) is the same trade in the opposite direction. Deliberately
+  a shrink rather than a hide — losing the map entirely is what the old
+  scroll-the-page layout already did wrong.
 - **Everything else is a tab**, not a stack: **Basics** (name, weight),
-  **+ Add** (the Unit picker), and one contextual slot that only appears
-  once something is selected — **Step**, **Attack**, or **Scaling**,
-  matching `selection`/`scalingOpenFor`. Selecting a step/attack or opening
-  Scaling explicitly switches to that tab (`selectStep`/`selectAttack`/
-  `toggleScaling` each call `setActiveTab`); manually switching to Basics/
-  Add doesn't lose the underlying selection, and a stale contextual tab
-  (its node got deleted) falls back to Basics automatically
-  (`effectiveTab`'s derivation, not extra cleanup code). "+ Add Unit"'s old
+  **+ Add** (the Unit picker), **Step**/**Attack** for whichever node is
+  selected, and **Scaling** for as long as *any* instance is selected.
+  Scaling is deliberately not gated behind its ⚖️ canvas button any more —
+  that button was a 9.5px target at a phone's fit-to-view zoom and being the
+  only way in meant a near-miss (which usually deselected the unit) cost you
+  the selection and the trip both. ⚖️ survives as a shortcut. `activeTab` is
+  the single source of truth: `scalingPanelOpen` derives from it, so the tab
+  strip and the canvas can't disagree about whether scaling handles are up
+  (the old separate `scalingOpenFor` state is gone). A stale contextual tab
+  (its node got deleted) falls back to Basics automatically via
+  `effectiveTab`'s derivation, not extra cleanup code. "+ Add Unit"'s old
   toggle-button-plus-inline-picker collapsed into just the Add tab itself —
   selecting it *is* the toggle now.
 - **"Embiggen"** (⛶, top-right corner of the viewport — same word Doors
@@ -1478,6 +1581,28 @@ view:
   reveals min cost/spawn delay/shape/ping-pong/preview — at the default
   `maxCount: 1`, the panel is just one Dial and the instance behaves
   exactly as if E3 didn't exist.
+
+- **The reveal is structured so it doesn't shuffle the controls around it.**
+  Noah's report: "some dials cause other dials to appear suddenly — if spawn
+  number goes from 1 to >1 everything jumps around." Measured, turning it on
+  grew the panel 127px → 406px and 4 → 16 controls, and switching positioning
+  shape displaced Ping-pong / Difficulty / the readout by 68px each. Three
+  changes, no behaviour lost:
+  - **`Max count` sits alone in its `.shmup-dial-grid`.** It used to share a
+    wrapping flex row with Min cost / Spawn delay, so enabling scaling could
+    re-flow the very dial you were touching.
+  - **Everything gated behind `maxCount > 1` is one labelled section**
+    (`.shmup-scaling-more`, headed "Group of N") rather than ~12 controls
+    materialising inline at assorted depths — the reveal reads as a section
+    opening below the dial you just turned.
+  - **The shape-specific dials live in a fixed-height slot**
+    (`.shmup-scaling-shape-slot`, one dial-row tall). Curve/V/Grid/Ring need
+    0/1/2/1 dials respectively, so reserving the tallest means changing shape
+    now displaces **nothing** below it.
+
+  Combined with the height-locked layout (the panel is its own scroller at a
+  fixed size), the panel container itself no longer grows at all on reveal:
+  only its scroll content changes.
 
 **Persistence**: `EncounterUnit.scaling` is a **required** field validated
 strictly (`encounterValidation.ts`'s `isUnitScaling`) — not treated as a
