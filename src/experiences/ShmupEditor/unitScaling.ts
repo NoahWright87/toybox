@@ -102,15 +102,24 @@ export function createDefaultScaling(): UnitScaling {
     shape: "curve",
     curvePoints: [],
     // Scaled against editorScale.ts's TILE_UNIT so a fresh shape reads at a
-    // sensible size relative to the tile, same ratios the old TILE_UNIT=130
-    // scale used (e.g. vWidth was ~0.92x TILE_UNIT; still is here).
-    curveEnd: { x: 0, y: TILE_UNIT * 1.1 },
-    vTip: { x: 0, y: TILE_UNIT * 1.1 },
-    vWidth: TILE_UNIT * 0.9,
-    gridWidth: TILE_UNIT * 1.2,
-    gridDepth: TILE_UNIT * 0.9,
+    // sensible size relative to the tile.
+    //
+    // **About half what these used to be** (curveEnd was 1.1x TILE_UNIT,
+    // gridWidth 1.2x, ringRadius 0.75x). A shape spanning more than a whole
+    // tile put its handles at or past the edge of the visible canvas the moment
+    // you enabled scaling, so the first thing you had to do was pan around
+    // hunting for them — Noah: "they initialize really far away (just like
+    // movement handles used to)". At the fit-to-view zoom a phone lands on,
+    // ~0.6 tile is ~75px of canvas: big enough that six slots read as a shape
+    // rather than a clump, small enough that every handle starts on screen.
+    // (A third of the old size was tried first and is too cramped to read.)
+    curveEnd: { x: 0, y: TILE_UNIT * 0.6 },
+    vTip: { x: 0, y: TILE_UNIT * 0.6 },
+    vWidth: TILE_UNIT * 0.5,
+    gridWidth: TILE_UNIT * 0.55,
+    gridDepth: TILE_UNIT * 0.45,
     ringCenterOffset: { x: 0, y: 0 },
-    ringRadius: TILE_UNIT * 0.75,
+    ringRadius: TILE_UNIT * 0.35,
     pingPong: false,
     pingPongOverride: null,
   };

@@ -43,12 +43,27 @@ type ScalingHandleId =
   | { kind: "curvePoint"; index: number }
   | { kind: "curveEnd" }
   | { kind: "vTip" }
-  | { kind: "gridWidth" }
-  | { kind: "gridDepth" }
+  | { kind: "vArm" }
+  | { kind: "gridCorner" }
   | { kind: "ringCenter" }
   | { kind: "ringRadius" }
   | { kind: "pingPongOverride" };
 type ScalingDrag = { instanceId: string; handle: ScalingHandleId; pos: Vec2 } | null;
+
+/**
+ * The right-hand corner of a V's open end, in world space — deliberately the
+ * same construction `unitScalingShapes.ts`'s `vSlots` uses for its extreme
+ * parameter, so this handle lands exactly on the outermost ghost slot instead
+ * of near it. Every scaling shape's handles now sit on a real slot (curve's end
+ * is its last slot, the grid corner is its last slot, the ring's radius handle
+ * is its first), which is what made Curve the only one that "looked accurate".
+ */
+function vArmPos(origin: Vec2, s: UnitScaling): Vec2 {
+  const len = Math.hypot(s.vTip.x, s.vTip.y) || 1;
+  const perp: Vec2 = { x: -s.vTip.y / len, y: s.vTip.x / len };
+  const half = s.vWidth / 2;
+  return { x: origin.x + s.vTip.x + perp.x * half, y: origin.y + s.vTip.y + perp.y * half };
+}
 
 function sameScalingHandle(a: ScalingHandleId, b: ScalingHandleId): boolean {
   if (a.kind !== b.kind) return false;
@@ -72,6 +87,19 @@ const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
 const ZOOM_MIN = 0.08;
 const ZOOM_MAX = 3;
 const PINCH_ZOOM_MIN_DIST = 1;
+/** What each Scaling handle actually does — the canvas shows several dots at once per shape, and one shared "drag to shape this scaling group" tooltip left you guessing which drove what. */
+const SCALING_HANDLE_TITLES: Record<ScalingHandleId["kind"], string> = {
+  curvePoint: "Drag to bend the line the group spreads along",
+  curveEnd: "Drag to set where the group's line ends",
+  vTip: "Drag to set the V's depth and direction",
+  vArm: "Drag to open or close the V",
+  gridCorner: "Drag to size the block (width and depth)",
+  ringCenter: "Drag to move the ring's centre",
+  ringRadius: "Drag to set the ring's radius",
+  pingPongOverride: "Drag to set an asymmetric mirror axis",
+};
+/** Ceiling for the Scaling tab's preview-Difficulty slider (UnitScalingPanel's own PREVIEW_DIFFICULTY_MAX), and the value the preview starts at so the whole group is visible while you shape it. */
+const SCALING_PREVIEW_DIFFICULTY_MAX = 100;
 /** Ceiling on the on-canvas controls' 1/zoom counter-scale (see the stage's `--enc-counter-scale`). At ZOOM_MIN an uncapped 1/zoom is 12.5x, which would blow a node's control cluster far across the canvas and over its neighbours. 6x holds controls at their full authored screen size down to zoom ~0.17, which covers the fit-to-view zoom a phone lands on for every tile footprint; below that they shrink again, but that's a survey-the-whole-encounter zoom, not one you author at. */
 const COUNTER_SCALE_MAX = 6;
 /** Half the screen-space control HUD's extent — how far its anchor is kept from any canvas edge so the whole cluster (a 28px button ring, see `.shmup-enc-node-hud`) stays inside the clip box and remains tappable. */
@@ -173,7 +201,16 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [scalingDrag, setScalingDrag] = useState<ScalingDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
-  const [scalingPreviewDifficulty, setScalingPreviewDifficulty] = useState(0);
+  /**
+   * Starts at the ceiling, not 0. The Scaling tab's ghost slots render
+   * `resolveScaling(scaling, scalingPreviewDifficulty).count` positions — and at
+   * difficulty 0 that count is 1, so enabling scaling and picking a shape drew
+   * exactly one dot. You had to find the Preview Difficulty slider at the bottom
+   * of the panel before the shape you were editing appeared at all, which is a
+   * large part of why these read as "not intuitive". Previewing the *full* group
+   * is what you want while authoring the shape; the slider still sweeps down.
+   */
+  const [scalingPreviewDifficulty, setScalingPreviewDifficulty] = useState(SCALING_PREVIEW_DIFFICULTY_MAX);
   const [scrubTime, setScrubTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("basics");
@@ -355,26 +392,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setPickingAttackPartFor(null);
     setSelection({ instanceId, kind: "attack", attackId });
     setActiveTab("attack");
-  }
-
-  /**
-   * The ⚖️ node button — now just a *shortcut* to the always-available Scaling
-   * tab (see `availableTabs`), not the only way in. Still selects the
-   * instance's first step so selectedInstance/selectedUnitDef stay coherent for
-   * the handle-rendering code below, and still toggles, so a second tap goes
-   * back to the Step tab.
-   */
-  function toggleScaling(instanceId: string) {
-    if (activeTab === "scaling" && selection?.instanceId === instanceId) {
-      setActiveTab("step");
-      return;
-    }
-    setPendingDeleteKey(null);
-    setPickingAttackPartFor(null);
-    setActiveTab("scaling");
-    const instance = draft.units.find((u) => u.id === instanceId);
-    const first = instance?.steps[0];
-    if (first) setSelection({ instanceId, kind: "step", stepId: first.id });
   }
 
   function addCurvePoint(instanceId: string) {
@@ -747,10 +764,19 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       s.curvePoints.forEach((p, index) => handles.push({ handle: { kind: "curvePoint", index }, pos: { x: origin.x + p.x, y: origin.y + p.y } }));
       handles.push({ handle: { kind: "curveEnd" }, pos: { x: origin.x + s.curveEnd.x, y: origin.y + s.curveEnd.y } });
     } else if (s.shape === "v") {
+      // Tip = the midpoint of the V's open end (its spine), arm = the open
+      // end's right corner, which is exactly where the outermost ghost slot
+      // sits (`vSlots` maps its extreme parameter to that point). Before this,
+      // V offered *only* the tip handle — a dot floating in the middle of the
+      // V's opening, on no part of the shape — and its width was a dial with no
+      // canvas presence at all.
       handles.push({ handle: { kind: "vTip" }, pos: { x: origin.x + s.vTip.x, y: origin.y + s.vTip.y } });
+      handles.push({ handle: { kind: "vArm" }, pos: vArmPos(origin, s) });
     } else if (s.shape === "grid") {
-      handles.push({ handle: { kind: "gridWidth" }, pos: { x: origin.x + s.gridWidth / 2, y: origin.y } });
-      handles.push({ handle: { kind: "gridDepth" }, pos: { x: origin.x, y: origin.y + s.gridDepth / 2 } });
+      // One corner, not two edge midpoints: a corner is both the intuitive
+      // box-resize grip and an actual ghost slot (the last one `gridSlots`
+      // emits). The Width/Depth dials still drive each axis independently.
+      handles.push({ handle: { kind: "gridCorner" }, pos: { x: origin.x + s.gridWidth / 2, y: origin.y + s.gridDepth / 2 } });
     } else if (s.shape === "ring") {
       const center = { x: origin.x + s.ringCenterOffset.x, y: origin.y + s.ringCenterOffset.y };
       handles.push({ handle: { kind: "ringCenter" }, pos: center });
@@ -859,10 +885,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         return { curveEnd: offset };
       case "vTip":
         return { vTip: offset };
-      case "gridWidth":
-        return { gridWidth: Math.max(0, Math.abs(offset.x) * 2) };
-      case "gridDepth":
-        return { gridDepth: Math.max(0, Math.abs(offset.y) * 2) };
+      case "vArm": {
+        // Width is the arm's perpendicular distance from the apex->tip spine,
+        // doubled (the V is symmetric about it), so dragging the corner in or
+        // out opens and closes the formation.
+        const len = Math.hypot(scaling.vTip.x, scaling.vTip.y) || 1;
+        const perp: Vec2 = { x: -scaling.vTip.y / len, y: scaling.vTip.x / len };
+        const fromTip: Vec2 = { x: offset.x - scaling.vTip.x, y: offset.y - scaling.vTip.y };
+        return { vWidth: Math.max(0, Math.abs(fromTip.x * perp.x + fromTip.y * perp.y) * 2) };
+      }
+      case "gridCorner":
+        return { gridWidth: Math.max(0, Math.abs(offset.x) * 2), gridDepth: Math.max(0, Math.abs(offset.y) * 2) };
       case "ringCenter":
         return { ringCenterOffset: offset };
       case "ringRadius": {
@@ -909,6 +942,15 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           y: Math.max(NODE_HUD_MARGIN, Math.min(viewportSize.height - NODE_HUD_MARGIN, selectedNodeStage.y * zoom + pan.y)),
         }
       : null;
+
+  /**
+   * 1/zoom, capped — see the stage's `--enc-counter-scale`. Also applied to SVG
+   * stroke widths, which are in stage units and so thinned with the zoom exactly
+   * like the buttons did: the movement path's 2px and the scaling stalks' 1.5px
+   * rendered at 0.35px and 0.26px at a phone's fit-to-view zoom, i.e. as good as
+   * invisible. Multiplying holds them at their authored *screen* thickness.
+   */
+  const counterScale = Math.min(COUNTER_SCALE_MAX, 1 / zoom);
 
   const scalingHandleEntries = scalingPanelOpen && selectedInstance ? scalingHandlesFor(selectedInstance) : [];
   const scalingOriginStage = scalingPanelOpen && selectedInstance?.steps[0] ? toStage(selectedInstance.steps[0].pos) : null;
@@ -1069,7 +1111,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   // scale inflates a cluster's ring spread along with its
                   // buttons, which pushed the outer ones past this stage's clip
                   // edge; that cluster renders in screen space instead.
-                  "--enc-counter-scale": Math.min(COUNTER_SCALE_MAX, 1 / zoom),
+                  "--enc-counter-scale": counterScale,
                 } as CSSProperties
               }
             >
@@ -1100,7 +1142,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                         d={`M ${a.x},${a.y} C ${b.x},${b.y} ${c.x},${c.y} ${d.x},${d.y}`}
                         fill="none"
                         stroke="#ffcc88"
-                        strokeWidth={2}
+                        strokeWidth={2 * counterScale}
                         markerEnd="url(#shmup-arrow)"
                       />
                     );
@@ -1116,7 +1158,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                       x2={stage.x}
                       y2={stage.y}
                       stroke="#66ffee"
-                      strokeWidth={1.5}
+                      strokeWidth={1.5 * counterScale}
                       strokeDasharray="3,3"
                     />
                   ))}
@@ -1125,7 +1167,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 {scalingOriginStage &&
                   scalingHandleEntries.map(({ handle, pos }, i) => {
                     const stage = toStage(pos);
-                    const anchorStage = handle.kind === "ringRadius" && selectedInstance ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === "ringCenter")?.pos ?? pos) : scalingOriginStage;
+                    // Each stalk hangs off whatever the handle is measured
+                    // *from*, not always the instance origin: a ring's radius
+                    // from its centre, a V's arm from its tip.
+                    const anchorKind = handle.kind === "ringRadius" ? "ringCenter" : handle.kind === "vArm" ? "vTip" : null;
+                    const anchorStage =
+                      anchorKind && selectedInstance
+                        ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === anchorKind)?.pos ?? pos)
+                        : scalingOriginStage;
                     return (
                       <line
                         key={i}
@@ -1134,7 +1183,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                         x2={stage.x}
                         y2={stage.y}
                         stroke="#ffbb33"
-                        strokeWidth={1.5}
+                        strokeWidth={1.5 * counterScale}
                         strokeDasharray="3,3"
                       />
                     );
@@ -1159,7 +1208,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               {selectedInstance &&
                 scalingHandleEntries.map(({ handle, pos }, i) => {
                   const stage = toStage(pos);
-                  const title = handle.kind === "pingPongOverride" ? "Drag to set an asymmetric mirror axis" : "Drag to shape this scaling group";
+                  const title = SCALING_HANDLE_TITLES[handle.kind];
                   return (
                     <button
                       key={i}
@@ -1347,8 +1396,13 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               spread be chosen independently, both in real pixels, and lets the
               cluster be clamped inside the canvas so no control is ever off the
               edge — near-misses land on inert canvas rather than deselecting.
+
+              Hidden entirely while the Scaling tab is open: those controls edit
+              one *step*, but a scaling shape's own handles and ghost slots start
+              right next to the instance, so the cluster sat directly on top of
+              the thing you were there to drag.
             */}
-            {selectedNodeHud && selectedInstance && selectedStep && (
+            {selectedNodeHud && selectedInstance && selectedStep && !scalingPanelOpen && (
               <div className="shmup-enc-node-hud" style={{ left: selectedNodeHud.x, top: selectedNodeHud.y }}>
                 <div className="shmup-enemy-node__controls">
                   <button
@@ -1395,19 +1449,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   >
                     ✕
                   </button>
-                  {selectedIdx === 0 && (
-                    <button
-                      type="button"
-                      className={`shmup-enemy-node__btn shmup-enemy-node__btn--scaling ${scalingPanelOpen ? "shmup-enemy-node__btn--active" : ""}`}
-                      title="Scaling — duplicate this instance"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleScaling(selectedInstance.id);
-                      }}
-                    >
-                      ⚖️
-                    </button>
-                  )}
                 </div>
               </div>
             )}

@@ -1225,7 +1225,10 @@ panel, Save/Cancel) — fine on desktop, a trap on mobile.
   Scaling is deliberately not gated behind its ⚖️ canvas button any more —
   that button was a 9.5px target at a phone's fit-to-view zoom and being the
   only way in meant a near-miss (which usually deselected the unit) cost you
-  the selection and the trip both. ⚖️ survives as a shortcut. `activeTab` is
+  the selection and the trip both. **The ⚖️ button is now gone outright**: a
+  permanent tab made a second, tiny door onto the same panel pointless, and
+  sitting top-centre it crowded the ✥ move handle it shared an edge with. The
+  node cluster is four controls on four corners, nothing in between. `activeTab` is
   the single source of truth: `scalingPanelOpen` derives from it, so the tab
   strip and the canvas can't disagree about whether scaling handles are up
   (the old separate `scalingOpenFor` state is gone). A stale contextual tab
@@ -1233,6 +1236,15 @@ panel, Save/Cancel) — fine on desktop, a trap on mobile.
   `effectiveTab`'s derivation, not extra cleanup code. "+ Add Unit"'s old
   toggle-button-plus-inline-picker collapsed into just the Add tab itself —
   selecting it *is* the toggle now.
+- **Nothing in the editor may set a `z-index` on a flex child of
+  `.shmup-enemy-form`.** A flex item with a z-index creates a stacking context
+  even when statically positioned, and `.shmup-enc-sticky-head` carried one
+  left over from its `position: sticky` days. That trapped the Embiggen
+  fullscreen canvas (z-index 1000) *inside* the head, so its 1000 only ranked
+  it against its own siblings — and the Save/Cancel footer (z-index 20, same
+  level as the head but later in DOM order) painted on top of the fullscreen
+  canvas, over the minimap and zoom buttons. Removing the head's z-index lets
+  the fullscreen canvas out-rank the footer as intended.
 - **"Embiggen"** (⛶, top-right corner of the viewport — same word Doors
   97's own window maximize button already uses) makes the viewport fill
   the screen (`position: fixed; inset: 0`) when half the screen isn't
@@ -1603,6 +1615,45 @@ view:
   Combined with the height-locked layout (the panel is its own scroller at a
   fixed size), the panel container itself no longer grows at all on reveal:
   only its scroll content changes.
+
+- **The canvas side of scaling was effectively invisible, and is now legible.**
+  Noah: "they initialize really far away (just like movement handles used to)…
+  only the curve type actually looks accurate at all. they're not intuitive."
+  Four separate causes, all measured on a 390x664 phone:
+  - **The ghost preview defaulted to showing nothing.** Ghost slots render
+    `resolveScaling(scaling, previewDifficulty).count` positions, and
+    `scalingPreviewDifficulty` started at **0**, which resolves to a count of 1.
+    Enabling scaling and picking a shape drew a single dot until you found the
+    Preview Difficulty slider at the bottom of the panel. It now starts at the
+    ceiling, so the full group is visible while you shape it.
+  - **Ghost dots and stalk lines were sized in stage units**, so they shrank
+    with the zoom exactly like the buttons did: a 10px dot rendered at 1.75px,
+    and the 1.5px/2px SVG strokes at 0.26px/0.35px. Both are counter-scaled
+    against `--enc-counter-scale` now.
+  - **Defaults spanned more than a whole tile** (`curveEnd` 1.1x TILE_UNIT,
+    `gridWidth` 1.2x, `ringRadius` 0.75x — the ring put 2 of 6 slots off the
+    visible canvas), so the first thing you did was pan hunting for handles.
+    Roughly halved (see `createDefaultScaling`) to ~0.6 tile, which is ~75px of
+    canvas at a phone's fit zoom: readable as a shape, and every handle on
+    screen. A third of the old size was tried first and is too cramped to read.
+  - **Only Curve's handles sat on the shape.** V offered a single handle at the
+    midpoint of its open end — a dot on no part of the shape — with its width a
+    dial having no canvas presence at all; Grid used two edge-midpoint handles.
+    Every shape's sizing handle now lands exactly on a real ghost slot: V gained
+    an arm handle at the open end's corner (`vArmPos`, deliberately the same
+    construction `vSlots` uses for its extreme parameter) alongside the tip, and
+    Grid's two edge handles became one corner handle driving both dimensions.
+    Curve's end and Ring's radius already coincided with their first/last slot.
+    The two handles that are still *not* on a slot are construction points by
+    definition — the V's spine midpoint and the ring's centre.
+
+- **The step-control cluster is hidden while the Scaling tab is open**, and
+  scaling handles paint above unit sprites (`z-index` on `.shmup-handle-btn`).
+  Both are the same collision: a scaling shape starts right next to the
+  instance, so the four-button cluster sat directly on top of the handles you
+  opened the tab to drag — and the ring's centre handle, which defaults to
+  exactly the instance's own position, was completely buried under the node
+  sprite that shares it, i.e. permanently ungrabbable.
 
 **Persistence**: `EncounterUnit.scaling` is a **required** field validated
 strictly (`encounterValidation.ts`'s `isUnitScaling`) — not treated as a
