@@ -84,9 +84,7 @@ export interface UnitScaling {
   gridWidth: number;
   /** grid: block/rank formation depth, centered on the instance's own position. */
   gridDepth: number;
-  /** ring: center point, offset from the instance's own position — defaults to {0,0} (the instance's own position). */
-  ringCenterOffset: Vec2;
-  /** ring: radius, driven by a draggable handle at this distance from the center. */
+  /** ring: radius, driven by a draggable handle at this distance from the centre. The centre is always the instance's own position — a separate centre offset existed once, but it defaulted to exactly the instance position, which put its handle underneath the unit's own sprite where it could never be grabbed, and "the ring is centred on the unit" is the only behaviour that was ever actually wanted. */
   ringRadius: number;
   /** Mirrors the whole resolved slot set across an axis, spawning a second full set — defaults to the owning tile's own center axis, free with no extra authoring. */
   pingPong: boolean;
@@ -118,7 +116,6 @@ export function createDefaultScaling(): UnitScaling {
     vWidth: TILE_UNIT * 0.5,
     gridWidth: TILE_UNIT * 0.55,
     gridDepth: TILE_UNIT * 0.45,
-    ringCenterOffset: { x: 0, y: 0 },
     ringRadius: TILE_UNIT * 0.35,
     pingPong: false,
     pingPongOverride: null,

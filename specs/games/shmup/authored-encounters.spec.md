@@ -109,6 +109,21 @@ genuinely spawns off-screen and flies in, the way a shmup's content
 arrives — rather than popping into existence mid-screen the instant the
 tile loads, which is what an earlier north-edge anchoring did.
 
+**A placed instance is therefore never culled until it has actually been on
+screen at least once** (`shouldCull`, `EncounterRunner.ts`). The rule used to
+be "off screen AND its authored path is over", which is fine for something
+that flies a long path and wrong for everything else: a stationary or
+single-step unit — a Turret, whose one step sits at time 0 — has its path
+"over" on its very first frame, so every scaling slot that happened to start
+outside the viewport was recycled immediately, before the scroll could bring
+it into view. That silently ate most of a group: a `maxCount: 30` turret ring
+put four on the field. It also explains the confusing workaround — adding a
+spawn delay appeared to fix it, because staggering meant each slot was already
+on screen by the time it spawned, not because the delay changed how many
+instances the budget resolved to. The rule is now "has been seen, is off screen
+now, and its path is over", with `placedUnseenLifespanSec` as a backstop so a
+slot the scroll genuinely never reaches can't hold a pool slot all episode.
+
 The anchoring collapses the whole mapping to one depth-independent line:
 
     screenY = localY - TILE_UNIT + LEVEL_SCROLL_SPEED * t

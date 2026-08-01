@@ -464,6 +464,15 @@ export const TUNING = {
     // projectile). Off-screen culling handles the normal case; this catches
     // an authored Unit that hangs around on screen doing nothing.
     spawnedLifespanSec: 12,
+    // Backstop lifespan (sec) for a *placed* instance that has never once been
+    // on screen. Placed instances are normally culled by "was seen, is now off
+    // screen, path is done" — which is what stops a duplicate from being
+    // deleted before the level scrolls it into view — so this only catches a
+    // slot the scroll genuinely never reaches (an authored position off the
+    // side of the level, or a scaling shape flung far outside the tile). Well
+    // above the time a tile takes to scroll past, so it never fires on content
+    // that was simply waiting its turn.
+    placedUnseenLifespanSec: 60,
     // Grace period (sec) after the last authored moment before an encounter
     // with nothing left alive counts as played through — long enough for
     // in-flight projectiles to clear. (The other half of the end condition,

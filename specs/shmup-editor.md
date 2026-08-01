@@ -1589,10 +1589,17 @@ view:
   the current scrub position — the two sliders are independent and serve
   different moments of authoring (shaping one instance's shape vs.
   sanity-checking the whole encounter's readability).
-- **Count range fields gate the rest of the panel**: `maxCount > 1` is what
-  reveals min cost/spawn delay/shape/ping-pong/preview — at the default
-  `maxCount: 1`, the panel is just one Dial and the instance behaves
-  exactly as if E3 didn't exist.
+- **Count range fields gate the *group* fields only.** `maxCount > 1` reveals
+  spawn delay/shape/ping-pong — the things that only mean something for a set
+  of duplicates. **Max count, Cost each, and the resolved readout are always
+  present**, whatever `maxCount` is. Cost used to be gated too, which hid the
+  single most important budget property in exactly the case that needs it most:
+  a lone expensive instance. Difficulty is one currency spent top down — a tile
+  splits its budget across what it spawns, and an instance whose cost exceeds
+  its share doesn't spawn at all — so cost is what gates a miniboss out of early
+  runs and into the endgame, with no separate difficulty-range system. The
+  readout says **"Priced out — nothing spawns at this Difficulty"** when the
+  resolved count is 0, which is the authoring feedback that gating depends on.
 
 - **The reveal is structured so it doesn't shuffle the controls around it.**
   Noah's report: "some dials cause other dials to appear suddenly — if spawn
@@ -1644,8 +1651,13 @@ view:
     construction `vSlots` uses for its extreme parameter) alongside the tip, and
     Grid's two edge handles became one corner handle driving both dimensions.
     Curve's end and Ring's radius already coincided with their first/last slot.
-    The two handles that are still *not* on a slot are construction points by
-    definition — the V's spine midpoint and the ring's centre.
+  - **Ring has exactly one handle, the radius; its centre is always the
+    instance's own position.** `ringCenterOffset` is gone from the model
+    entirely (editor and runtime), not just hidden: it defaulted to {0,0}, which
+    put its handle underneath the unit's own sprite where it could never be
+    grabbed, and a ring centred on anything other than the unit was never
+    actually wanted. Dropped from both validators rather than version-bumped, so
+    saves still carrying the key keep loading — an extra property is harmless.
 
 - **The step-control cluster is hidden while the Scaling tab is open**, and
   scaling handles paint above unit sprites (`z-index` on `.shmup-handle-btn`).

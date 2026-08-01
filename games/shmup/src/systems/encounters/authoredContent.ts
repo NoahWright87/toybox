@@ -189,7 +189,6 @@ function isScaling(v: unknown): v is AuthoredScaling {
     isNum(s.vWidth) &&
     isNum(s.gridWidth) &&
     isNum(s.gridDepth) &&
-    isVec2(s.ringCenterOffset) &&
     isNum(s.ringRadius) &&
     typeof s.pingPong === "boolean" &&
     (s.pingPongOverride === null || isNum(s.pingPongOverride))

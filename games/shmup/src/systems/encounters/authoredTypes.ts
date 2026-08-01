@@ -157,7 +157,6 @@ export interface AuthoredScaling {
   vWidth: number;
   gridWidth: number;
   gridDepth: number;
-  ringCenterOffset: Vec2;
   ringRadius: number;
   pingPong: boolean;
   pingPongOverride: number | null;

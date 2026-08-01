@@ -62,7 +62,6 @@ function isUnitScaling(v: unknown): v is UnitScaling {
     isNumber(s.vWidth) &&
     isNumber(s.gridWidth) &&
     isNumber(s.gridDepth) &&
-    isVec2(s.ringCenterOffset) &&
     isNumber(s.ringRadius) &&
     typeof s.pingPong === "boolean" &&
     (s.pingPongOverride === null || isNumber(s.pingPongOverride))

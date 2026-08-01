@@ -45,7 +45,6 @@ type ScalingHandleId =
   | { kind: "vTip" }
   | { kind: "vArm" }
   | { kind: "gridCorner" }
-  | { kind: "ringCenter" }
   | { kind: "ringRadius" }
   | { kind: "pingPongOverride" };
 type ScalingDrag = { instanceId: string; handle: ScalingHandleId; pos: Vec2 } | null;
@@ -94,7 +93,6 @@ const SCALING_HANDLE_TITLES: Record<ScalingHandleId["kind"], string> = {
   vTip: "Drag to set the V's depth and direction",
   vArm: "Drag to open or close the V",
   gridCorner: "Drag to size the block (width and depth)",
-  ringCenter: "Drag to move the ring's centre",
   ringRadius: "Drag to set the ring's radius",
   pingPongOverride: "Drag to set an asymmetric mirror axis",
 };
@@ -778,9 +776,10 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // emits). The Width/Depth dials still drive each axis independently.
       handles.push({ handle: { kind: "gridCorner" }, pos: { x: origin.x + s.gridWidth / 2, y: origin.y + s.gridDepth / 2 } });
     } else if (s.shape === "ring") {
-      const center = { x: origin.x + s.ringCenterOffset.x, y: origin.y + s.ringCenterOffset.y };
-      handles.push({ handle: { kind: "ringCenter" }, pos: center });
-      handles.push({ handle: { kind: "ringRadius" }, pos: { x: center.x + s.ringRadius, y: center.y } });
+      // One handle only. The ring is always centred on the instance itself, so
+      // a centre handle sat exactly under the unit's own sprite — unreachable,
+      // and controlling something nobody wanted to move.
+      handles.push({ handle: { kind: "ringRadius" }, pos: { x: origin.x + s.ringRadius, y: origin.y } });
     }
     if (s.pingPong) {
       handles.push({ handle: { kind: "pingPongOverride" }, pos: { x: s.pingPongOverride ?? tileWidthPx / 2, y: -TILE_UNIT * 0.35 } });
@@ -896,12 +895,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       }
       case "gridCorner":
         return { gridWidth: Math.max(0, Math.abs(offset.x) * 2), gridDepth: Math.max(0, Math.abs(offset.y) * 2) };
-      case "ringCenter":
-        return { ringCenterOffset: offset };
-      case "ringRadius": {
-        const center = scaling.ringCenterOffset;
-        return { ringRadius: Math.max(1, Math.hypot(offset.x - center.x, offset.y - center.y)) };
-      }
+      case "ringRadius":
+        // `offset` is already relative to the instance, which is the centre.
+        return { ringRadius: Math.max(1, Math.hypot(offset.x, offset.y)) };
       case "pingPongOverride":
         return { pingPongOverride: absolute.x };
       default:
@@ -1170,7 +1166,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                     // Each stalk hangs off whatever the handle is measured
                     // *from*, not always the instance origin: a ring's radius
                     // from its centre, a V's arm from its tip.
-                    const anchorKind = handle.kind === "ringRadius" ? "ringCenter" : handle.kind === "vArm" ? "vTip" : null;
+                    const anchorKind = handle.kind === "vArm" ? "vTip" : null;
                     const anchorStage =
                       anchorKind && selectedInstance
                         ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === anchorKind)?.pos ?? pos)

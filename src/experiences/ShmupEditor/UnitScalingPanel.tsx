@@ -27,13 +27,41 @@ export default function UnitScalingPanel({ scaling, previewDifficulty, onPreview
 
   return (
     <div className="shmup-panel">
-      {/* Max count sits ALONE in its grid on purpose. It used to share a
-          wrapping flex row with Min cost / Spawn delay, so turning scaling on
-          re-flowed the very dial you were touching. Its own row means the
-          control under your finger cannot move. */}
+      {/* Max count and Cost are ALWAYS present, whatever maxCount is.
+          Cost used to be gated behind maxCount > 1, which hid the single most
+          important budget property in exactly the case that needs it most: a
+          lone expensive instance. Difficulty is one currency spent top down — a
+          tile splits its budget across what it spawns, and an instance whose
+          cost exceeds its share doesn't spawn at all — so cost is what gates a
+          miniboss out of early runs and into the endgame, with no separate
+          difficulty-range system. That's a property of *one* instance, not of a
+          group, so it belongs outside the group section.
+
+          Max count keeps its own row: it used to share a wrapping flex row with
+          the group fields, so turning scaling on re-flowed the very dial you
+          were touching. */}
       <div className="shmup-dial-grid">
         <Dial label="Max count" value={scaling.maxCount} onChange={(v) => onChange({ maxCount: v })} min={1} max={MAX_COUNT_CEILING} showNudgeButtons />
+        <Dial label="Cost each" value={scaling.minCostPerInstance} onChange={(v) => onChange({ minCostPerInstance: Math.max(0.01, v) })} step={1} showNudgeButtons />
       </div>
+
+      {/* The budget outcome, always visible for the same reason: at maxCount 1
+          this is the "does this thing spawn at all, at this Difficulty" readout,
+          which was otherwise invisible until you enabled grouping. */}
+      <label className="shmup-field shmup-field--inline">
+        <span>Preview Difficulty</span>
+        <input type="range" min={0} max={PREVIEW_DIFFICULTY_MAX} value={previewDifficulty} onChange={(e) => onPreviewDifficultyChange(Number(e.target.value))} />
+        <span className="shmup-spawn-scaling-preview__value">{previewDifficulty}</span>
+      </label>
+      <p className="shmup-readout">
+        {resolution.count === 0 ? (
+          <strong>Priced out — nothing spawns at this Difficulty</strong>
+        ) : (
+          <>
+            <strong>{resolution.count}</strong> instance{resolution.count === 1 ? "" : "s"} · <strong>{resolution.power}</strong> Difficulty each
+          </>
+        )}
+      </p>
 
       {/* Everything gated behind maxCount > 1 appears as ONE labelled section
           rather than as ~12 controls materialising inline at various depths —
@@ -44,7 +72,6 @@ export default function UnitScalingPanel({ scaling, previewDifficulty, onPreview
         <div className="shmup-scaling-more">
           <div className="shmup-scaling-more__title">Group of {scaling.maxCount}</div>
           <div className="shmup-dial-grid">
-            <Dial label="Min cost" value={scaling.minCostPerInstance} onChange={(v) => onChange({ minCostPerInstance: Math.max(0.01, v) })} step={1} showNudgeButtons />
             <Dial label="Spawn delay (ms)" value={scaling.spawnDelayMs} onChange={(v) => onChange({ spawnDelayMs: Math.max(0, v) })} step={50} showNudgeButtons />
           </div>
 
@@ -100,14 +127,6 @@ export default function UnitScalingPanel({ scaling, previewDifficulty, onPreview
             Ping-pong mirror
           </label>
 
-          <label className="shmup-field shmup-field--inline">
-            <span>Preview Difficulty</span>
-            <input type="range" min={0} max={PREVIEW_DIFFICULTY_MAX} value={previewDifficulty} onChange={(e) => onPreviewDifficultyChange(Number(e.target.value))} />
-            <span className="shmup-spawn-scaling-preview__value">{previewDifficulty}</span>
-          </label>
-          <p className="shmup-readout">
-            <strong>{resolution.count}</strong> instance{resolution.count === 1 ? "" : "s"} · <strong>{resolution.power}</strong> Difficulty each
-          </p>
         </div>
       )}
     </div>
