@@ -109,6 +109,43 @@ genuinely spawns off-screen and flies in, the way a shmup's content
 arrives — rather than popping into existence mid-screen the instant the
 tile loads, which is what an earlier north-edge anchoring did.
 
+**Air units do not ride the terrain.** Every authored position resolves through
+the tile frame, and that frame slides down the screen as the level scrolls — so
+everything on a tile moved with it, which is right for a turret bolted to the
+ground and wrong for an aircraft, which the terrain should pass beneath. Keyed
+off `UnitDef.layer` (`isScrollLocked`, `EncounterRunner.ts`), this is the
+scroll-locked/time-locked reference-frame split `shmup-editor.todo.md` deferred:
+
+- **Ground and doodad stay scroll-locked**, resolving against the live frame
+  forever.
+- **Air is time-locked, but not from spawn.** The tile's north edge is a full
+  `TILE_UNIT` above the screen at tile-clock zero, so a unit authored at the top
+  of its tile spawns at screen Y −720; pinning its frame there would strand it
+  off-screen forever instead of letting it fly in. An air unit tracks the
+  scrolling frame exactly as a ground unit does **until it is first genuinely on
+  screen**, and pins the frame origin at that moment (`pinnedOriginY`). It
+  therefore still enters on cue where the author drew it, and from then on the
+  only thing that moves it is its own authored path. Pinning the *current*
+  origin makes the handover positionally continuous — nothing jumps on the frame
+  it decouples.
+- **The pin deliberately uses a different visibility test from culling.** Culling
+  uses the generous `despawnMarginPx` so a path looping just off the edge isn't
+  deleted mid-manoeuvre; the pin needs true viewport containment, because keying
+  it off the margin decoupled air units 220px *above* the top edge, where they
+  held station off screen and never appeared at all.
+
+Measured in the engine with a turret and a helicopter authored side by side on
+one tile: both descend together from y −515 to −28 as the tile scrolls in, then
+at the moment the helicopter crosses the top edge it pins at y 5 and holds while
+the turret carries on down (63 → 751) and off the bottom with its terrain.
+
+**A known consequence:** an air unit whose authored path leaves it parked on
+screen no longer scrolls away, so it is still there when its tile retires
+(`tileFullyOffScreen`, ~11.1s) and gets recycled where it stands. Air units with
+a real flight path fly themselves off and never hit this; a parked one pops. If
+that becomes visible in practice the fix is ownership hand-off at tile retire,
+not re-coupling air to the ground.
+
 **A placed instance is therefore never culled until it has actually been on
 screen at least once** (`shouldCull`, `EncounterRunner.ts`). The rule used to
 be "off screen AND its authored path is over", which is fine for something

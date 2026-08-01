@@ -369,7 +369,13 @@ current design; this entry describes what actually shipped.
   time-locked) are deferred~~ — **Layers shipped** when Actions came back:
   `UnitDef.layer: "ground" | "air" | "doodad"`, chosen once per Unit, shown
   as a filter in the Encounter editor's "+ Add" picker. Scroll-locked/
-  time-locked reference frames are still not a concept here. What the game
+  time-locked reference frames are still not a concept *in the editor*, but
+  they now exist **at runtime**, derived from the layer rather than authored
+  separately: ground/doodad ride the scrolling tile frame, air decouples from
+  it once on screen so the terrain passes beneath it (see
+  `games/shmup/authored-encounters.spec.md`). The editor canvas is tile-local
+  and static, so it shows the authored layout either way — it does not yet
+  visualise that an air unit will stop tracking the terrain. What the game
   does with layers when picking which Encounters combine on a tile spawn
   is a separate runtime concern this editor doesn't need to know about.
   **Deliberate departure from v3 §6's model, confirmed by Noah, not an

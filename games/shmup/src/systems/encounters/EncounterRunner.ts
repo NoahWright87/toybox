@@ -110,6 +110,35 @@ interface LiveInstance {
    * appeared, rather than changing how many were resolved.
    */
   seenOnScreen: boolean;
+  /**
+   * **Scroll-locked vs time-locked reference frame**, keyed off `UnitDef.layer`
+   * (the concept `shmup-editor.todo.md` deferred; this is it arriving).
+   *
+   * Every authored position resolves through the tile frame, and that frame
+   * slides down the screen as the level scrolls — so everything on a tile moved
+   * with it, which is exactly right for a turret bolted to the ground and
+   * exactly wrong for an aircraft. A jet is not attached to the terrain; the
+   * terrain passes beneath it.
+   *
+   * True for ground and doodad units, which keep resolving against the live
+   * frame forever. False for air, which decouples — see `pinnedOriginY`.
+   */
+  scrollLocked: boolean;
+  /**
+   * The frame origin Y an air unit resolves against once it has decoupled, or
+   * `null` while it is still riding the scroll in.
+   *
+   * Air units deliberately do **not** pin at spawn. The tile's north edge is a
+   * full `TILE_UNIT` above the screen at tile-clock zero, so a unit authored at
+   * the top of its tile spawns at screen Y -720; pinning there would strand it
+   * off-screen forever instead of letting it fly in. Instead an air unit tracks
+   * the scrolling frame exactly as before **until it first becomes visible**,
+   * and pins at that moment — so it still enters on cue where the author drew
+   * it, and from then on the only thing that moves it is its own authored path.
+   * Pinning the *current* origin makes the handover positionally continuous:
+   * nothing jumps on the frame it decouples.
+   */
+  pinnedOriginY: number | null;
   /** The Action a dynamically spawned instance runs (its `defaultActionId`). Null for a placed one, which reads its Action off each step. */
   spawnedAction: AuthoredAction | null;
   /** Encounter time (sec) this instance's own local clock started at. */
@@ -152,6 +181,11 @@ export interface EncounterRunnerConfig {
   playerPos: () => Vec2;
   /** Texture key used when an authored sprite id resolves to nothing loadable. */
   fallbackTexture: string;
+}
+
+/** Whether a layer's authored positions ride the scrolling tile frame. Air does not — see `LiveInstance.pinnedOriginY`. */
+export function isScrollLocked(layer: string): boolean {
+  return layer !== "air";
 }
 
 /**
@@ -339,6 +373,8 @@ export class EncounterRunner {
       steps: p.steps,
       pathEndSec: p.startSec + p.steps[p.steps.length - 1].time,
       seenOnScreen: false,
+      scrollLocked: isScrollLocked(p.def.layer),
+      pinnedOriginY: null,
       spawnedAction: null,
       startSec: p.startSec,
       power: p.power,
@@ -414,6 +450,12 @@ export class EncounterRunner {
     return out;
   }
 
+  /** The frame an instance resolves authored positions through — the live scrolling one, or its pinned copy for a time-locked (air) unit. */
+  private frameFor(instance: LiveInstance): TileFrame {
+    if (instance.pinnedOriginY === null) return this.frame;
+    return { ...this.frame, originY: instance.pinnedOriginY };
+  }
+
   private updatePlaced(instance: LiveInstance, previousSec: number): void {
     const steps = instance.steps;
     if (!steps) return;
@@ -421,7 +463,7 @@ export class EncounterRunner {
     const state = instanceStateAt(steps, instance.def.turnRate, localT);
     if (!state) return;
 
-    const screen = toScreen(this.frame, state.pos);
+    const screen = toScreen(this.frameFor(instance), state.pos);
     instance.entity.setPosition(screen.x, screen.y);
 
     const action = this.actionById(instance.def.actions, state.step.actionId);
@@ -582,6 +624,11 @@ export class EncounterRunner {
       steps: null,
       pathEndSec: 0,
       seenOnScreen: false,
+      // A dynamically spawned instance already moves in pure screen space
+      // (`updateSpawned` integrates velocity directly), so it has no tile frame
+      // to track or pin either way.
+      scrollLocked: true,
+      pinnedOriginY: null,
       spawnedAction: action,
       startSec: this.clockSec,
       power,
@@ -621,7 +668,21 @@ export class EncounterRunner {
       }
       const offScreen =
         entity.x < -margin || entity.x > GAME_WIDTH + margin || entity.y < -margin || entity.y > GAME_HEIGHT + margin;
-      if (!offScreen) instance.seenOnScreen = true;
+      // Note the two different tests. Culling uses the generous despawn margin,
+      // so a path that loops just off the edge isn't deleted mid-manoeuvre. The
+      // air-unit pin needs *actual* visibility: pinning on the margin version
+      // decoupled a unit 220px above the top edge, where it then held station
+      // off screen forever instead of flying in.
+      const onScreen = entity.x >= 0 && entity.x <= GAME_WIDTH && entity.y >= 0 && entity.y <= GAME_HEIGHT;
+      if (onScreen) {
+        // The instant an air unit is genuinely on screen it stops riding the
+        // scroll and holds the frame it entered on. Pinning here rather than at
+        // spawn is what lets it fly in from above the tile first.
+        if (!instance.seenOnScreen && !instance.scrollLocked && instance.steps !== null) {
+          instance.pinnedOriginY = this.frame.originY;
+        }
+        instance.seenOnScreen = true;
+      }
       const done = shouldCull({
         placed: instance.steps !== null,
         offScreen,

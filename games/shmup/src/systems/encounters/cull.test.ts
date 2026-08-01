@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldCull } from "./EncounterRunner";
+import { isScrollLocked, shouldCull } from "./EncounterRunner";
 import { TUNING } from "../../tuning";
 
 /**
@@ -48,5 +48,28 @@ describe("shouldCull", () => {
   it("culls a spawned instance that overstays on screen", () => {
     const ageSec = TUNING.encounters.spawnedLifespanSec + 1;
     expect(shouldCull({ placed: false, offScreen: false, seenOnScreen: true, ageSec, pathOver: false })).toBe(true);
+  });
+});
+
+/**
+ * Reference frames. Authored positions resolve through the tile frame, which
+ * slides down the screen as the level scrolls — correct for a turret bolted to
+ * the ground, wrong for an aircraft, which the terrain should pass beneath.
+ */
+describe("isScrollLocked", () => {
+  it("keeps ground units riding the scrolling tile frame", () => {
+    expect(isScrollLocked("ground")).toBe(true);
+  });
+
+  it("keeps doodads riding it too — they are scenery on the terrain", () => {
+    expect(isScrollLocked("doodad")).toBe(true);
+  });
+
+  it("decouples air units from the terrain", () => {
+    expect(isScrollLocked("air")).toBe(false);
+  });
+
+  it("treats an unknown layer as scroll-locked, the safer default", () => {
+    expect(isScrollLocked("something-new")).toBe(true);
   });
 });
