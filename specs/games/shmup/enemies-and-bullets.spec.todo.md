@@ -2,7 +2,14 @@
 
 > Issues: **L3 #185** (enemy runtime model), **L4 #186** (bullets-as-
 > minimal-enemies), **L8 #190** (boss tiles + first hand-coded boss). Part
-> of **Epic 5 #181**. Status: design locked, not yet implemented. Source:
+> of **Epic 5 #181**. Status: **design locked; substantially implemented for
+> *authored* content** — `systems/encounters/` (EncounterRunner, bezier
+> movement, per-Part attack tracks, and bullets that are real spawned Units
+> with their own tracks) plays Epic 6's authored encounters today, see
+> `authored-encounters.spec.md`. What is *not* built is this spec applied to
+> **generated** levels (blocked on L1/L2) and **L8's boss tiles**. Treat
+> per-section claims of "not implemented" below with that in mind; they were
+> written before the authored-content pipeline existed. Source:
 > design handoff doc (Claude Chat → Claude Code), 2026-07-04; **reconciled
 > 2026-07-16 against Epic 6's shipped `/shmup-editor` authoring model**,
 > which was designed and built after this spec's original node-graph draft
@@ -194,16 +201,20 @@ position against scroll vs. drifting with it) is still deferred, not
 built — this is unaffected by Layers shipping.** `UnitDef.layer`
 (Ground/Air/Doodad) shipped as an authored, Unit-level field — a fixed
 property of the Unit definition itself, chosen once when authoring the
-Unit, **not** an Encounter-level concept and **not** the same thing as the
-reference-frame question. Every step today is still a plain tile-relative
-canvas position regardless of which layer its Unit belongs to — there's no
+Unit, and **not** an Encounter-level concept.
+
+**The reference-frame question this paragraph used to describe as open is
+resolved and shipped, in both packages.** It said "there's no
 `scrollLocked`/`timeLocked` concept anywhere yet, so a Ground Unit and an
-Air Unit are scheduled identically even though an Air Unit's position
-conceptually shouldn't be tile-relative. Until that lands, whether a
-dwelling enemy holds screen position or scrolls with the terrain is
-presumably a runtime-only decision (e.g. per enemy archetype) rather than
-something the editor lets an author choose per-step. See
-`shmup-editor.todo.md`'s E2 Remaining list for the tracked gap.
+Air Unit are scheduled identically" — that stopped being true when
+`EncounterRunner.ts` gained `isScrollLocked`/`pinnedOriginY` (see
+`authored-encounters.spec.md`), and the editor caught up with its Ground/Air
+authoring frames (`airFrame.ts`, `specs/shmup-editor.md`). Ground and doodad
+ride the scrolling tile frame; air rides it until first genuinely visible
+and then holds screen position. A dwelling enemy therefore holds screen
+position or scrolls with the terrain **according to its Unit's layer** — it
+is not a runtime-only per-archetype decision, and it is not authored
+per-step.
 
 ## 4. Exit
 

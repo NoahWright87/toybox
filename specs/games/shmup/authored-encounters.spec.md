@@ -114,7 +114,11 @@ the tile frame, and that frame slides down the screen as the level scrolls — s
 everything on a tile moved with it, which is right for a turret bolted to the
 ground and wrong for an aircraft, which the terrain should pass beneath. Keyed
 off `UnitDef.layer` (`isScrollLocked`, `EncounterRunner.ts`), this is the
-scroll-locked/time-locked reference-frame split `shmup-editor.todo.md` deferred:
+scroll-locked/time-locked reference-frame split `shmup-editor.todo.md` had
+deferred. **The editor has since caught up** — its Ground/Air authoring
+frames (`airFrame.ts`) mirror the rule below rather than deriving their own,
+so what you draw is what plays; see `specs/shmup-editor.md`'s "Authoring
+frames: Ground vs Air":
 
 - **Ground and doodad stay scroll-locked**, resolving against the live frame
   forever.
@@ -196,6 +200,12 @@ moves the dotted camera box up the tile and the player marker through it —
 where before both were static rectangles that quietly implied the tile just
 sits there. Fixing the width fell out of the same change: the camera is
 always one screen across, and no longer stretches to a 3-wide tile.
+
+The editor's **Air** authoring frame is the same geometry read the other way
+round: it holds the camera box still and slides the tile through it, which is
+what an aircraft actually experiences. Air units are drawn riding the terrain
+until their pin moment and holding station after, matching `pinnedOriginY`
+above exactly.
 
 ## Display size vs. hitbox size
 

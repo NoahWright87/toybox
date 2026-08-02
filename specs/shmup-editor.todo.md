@@ -1,28 +1,36 @@
 # Shmup Level & Enemy Editor — TODOs (PRD)
 
 > Epic: **[Shmup Editor] Epic 6 #182**. Issues: **E1 #191** (tile editor —
-> partially shipped, see `shmup-editor.md`), **E2 #192** (Unit +
-> Encounter editor — shipped minus layers and per-param scaling curves,
-> see `shmup-editor.md`), **E3 #193** (per-instance scaling — shipped minus
-> the same per-param scaling-curve retrofit, see `shmup-editor.md`'s
-> "Per-instance scaling (E3)" section), **E4 #194** (preview/playtest),
-> **E5 #195** (export/import pipeline). Source: design handoff docs
-> (Claude Chat → Claude Code), 2026-07-04 and 2026-07-11.
+> shipped bar one runtime-side side quest, see `shmup-editor.md`), **E2 #192**
+> (Unit + Encounter editor — shipped, including Layers and the Ground/Air
+> authoring frames, minus per-param scaling curves), **E3 #193**
+> (per-instance scaling — shipped minus the same per-param scaling-curve
+> retrofit, see `shmup-editor.md`'s "Per-instance scaling (E3)" section),
+> **E4 #194** (preview/playtest — low-fi hitbox preview shipped, multi-tile
+> chaining not), **E5 #195** (export/import pipeline — **superseded, there
+> is no export**; see that section). Source: design handoff docs (Claude
+> Chat → Claude Code), 2026-07-04 and 2026-07-11.
 
 ## What this is
 
 A browser-based authoring tool at **`/shmup-editor`**, used to create
-tiles, enemy definitions, and spawn configurations for the shmup game's
-data-driven level system (`specs/games/shmup/levels-and-tiles.spec.todo.md`,
-`enemies-and-bullets.spec.todo.md`, `spawn-and-warnings.spec.todo.md`). It
-will output JSON files that a human commits into the `games/shmup`
-workspace as static content (the concrete hand-off mechanics are E5's job
-— nothing lands there automatically yet).
+tiles, Units, and encounters for the shmup game's data-driven level system
+(`specs/games/shmup/levels-and-tiles.spec.todo.md`,
+`enemies-and-bullets.spec.todo.md`, `spawn-and-warnings.spec.todo.md`).
 
-Settled (see `shmup-editor.md` for the shipped slice): the editor is a
-route in the **main app**, not inside `games/shmup`'s Phaser workspace;
-it shares **no runtime code** with the game (only the JSON shape); tiles
-persist via **fsStore**, not localStorage.
+**The game reads what it authors directly** — both apps are same-origin and
+share the `ns97_fs_v1` localStorage blob, so there is no export step and
+nothing is committed into `games/shmup` by hand. (This section used to
+describe a JSON-export-and-commit hand-off; that plan was dropped — see E5
+below for why, and `games/shmup/authored-encounters.spec.md` for what
+replaced it.)
+
+Settled (see `shmup-editor.md` for the shipped behavior): the editor is a
+route in the **main app**, not inside `games/shmup`'s Phaser workspace; it
+shares **no runtime code** with the game beyond the one module both import
+on purpose (`scrollModel.ts` — the tile size and scroll speed, where two
+mirrored copies had already drifted once); content persists via
+**fsStore**, not localStorage directly.
 
 ## Non-goals for this tool
 
@@ -30,14 +38,16 @@ persist via **fsStore**, not localStorage.
   Hellzone's `HellMapEditor.tsx` stays separate — different data model,
   different game).
 - Not a live-preview-against-the-real-Phaser-bundle tool — E4's preview
-  mode is a lightweight in-browser simulation of node-graph/spawn timing,
-  not an embedded copy of `games/shmup`.
+  mode is a lightweight in-browser approximation of movement/attack timing,
+  not an embedded copy of `games/shmup`. (Playing content *for real* is a
+  separate thing that does exist: the ▶ buttons hand off to the actual
+  game — see E5.)
 - No multiplayer/real-time collaboration — single-author, local browser
-  session, export-to-file.
+  session.
 
 ## Surfaces (build in this order — E1/E2 are load-bearing)
 
-### E1 — Tile editor (#191) — partially shipped
+### E1 — Tile editor (#191) — shipped (one runtime-side side quest left)
 
 **Done** (see `shmup-editor.md`): mobile-first footprint sizing (a 1x1
 tile fills most of a phone's width; wider footprints scroll horizontally,
@@ -291,9 +301,11 @@ current design; this entry describes what actually shipped.
   flat multiplier. `EncounterUnit` gained a flat, **unordered**
   `attacks: EncounterAttack[]` (`{partId, weaponId, time, durationMs,
   aimAngleOverride}`, `encounterAttacks.ts`'s CRUD has no chronology
-  invariant to maintain, unlike steps) — placed via a 🔫+ button on a
-  selected step's control cluster (adds at that step's time; a small Part
-  picker appears if the Unit has more than one Part), rendered as its own
+  invariant to maintain, unlike steps) — placed, **at the time of this
+  pass**, via a 🔫+ button on a selected step's control cluster (adds at
+  that step's time; a small Part picker appears if the Unit has more than
+  one Part; both since removed — see the Parts-as-tracks entry below),
+  rendered as its own
   marker on canvas (anchored wherever the instance's bezier path puts it
   at the attack's own time, reusing `movementPreview.ts`'s
   `computeInstancePreview`) and its own lane on the timeline, one per Part
@@ -346,6 +358,30 @@ current design; this entry describes what actually shipped.
   `SAVE_VERSION` (7→8) and `TILE_SESSION_VERSION` (4→5), plus
   `tileStore.ts`'s `SAVE_VERSION` (5→6), all bumped — the usual "reset
   rather than silently carry a mismatched shape" reason.
+- **Parts became independent timeline tracks and the 🔫+ button was
+  removed** (2026-08-02, `partActions.ts`'s `seedPartActions`,
+  `PartActionPanel.tsx`). Noah, on finding the button still there long
+  after Actions had absorbed attacks: "why do we still have an attack
+  button? Aren't attacks 100% covered by Actions in general?" They are —
+  one `ActionDef` with an optional `attack`, one `runAttackTrack` in the
+  runtime serving the base Unit and every Part alike. The button was
+  pre-unification vocabulary that outlived its data model, and it existed
+  only because a Part with no placements had no lane and nothing to select.
+  Now: placing a Unit seeds a placement for every Part at spawn time (a
+  Part with no Actions included, with a `null` `actionId` — both validators
+  already accepted that, so no save-version bump and existing content is
+  untouched); every Part owns a lane; a lane's dots select and append like
+  step diamonds, with **+** adding at the playhead; and a Unit's Part lanes
+  are expanded exactly while that Unit is selected, folding to one hairline
+  summary row otherwise, so a four-turret battleship can't own the ruler.
+  Vocabulary followed the model throughout (`AttackPanel` →
+  `PartActionPanel`, "Attack" tab → "Part", selection kind `"attack"` →
+  `"partAction"`), and the panel dropped its Part dropdown — you now select
+  a placement from the lane that names its Part, so a control that could
+  silently move it to another turret is a way to lose work, not a feature.
+  **Parts still don't move** — this was scheduling parity only, per Noah;
+  positional authoring for Parts stays deferred (see the rotating/facing
+  Part sprite item below).
 - ~~Actions cut entirely~~ — **reversed.** After building with the
   Action-less editor for a while, Noah's call was that a plain step/attack
   model was missing too much (reusable named behaviors, facing/rotation, a
@@ -369,15 +405,16 @@ current design; this entry describes what actually shipped.
   time-locked) are deferred~~ — **Layers shipped** when Actions came back:
   `UnitDef.layer: "ground" | "air" | "doodad"`, chosen once per Unit, shown
   as a filter in the Encounter editor's "+ Add" picker. Scroll-locked/
-  time-locked reference frames are still not a concept *in the editor*, but
-  they now exist **at runtime**, derived from the layer rather than authored
-  separately: ground/doodad ride the scrolling tile frame, air decouples from
-  it once on screen so the terrain passes beneath it (see
-  `games/shmup/authored-encounters.spec.md`). The editor canvas is tile-local
-  and static, so it shows the authored layout either way — it does not yet
-  visualise that an air unit will stop tracking the terrain. What the game
-  does with layers when picking which Encounters combine on a tile spawn
-  is a separate runtime concern this editor doesn't need to know about.
+  time-locked reference frames exist **at runtime**, derived from the layer
+  rather than authored separately: ground/doodad ride the scrolling tile
+  frame, air decouples from it once on screen so the terrain passes beneath
+  it (see `games/shmup/authored-encounters.spec.md`). **They now exist in
+  the editor too** (2026-08-02) — the sentence that used to sit here saying
+  the canvas "does not yet visualise that an air unit will stop tracking the
+  terrain" is obsolete; see the Ground/Air entry under Remaining below and
+  `shmup-editor.md`'s "Authoring frames" section. What the game does with
+  layers when picking which Encounters combine on a tile spawn is still a
+  separate runtime concern this editor doesn't need to know about.
   **Deliberate departure from v3 §6's model, confirmed by Noah, not an
   oversight**: v3 describes layer as an *Encounter*-level concept (an
   Encounter "can define up to 3 layers... and places one or more Unit
@@ -420,23 +457,34 @@ current design; this entry describes what actually shipped.
   still a plain flat number.
 
 **Remaining:**
-- **Air units are placed/scheduled exactly like ground units today — real
-  design gap, not yet resolved.** A ground Unit's `pos`/steps are naturally
-  tile-relative (it's driving/walking over the tile's own terrain); an air
-  Unit conceptually shouldn't be — Noah: "their positions are relative to
-  the camera, not the tile." The editor doesn't distinguish the two yet:
-  every instance's steps place/schedule against the same tile-relative
-  world space regardless of `UnitDef.layer`. Needs its own design pass
-  (does an air Unit's step `pos` become camera/viewport-relative instead of
-  tile-relative? does its clock run against scroll position rather than
-  the shared encounter `time`? how does that interact with the timeline
-  scrubber and E4's hitbox preview, both of which currently assume one
-  tile-relative coordinate space for everything) before it's built — flagged
-  here so it isn't lost, not attempted as part of the Actions-are-back pass.
-  **This is v3's §6 "Reference frame" concept** (`scrollLocked` for Ground,
-  `timeLocked` for Air) — v3 already names the two behaviors this needs;
-  what's missing is deciding how `timeLocked` interacts with this editor's
-  shared encounter clock and the timeline scrubber before building it.
+- ~~Air units are placed/scheduled exactly like ground units today~~ —
+  **shipped (2026-08-02): Ground/Air authoring frames.** See
+  `shmup-editor.md`'s "Authoring frames: Ground vs Air" section for the
+  full design. Two corrections to how this entry framed the problem, both
+  found while building it:
+  - **It was never an open design question by the time this was written.**
+    The *runtime* had already shipped the split (`EncounterRunner.ts`'s
+    `isScrollLocked`/`pinnedOriginY`, `authored-encounters.spec.md`); only
+    the editor was blind to it. So the work was "mirror the runtime's
+    rule", not "decide a rule" — and `airFrame.ts` deliberately copies it
+    rather than deriving an editor-side equivalent.
+  - **"Air positions are camera-relative" is very nearly right but not
+    literally what the runtime does**, and the difference matters. An air
+    Unit rides the tile frame until it is *first genuinely on screen*, and
+    pins only then — pinning at spawn would strand it, since at tile clock
+    zero the tile's north edge is a full `TILE_UNIT` above the screen. So
+    the editor shows the fly-in as real motion and marks the decouple
+    moment on the timeline, rather than drawing air units as viewport-fixed
+    from t=0.
+
+  The answers to this entry's own open questions, for the record: a step's
+  `pos` stays **tile-local in the saved data** (air mode is a rigid
+  render-time translation — the runtime resolves air positions *through*
+  the tile frame, and a rigid translation preserves arc length, so no
+  derived step time changed and no save-version bump was needed); the clock
+  stays the **one shared encounter clock**, unchanged; and the timeline
+  scrubber and E4 hitbox preview both keep their single tile-relative
+  coordinate space, with the frame offset applied at render.
 - ~~A Unit can't be authored with zero Parts, contradicting v3 §4~~ —
   **resolved.** v3 §4: "A Unit does not require Parts... the simplest
   case... is a Unit with zero Parts and a single Final Action on the Unit
@@ -472,7 +520,7 @@ current design; this entry describes what actually shipped.
   placement's `time` lands inside — surfaces how many seconds too early it
   is. An indefinite-repeat preceding attack (`computeAttackDurationMs`
   returns `null`) warns unconditionally, since there's no end to land
-  after. `AttackPanel.tsx` renders it below the Time Dial via a new
+  after. `PartActionPanel.tsx` renders it below the Time Dial via a new
   `.shmup-warning` style (amber, distinct from `.shmup-error`'s red —
   deliberately non-blocking: duration is only ever an estimate, and an
   author may have a real reason to want two bursts to overlap, so nothing
@@ -497,7 +545,7 @@ current design; this entry describes what actually shipped.
   (`ActionForm.tsx`) instead of v3's proposed nested piano-roll editor.
   Revisit only if/when a Unit's own Actions need to be sequenced against
   each other rather than referenced individually by encounter placements.
-- **Weapon strength doesn't pass down to spawned Units via the difficulty
+- **Attack strength doesn't pass down to spawned Units via the difficulty
   system (v3 §4.2, §5.5).** `ActionAttack.spawnScale` is a flat multiplier
   only — a spawned bullet Unit's stats don't scale with whatever
   difficulty/power value produced the Action that fired it. Same root
@@ -543,12 +591,12 @@ current design; this entry describes what actually shipped.
   position (shipped in the "visual authoring pass" follow-up — see
   `shmup-editor.md`'s section of that name) — what's still missing is
   *rotation*: a Part's sprite always renders at a fixed orientation, it
-  doesn't turn to visually track its own Weapon's current aim direction
+  doesn't turn to visually track its own Action attack's current aim direction
   the way a tank turret would. The design doc's §5.4 gives a concrete
   shape to build toward: a facing mode per Part (`fixedToBody` — rotates
   with the base sprite; `facePlayer` — a turret always oriented at the
   live player; `faceMovement` — oriented toward current travel direction;
-  `faceAttackTarget` — oriented toward wherever its own Weapon is
+  `faceAttackTarget` — oriented toward wherever its own Action's attack is
   currently aiming, for a fixed/sweeping attack rather than an
   aimed-at-player one). Rendering-only — no independent HP/hitbox per
   Part, that stays reserved for genuine hand-coded boss decomposition.
@@ -629,7 +677,7 @@ after the correction.**
 - **Canvas integration** (`EncounterEditor.tsx`): a 5th control button, ⚖️
   (top-center — the 4 corners are already move/add/attack/delete), on an
   instance's first step opens/closes its Scaling tab, selecting that
-  shape's handles on canvas and swapping `StepPanel`/`AttackPanel` for
+  shape's handles on canvas and swapping `StepPanel`/`PartActionPanel` for
   `UnitScalingPanel` below. A ⚖️ badge marks any instance with
   `maxCount > 1` even when the tab is closed.
 - **`UnitScalingPanel.tsx`**: max count and min cost/instance as
@@ -649,14 +697,14 @@ after the correction.**
   in the existing `TILE-DRAFT.DAT` session for free.
 
 **Scope decisions**:
-- **Per-param scaling-curve retrofit onto Unit/Weapon stats is
+- **Per-param scaling-curve retrofit onto Unit/Action stats is
   deliberately NOT built** — §1's broader vision (flat/linear/capped/
   stepped curves attachable to HP, fire rate, damage...) would mean
-  reopening E2's already-shipped `UnitStatsForm`/`WeaponForm`, a materially
+  reopening E2's already-shipped `UnitStatsForm`/`ActionForm`, a materially
   larger, separate piece of work, and isn't what §6's actual Scaling panel
   calls for. `resolveScaling()`'s `power` is the Difficulty value handed
   down to whatever the instance itself spawns — a representative preview
-  number only for now, not wired to any real Unit/Weapon stat.
+  number only for now, not wired to any real Unit/Action stat.
 - **Spawn-node-level concepts from the reverted first pass (origin
   point/region/shape-with-span, distribution, direction, mirror-as-a-
   standalone-field, timing delay/interval/count-mode) do not exist** —
@@ -671,12 +719,16 @@ after the correction.**
   new state threading across instances). See Remaining.
 
 **Remaining:**
-- **Encounter-wide difficulty-preview slider** (§8.3) — one slider driving
-  every scaled instance's ghost preview simultaneously, replacing the
-  current per-instance-tab slider. Needed to sanity-check a whole
-  encounter's readability at once ("does a full-count line still fit the
-  tile *and* still read clearly alongside the other scaled instances").
-- **Per-param scaling curves on Unit/Weapon stats** (see Scope decisions) —
+- **Encounter-wide difficulty-preview slider** (§8.3) — **mostly shipped,
+  in E4 rather than here.** The hitbox preview's own Difficulty slider does
+  drive every scaled instance in the encounter simultaneously, which is what
+  §8.3 asked for and what answers "does a full-count line still fit the tile
+  *and* still read clearly alongside the other scaled instances". What's
+  left is narrower than this entry used to claim: the Scaling **tab**'s own
+  static ghost-slot dots still resolve against their own per-instance
+  slider, so the two previews can disagree while the tab is open. Worth
+  unifying, not worth much.
+- **Per-param scaling curves on Unit/Action stats** (see Scope decisions) —
   the eventual home for §1's broader curve-type vision, if/when there's
   appetite to reopen E2's stat forms.
 - ~~Spawn delay affects the E4 hitbox preview but not `EncounterTimeline.tsx`
@@ -714,24 +766,27 @@ playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
 **What shipped**:
 - Toggling "Hitbox preview" swaps the canvas's big touch-friendly authoring
   icons for real-scale reference geometry at the current scrub position:
-  red boxes for enemies (and their scaled duplicates, per E3) at their
-  authored `UnitDef.size`, red dots for bullets in flight (reusing
-  `weaponPreview.ts`'s per-shot math — arc offsets, sweep, travel speed/
-  life — via a new `computeAttackBullets` that fires an attack exactly as
-  authored instead of looping forever the way the standalone
-  `WeaponForm.tsx` preview does for demo purposes), a static green
-  reference circle standing in for the player's own hitbox (radius 6,
-  documented against `games/shmup`'s real `TUNING.combat.hitboxRadiusNormal`
-  — no live player exists at authoring time, same approximation the rest
-  of the editor already accepts for `turnRate`/`trackPlayer`), a thick
-  yellow border for the tile's real bounds, and a dotted border for a
-  static "how much of the tile is visible on screen at once" reference
-  rectangle (`computeCameraBoundsRect` — width matches the tile's own
-  width per `levels-and-tiles.spec.todo.md` §4's "camera shows more/less
-  active width" framing, height derived from `games/shmup`'s real 720x1280
-  aspect ratio, centered on the tile; does **not** animate/ease between
-  sections the way the real playable-bounds box does — a static
-  approximation, not a simulation).
+  boxes for enemies (and their scaled duplicates, per E3) at their authored
+  `UnitDef.size` — **red for ground/doodad, amber for air** since at real
+  hitbox scale the two are otherwise identical rectangles that behave
+  completely differently once the level scrolls — red dots for bullets in
+  flight (reusing `actionPreview.ts`'s per-shot math — arc offsets, sweep,
+  travel speed/life — via a new `computeAttackBullets` that fires an attack
+  exactly as authored instead of looping forever the way the standalone
+  `ActionForm.tsx` preview does for demo purposes), a green reference
+  circle standing in for the player's own hitbox (radius 6, documented
+  against `games/shmup`'s real `TUNING.combat.hitboxRadiusNormal` — no live
+  player exists at authoring time), a thick yellow border for the tile's
+  real bounds, and a dotted "how much of the tile is visible on screen at
+  once" rectangle (`computeCameraBoundsRect`; the camera is always one
+  screen wide however wide the tile is, height from `games/shmup`'s real
+  720x1280 aspect ratio). **The player circle and the camera rectangle both
+  track the scrub**, via the game's own shared scroll model — the ship
+  holds a fixed screen position while the tile scrolls past it, so in
+  tile-local terms both climb the tile. (An earlier revision of this entry
+  called both static; that predates the scroll model.) What the camera box
+  still does not do is animate/ease between wider and narrower sections the
+  way the real playable-bounds box will — that easing is L2 work.
 - **Ships the previously-deferred "encounter-wide difficulty-preview
   slider"** (§8.3, listed above as E3 Remaining) as the toggle's own
   Difficulty slider — every scaled instance's duplicate count/positions in
@@ -739,7 +794,7 @@ playback layered on the scrubber that already existed for E2/E3 (`scrubTime`/
   Scaling-tab slider (which still exists separately, driving only that
   tab's own static ghost-slot dots while open).
 - A `"player"`-aimed weapon's bullets aim at the reference player marker in
-  this preview — a real improvement over `WeaponForm.tsx`'s isolated
+  this preview — a real improvement over `ActionForm.tsx`'s isolated
   preview, which has no reference point available at all while just
   browsing the picker.
 
@@ -868,5 +923,12 @@ Shmup Editor only, not a decision to also register Hell Map Editor.
 
 ## Reminders
 
-- `shmup-editor.md` now tracks current (partial-E1, E2, E3) behavior; keep
-  promoting sections here into it as E1's remaining gaps and E4-E5 ship.
+- `shmup-editor.md` tracks current behavior for E1-E4 and is the canonical
+  description of anything shipped; this file is the roadmap plus the record
+  of *why* each design turned out the way it did. Keep promoting sections
+  across as things ship.
+- **When an entry here is superseded, strike it and say what replaced it
+  rather than deleting it.** Several decisions in this project were reversed
+  (Actions cut then restored; export replaced by direct FS reads; Parts
+  moving from a button to their own tracks), and the reversal reasoning is
+  usually the most load-bearing part of the entry.

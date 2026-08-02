@@ -1,9 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { addPartAction, partActionsForPart, deletePartAction, updatePartAction } from "./partActions";
+import { addPartAction, partActionsForPart, deletePartAction, seedPartActions, updatePartAction } from "./partActions";
 import { createEncounterUnit, type EncounterUnit } from "./encounterTypes";
+import { createBlankAction, createBlankPart, createBlankUnit, type UnitDef } from "./unitTypes";
 
 function instance(): EncounterUnit {
   return createEncounterUnit("unit-test");
+}
+
+/** A Unit with `partCount` Parts, each carrying `actionsPerPart` Actions. */
+function unitWithParts(partCount: number, actionsPerPart: number): UnitDef {
+  const parts = Array.from({ length: partCount }, (_, i) => ({
+    ...createBlankPart(i),
+    actions: Array.from({ length: actionsPerPart }, (_, j) => createBlankAction(j)),
+  }));
+  return { ...createBlankUnit(0), parts };
 }
 
 describe("addPartAction", () => {
@@ -87,5 +97,62 @@ describe("partActionsForPart", () => {
   it("returns an empty array for a part with no placements", () => {
     const e = addPartAction(instance(), "part-1", "action-1", 1);
     expect(partActionsForPart(e, "part-2")).toEqual([]);
+  });
+});
+
+describe("seedPartActions", () => {
+  it("gives every Part a placement at spawn time, so a placed Unit arrives fully formed", () => {
+    const unit = unitWithParts(3, 1);
+    const seeded = seedPartActions(instance(), unit, 0);
+    expect(seeded.partActions).toHaveLength(3);
+    expect(new Set(seeded.partActions.map((p) => p.partId))).toEqual(new Set(unit.parts.map((p) => p.id)));
+    expect(seeded.partActions.every((p) => p.time === 0)).toBe(true);
+  });
+
+  it("points each seeded placement at that Part's own first Action", () => {
+    const unit = unitWithParts(2, 2);
+    const seeded = seedPartActions(instance(), unit, 0);
+    for (const part of unit.parts) {
+      const placement = seeded.partActions.find((p) => p.partId === part.id);
+      expect(placement?.actionId).toBe(part.actions[0].id);
+    }
+  });
+
+  it("still seeds a dot for a Part with no Actions, rather than leaving it trackless", () => {
+    const seeded = seedPartActions(instance(), unitWithParts(1, 0), 0);
+    expect(seeded.partActions).toHaveLength(1);
+    expect(seeded.partActions[0].actionId).toBeNull();
+  });
+
+  it("seeds at the instance's own spawn time, not a hardcoded zero", () => {
+    const seeded = seedPartActions(instance(), unitWithParts(2, 1), 4.25);
+    expect(seeded.partActions.every((p) => p.time === 4.25)).toBe(true);
+  });
+
+  it("is idempotent per Part — re-running never duplicates an existing track", () => {
+    const unit = unitWithParts(2, 1);
+    const once = seedPartActions(instance(), unit, 0);
+    const twice = seedPartActions(once, unit, 3);
+    expect(twice.partActions).toHaveLength(2);
+    expect(twice).toBe(once); // nothing missing, so not even a new object
+  });
+
+  it("leaves a hand-authored placement alone and only fills in the Parts that have none", () => {
+    const unit = unitWithParts(3, 1);
+    const authored = addPartAction(instance(), unit.parts[1].id, unit.parts[1].actions[0].id, 7);
+    const seeded = seedPartActions(authored, unit, 0);
+    expect(seeded.partActions).toHaveLength(3);
+    expect(partActionsForPart(seeded, unit.parts[1].id)).toHaveLength(1);
+    expect(partActionsForPart(seeded, unit.parts[1].id)[0].time).toBe(7);
+  });
+
+  it("is a no-op when the Unit can't be resolved", () => {
+    const inst = instance();
+    expect(seedPartActions(inst, undefined, 0)).toBe(inst);
+  });
+
+  it("gives every seeded placement a distinct id", () => {
+    const seeded = seedPartActions(instance(), unitWithParts(4, 1), 0);
+    expect(new Set(seeded.partActions.map((p) => p.id)).size).toBe(4);
   });
 });
