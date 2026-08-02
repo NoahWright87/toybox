@@ -8,7 +8,7 @@ import { authorLayerOf, type AuthorLayer } from "./airFrame";
 import type { EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
-type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
+type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "partAction"; placementId: string } | null;
 
 interface EncounterTimelineProps {
   units: EncounterUnit[];
@@ -20,7 +20,9 @@ interface EncounterTimelineProps {
   onTogglePlay: () => void;
   selection: Selection;
   onSelectStep: (instanceId: string, stepId: string) => void;
-  onSelectAttack: (instanceId: string, attackId: string) => void;
+  onSelectPartAction: (instanceId: string, placementId: string) => void;
+  /** Appends an Action placement to that Part's track at the playhead. */
+  onAddPartAction: (instanceId: string, partId: string) => void;
   onRetimeStep: (instanceId: string, stepId: string, time: number) => void;
   /** Which reference frame the canvas is drawn in (airFrame.ts) — decides which tracks are authored in full and which collapse to timing hairlines. */
   authorLayer: AuthorLayer;
@@ -73,7 +75,8 @@ export default function EncounterTimeline({
   onTogglePlay,
   selection,
   onSelectStep,
-  onSelectAttack,
+  onSelectPartAction,
+  onAddPartAction,
   onRetimeStep,
   authorLayer,
   onAuthorLayerChange,
@@ -192,6 +195,10 @@ export default function EncounterTimeline({
             // moment its authored path stops being relative to the terrain,
             // which is otherwise invisible on a ruler of plain times.
             const pinSec = authorLayer === "air" ? pinSecByInstance.get(instance.id) ?? null : null;
+            // "Is my Unit selected" is the entire collapse rule (Noah's
+            // call). Nothing to toggle, nothing to persist, and picking up a
+            // different Unit folds the last one on its own.
+            const expanded = selection?.instanceId === instance.id;
             // Scaled duplicates beyond the base instance (slot 0, already drawn
             // below) spawn staggered by spawnDelayMs — ghost markers show
             // where each later slot's copy of the same step/attack lands,
@@ -271,50 +278,112 @@ export default function EncounterTimeline({
                   )}
                 </div>
 
-                {/* One extra lane per Part that has at least one placed Action — independent per-part tracks, so a battleship's three turrets show up as three separate rows, not merged into one. */}
-                {unitDef?.parts
-                  .filter((part) => partActionsForPart(instance, part.id).length > 0)
-                  .map((part) => (
-                    <div key={part.id} className="shmup-timeline__lane shmup-timeline__lane--attack">
-                      <div className="shmup-timeline__track-sublabel">{part.name}</div>
-                      {partActionsForPart(instance, part.id).map((placement) => {
-                        const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === placement.id;
-                        const action = part.actions.find((a) => a.id === placement.actionId);
-                        const left = placement.time * PX_PER_SEC + STAGE_PADDING_LEFT;
-                        const colors = actionCategoryColors(action);
-                        const setsInvincible = action?.setsInvincible != null;
-                        return (
+                {/*
+                  One lane per Part, always — a Part is a small independent
+                  unit with its own track, not something that appears once
+                  you've attached an attack to it. Every Part is seeded with a
+                  placement when its Unit is placed (partActions.ts's
+                  `seedPartActions`), so a battleship shows up with all four
+                  turret tracks already on the ruler.
+
+                  Expanded only while this Unit is selected. That's the whole
+                  collapse mechanism: no toggle to find, no state to remember,
+                  and selecting another Unit folds this one automatically. A
+                  multi-turret Unit would otherwise own most of the ruler
+                  permanently, which is exactly what made stacking several of
+                  them unreadable.
+                */}
+                {expanded &&
+                  unitDef?.parts.map((part) => {
+                    const placements = partActionsForPart(instance, part.id);
+                    return (
+                      <div key={part.id} className="shmup-timeline__lane shmup-timeline__lane--part">
+                        <div className="shmup-timeline__track-sublabel">{part.name}</div>
+                        {/* A Part whose placements were all deleted (or an encounter authored before Parts were seeded) still needs a way back in. */}
+                        {placements.length === 0 && (
                           <button
-                            key={placement.id}
                             type="button"
-                            className={`shmup-timeline__attack ${isSelected ? "shmup-timeline__attack--selected" : ""} ${setsInvincible ? "shmup-timeline__marker--sets-invincible" : ""}`}
-                            style={{ left, backgroundColor: colors.fill, borderColor: isSelected ? undefined : colors.border }}
+                            className="shmup-timeline__lane-add"
+                            style={{ left: scrubTime * PX_PER_SEC + STAGE_PADDING_LEFT }}
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
-                              onSelectAttack(instance.id, placement.id);
+                              onAddPartAction(instance.id, part.id);
                             }}
-                            title={action?.name ?? "(missing Action)"}
-                          />
-                        );
-                      })}
-                      {ghostOffsets.flatMap((offset, slotIdx) =>
-                        partActionsForPart(instance, part.id).map((placement) => {
+                            title={`Add a ${part.name} Action at the playhead`}
+                          >
+                            +
+                          </button>
+                        )}
+                        {placements.map((placement) => {
+                          const isSelected = selection?.kind === "partAction" && selection.instanceId === instance.id && selection.placementId === placement.id;
                           const action = part.actions.find((a) => a.id === placement.actionId);
+                          const left = placement.time * PX_PER_SEC + STAGE_PADDING_LEFT;
                           const colors = actionCategoryColors(action);
-                          const left = (placement.time + offset) * PX_PER_SEC + STAGE_PADDING_LEFT;
+                          const setsInvincible = action?.setsInvincible != null;
                           return (
-                            <div
-                              key={`ghost-${slotIdx}-${placement.id}`}
-                              className="shmup-timeline__attack shmup-timeline__marker--ghost"
-                              style={{ left, backgroundColor: colors.fill, borderColor: colors.border }}
-                              title={`Duplicate slot ${slotIdx + 2} of ${instance.scaling.maxCount}`}
-                            />
+                            <div key={placement.id} className="shmup-timeline__part-wrap" style={{ left }}>
+                              <button
+                                type="button"
+                                className={`shmup-timeline__part-marker ${isSelected ? "shmup-timeline__part-marker--selected" : ""} ${setsInvincible ? "shmup-timeline__marker--sets-invincible" : ""}`}
+                                style={{ backgroundColor: colors.fill, borderColor: isSelected ? undefined : colors.border }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectPartAction(instance.id, placement.id);
+                                }}
+                                title={`${action?.name ?? "(no Action)"} @ ${placement.time.toFixed(1)}s`}
+                              />
+                              {/* Selecting a dot reveals + on its own lane — the same "select, then append" gesture a step uses, just scheduling instead of positioning. */}
+                              {isSelected && (
+                                <button
+                                  type="button"
+                                  className="shmup-timeline__part-add"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAddPartAction(instance.id, part.id);
+                                  }}
+                                  title={`Add another ${part.name} Action at the playhead`}
+                                >
+                                  +
+                                </button>
+                              )}
+                            </div>
                           );
-                        })
-                      )}
-                    </div>
-                  ))}
+                        })}
+                        {ghostOffsets.flatMap((offset, slotIdx) =>
+                          placements.map((placement) => {
+                            const action = part.actions.find((a) => a.id === placement.actionId);
+                            const colors = actionCategoryColors(action);
+                            const left = (placement.time + offset) * PX_PER_SEC + STAGE_PADDING_LEFT;
+                            return (
+                              <div
+                                key={`ghost-${slotIdx}-${placement.id}`}
+                                className="shmup-timeline__part-marker shmup-timeline__marker--ghost"
+                                style={{ left, backgroundColor: colors.fill, borderColor: colors.border }}
+                                title={`Duplicate slot ${slotIdx + 2} of ${instance.scaling.maxCount}`}
+                              />
+                            );
+                          })
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {/*
+                  Collapsed: every Part's placements merged into one hairline
+                  row. A folded battleship still has to show *that* it fires
+                  and roughly when, or collapsing it would hide the timing you
+                  were trying to choreograph against.
+                */}
+                {!expanded && instance.partActions.length > 0 && (
+                  <div className="shmup-timeline__lane shmup-timeline__lane--part-summary" title={`${instance.partActions.length} Part Action(s) — select this Unit to expand its Parts`}>
+                    {instance.partActions.map((placement) => (
+                      <div key={placement.id} className="shmup-timeline__hairline shmup-timeline__hairline--part" style={{ left: placement.time * PX_PER_SEC + STAGE_PADDING_LEFT }} />
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

@@ -575,7 +575,13 @@ export default function ShmupEditor() {
             {helpTopic === "encounter" && (
               <ul className="shmup-help-modal__list">
                 <li>Tap a step to select it; drag ✥ to move, teal ⬦ handles bend the curve.</li>
-                <li>+ (last step) adds the next step. 🔫+ adds an Action placement on a Part's own track at that step's time.</li>
+                <li>+ (last step) adds the next step.</li>
+                <li>
+                  Every Part of a placed Unit gets its own timeline lane, already carrying whatever it does on spawn. Select a dot on a Part's
+                  lane and press + to schedule another Action at the playhead; the Part tab's Time dial moves it afterwards. There's one Action
+                  type throughout — a Part Action may fire something or may just be state, exactly like the Unit's own.
+                </li>
+                <li>A Unit's Part lanes are only expanded while that Unit is selected; otherwise they fold into one hairline row, so a four-turret battleship doesn't own the whole ruler.</li>
                 <li>⚖️ (first step) opens Scaling — duplicates replay the whole sequence on a draggable shape.</li>
                 <li>Dashed box = the tile's real footprint/edges.</li>
                 <li>Step timing is usually automatic (distance ÷ the step's own Action's Movement %) — pick a different (or Cloned) Action to retime a moving segment; drag-to-retime only works on a manually-timed (first or dwelling) step.</li>

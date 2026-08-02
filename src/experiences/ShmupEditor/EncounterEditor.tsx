@@ -3,13 +3,13 @@ import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
 import EncounterMinimap from "./EncounterMinimap";
 import StepPanel from "./StepPanel";
-import AttackPanel from "./AttackPanel";
+import PartActionPanel from "./PartActionPanel";
 import UnitScalingPanel from "./UnitScalingPanel";
 import { Dial } from "../../components/Dial/Dial";
 import { resolveSpriteUrl } from "./enemySprites";
 import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
 import { addStep, deleteStepsFrom, isFirstStep, moveStep, updateStep } from "./encounterSteps";
-import { addPartAction, deletePartAction, updatePartAction } from "./partActions";
+import { addPartAction, deletePartAction, seedPartActions, updatePartAction } from "./partActions";
 import { isStepTimeDerived, recomputeStepTimes } from "./encounterTiming";
 import { resolveInvincibleAt } from "./actionState";
 import { createEncounterUnit, type EncounterDef, type EncounterStep, type EncounterUnit, type PartActionPlacement, type Vec2 } from "./encounterTypes";
@@ -34,10 +34,10 @@ interface EncounterEditorProps {
   onDraftChange: (encounter: EncounterDef) => void;
 }
 
-type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "attack"; attackId: string } | null;
+type Selection = { instanceId: string; kind: "step"; stepId: string } | { instanceId: string; kind: "partAction"; placementId: string } | null;
 type HandleDrag = { instanceId: string; stepId: string; which: "in" | "out"; offset: Vec2 } | null;
 /** Everything below the pinned timeline/viewport is tabbed instead of stacked inline (mobile scroll-and-lose-your-selection fix) — Basics/Add are always available, the third slot shows whichever node is currently selected. */
-type EditorTab = "basics" | "add" | "step" | "attack" | "scaling";
+type EditorTab = "basics" | "add" | "step" | "partAction" | "scaling";
 
 /** Every draggable handle a Scaling positioning shape can offer (unitScaling.ts's UnitScaling — curve/v/grid/ring, plus the ping-pong override axis). Only the currently-selected shape's handles render at once, per "Design Handoff v2" §8.2. */
 type ScalingHandleId =
@@ -81,8 +81,8 @@ const HANDLE_DIAMETER = 22;
 const HANDLE_RADIUS = HANDLE_DIAMETER / 2;
 const PADDING = 60;
 /** Attack-track markers are smaller than a movement waypoint node — secondary to the path, same "reads as another layer, not another waypoint" reasoning as PREVIEW_DIAMETER. */
-const ATTACK_MARKER_DIAMETER = 32;
-const ATTACK_MARKER_RADIUS = ATTACK_MARKER_DIAMETER / 2;
+const PART_MARKER_DIAMETER = 32;
+const PART_MARKER_RADIUS = PART_MARKER_DIAMETER / 2;
 /** View (pan/zoom) range — ZOOM_MIN well below 1 is the explicit point: the old fixed-scale canvas could never show more than roughly one tile's worth of content at once, per Noah's usability note. Matches JigsawPuzzle.tsx's zoom-toward-cursor/pinch pattern, not NS Art's discrete-step one. Lower than it needs to be for a 1x1 tile so the widest (3x1) footprint still fits on the narrowest mobile viewport after editorScale.ts's TILE_UNIT increase — fitView's `* 1.15` margin plus a 3x1 tile at TILE_UNIT=720 needs roughly 0.145 on a ~380px-wide phone viewport. */
 const ZOOM_MIN = 0.08;
 const ZOOM_MAX = 3;
@@ -140,7 +140,7 @@ function deleteKey(instanceId: string, stepId: string): string {
  * always looked like they came from the unit's spawn point regardless of
  * how far it had traveled since.
  */
-function attackAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: PartActionPlacement, atTime: number = attack.time): Vec2 | null {
+function partActionAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undefined, attack: PartActionPlacement, atTime: number = attack.time): Vec2 | null {
   if (!unitDef) return null;
   const part = unitDef.parts.find((p) => p.id === attack.partId);
   if (!part) return null;
@@ -203,7 +203,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const [dragHandle, setDragHandle] = useState<HandleDrag>(null);
   const [scalingDrag, setScalingDrag] = useState<ScalingDrag>(null);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
-  const [pickingAttackPartFor, setPickingAttackPartFor] = useState<string | null>(null);
   /**
    * Starts at the ceiling, not 0. The Scaling tab's ghost slots render
    * `resolveScaling(scaling, scalingPreviewDifficulty).count` positions — and at
@@ -463,16 +462,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   function selectStep(instanceId: string, stepId: string) {
     setPendingDeleteKey(null);
-    setPickingAttackPartFor(null);
     setSelection({ instanceId, kind: "step", stepId });
     setActiveTab("step");
   }
 
-  function selectAttack(instanceId: string, attackId: string) {
+  function selectPartAction(instanceId: string, placementId: string) {
     setPendingDeleteKey(null);
-    setPickingAttackPartFor(null);
-    setSelection({ instanceId, kind: "attack", attackId });
-    setActiveTab("attack");
+    setSelection({ instanceId, kind: "partAction", placementId });
+    setActiveTab("partAction");
   }
 
   function addCurvePoint(instanceId: string) {
@@ -510,7 +507,11 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     // null — a freshly-placed Unit should already do *something* sensible
     // (fly/patrol/idle-and-shoot, whatever its author set as the default)
     // instead of sitting inert until you dig into the Step tab.
-    const instance = addStep(createEncounterUnit(unitDefId), unitDef?.defaultActionId ?? null, startPos);
+    const placed = addStep(createEncounterUnit(unitDefId), unitDef?.defaultActionId ?? null, startPos);
+    // Every Part comes with the Unit, already scheduled with whatever it does
+    // on spawn — a battleship arrives with all four turret tracks on the
+    // timeline rather than as a hull you then have to attach guns to.
+    const instance = seedPartActions(placed, unitDef, placed.steps[0]?.time ?? 0);
     updateDraft({ ...draft, units: [...draft.units, instance] });
     const added = instance.steps[0];
     if (added) selectStep(instance.id, added.id);
@@ -571,32 +572,39 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     return { x: last.pos.x + dx * gapWorld, y: last.pos.y + dy * gapWorld };
   }
 
-  /** Adds a Part-action-track placement for `partId`, defaulting `time` to `atTime` and the Action to that Part's first — a no-op if the Part has no Actions yet (nothing to reference). */
-  function addAttackToPart(instanceId: string, partId: string, atTime: number) {
+  /**
+   * Adds one Action placement to a Part's own track, **at the playhead**.
+   *
+   * This is the whole add flow now. It replaces the old 🔫+ button on a
+   * step's control cluster, which had to exist only because a Part with no
+   * placements had no track and therefore nothing to select — that button
+   * carried a Part picker of its own, and framed the operation as "attach an
+   * attack to this waypoint" when a Part's schedule has never had anything to
+   * do with where the hull happens to have a waypoint.
+   *
+   * Now every Part is already on the timeline with its own lane (seeded by
+   * `seedPartActions` when the Unit is placed), so adding is just "select a
+   * dot on that lane, press +", exactly like appending a step. The playhead
+   * supplies the time because it's the shared clock every track is
+   * choreographed against, and the Part panel's Time dial adjusts it after.
+   */
+  function addPartActionAtPlayhead(instanceId: string, partId: string) {
     const before = draft.units.find((u) => u.id === instanceId);
     const unitDef = units.find((u) => u.id === before?.unitDefId);
     const part = unitDef?.parts.find((p) => p.id === partId);
-    const actionId = part?.actions[0]?.id;
-    if (!before || !actionId) return;
-    const after = addPartAction(before, partId, actionId, atTime);
+    if (!before || !part) return;
+    // A Part with no Actions still gets its placement, with a null actionId —
+    // the Part panel's Action dropdown is then the place to give it one.
+    // Refusing to add would leave an empty lane with no way forward, which is
+    // the discoverability hole this whole change is closing.
+    const after = addPartAction(before, partId, part.actions[0]?.id ?? null, scrubTime);
     updateInstance(instanceId, () => after);
-    setPickingAttackPartFor(null);
     const added = after.partActions[after.partActions.length - 1];
-    if (added) selectAttack(instanceId, added.id);
+    if (added) selectPartAction(instanceId, added.id);
   }
 
-  /** Tapping "+ Attack" on a selected step: if the Unit has exactly one Part, add directly to it; otherwise show a small Part picker (mirrors "+ Add Unit"'s picker pattern). */
-  function requestAddAttack(instanceId: string, unitDef: UnitDef | undefined, atTime: number) {
-    if (!unitDef || unitDef.parts.length === 0) return;
-    if (unitDef.parts.length === 1) {
-      addAttackToPart(instanceId, unitDef.parts[0].id, atTime);
-      return;
-    }
-    setPickingAttackPartFor(instanceId);
-  }
-
-  function deleteAttackEvent(instanceId: string, attackId: string) {
-    updateInstance(instanceId, (i) => deletePartAction(i, attackId));
+  function removePartActionPlacement(instanceId: string, placementId: string) {
+    updateInstance(instanceId, (i) => deletePartAction(i, placementId));
     setSelection(null);
   }
 
@@ -904,7 +912,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   const selectedInstance = selection ? draft.units.find((u) => u.id === selection.instanceId) : undefined;
   const selectedStep: EncounterStep | undefined = selection?.kind === "step" ? selectedInstance?.steps.find((s) => s.id === selection.stepId) : undefined;
-  const selectedAttack: PartActionPlacement | undefined = selection?.kind === "attack" ? selectedInstance?.partActions.find((a) => a.id === selection.attackId) : undefined;
+  const selectedPlacement: PartActionPlacement | undefined = selection?.kind === "partAction" ? selectedInstance?.partActions.find((a) => a.id === selection.placementId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
   /** The Unit roster the "+ Add" tab offers — whichever frame is being authored. Layer is a Unit-definition property (unitTypes.ts), so this filters the picker only; nothing about the placement records it. */
   const addableUnits = units.filter((u) => authorLayerOf(u.layer) === authorLayer);
@@ -921,12 +929,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
    */
   const availableTabs: EditorTab[] = ["basics", "add"];
   if (selection?.kind === "step") availableTabs.push("step");
-  if (selection?.kind === "attack") availableTabs.push("attack");
+  if (selection?.kind === "partAction") availableTabs.push("partAction");
   if (selectedInstance) availableTabs.push("scaling");
   // Auto-focus the tab matching a freshly selected node, but never strand the
   // user on a tab that no longer exists (its node got deleted / nothing is
   // selected) — fall back to whatever the selection does offer, else Basics.
-  const contextualTab: EditorTab | null = selection?.kind === "step" ? "step" : selection?.kind === "attack" ? "attack" : null;
+  const contextualTab: EditorTab | null = selection?.kind === "step" ? "step" : selection?.kind === "partAction" ? "partAction" : null;
   const effectiveTab: EditorTab = availableTabs.includes(activeTab) ? activeTab : (contextualTab ?? "basics");
   /** Scaling handles + ghost slots are on-canvas *because the Scaling tab is open* — one source of truth, so the tab strip and the canvas can never disagree about whether you're in scaling mode. */
   const scalingPanelOpen = !!selectedInstance && effectiveTab === "scaling";
@@ -1062,7 +1070,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     pendingFitRef.current = true;
     setSelection(null);
     setPendingDeleteKey(null);
-    setPickingAttackPartFor(null);
     setAuthorLayer(next);
   }
 
@@ -1202,7 +1209,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // slot index N spawns `N * spawnDelayMs` after the base instance
       // (slot 0, no delay). `dupLocalTime` maps the shared global
       // `scrubTime` back onto that duplicate's own sequence-relative
-      // clock, so `computeInstancePreview`/`attackAnchorWorld` (which
+      // clock, so `computeInstancePreview`/`partActionAnchorWorld` (which
       // operate purely in authored/local time — the same values on the
       // timeline) don't need to know anything shifted; only the "what
       // global instant does this correspond to" mapping changes per slot.
@@ -1252,7 +1259,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         for (const attack of instance.partActions) {
           const part = unitDef.parts.find((p) => p.id === attack.partId);
           const action = part?.actions.find((a) => a.id === attack.actionId);
-          const baseAnchor = part && action?.attack ? attackAnchorWorld(instance, unitDef, attack, dupLocalTime) : null;
+          const baseAnchor = part && action?.attack ? partActionAnchorWorld(instance, unitDef, attack, dupLocalTime) : null;
           if (!part || !action?.attack || !baseAnchor) continue;
           const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y + pinY };
           pushAttackBullets(`${instance.id}-${slotIdx}-${attack.id}`, action, action.attack, anchor, (dupLocalTime - attack.time) * 1000);
@@ -1274,7 +1281,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           onTogglePlay={() => setPlaying((v) => !v)}
           selection={selection}
           onSelectStep={selectStep}
-          onSelectAttack={selectAttack}
+          onSelectPartAction={selectPartAction}
+          onAddPartAction={addPartActionAtPlayhead}
           onRetimeStep={handleRetimeStep}
           authorLayer={authorLayer}
           onAuthorLayerChange={switchAuthorLayer}
@@ -1477,28 +1485,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                           (`.shmup-enc-node-hud` below), so its buttons keep a real
                           touch size at any zoom without the ring spread inflating
                           past the canvas edge. */}
-                      {pickingAttackPartFor === instance.id && isSelected && unitDef && (
-                        <div className="shmup-tile-picker shmup-part-picker">
-                          {unitDef.parts.map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="shmup-btn shmup-btn--small"
-                              disabled={p.actions.length === 0}
-                              title={p.actions.length === 0 ? "This Part has no Actions yet" : undefined}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addAttackToPart(instance.id, p.id, step.time);
-                              }}
-                            >
-                              {p.name}
-                            </button>
-                          ))}
-                          <button type="button" className="shmup-btn shmup-btn--small" onClick={() => setPickingAttackPartFor(null)}>
-                            Cancel
-                          </button>
-                        </div>
-                      )}
                     </div>
                   );
                 });
@@ -1508,41 +1494,53 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 const unitDef = units.find((u) => u.id === instance.unitDefId);
                 if (!unitDef) return [];
                 const { shiftY, offLayer } = renderFrameFor(instance);
-                return instance.partActions.map((attack) => {
-                  const part = unitDef.parts.find((p) => p.id === attack.partId);
-                  const action = part?.actions.find((a) => a.id === attack.actionId);
-                  const anchorWorld = attackAnchorWorld(instance, unitDef, attack);
+                return instance.partActions.map((placement) => {
+                  const part = unitDef.parts.find((p) => p.id === placement.partId);
+                  const action = part?.actions.find((a) => a.id === placement.actionId);
+                  const anchorWorld = partActionAnchorWorld(instance, unitDef, placement);
                   if (!anchorWorld) return null;
                   const pos = toStageAt(anchorWorld, shiftY);
-                  const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
+                  const isSelected = selection?.kind === "partAction" && selection.instanceId === instance.id && selection.placementId === placement.id;
                   const partSpriteUrl = part ? resolveSpriteUrl(part.spriteId, part.customSprite) : null;
                   return (
                     <div
-                      key={attack.id}
-                      className={`shmup-attack-marker-wrap${offLayer ? " shmup-enc-offlayer shmup-enc-offlayer--inert" : ""}`}
-                      style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}
+                      key={placement.id}
+                      className={`shmup-part-marker-wrap${offLayer ? " shmup-enc-offlayer shmup-enc-offlayer--inert" : ""}`}
+                      style={{ left: pos.x - PART_MARKER_RADIUS, top: pos.y - PART_MARKER_RADIUS }}
                     >
                       <button
                         type="button"
-                        className={`shmup-attack-marker ${isSelected ? "shmup-attack-marker--selected" : ""}`}
+                        className={`shmup-part-marker ${isSelected ? "shmup-part-marker--selected" : ""}`}
                         style={partSpriteUrl ? { backgroundImage: `url(${partSpriteUrl})` } : undefined}
                         onClick={(e) => {
                           e.stopPropagation();
-                          selectAttack(instance.id, attack.id);
+                          selectPartAction(instance.id, placement.id);
                         }}
-                        title={`${part?.name ?? "?"}: ${action?.name ?? "(missing Action)"} @ ${attack.time.toFixed(1)}s`}
+                        title={`${part?.name ?? "?"}: ${action?.name ?? "(no Action)"} @ ${placement.time.toFixed(1)}s`}
                       >
-                        {!partSpriteUrl && "🔫"}
+                        {!partSpriteUrl && "◈"}
                       </button>
                       {isSelected && (
-                        <div className="shmup-attack-marker__controls">
+                        <div className="shmup-part-marker__controls">
+                          {/* Same +/✕ pair a selected step gets. + appends another placement to this same Part's track at the playhead. */}
+                          <button
+                            type="button"
+                            className="shmup-enemy-node__btn shmup-enemy-node__btn--add"
+                            title={`Add another ${part?.name ?? "Part"} Action at the playhead`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addPartActionAtPlayhead(instance.id, placement.partId);
+                            }}
+                          >
+                            +
+                          </button>
                           <button
                             type="button"
                             className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
                             title="Delete"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteAttackEvent(instance.id, attack.id);
+                              removePartActionPlacement(instance.id, placement.id);
                             }}
                           >
                             ✕
@@ -1669,18 +1667,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   )}
                   <button
                     type="button"
-                    className="shmup-enemy-node__btn shmup-enemy-node__btn--attack"
-                    title={selectedUnitDef && selectedUnitDef.parts.some((p) => p.actions.length > 0) ? "Add an Action placement at this step's time" : "Add an Action to this Unit's Parts first (Units menu)"}
-                    disabled={!selectedUnitDef || !selectedUnitDef.parts.some((p) => p.actions.length > 0)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      requestAddAttack(selectedInstance.id, selectedUnitDef, selectedStep.time);
-                    }}
-                  >
-                    🔫+
-                  </button>
-                  <button
-                    type="button"
                     className="shmup-enemy-node__btn shmup-enemy-node__btn--delete"
                     title={selectedIdx === 0 ? "Remove this Unit from the encounter" : "Delete"}
                     onClick={(e) => {
@@ -1772,9 +1758,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               Step
             </button>
           )}
-          {availableTabs.includes("attack") && (
-            <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "attack" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("attack")}>
-              Attack
+          {availableTabs.includes("partAction") && (
+            <button type="button" className={`shmup-enc-tab-btn ${effectiveTab === "partAction" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setActiveTab("partAction")}>
+              Part
             </button>
           )}
           {availableTabs.includes("scaling") && (
@@ -1856,8 +1842,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             </>
           )}
 
-          {effectiveTab === "attack" && selectedInstance && selectedAttack && (
-            <AttackPanel unit={selectedUnitDef} instance={selectedInstance} attack={selectedAttack} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updatePartAction(i, selectedAttack.id, patch))} />
+          {effectiveTab === "partAction" && selectedInstance && selectedPlacement && (
+            <PartActionPanel unit={selectedUnitDef} instance={selectedInstance} placement={selectedPlacement} onChange={(patch) => updateInstance(selectedInstance.id, (i) => updatePartAction(i, selectedPlacement.id, patch))} />
           )}
 
           {scalingPanelOpen && selectedInstance && (

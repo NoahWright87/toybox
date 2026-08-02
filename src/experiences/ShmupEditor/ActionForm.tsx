@@ -31,7 +31,7 @@ const COLLISION_GROUP_LABELS: Record<CollisionGroup, string> = {
  *
  * **Tabbed (Basics/State/Attack) with `Dial` knobs**, mirroring
  * `EncounterEditor.tsx`'s tab treatment and `StepPanel.tsx`/
- * `AttackPanel.tsx`'s Dial conversion — this form used to be one long
+ * `PartActionPanel.tsx`'s Dial conversion — this form used to be one long
  * scrolling stack of fields with muted `.shmup-hint` paragraphs; explanatory
  * text now lives in the Help menu (`ShmupEditor.tsx`'s "Units & Actions"
  * topic) instead. The live `ActionPreview` stays outside the tabs,
