@@ -14,7 +14,6 @@ function scaling(overrides: Partial<AuthoredScaling> = {}): AuthoredScaling {
     vWidth: 640,
     gridWidth: 900,
     gridDepth: 640,
-    ringCenterOffset: { x: 0, y: 0 },
     ringRadius: 500,
     pingPong: false,
     pingPongOverride: null,
@@ -85,7 +84,7 @@ describe("resolveScalingSlots", () => {
   });
 
   it("centres a ring on its authored offset at its authored radius", () => {
-    const slots = resolveScalingSlots(scaling({ shape: "ring", ringRadius: 100, ringCenterOffset: { x: 0, y: 0 } }), origin, 4);
+    const slots = resolveScalingSlots(scaling({ shape: "ring", ringRadius: 100 }), origin, 4);
     for (const slot of slots) {
       expect(Math.hypot(slot.x - origin.x, slot.y - origin.y)).toBeCloseTo(100, 6);
     }

@@ -11,6 +11,9 @@ interface TileEditorFormProps {
   onRegisterTag: (tag: string) => void;
   onSave: (tile: TileDef) => void;
   onCancel: () => void;
+  /** Null for a tile that isn't in the library yet — there's nothing to duplicate or delete until it's been saved once. */
+  onDuplicate: (() => void) | null;
+  onDelete: (() => void) | null;
   /** Called on every change (not just Save) so the caller can persist the in-progress draft and keep it live while navigating to/from the Encounter editor — root CLAUDE.md's mandatory in-progress-session-survives-reload rule. */
   onDraftChange: (tile: TileDef) => void;
   onNewEncounter: () => void;
@@ -35,6 +38,8 @@ export default function TileEditorForm({
   onRegisterTag,
   onSave,
   onCancel,
+  onDuplicate,
+  onDelete,
   onDraftChange,
   onNewEncounter,
   onEditEncounter,
@@ -42,6 +47,8 @@ export default function TileEditorForm({
 }: TileEditorFormProps) {
   const [draft, setDraft] = useState<TileDef>(tile);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  /** Delete is destructive and sits next to Save, so it arms first — same Confirm/Keep pattern the library grid's menu used. */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [paletteSize, setPaletteSize] = useState(DEFAULT_PALETTE_SIZE);
   const [pendingDeleteEncounterId, setPendingDeleteEncounterId] = useState<string | null>(null);
@@ -287,6 +294,10 @@ export default function TileEditorForm({
 
       {error && <p className="shmup-error">{error}</p>}
 
+      {/* Duplicate/Delete live here rather than in the library grid: the grid's
+          per-tile "⋮" menu was an 18x14px target guarding actions you rarely
+          want, and it cost a tap on the one you almost always want (open). Here
+          you're already looking at the thing you're about to copy or destroy. */}
       <div className="shmup-btn-row">
         <button type="button" className="shmup-btn shmup-btn--primary" disabled={!!error || uploading} onClick={handleSave}>
           Save Tile
@@ -294,6 +305,26 @@ export default function TileEditorForm({
         <button type="button" className="shmup-btn" onClick={onCancel}>
           Cancel
         </button>
+        {onDuplicate && (
+          <button type="button" className="shmup-btn" onClick={onDuplicate}>
+            Duplicate
+          </button>
+        )}
+        {onDelete &&
+          (confirmingDelete ? (
+            <>
+              <button type="button" className="shmup-btn shmup-btn--danger" onClick={onDelete}>
+                Confirm Delete
+              </button>
+              <button type="button" className="shmup-btn" onClick={() => setConfirmingDelete(false)}>
+                Keep
+              </button>
+            </>
+          ) : (
+            <button type="button" className="shmup-btn" onClick={() => setConfirmingDelete(true)}>
+              Delete
+            </button>
+          ))}
       </div>
     </div>
   );

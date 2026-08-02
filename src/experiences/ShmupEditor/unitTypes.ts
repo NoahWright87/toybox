@@ -502,6 +502,19 @@ function enemyUnitId(slug: string): string {
 function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
   const moveAction = createMoveAction(spec.speed > 0);
   const attackAction = createAttackAction(spec.fireIntervalMs);
+  // The attack lives on the Part, not just in the Unit-level buffet. The
+  // encounter editor's 🔫+ node control gates on
+  // `parts.some(p => p.actions.length > 0)`, so a Part with `actions: []` left
+  // that button permanently disabled ("Add an Action to this Unit's Parts
+  // first") for every one of these enemies — you could never place an attack
+  // on one without first detouring through the Units editor.
+  const main: UnitPart = { ...createDefaultPart(), actions: [cloneAction(attackAction)] };
+  // A stationary unit (a Turret: speed 0) gets the *attack* as its default
+  // rather than the Move action, because `createMoveAction(false)` is inert by
+  // construction — movementPercent 0, attack null — so a freshly placed turret
+  // stood there doing precisely nothing until you hand-picked an Action for it,
+  // once per placement. Things that can actually move still default to moving.
+  const stationary = spec.speed <= 0;
   return {
     id: enemyUnitId(spec.slug),
     name: spec.name,
@@ -514,9 +527,9 @@ function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
     turnRate: spec.turnRate,
     size: spec.size,
     layer: spec.layer,
-    defaultActionId: moveAction.id,
+    defaultActionId: stationary ? attackAction.id : moveAction.id,
     actions: [moveAction, attackAction],
-    parts: [createDefaultPart()],
+    parts: [main],
     createdAt: now,
     modifiedAt: now,
   };
@@ -583,6 +596,48 @@ function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef 
     createdAt: now,
     modifiedAt: now,
   };
+}
+
+/**
+ * Repairs the two encounter-editor papercuts the *seeded* simple enemies used
+ * to ship with, in place, for libraries saved before the fix:
+ *
+ *  1. their single "Main" Part had `actions: []`, which permanently disabled the
+ *     encounter editor's 🔫+ control (it gates on the Part having an Action);
+ *  2. a stationary one (a Turret, `speed: 0`) defaulted to `createMoveAction(false)`
+ *     — movementPercent 0, attack null — so it did nothing at all until you
+ *     hand-set an Action, once per placement.
+ *
+ * Done as a targeted repair rather than a `SAVE_VERSION` bump on purpose: the
+ * stored *type* shape never changed, only the seeded content, and bumping the
+ * version resets the whole library — throwing away any Units the user authored
+ * themselves. Matches only ids `createSimpleEnemyUnit` owns, so a user-authored
+ * Unit (or one they deliberately edited to hold position) is never touched.
+ */
+export function repairSeededSimpleEnemies(units: UnitDef[]): UnitDef[] {
+  const bySlug = new Map<string, SimpleEnemySpec>(SIMPLE_ENEMY_SPECS.map((s) => [enemyUnitId(s.slug), s]));
+  return units.map((unit) => {
+    const spec = bySlug.get(unit.id);
+    if (!spec) return unit;
+    const attackAction = unit.actions.find((a) => a.attack !== null);
+    if (!attackAction) return unit;
+    let next = unit;
+    if (next.parts.length > 0 && next.parts.every((p) => p.actions.length === 0)) {
+      const [main, ...rest] = next.parts;
+      next = { ...next, parts: [{ ...main, actions: [cloneAction(attackAction)] }, ...rest] };
+    }
+    if (spec.speed <= 0 && next.defaultActionId !== null) {
+      const current = next.actions.find((a) => a.id === next.defaultActionId);
+      // Only redirect a default that is the *inert Move* this function exists to
+      // undo. A null default is "(none — holds position)", which is a legitimate
+      // authoring choice — and since this repair runs on every `loadUnits`,
+      // overwriting it would make that choice impossible to keep.
+      if (current && current.attack === null && current.movementPercent === 0) {
+        next = { ...next, defaultActionId: attackAction.id };
+      }
+    }
+    return next;
+  });
 }
 
 /** The full default Unit library a brand-new/reset session starts with. */

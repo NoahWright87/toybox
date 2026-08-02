@@ -97,6 +97,48 @@ interface LiveInstance {
   steps: AuthoredStep[] | null;
   /** When a placed instance's path ends — after this it's finished travelling and may be culled once off screen. */
   pathEndSec: number;
+  /**
+   * Whether this instance has ever actually been inside the viewport. Culling a
+   * *placed* instance is gated on this: `pathEndSec` alone is not a safe
+   * "it has had its turn" signal, because a stationary or single-step unit (a
+   * Turret — one step at time 0) has `pathEndSec === 0`, so the path-is-over
+   * test passed on its very first frame. Any scaling slot that happened to sit
+   * outside the viewport at spawn was then culled instantly, before the level
+   * had scrolled it into view. That is why a `maxCount: 30` turret group only
+   * put a handful on the field, and why adding a spawn delay "fixed" it —
+   * staggering the spawns meant each slot was already on screen by the time it
+   * appeared, rather than changing how many were resolved.
+   */
+  seenOnScreen: boolean;
+  /**
+   * **Scroll-locked vs time-locked reference frame**, keyed off `UnitDef.layer`
+   * (the concept `shmup-editor.todo.md` deferred; this is it arriving).
+   *
+   * Every authored position resolves through the tile frame, and that frame
+   * slides down the screen as the level scrolls — so everything on a tile moved
+   * with it, which is exactly right for a turret bolted to the ground and
+   * exactly wrong for an aircraft. A jet is not attached to the terrain; the
+   * terrain passes beneath it.
+   *
+   * True for ground and doodad units, which keep resolving against the live
+   * frame forever. False for air, which decouples — see `pinnedOriginY`.
+   */
+  scrollLocked: boolean;
+  /**
+   * The frame origin Y an air unit resolves against once it has decoupled, or
+   * `null` while it is still riding the scroll in.
+   *
+   * Air units deliberately do **not** pin at spawn. The tile's north edge is a
+   * full `TILE_UNIT` above the screen at tile-clock zero, so a unit authored at
+   * the top of its tile spawns at screen Y -720; pinning there would strand it
+   * off-screen forever instead of letting it fly in. Instead an air unit tracks
+   * the scrolling frame exactly as before **until it first becomes visible**,
+   * and pins at that moment — so it still enters on cue where the author drew
+   * it, and from then on the only thing that moves it is its own authored path.
+   * Pinning the *current* origin makes the handover positionally continuous:
+   * nothing jumps on the frame it decouples.
+   */
+  pinnedOriginY: number | null;
   /** The Action a dynamically spawned instance runs (its `defaultActionId`). Null for a placed one, which reads its Action off each step. */
   spawnedAction: AuthoredAction | null;
   /** Encounter time (sec) this instance's own local clock started at. */
@@ -139,6 +181,37 @@ export interface EncounterRunnerConfig {
   playerPos: () => Vec2;
   /** Texture key used when an authored sprite id resolves to nothing loadable. */
   fallbackTexture: string;
+}
+
+/** Whether a layer's authored positions ride the scrolling tile frame. Air does not — see `LiveInstance.pinnedOriginY`. */
+export function isScrollLocked(layer: string): boolean {
+  return layer !== "air";
+}
+
+/**
+ * Whether a live instance should be recycled this frame. Pure and exported so
+ * the rule can be tested without standing up a Phaser entity — it encodes a
+ * regression that cost a lot of authored content: see `seenOnScreen`.
+ */
+export function shouldCull(state: {
+  /** A hand-placed instance (has an authored path); false for a dynamically spawned one. */
+  placed: boolean;
+  offScreen: boolean;
+  seenOnScreen: boolean;
+  /** Seconds since this instance's own local clock started. */
+  ageSec: number;
+  /** Whether the authored path has finished (meaningless for a spawned instance). */
+  pathOver: boolean;
+}): boolean {
+  if (!state.placed) return state.offScreen || state.ageSec > TUNING.encounters.spawnedLifespanSec;
+  // "Seen, then left" is the real end-of-life signal for placed content.
+  // `pathOver` alone is trivially true for a stationary/single-step unit, whose
+  // path ends at time 0 — which used to cull every off-screen scaling slot on
+  // its first frame, before the level had scrolled it into view.
+  if (state.seenOnScreen && state.offScreen && state.pathOver) return true;
+  // Backstop for a slot the scroll genuinely never reaches, so it can't hold a
+  // pool slot for the whole episode.
+  return state.ageSec > TUNING.encounters.placedUnseenLifespanSec;
 }
 
 export class EncounterRunner {
@@ -299,6 +372,9 @@ export class EncounterRunner {
       def: p.def,
       steps: p.steps,
       pathEndSec: p.startSec + p.steps[p.steps.length - 1].time,
+      seenOnScreen: false,
+      scrollLocked: isScrollLocked(p.def.layer),
+      pinnedOriginY: null,
       spawnedAction: null,
       startSec: p.startSec,
       power: p.power,
@@ -374,6 +450,12 @@ export class EncounterRunner {
     return out;
   }
 
+  /** The frame an instance resolves authored positions through — the live scrolling one, or its pinned copy for a time-locked (air) unit. */
+  private frameFor(instance: LiveInstance): TileFrame {
+    if (instance.pinnedOriginY === null) return this.frame;
+    return { ...this.frame, originY: instance.pinnedOriginY };
+  }
+
   private updatePlaced(instance: LiveInstance, previousSec: number): void {
     const steps = instance.steps;
     if (!steps) return;
@@ -381,7 +463,7 @@ export class EncounterRunner {
     const state = instanceStateAt(steps, instance.def.turnRate, localT);
     if (!state) return;
 
-    const screen = toScreen(this.frame, state.pos);
+    const screen = toScreen(this.frameFor(instance), state.pos);
     instance.entity.setPosition(screen.x, screen.y);
 
     const action = this.actionById(instance.def.actions, state.step.actionId);
@@ -541,6 +623,12 @@ export class EncounterRunner {
       def,
       steps: null,
       pathEndSec: 0,
+      seenOnScreen: false,
+      // A dynamically spawned instance already moves in pure screen space
+      // (`updateSpawned` integrates velocity directly), so it has no tile frame
+      // to track or pin either way.
+      scrollLocked: true,
+      pinnedOriginY: null,
       spawnedAction: action,
       startSec: this.clockSec,
       power,
@@ -555,11 +643,19 @@ export class EncounterRunner {
   // ── Housekeeping ─────────────────────────────────────────────────────────
 
   /**
-   * A **placed** instance is only culled once its authored path is over —
-   * authored paths routinely start (and can loop) well off screen, so
-   * culling on position alone would delete an enemy on the very frame it
-   * spawned, before it ever flew in. A **spawned** one has no path to
-   * finish, so off-screen (or a backstop lifespan) is the whole rule.
+   * A **placed** instance is only culled once it has actually been on screen
+   * *and* its authored path is over — authored paths routinely start (and can
+   * loop) well off screen, so culling on position alone would delete an enemy
+   * on the very frame it spawned, before it ever flew in.
+   *
+   * The `seenOnScreen` half of that is load-bearing, not belt-and-braces: the
+   * path-is-over test alone is trivially true for a stationary or single-step
+   * unit (a Turret's one step sits at time 0, so `pathEndSec` is 0), which made
+   * every such duplicate whose slot started outside the viewport get culled on
+   * its first frame. See the field's own doc comment.
+   *
+   * A **spawned** one has no path to finish, so off-screen (or a backstop
+   * lifespan) is the whole rule.
    */
   private cull(): void {
     const margin = TUNING.encounters.despawnMarginPx;
@@ -572,10 +668,28 @@ export class EncounterRunner {
       }
       const offScreen =
         entity.x < -margin || entity.x > GAME_WIDTH + margin || entity.y < -margin || entity.y > GAME_HEIGHT + margin;
-      const done =
-        instance.steps !== null
-          ? offScreen && this.clockSec > instance.pathEndSec
-          : offScreen || this.clockSec - instance.startSec > TUNING.encounters.spawnedLifespanSec;
+      // Note the two different tests. Culling uses the generous despawn margin,
+      // so a path that loops just off the edge isn't deleted mid-manoeuvre. The
+      // air-unit pin needs *actual* visibility: pinning on the margin version
+      // decoupled a unit 220px above the top edge, where it then held station
+      // off screen forever instead of flying in.
+      const onScreen = entity.x >= 0 && entity.x <= GAME_WIDTH && entity.y >= 0 && entity.y <= GAME_HEIGHT;
+      if (onScreen) {
+        // The instant an air unit is genuinely on screen it stops riding the
+        // scroll and holds the frame it entered on. Pinning here rather than at
+        // spawn is what lets it fly in from above the tile first.
+        if (!instance.seenOnScreen && !instance.scrollLocked && instance.steps !== null) {
+          instance.pinnedOriginY = this.frame.originY;
+        }
+        instance.seenOnScreen = true;
+      }
+      const done = shouldCull({
+        placed: instance.steps !== null,
+        offScreen,
+        seenOnScreen: instance.seenOnScreen,
+        ageSec: this.clockSec - instance.startSec,
+        pathOver: this.clockSec > instance.pathEndSec,
+      });
       if (done) {
         entity.recycle();
         this.live.splice(i, 1);

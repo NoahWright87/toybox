@@ -453,8 +453,10 @@
 
 .shmup-tile-list__grid {
   /* Single source of truth for the grid's column unit — TileArt's --grid
-     cell size (below) must match exactly or footprint spans stop lining up. */
-  --shmup-tile-grid-unit: 56px;
+     cell size (below) must match exactly or footprint spans stop lining up.
+     Raised from 56px: the whole cell is the open-this button now, and 56px is
+     well under the 44px-plus-comfortable-margin a primary target wants. */
+  --shmup-tile-grid-unit: 88px;
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--shmup-tile-grid-unit));
   gap: 0;
@@ -465,13 +467,138 @@
 .shmup-tile-list__cell {
   position: relative;
 }
+/* The cell IS the button — no nested "⋮" menu to miss. Reset the button chrome
+   so the art still tiles seamlessly edge-to-edge, which is the whole point of
+   this grid (checking how neighbouring tile art reads). */
+.shmup-tile-list__cell--button {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.shmup-tile-list__cell--button:focus-visible {
+  outline: 2px solid var(--orange-primary, #cc4400);
+  outline-offset: -2px;
+  z-index: 1;
+}
+/* Name strip along the bottom of a cell. The old grid put the name behind the
+   "⋮" menu's tooltip, so browsing by name meant hovering — which does not exist
+   on touch. */
+.shmup-tile-list__caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 3px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* ── Library browser: Tiles / Units / Preview (LibraryBrowser.tsx) ─────────
+   Same height-lock shape as the encounter editor: a pinned head (tabs, filter,
+   Create) over a single scrolling body, so the controls stay reachable however
+   far down a long library you scroll. */
+.shmup-lib {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 6px;
+  /* Fill whichever host we're in (standalone window or a Doors 97 window)
+     rather than shrink-wrapping the grid. */
+  width: 100%;
+}
+/* The standalone window is shrink-to-fit by default, which left the browse grid
+   about two columns wide on a desktop viewport with a wide black gutter beside
+   it. Give it real width there; the mobile rule below already forces 100%. */
+.standalone-page:has(.shmup-lib) .standalone-window {
+  width: min(1000px, 100%);
+}
+.shmup-lib__head {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--win95-dark, #808080);
+}
+.shmup-lib__tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.shmup-lib__tab {
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  /* Chunky on purpose — this is the editor's primary navigation and it used to
+     be a 35x17px menu-bar label. */
+  padding: 12px 8px;
+  background: var(--win95-gray, #c0c0c0);
+  border: 2px solid;
+  border-color: var(--white, #fff) var(--win95-dark, #808080) var(--win95-dark, #808080) var(--white, #fff);
+  color: #000;
+  cursor: pointer;
+}
+.shmup-lib__tab--active {
+  background: var(--orange-primary, #cc4400);
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.shmup-lib__controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.shmup-lib__filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.shmup-lib__filter select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 6px;
+}
+.shmup-lib__create {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+}
+.shmup-lib__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shmup-lib__preview-switch {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
 /* Grid variant: no border/gap between cells, sized to the grid's column unit so footprint spans line up exactly. */
 .shmup-tile-art--grid .shmup-tile-art__row {
   border: none;
 }
 .shmup-tile-art--grid .shmup-tile-art__cell {
-  width: var(--shmup-tile-grid-unit, 56px);
-  height: var(--shmup-tile-grid-unit, 56px);
+  width: var(--shmup-tile-grid-unit, 88px);
+  height: var(--shmup-tile-grid-unit, 88px);
 }
 /* Strip variant (Connection Viewer): no border either, sized large — the
    whole point is judging art at real size, not a small schematic thumbnail. */
@@ -754,9 +881,17 @@
   background: #180800;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  height: 50vh;
-  min-height: 220px;
+  /* Was a flat 50vh, which on a phone left the panel below it a 175px slot to
+     render panels up to ~470px tall. Now the map takes a smaller default share
+     and the panel keeps the rest; `--panel` (the ▲ button) shrinks the map
+     further to a reference strip when you're working the dials. */
+  height: 32vh;
+  min-height: 150px;
   touch-action: none;
+}
+.shmup-enc-fill--panel .shmup-enemy-canvas-viewport {
+  height: 15vh;
+  min-height: 92px;
 }
 /* Embiggen mode (EncounterEditor.tsx) fills its fixed-positioned wrapper instead of the fixed 50vh. */
 .shmup-enc-viewport-pin--embiggen .shmup-enemy-canvas-viewport {
@@ -842,6 +977,18 @@
   padding: 0;
   cursor: grab;
   touch-action: none;
+  /* Held at a constant *screen* size regardless of canvas zoom -- see
+     `--enc-counter-scale` on .shmup-enemy-canvas-stage. The element's box is
+     already centred on its stage coordinate (left/top are pre-offset by
+     HANDLE_RADIUS), so a centre-origin scale grows it in place without
+     moving the point it represents. */
+  transform: scale(var(--enc-counter-scale, 1));
+  transform-origin: 50% 50%;
+  /* Above the unit sprites, which are later in DOM order and would otherwise
+     bury a handle that shares their position -- the ring's centre handle
+     defaults to exactly the instance's own position, so it was completely
+     unreachable under the node it belongs to. */
+  z-index: 4;
 }
 
 .shmup-enemy-node {
@@ -856,9 +1003,16 @@
   font-size: 18px;
   cursor: pointer;
 }
+/* The selected node counter-scales (capped) against the canvas zoom so the unit
+   you're editing stays visible. Without it, a 56px sprite is under 10px on
+   screen at a phone's fit-to-view zoom — smaller than any one button in the
+   control cluster now drawn around it, which read as "my controls are floating
+   in empty space". Centre-origin, so it grows in place. */
 .shmup-enemy-node--selected {
   border-color: #ff6b00;
   box-shadow: 0 0 0 2px #ff6b00;
+  transform: scale(min(var(--enc-counter-scale, 1), 3));
+  transform-origin: 50% 50%;
 }
 /* Action.visible === false — Disappear/teleport-out/pop-down steps read as ghosted rather than fully solid. */
 .shmup-enemy-node--hidden {
@@ -880,9 +1034,29 @@
   pointer-events: none;
 }
 
+/* Screen-space anchor for a selected step's control cluster. Positioned in
+   viewport pixels (EncounterEditor.tsx's `selectedNodeHud`) as a sibling of the
+   zoomed stage, so the buttons below get real pixel sizes at any zoom. The
+   translate centres the cluster on the node it belongs to. */
+.shmup-enc-node-hud {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+}
+
+/* The ✥/+/🔫+/✕/⚖️ cluster around a selected node. Lives in the unscaled HUD
+   above, so both the button size and this ring's spread are plain screen px and
+   can be chosen independently -- an earlier attempt counter-scaled the cluster
+   in place inside the stage, but one uniform scale inflates the spread along
+   with the buttons, which shoved the outer controls past the canvas clip edge. */
 .shmup-enemy-node__controls {
   position: absolute;
-  inset: -30px;
+  left: -38px;
+  top: -38px;
+  width: 76px;
+  height: 76px;
   pointer-events: none;
 }
 .shmup-enemy-node__btn {
@@ -925,19 +1099,11 @@
   right: 0;
   background: rgba(153, 0, 0, 0.75);
 }
-/* First-step-only, top-center — the 5th control, positioned clear of
-   --move/--add (a lone single-step instance is both first AND last, so
-   --add already claims top-right; top-center avoids that collision). */
-.shmup-enemy-node__btn--scaling {
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(123, 61, 190, 0.75);
-}
-.shmup-enemy-node__btn--scaling.shmup-enemy-node__btn--active {
-  background: rgba(123, 61, 190, 1);
-  border-color: #ff6b00;
-}
+/* The ⚖️ on-canvas scaling button is gone: Scaling is a permanent tab whenever
+   an instance is selected, so a second, tiny door onto the same panel earned
+   nothing -- and sitting top-centre it crowded the ✥ move handle it shared an
+   edge with. The cluster is now four controls on four corners, nothing in
+   between. */
 
 /* Small Part picker shown under a step's node when adding an attack to a
    multi-Part Unit (mirrors the "+ Add Unit" picker's look, but anchored to
@@ -1029,6 +1195,16 @@
   width: 32px;
   height: 32px;
 }
+/* The selected attack marker's lone ✕. Still inside the zoomed stage (unlike a
+   step's cluster, one button has no ring spread to inflate), so it counter-scales
+   in place to hold a real touch size at low zoom. */
+.shmup-attack-marker__controls {
+  position: absolute;
+  inset: -14px;
+  pointer-events: none;
+  transform: scale(var(--enc-counter-scale, 1));
+  transform-origin: 50% 50%;
+}
 .shmup-attack-marker {
   width: 32px;
   height: 32px;
@@ -1058,6 +1234,11 @@
   background: #ffbb33;
   border-color: #7b3dbe;
 }
+/* Where each duplicate would land at the current preview Difficulty. Sized in
+   stage units, so it shrank with the zoom just like the buttons did -- 10px
+   became a 1.75px speck at a phone's fit-to-view zoom, which is why the shape
+   you were editing was effectively invisible. Counter-scaled to hold its
+   authored screen size; centre-origin so it stays centred on its slot. */
 .shmup-scaling-ghost-dot {
   position: absolute;
   width: 10px;
@@ -1068,6 +1249,8 @@
   background: rgba(255, 187, 51, 0.55);
   border: 1px solid #7b3dbe;
   pointer-events: none;
+  transform: scale(var(--enc-counter-scale, 1));
+  transform-origin: 50% 50%;
 }
 
 /* ── Encounter editor's tile reference frame ──────────────────────────
@@ -1358,16 +1541,106 @@
    container as one unit; everything else (Basics/Add/Step/Attack/Scaling)
    is a tab below, so there's rarely anything to scroll past to reach a
    selected node's settings. */
+/* ─────────────────────────────────────────────────────────────────────────
+   Height-locked layouts, ONE scroll region — used by both the encounter editor
+   (`.shmup-enc-fill`) and the library browser (`.shmup-lib`), which have the
+   same shape: a pinned head over a single scrolling body.
+
+   What this replaces: the head was `position: sticky; top: 0`, which never
+   engaged, because `.shmup-editor` sets `overflow-y: auto` and therefore
+   *is* the head's nearest scrollport — while the element that actually
+   scrolls is `.standalone-page`, further out. Sticky only reacts to its own
+   scrollport, so the "pinned" timeline + canvas scrolled away completely
+   (measured: 421px tall, gone by 600px of scroll), and you ended up editing
+   dials with no map on screen. Meanwhile the page grew to ~1400px and the
+   panel got a 175px slot, so there were two nested vertical scrolls fighting
+   over one gesture.
+
+   Now: the editor column fills the window, the head is a normal (non-sticky)
+   flex child that simply can't scroll away, and `.shmup-enc-tab-content` is
+   the only vertical scroller. `:has()` is a progressive enhancement — without
+   it the chain just falls back to the old content-height behaviour rather
+   than breaking. ───────────────────────────────────────────────────────── */
+.standalone-page:has(.shmup-enc-fill),
+.standalone-page:has(.shmup-lib) {
+  align-items: stretch;
+}
+.standalone-page:has(.shmup-enc-fill) .standalone-window,
+.standalone-page:has(.shmup-lib) .standalone-window {
+  height: 100%;
+  min-height: 0;
+}
+.standalone-page:has(.shmup-enc-fill) .standalone-window__content,
+.standalone-page:has(.shmup-lib) .standalone-window__content,
+.window__content:has(.shmup-enc-fill),
+.window__content:has(.shmup-lib) {
+  flex: 1;
+  min-height: 0;
+  align-self: stretch;
+}
+.shmup-editor:has(.shmup-enc-fill),
+.shmup-editor:has(.shmup-lib) {
+  overflow-y: hidden;
+}
+.shmup-editor:has(.shmup-enc-fill) .shmup-editor__body,
+.shmup-editor:has(.shmup-lib) .shmup-editor__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.shmup-enc-fill {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Touch devices: claw back the chrome padding wrapping the height-locked
+   column. On a 664px phone viewport 101px sat above the timeline before any
+   content did — editor padding, the heading's margin, and the body's padding,
+   each individually reasonable and collectively a sixth of the screen. Scoped
+   to `(pointer: coarse)` and to the encounter editor, so the tile/unit editors
+   and desktop keep their roomier spacing. */
+@media (pointer: coarse) {
+  .shmup-editor:has(.shmup-enc-fill),
+  .shmup-editor:has(.shmup-lib) {
+    padding: 4px;
+    gap: 4px;
+  }
+  .shmup-editor:has(.shmup-enc-fill) .shmup-editor__heading,
+  .shmup-editor:has(.shmup-lib) .shmup-editor__heading {
+    margin-bottom: 2px;
+  }
+  .shmup-editor:has(.shmup-enc-fill) .shmup-editor__body,
+  .shmup-editor:has(.shmup-lib) .shmup-editor__body {
+    padding: 4px;
+  }
+  .shmup-enc-fill {
+    gap: 6px;
+  }
+  .shmup-enemy-canvas-viewport {
+    height: 26vh;
+  }
+  .shmup-enc-fill--panel .shmup-enemy-canvas-viewport {
+    height: 13vh;
+  }
+}
+
+/* Deliberately NO z-index. A flex item with one creates a stacking context even
+   when statically positioned, which trapped the Embiggen fullscreen canvas
+   (`.shmup-enc-viewport-pin--embiggen`, z-index 1000) *inside* this head — so
+   its 1000 only ranked it against its own siblings, and the Save/Cancel footer
+   (z-index 20, same level as this head, later in DOM order) painted on top of
+   the fullscreen canvas, over the minimap and zoom buttons. The head needed the
+   z-index back when it was `position: sticky` and content scrolled under it;
+   nothing scrolls under it now that the column is height-locked. */
 .shmup-enc-sticky-head {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   background: #c0c0c0;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding-bottom: 4px;
   border-bottom: 2px solid #808080;
+  flex: 0 0 auto;
 }
 
 .shmup-enc-viewport-pin {
@@ -1442,12 +1715,61 @@
   border-color: #808080 #ffffff #ffffff #808080;
   background: #d4d0c8;
 }
+/* The tab strip owns all remaining height, and its content pane is the single
+   vertical scroller in the editor (see the height-lock block above). */
+.shmup-enc-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .shmup-enc-tab-content {
   background: #d4d0c8;
   border: 2px solid;
   border-color: #808080 #ffffff #ffffff #808080;
   padding: 8px;
   min-height: 70px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Keeps a flick inside the panel from chaining out to the page/desktop once
+     it bottoms out — the panel is the only thing that should scroll here. */
+  overscroll-behavior: contain;
+}
+
+/* Pushed to the far right of the tab strip: the panel/map height trade-off
+   (`panelExpanded`). Not a tab, so it never takes the --active treatment. */
+.shmup-enc-tab-btn--grow {
+  margin-left: auto;
+}
+
+/* The maxCount > 1 reveal in UnitScalingPanel, grouped so it reads as one
+   section opening rather than a dozen controls appearing at scattered depths.
+   The inset bevel + label is the visual cue that these belong to the dial
+   immediately above them. */
+.shmup-scaling-more {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: #c9c5bd;
+  padding: 6px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.shmup-scaling-more__title {
+  font-size: 8px;
+  color: #5b2d8e;
+}
+/* One dial-row tall regardless of which positioning shape is selected, so
+   switching Curve/V/Grid/Ring never displaces the controls below. */
+.shmup-scaling-shape-slot {
+  min-height: 79px;
+}
+.shmup-scaling-shape-slot .shmup-dial-grid {
+  margin-bottom: 0;
 }
 
 .shmup-dial-grid {
@@ -1497,6 +1819,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Save/Cancel must never be the thing that gets compressed out of the
+     height-locked column. */
+  flex: 0 0 auto;
 }
 
 /* ── Help modal (ShmupEditor.tsx) ─────────────────────────────────── */

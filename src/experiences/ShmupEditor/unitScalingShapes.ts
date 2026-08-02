@@ -75,7 +75,7 @@ function gridSlots(scaling: UnitScaling, originPos: Vec2, count: number): Vec2[]
 }
 
 function ringSlots(scaling: UnitScaling, originPos: Vec2, count: number): Vec2[] {
-  const center = add(originPos, scaling.ringCenterOffset);
+  const center = originPos;
   return Array.from({ length: count }, (_, i) => {
     const angle = (2 * Math.PI * i) / count;
     return { x: center.x + Math.cos(angle) * scaling.ringRadius, y: center.y + Math.sin(angle) * scaling.ringRadius };

@@ -46,7 +46,7 @@ describe("resolveScalingSlots", () => {
   });
 
   it("ring distributes points evenly around a center at the given radius", () => {
-    const s = scaling({ shape: "ring", ringCenterOffset: { x: 0, y: 0 }, ringRadius: 50 });
+    const s = scaling({ shape: "ring", ringRadius: 50 });
     const slots = resolveScalingSlots(s, ORIGIN, 4);
     expect(slots).toHaveLength(4);
     for (const p of slots) {

@@ -75,7 +75,6 @@ function encounter(id: string, unitDefId: string): AuthoredEncounter {
           vWidth: 0,
           gridWidth: 0,
           gridDepth: 0,
-          ringCenterOffset: { x: 0, y: 0 },
           ringRadius: 0,
           pingPong: false,
           pingPongOverride: null,

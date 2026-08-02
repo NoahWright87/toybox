@@ -16,7 +16,7 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_UNITS_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import type { EncounterDef } from "./encounterTypes";
-import { createDefaultUnitLibrary, type ActionDef, type CollisionGroup, type UnitDef, type UnitPart } from "./unitTypes";
+import { createDefaultUnitLibrary, repairSeededSimpleEnemies, type ActionDef, type CollisionGroup, type UnitDef, type UnitPart } from "./unitTypes";
 import type { TileDef } from "./types";
 
 // v6: Attacks moved off ActionDef entirely and onto a Unit's Parts
@@ -173,7 +173,10 @@ export function loadUnits(): UnitDef[] {
   try {
     const parsed = JSON.parse(content) as SavedLibrary;
     if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.units)) return seedAndPersistDefaultLibrary();
-    return parsed.units.filter(isValidUnitDef);
+    // Content-level repair of the seeded enemies (Part-less Actions / inert
+    // turret defaults) — see repairSeededSimpleEnemies. Deliberately not a
+    // SAVE_VERSION bump, which would discard user-authored Units too.
+    return repairSeededSimpleEnemies(parsed.units.filter(isValidUnitDef));
   } catch {
     return seedAndPersistDefaultLibrary();
   }

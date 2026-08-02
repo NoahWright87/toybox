@@ -9,6 +9,9 @@ interface UnitStatsFormProps {
   units: UnitDef[];
   onSave: (unit: UnitDef) => void;
   onCancel: () => void;
+  /** Null for a Unit that isn't in the library yet — nothing to duplicate or delete until it's been saved once. */
+  onDuplicate: (() => void) | null;
+  onDelete: (() => void) | null;
   /** Called on every change so the caller can persist the in-progress draft — root CLAUDE.md's mandatory in-progress-session-survives-reload rule. */
   onDraftChange: (unit: UnitDef) => void;
   onNewPart: () => void;
@@ -51,7 +54,9 @@ function actionSummary(action: ActionDef): string {
  * dedicated `PartEditor.tsx` view on Edit (a Part is a full sub-form in its
  * own right, not something that fits inline the way an Action does).
  */
-export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftChange, onNewPart, onEditPart, onDeletePart }: UnitStatsFormProps) {
+export default function UnitStatsForm({ unit, units, onSave, onCancel, onDuplicate, onDelete, onDraftChange, onNewPart, onEditPart, onDeletePart }: UnitStatsFormProps) {
+  /** Delete is destructive and sits next to Save, so it arms first. */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState<UnitDef>(unit);
   const [tab, setTab] = useState<UnitTab>("basics");
   const [pendingDeletePartId, setPendingDeletePartId] = useState<string | null>(null);
@@ -262,6 +267,8 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
       </div>
 
       {error && <p className="shmup-error">{error}</p>}
+      {/* Duplicate/Delete live here rather than in the library grid — see
+          TileEditorForm's matching note. */}
       <div className="shmup-btn-row">
         <button type="button" className="shmup-btn shmup-btn--primary" disabled={!!error} onClick={handleSave}>
           Save Unit
@@ -269,6 +276,26 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDraftCh
         <button type="button" className="shmup-btn" onClick={onCancel}>
           Cancel
         </button>
+        {onDuplicate && (
+          <button type="button" className="shmup-btn" onClick={onDuplicate}>
+            Duplicate
+          </button>
+        )}
+        {onDelete &&
+          (confirmingDelete ? (
+            <>
+              <button type="button" className="shmup-btn shmup-btn--danger" onClick={onDelete}>
+                Confirm Delete
+              </button>
+              <button type="button" className="shmup-btn" onClick={() => setConfirmingDelete(false)}>
+                Keep
+              </button>
+            </>
+          ) : (
+            <button type="button" className="shmup-btn" onClick={() => setConfirmingDelete(true)}>
+              Delete
+            </button>
+          ))}
       </div>
     </div>
   );
