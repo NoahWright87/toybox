@@ -459,11 +459,12 @@ are a fixed property of the Unit definition itself, chosen once when
 authoring the Unit, not of any one encounter placement: "Layer is a Unit
 definition. In the editor, when adding a Unit you choose which layer
 you're adding to and it shows you the available Units for that layer"
-(Noah). What the game does with layers when picking which Encounters
-combine on a tile spawn (10 ground x 10 air = 100 possible combinations,
-some spawning together, some filled independently) is entirely a runtime
-concern this editor doesn't need to know about — its only job is letting
-an author declare which roster a Unit belongs to.
+(Noah). Layer also decides which **reference frame** an instance is
+authored and previewed in — see "Authoring frames: Ground vs Air" below.
+What the game does with layers when picking which Encounters combine on a
+tile spawn (10 ground x 10 air = 100 possible combinations, some spawning
+together, some filled independently) is still entirely a runtime concern
+this editor doesn't need to know about.
 
 **`defaultActionId`** (`UnitDef`) is the Action used when a Unit is
 spawned *dynamically* — via another Action's `attack.spawnUnitId` — rather
@@ -614,7 +615,77 @@ or oscillates around its primary bezier-path position, independent of
 `speed`/`turnRate`) that will eventually cover what those movement kinds
 used to.
 
-### Attacks (`unitTypes.ts`, `partActions.ts`, `ActionForm.tsx`, `PartEditor.tsx`, `AttackPanel.tsx`)
+### Authoring frames: Ground vs Air (`airFrame.ts`, `EncounterEditor.tsx`, `EncounterTimeline.tsx`)
+
+**A Unit's layer decides which reference frame it lives in, and the
+canvas can be drawn in either one.** This is the editor half of a split
+the *runtime* already shipped (`EncounterRunner.ts`'s `isScrollLocked` /
+`pinnedOriginY`, documented in `games/shmup/authored-encounters.spec.md`).
+Before this, the canvas drew every instance against one tile-local frame
+regardless of layer, so a helicopter and a turret looked identical while
+authoring and behaved completely differently once played — exactly the
+editor-shows-X-game-does-Y drift `scrollModel.ts` exists to prevent, one
+level up. `airFrame.ts` therefore **mirrors the runtime's rule rather than
+inventing an editor-side one**:
+
+- **Ground and doodad are scroll-locked.** Their authored position
+  resolves against the live tile frame forever.
+- **Air is time-locked, but not from spawn.** An air unit rides the
+  scrolling frame exactly like a ground unit **until it is first genuinely
+  on screen**, and pins there. Pinning at spawn would strand it — at tile
+  clock zero the tile's north edge is a full `TILE_UNIT` above the screen.
+
+A **Ground/Air toggle** sits in the timeline toolbar (a view-wide mode,
+not a property of any selection). It switches several things at once:
+
+| | Ground mode | Air mode |
+|---|---|---|
+| Tile + ground units | fixed | slide down past a fixed camera |
+| Air unit, pre-pin | rides the tile | rides the tile (descends into view) |
+| Air unit, post-pin | drifts *up* the tile as terrain passes beneath | holds still |
+| Camera box | climbs the tile | fixed, drawn as a solid teal frame |
+| "+ Add" roster | ground + doodad Units | air Units |
+
+The frame you aren't authoring stays **visible but dimmed and
+non-interactive** (`.shmup-enc-offlayer`), and its timeline track collapses
+to bare timing hairlines — separate to author, together to check. An air
+track also carries a dashed teal **pin marker** at its decouple moment
+(`computePinTimeSec`), which is what makes the fly-in legible rather than
+implicit. The camera box is drawn unconditionally in air mode (not just in
+the E4 hitbox preview) because there every authored position is really
+"where on screen, and when" — without it the air canvas is an empty field
+with nothing to place against.
+
+**Authored positions stay tile-local.** Air mode is a rigid render-time
+translation, never a coordinate-system change. Two consequences, both of
+which would be bugs done the other way:
+
+1. The runtime resolves air positions *through* the tile frame — pinning
+   freezes that frame's origin, it does not switch coordinate systems. So
+   storing viewport-relative positions would contradict it.
+2. A rigid translation preserves arc length, so every derived step time
+   (`encounterTiming.ts`, `bezier.ts`'s `cubicBezierLength`) is unaffected
+   by which mode you authored in. No save-version bump, no migration.
+
+`airFrame.ts` keeps the two halves of the offset deliberately separate:
+`pinShiftY` (the decoupling) is what *geometry* math uses — attack
+anchors, `facePlayer` aim against the player marker — while
+`referenceShiftY` (the mode term) translates the whole scene uniformly at
+render. Folding the mode term into relative geometry would double-count it
+and make a pinned unit slowly swing its aim for no authored reason.
+
+Two smaller consequences: a newly placed **air** Unit defaults to just
+above the camera (one second of scroll out) rather than above the tile,
+since the latter leaves it off-screen for several seconds before the
+scroll reaches it; and an encounter whose placed Units are *all* air opens
+in Air mode, because opening it in Ground would show every one of them
+dimmed and unselectable.
+
+**Still not built**: Parts don't move (see "Attacks" below — scheduling
+only), and the pin moment is sampled at `PIN_SAMPLE_SEC` rather than
+solved, since the path is a bezier and the camera band is a moving window.
+
+### Attacks (`unitTypes.ts`, `partActions.ts`, `ActionForm.tsx`, `PartEditor.tsx`, `PartActionPanel.tsx`)
 
 **An attack is just one optional field of an Action — `ActionAttack |
 null` — not a separate class.** The prior (fifth-pass) `WeaponDef` was
@@ -720,7 +791,7 @@ is **always manually authored** — unlike a step, there's no
 position/distance to derive it from, since a Part placement has no
 position of its own (Parts don't move independently yet — see "Movement"
 above). It fires from wherever the instance's bezier path (plus the
-Part's `offset`) puts it at that moment — `attackAnchorWorld()` in
+Part's `offset`) puts it at that moment — `partActionAnchorWorld()` in
 `EncounterEditor.tsx` reuses `movementPreview.ts`'s
 `computeInstancePreview` for this, falling back to the instance's first
 step if the placement's time is before the instance has technically
@@ -735,12 +806,40 @@ one never cascades to any other.
 authored once on the Action rather than per-placement, there's nothing
 left for a per-placement drag to write to.
 
-**Adding a Part-track attack**: tapping the 🔫+ button on a selected step
-(next to ✥/+/✕) adds a placement at that step's time. If the Unit has
-exactly one Part, it's added directly (to that Part's first Action); with
-more than one Part, a small picker (mirrors "+ Add Unit"'s picker) asks
-which Part. Disabled with a hint if the Unit has no Actions authored on any
-Part yet — nothing to reference.
+**Parts are independent tracks, not attacks attached to a waypoint.** The
+🔫+ button that used to add a placement (on a selected step's control
+cluster, with its own Part picker for multi-Part Units) is **gone**. It
+framed the operation as "attach an attack to this waypoint" — and a Part's
+firing schedule has never had anything to do with where the hull happens
+to have a waypoint. It existed only because a Part with no placements had
+no lane, no marker and nothing to select. Noah, on finding it still there
+after Actions had already absorbed attacks: "why do we still have an
+attack button? Aren't attacks 100% covered by Actions in general?" They
+are — the button was pre-unification vocabulary that outlived the data
+model it described.
+
+What replaces it:
+
+- **Placing a Unit places all of its Parts.** `partActions.ts`'s
+  `seedPartActions` gives every Part a placement at the instance's spawn
+  time, pointed at that Part's first Action. A battleship arrives with all
+  four turret tracks already on the timeline rather than as a hull you
+  then bolt guns onto.
+- **A Part with no Actions still gets its dot**, with a `null` `actionId`.
+  Refusing would recreate the same discoverability hole one level down — a
+  Part you can't reach until you go elsewhere and give it an Action first.
+  Both validators (`encounterValidation.ts`, and the game's own
+  `authoredContent.ts`) already accepted a null `actionId`, so this needed
+  no save-version bump and left existing content untouched.
+- **Adding more**: select a dot on a Part's lane and press **+**, which
+  appends at the **playhead** — the shared clock every track is
+  choreographed against — and the Part tab's Time Dial adjusts it after.
+  Same select-then-append gesture a step uses, just scheduling instead of
+  positioning. A lane whose placements were all deleted (or an encounter
+  authored before seeding existed) keeps a **+** parked at the playhead, so
+  an emptied Part always has a way back.
+
+See "Timing" below for how the lanes themselves render and collapse.
 
 ### Per-Part hitboxes (`unitTypes.ts`, `PartEditor.tsx`)
 
@@ -782,8 +881,9 @@ attack together instead of a standalone Weapon.)
   offset-unit mapping centered on the canvas; no bounding-box/PADDING math
   needed like `EncounterEditor.tsx`'s world canvas, since this is a small
   fixed-size widget, not a scrolling world space. The encounter canvas's
-  attack markers also switched from a generic 🔫 icon to the firing Part's
-  actual sprite when one is set (falls back to 🔫 for a spriteless Part).
+  Part-Action markers also switched from a generic icon to the firing
+  Part's actual sprite when one is set (falls back to ◈ for a spriteless
+  Part).
 - **`ActionPreview.tsx`/`actionPreview.ts`**: a live animated canvas at
   the top of `ActionForm.tsx` (deliberately first, not an afterthought)
   showing what the Action's facing/attack actually does — a shooter
@@ -858,10 +958,13 @@ attack together instead of a standalone Weapon.)
     "placed turrets don't have a default Action, so I have to place them, set
     the action, repeat for any other placements."
     1. Single-sprite enemies got their Attack on the *Unit's* buffet but their
-       one "Main" Part was left `actions: []`. The encounter editor's 🔫+ node
-       control gates on `parts.some(p => p.actions.length > 0)`, so it was
-       permanently disabled for all twelve of them — you could never place an
-       attack without detouring through the Units editor first.
+       one "Main" Part was left `actions: []`. The encounter editor's (since
+       removed) 🔫+ node control gated on
+       `parts.some(p => p.actions.length > 0)`, so it was permanently disabled
+       for all twelve of them — you could never place an attack without
+       detouring through the Units editor first. Under the Part-lane model
+       that replaced it this class of bug can't recur: a Part with no Actions
+       still gets a lane and a dot, and its Action picker is right there.
     2. A stationary enemy (a Turret, `speed: 0`) took
        `createMoveAction(false)` as its `defaultActionId`, which is inert by
        construction — `movementPercent: 0`, `attack: null`. So a freshly placed
@@ -948,9 +1051,12 @@ that changed) — see `encounterTiming.ts`:
   picking a different (or Cloned, differently-tuned) Action for the step
   that starts it, not dragging its arrival marker. The timeline's retime
   handle (⟷) only renders on a manually-timed step now (first step, or
-  dwelling) — a derived step has no handle to drag. The drag-retime
-  gesture survives only for Part-action placements (`AttackPanel.tsx`),
-  whose `time` is still freely per-placement authored.
+  dwelling) — a derived step has no handle to drag. A Part-Action
+  placement's `time` *is* still freely per-placement authored, but it has
+  never had a drag handle either: it's edited by the Time Dial in the Part
+  tab (`PartActionPanel.tsx`). (An earlier revision of this doc claimed the
+  drag gesture "survives only for Part-action placements" — it did not;
+  no such handle was ever rendered for them.)
 - **Array index order is the authorial sequence order — steps are no
   longer reordered by dragging.** An earlier design kept `steps` sorted by
   `time` as an invariant so dragging past a neighbor could reorder the
@@ -970,8 +1076,9 @@ practice `hitboxPreview.ts`'s `computeAttackDurationMs` derives it from
 the attack's own fields: `telegraphMs` + every burst-to-burst gap after
 the first (`(repeatCount - 1) * burstIntervalMs`) + the last burst's own
 per-shot delays (`(count - 1) * perShotDelayMs`) — or `null` (indefinite)
-when `repeatCount` is `null`. `AttackPanel.tsx` shows this as a read-only
-readout next to a selected Part-action placement, not an editable field.
+when `repeatCount` is `null`. `PartActionPanel.tsx` shows this as a
+read-only readout next to a selected Part-Action placement, not an
+editable field.
 
 **`EncounterTimeline.tsx`** renders the shared clock as a horizontal ruler
 with one track per unit instance, below the canvas. Each step is a small
@@ -979,6 +1086,27 @@ diamond positioned at `time * PX_PER_SEC`; tapping one selects it (same
 selection as the canvas), and a drag handle (⟷) appears only when selected
 — mirroring the canvas's own move-handle pattern rather than making every
 marker draggable at all times.
+
+**Every Part of a placed Unit owns a lane under its Unit's own track**, as
+a small independent unit with its own schedule. Lanes are no longer
+conditional on a Part already having placements — that condition was the
+sole reason the removed 🔫+ button had to exist (see "Attacks" above).
+A lane's dots select and append exactly like step diamonds.
+
+**A Unit's Part lanes are expanded exactly while that Unit is selected**,
+and fold into a single hairline summary row otherwise. That's the whole
+collapse mechanism — no toggle to find, no state to persist, and picking
+up a different Unit folds the last one automatically ("maybe *is the
+parent selected* is what decides if it's collapsed or not" — Noah). The
+folded row still plots every Part placement as a hairline, because a
+battleship that hides *whether it fires at all* would defeat the reason
+you were lining tracks up in the first place. A four-turret Unit would
+otherwise own most of the ruler permanently, which is what made stacking
+several of them unreadable.
+
+**Off-frame tracks** (a ground Unit while authoring Air, or vice versa)
+collapse to the same bare hairlines regardless of selection — see
+"Authoring frames" above.
 
 **Play/scrub doubles as a live motion preview.** A Play button runs the
 playhead forward in real time (looping back to 0 at the end) via
@@ -1006,7 +1134,7 @@ can never look like the unit "keeps traveling after it reaches the final
 node," which is the exact bug report that drove several iterations of
 this feature (see "Movement" above).
 
-### Placement settings (`StepPanel.tsx`, `AttackPanel.tsx`)
+### Placement settings (`StepPanel.tsx`, `PartActionPanel.tsx`)
 
 **There are no per-placement field overrides anymore.** A prior pass had a
 narrow whitelist of fields a placement could override on top of whatever
@@ -1020,11 +1148,18 @@ references and *when*:
   a read-only readout when derived — see Timing above) and an **Action**
   picker listing the owning Unit's own `actions`, `"(none — holds
   position)"` for `null`.
-- **`AttackPanel.tsx`** — a placement's **Part** (only shown when the Unit
-  has more than one), **Action** picker listing that Part's own `actions`,
-  `time` (`Dial`), and a read-only computed **Duration** readout when the
-  resolved Action carries an attack (see Timing above's
-  `computeAttackDurationMs`).
+- **`PartActionPanel.tsx`** (the "Part" tab) — an **Action** picker listing
+  that Part's own `actions`, `time` (`Dial`), and a read-only computed
+  **Duration** readout when the resolved Action carries an attack (see
+  Timing above's `computeAttackDurationMs`). **Which Part is context, not a
+  field**: it used to be a dropdown, back when placements were created by a
+  🔫+ popup that made you pick a Part and left you able to reassign it
+  afterwards. Now that every Part owns a visible lane and you select a
+  placement *from* that lane, a control that could silently move it onto a
+  different turret is a way to lose work, not a feature — retargeting means
+  deleting the dot and adding one on the lane you meant. A Duration readout
+  is absent for an Action with no attack, which is correct rather than an
+  omission: a Part Action can legitimately be pure state.
 
 Retiming, retargeting a different facing, or changing a fire pattern all
 mean picking a different (or newly-authored, or Cloned) Action on the Unit
@@ -1168,15 +1303,18 @@ to drag (see "Movement" above).
   render as their own markers, below (a step whose *own* referenced Action
   carries an attack has no separate badge either; its attack renders live
   in the E4 hitbox preview, anchored at the step's own position).
-- **Part-track placements render as separate 🔫 markers**
-  (`.shmup-attack-marker`, smaller and differently colored than a
-  movement waypoint — same "reads as secondary" reasoning as the live
-  preview dot), positioned via `attackAnchorWorld()` at wherever the
-  instance's bezier path puts it at the placement's own time. Selecting
-  one shows a ✕ delete control — no aim handle anymore, since aim lives on
-  the referenced Action's own `facing` now (see "Attacks" above). A
-  selected step's control cluster gains a 🔫+ button (next to ✥/+/✕) to add
-  one there.
+- **Part-Action placements render as separate markers**
+  (`.shmup-part-marker`, smaller and differently colored than a movement
+  waypoint — same "reads as secondary" reasoning as the live preview dot;
+  the firing Part's own sprite when it has one, a ◈ fallback otherwise),
+  positioned via `partActionAnchorWorld()` at wherever the instance's
+  bezier path puts the Part at the placement's own time. Anchoring there
+  rather than at a fixed spot is what makes them useful for timing — you
+  see where a shot originates, not just that one exists. Selecting one
+  shows a **+/✕** pair, the same append-and-delete controls a selected step
+  gets (+ appends another placement on that same Part's track, at the
+  playhead). No aim handle anymore, since aim lives on the referenced
+  Action's own `facing` (see "Attacks" above).
 - **Deleting the first step removes the whole instance** from the
   encounter (confirm-then-`removeInstance`) — same reasoning as the prior
   pass's entrance-node special case, just phrased in step-list terms.
@@ -1187,15 +1325,25 @@ to drag (see "Movement" above).
 
 - **Pan/zoom (`EncounterMinimap.tsx`)**: the canvas is a fixed-size
   viewport (`.shmup-enemy-canvas-viewport`) showing a stage transformed by
-  `translate(pan) scale(zoom)` — continuous zoom from `0.15` to `3`, below
-  a tile's own size so a whole large tile can be seen at once, matching
+  `translate(pan) scale(zoom)` — continuous zoom from `0.08` to `3`, well
+  below a tile's own size so a whole large tile can be seen at once (the
+  floor dropped from `0.15` when `TILE_UNIT` grew to match the game's real
+  `GAME_WIDTH`: a 3x1 tile at 720/column needs roughly 0.145 to fit a
+  ~380px phone viewport, leaving no headroom), matching
   `JigsawPuzzle.tsx`'s pattern rather than the discrete-step/native-scroll
   one NS Art uses. Zoom via on-canvas +/− buttons, ctrl/cmd+wheel toward
   the cursor, or two-finger pinch; one-finger drag on empty canvas
   background pans. A small minimap (bottom-left) shows the tile outline
   and every step position at a glance, with click/drag-to-pan. The
-  viewport fits the whole stage on first mount (`fitView`, guarded to run
-  once) and never resizes after that — the bug this replaced was the
+  viewport fits the whole stage on first mount (`fitToStageRect`, guarded
+  by `didFitViewRef` to run once) and afterwards only ever refits when the
+  Ground/Air toggle changes — air mode's subject is the camera box, which
+  sits a whole tile-height below the tile and is completely outside a
+  ground-mode fit. That refit is deferred into an effect keyed on the mode
+  rather than done in the toggle handler, because the stage's bounding box
+  only grows to include the camera box *after* the mode has changed;
+  fitting inline would measure the old stage. Nothing else refits — the bug
+  this replaced was the
   stage's own bounding box being recomputed every render from *content*,
   including whatever was mid-drag, so the coordinate frame shifted under
   the pointer while dragging a unit near an edge. The fix separates "world
@@ -1291,7 +1439,7 @@ panel, Save/Cancel) — fine on desktop, a trap on mobile.
   minimap's existing corner-overlay convention) — its Difficulty Dial only
   renders inline next to the button while the toggle is on.
 - **Muted `.shmup-hint` explanatory paragraphs are gone from every panel**
-  (StepPanel/AttackPanel/UnitScalingPanel and the canvas's own top
+  (StepPanel/PartActionPanel/UnitScalingPanel and the canvas's own top
   instruction paragraph) — Noah's "remove all the muted explanatory text,
   put instructions in the Help menu instead." `ShmupEditor.tsx` now
   registers a "Help" menu with two topics (Tile Editor, Encounter Editor),
@@ -1601,7 +1749,7 @@ view:
   corners, and a lone single-step instance is simultaneously first *and*
   last, so top-right is already claimed by "+"). Tapping it toggles that
   instance's Scaling tab: the panel area below the canvas swaps `StepPanel`/
-  `AttackPanel` out for `UnitScalingPanel`, and that instance's shape
+  `PartActionPanel` out for `UnitScalingPanel`, and that instance's shape
   handles appear on the canvas (selecting the instance's first step under
   the hood, so the existing `selectedInstance`/`selectedUnitDef` plumbing
   stays coherent). A ⚖️ badge on the node itself (alongside ▶/🛡️) marks any
@@ -1727,9 +1875,13 @@ clearly" is something to actually look at rather than infer from numbers
 for this feature).
 
 **What renders, at the current scrub position**:
-- **Enemies** — a red box per live instance (and per scaled duplicate, at
-  its own slot's live position — see below), sized to the Unit's real
-  `size` (its hitbox radius), not the big authoring icon.
+- **Enemies** — a box per live instance (and per scaled duplicate, at its
+  own slot's live position — see below), sized to the Unit's real `size`
+  (its hitbox radius), not the big authoring icon. **Colour-coded by
+  frame**: red for ground/doodad, amber for air. At real hitbox scale the
+  two are otherwise identical rectangles, and they behave completely
+  differently once the level scrolls — one rides the terrain off the
+  bottom, the other pins to the screen (see "Authoring frames" above).
 - **Bullets in flight** — a red dot per bullet, reusing `actionPreview.ts`'s
   actual per-shot math (`shotAngleOffsets`, `sweepOffsetDeg`,
   `PREVIEW_BULLET_SPEED`, `PREVIEW_BULLET_LIFE_MS`) via
@@ -1749,14 +1901,18 @@ for this feature).
   Bullet size is the attack's `spawnUnitId`'s own real `size`
   (`resolveBulletRadius`), falling back to a documented default (6px) when
   it doesn't resolve.
-- **Player reference** — a static green circle, radius 6, documented
-  against `games/shmup/src/tuning/index.ts`'s real
-  `TUNING.combat.hitboxRadiusNormal` (independently maintained, not
-  imported — same "no shared code with the game" stance the rest of the
-  editor takes). Placed low in the tile (85% down), the same way a
-  vertical shmup's own ship sits near the bottom of the screen. Not
-  simulated or draggable — a fixed stand-in, since there's no live player
-  to track at authoring time. A `facing: "facePlayer"` Action's bullets aim
+- **Player reference** — a green circle, radius 6, documented against
+  `games/shmup/src/tuning/index.ts`'s real `TUNING.combat.hitboxRadiusNormal`
+  (independently maintained, not imported — same "no shared code with the
+  game" stance the rest of the editor takes). It **moves with the scrub**,
+  via the game's own shared scroll model (`computePlayerRefLocalY` is
+  `scrollModel.ts`'s `playerTileLocalY`): the ship holds a fixed screen
+  position while the tile scrolls past it, so in tile-local terms it climbs
+  the tile from below. An earlier revision of this doc described it as a
+  static marker 85% down the tile — that predates the scroll model, and a
+  static marker was only ever one frame of the truth. Still not *simulated*
+  or draggable: where the ship is at a given moment is known, where the
+  player chooses to be is not. A `facing: "facePlayer"` Action's bullets aim
   at this marker (`resolveActionFacingDeg`) — a real improvement over
   `ActionForm.tsx`'s isolated preview, which has no reference point
   available at all while just browsing the picker. A `facing:
@@ -1767,15 +1923,19 @@ for this feature).
   this preview has an actual path to differentiate.
 - **Tile bounds** — a thick yellow border on the tile's real footprint
   (the same rectangle `EncounterTileFrame` already outlines, just louder).
-- **Camera/playable bounds** — a dotted border, a static approximation of
-  "how much of the tile is visible on screen at once." Width matches the
-  tile's own width, per `levels-and-tiles.spec.todo.md` §4 ("the camera
-  framing... show[s] more/less active width" — camera width tracks the
-  tile, not an independent fixed value); height is derived from
-  `games/shmup/src/config.ts`'s real 720x1280 portrait aspect ratio and
-  centered on the tile (`computeCameraBoundsRect`). Does **not** animate/
-  ease the way the real playable-bounds box does when a level transitions
-  between sections (§4) — a static reference, not a scroll simulation.
+- **Camera/playable bounds** — a dotted border showing "how much of the
+  tile is visible on screen at once", which like the player marker **tracks
+  the scrub** (`computeCameraBoundsRect` reads `cameraLocalBand(t)`): the
+  band of tile-local y on screen climbs the tile as the level scrolls. The
+  camera is always one screen wide however wide the tile is
+  (`cameraLocalXBand`), so on a 2- or 3-wide tile the outer columns are
+  genuinely never on screen at once. Height comes from
+  `games/shmup/src/config.ts`'s real 720x1280 portrait aspect ratio. What
+  it still does **not** do is animate/ease the way the real playable-bounds
+  box does when a level transitions between wider and narrower sections
+  (§4) — that easing is L2 work that doesn't exist yet. In Air mode this
+  same rectangle is the fixed frame everything else moves against, and is
+  drawn solid rather than dotted (see "Authoring frames").
 
 **Scaled duplicates render for real, using an encounter-wide Difficulty
 slider — the previously-deferred §8.3 slider.** The toggle reveals its own
@@ -1792,7 +1952,7 @@ simultaneously regardless of its value (Noah caught this: "everything
 spawns simultaneously instead of individually").** Fix: slot index `N`'s
 own local clock (the same authored step/attack `time` values every
 duplicate shares) is offset from the shared `scrubTime` by `N *
-spawnDelayMs`, so `computeInstancePreview`/`attackAnchorWorld` — which
+spawnDelayMs`, so `computeInstancePreview`/`partActionAnchorWorld` — which
 only ever read local/authored time, never global time — evaluate each
 duplicate at its own correctly-shifted instant. Before its own delayed
 spawn instant, `computeInstancePreview` returns null the same way it

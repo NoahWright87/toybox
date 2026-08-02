@@ -70,6 +70,6 @@ authored Encounter with the real ship, weapons, Hype and economy.
 | `tuning.spec.todo.md` | the single home of every numeric lever | (all) |
 | `authored-encounters.spec.md` | loading `/shmup-editor` content and playing it in the engine — single-tile Encounter playback **implemented** | Epic 5 #181 / Epic 6 #182 |
 | `levels-and-tiles.spec.todo.md` | grid-fill tile generation, JIT streaming, camera bounds-box easing, biome emergence via tags | L1 #183, L2 #184, L7 #189 |
-| `enemies-and-bullets.spec.todo.md` | enemy node-graph model, bullets-as-enemies, boss tiles | L3 #185, L4 #186, L8 #190 |
+| `enemies-and-bullets.spec.todo.md` | enemy runtime model (Units, bezier steps, per-Part attack tracks), bullets-as-enemies, boss tiles — L3/L4 **implemented for authored content**, L8 not started | L3 #185, L4 #186, L8 #190 |
 | `spawn-and-warnings.spec.todo.md` | generalized difficulty-budget scaling, spawn nodes, warning indicators | L5 #187, L6 #188 |
-| `../../shmup-editor.todo.md` | `/shmup-editor` authoring tool (separate main-app route) | Epic 6 #182, E1–E5 #191–#195 |
+| `../../shmup-editor.todo.md` | `/shmup-editor` authoring tool (separate main-app route) — E1-E3 shipped, E4 partial, E5 superseded (no export) | Epic 6 #182, E1–E5 #191–#195 |
