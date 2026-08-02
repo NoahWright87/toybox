@@ -453,8 +453,10 @@
 
 .shmup-tile-list__grid {
   /* Single source of truth for the grid's column unit — TileArt's --grid
-     cell size (below) must match exactly or footprint spans stop lining up. */
-  --shmup-tile-grid-unit: 56px;
+     cell size (below) must match exactly or footprint spans stop lining up.
+     Raised from 56px: the whole cell is the open-this button now, and 56px is
+     well under the 44px-plus-comfortable-margin a primary target wants. */
+  --shmup-tile-grid-unit: 88px;
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--shmup-tile-grid-unit));
   gap: 0;
@@ -465,13 +467,138 @@
 .shmup-tile-list__cell {
   position: relative;
 }
+/* The cell IS the button — no nested "⋮" menu to miss. Reset the button chrome
+   so the art still tiles seamlessly edge-to-edge, which is the whole point of
+   this grid (checking how neighbouring tile art reads). */
+.shmup-tile-list__cell--button {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.shmup-tile-list__cell--button:focus-visible {
+  outline: 2px solid var(--orange-primary, #cc4400);
+  outline-offset: -2px;
+  z-index: 1;
+}
+/* Name strip along the bottom of a cell. The old grid put the name behind the
+   "⋮" menu's tooltip, so browsing by name meant hovering — which does not exist
+   on touch. */
+.shmup-tile-list__caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 3px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 6px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* ── Library browser: Tiles / Units / Preview (LibraryBrowser.tsx) ─────────
+   Same height-lock shape as the encounter editor: a pinned head (tabs, filter,
+   Create) over a single scrolling body, so the controls stay reachable however
+   far down a long library you scroll. */
+.shmup-lib {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 6px;
+  /* Fill whichever host we're in (standalone window or a Doors 97 window)
+     rather than shrink-wrapping the grid. */
+  width: 100%;
+}
+/* The standalone window is shrink-to-fit by default, which left the browse grid
+   about two columns wide on a desktop viewport with a wide black gutter beside
+   it. Give it real width there; the mobile rule below already forces 100%. */
+.standalone-page:has(.shmup-lib) .standalone-window {
+  width: min(1000px, 100%);
+}
+.shmup-lib__head {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--win95-dark, #808080);
+}
+.shmup-lib__tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.shmup-lib__tab {
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  /* Chunky on purpose — this is the editor's primary navigation and it used to
+     be a 35x17px menu-bar label. */
+  padding: 12px 8px;
+  background: var(--win95-gray, #c0c0c0);
+  border: 2px solid;
+  border-color: var(--white, #fff) var(--win95-dark, #808080) var(--win95-dark, #808080) var(--white, #fff);
+  color: #000;
+  cursor: pointer;
+}
+.shmup-lib__tab--active {
+  background: var(--orange-primary, #cc4400);
+  color: #fff;
+  border-color: #ffcc88 #664400 #664400 #ffcc88;
+}
+.shmup-lib__controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.shmup-lib__filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.shmup-lib__filter select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 6px;
+}
+.shmup-lib__create {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+}
+.shmup-lib__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shmup-lib__preview-switch {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
 /* Grid variant: no border/gap between cells, sized to the grid's column unit so footprint spans line up exactly. */
 .shmup-tile-art--grid .shmup-tile-art__row {
   border: none;
 }
 .shmup-tile-art--grid .shmup-tile-art__cell {
-  width: var(--shmup-tile-grid-unit, 56px);
-  height: var(--shmup-tile-grid-unit, 56px);
+  width: var(--shmup-tile-grid-unit, 88px);
+  height: var(--shmup-tile-grid-unit, 88px);
 }
 /* Strip variant (Connection Viewer): no border either, sized large — the
    whole point is judging art at real size, not a small schematic thumbnail. */
@@ -1415,7 +1542,9 @@
    is a tab below, so there's rarely anything to scroll past to reach a
    selected node's settings. */
 /* ─────────────────────────────────────────────────────────────────────────
-   Encounter editor: height-locked layout, ONE scroll region.
+   Height-locked layouts, ONE scroll region — used by both the encounter editor
+   (`.shmup-enc-fill`) and the library browser (`.shmup-lib`), which have the
+   same shape: a pinned head over a single scrolling body.
 
    What this replaces: the head was `position: sticky; top: 0`, which never
    engaged, because `.shmup-editor` sets `overflow-y: auto` and therefore
@@ -1432,23 +1561,29 @@
    the only vertical scroller. `:has()` is a progressive enhancement — without
    it the chain just falls back to the old content-height behaviour rather
    than breaking. ───────────────────────────────────────────────────────── */
-.standalone-page:has(.shmup-enc-fill) {
+.standalone-page:has(.shmup-enc-fill),
+.standalone-page:has(.shmup-lib) {
   align-items: stretch;
 }
-.standalone-page:has(.shmup-enc-fill) .standalone-window {
+.standalone-page:has(.shmup-enc-fill) .standalone-window,
+.standalone-page:has(.shmup-lib) .standalone-window {
   height: 100%;
   min-height: 0;
 }
 .standalone-page:has(.shmup-enc-fill) .standalone-window__content,
-.window__content:has(.shmup-enc-fill) {
+.standalone-page:has(.shmup-lib) .standalone-window__content,
+.window__content:has(.shmup-enc-fill),
+.window__content:has(.shmup-lib) {
   flex: 1;
   min-height: 0;
   align-self: stretch;
 }
-.shmup-editor:has(.shmup-enc-fill) {
+.shmup-editor:has(.shmup-enc-fill),
+.shmup-editor:has(.shmup-lib) {
   overflow-y: hidden;
 }
-.shmup-editor:has(.shmup-enc-fill) .shmup-editor__body {
+.shmup-editor:has(.shmup-enc-fill) .shmup-editor__body,
+.shmup-editor:has(.shmup-lib) .shmup-editor__body {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1466,14 +1601,17 @@
    to `(pointer: coarse)` and to the encounter editor, so the tile/unit editors
    and desktop keep their roomier spacing. */
 @media (pointer: coarse) {
-  .shmup-editor:has(.shmup-enc-fill) {
+  .shmup-editor:has(.shmup-enc-fill),
+  .shmup-editor:has(.shmup-lib) {
     padding: 4px;
     gap: 4px;
   }
-  .shmup-editor:has(.shmup-enc-fill) .shmup-editor__heading {
+  .shmup-editor:has(.shmup-enc-fill) .shmup-editor__heading,
+  .shmup-editor:has(.shmup-lib) .shmup-editor__heading {
     margin-bottom: 2px;
   }
-  .shmup-editor:has(.shmup-enc-fill) .shmup-editor__body {
+  .shmup-editor:has(.shmup-enc-fill) .shmup-editor__body,
+  .shmup-editor:has(.shmup-lib) .shmup-editor__body {
     padding: 4px;
   }
   .shmup-enc-fill {

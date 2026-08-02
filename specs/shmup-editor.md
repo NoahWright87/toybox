@@ -65,10 +65,30 @@ unrotated slots.
 
 ## Surfaces
 
-Navigation between views (Tile List / New Tile / Connection Viewer / Tag
-Graph) is via the **Tiles menu** in the window's menu bar
-(`useWindowMenus`) — no duplicate on-screen nav buttons; the body just
-shows a plain heading for whichever view is active.
+Navigation between the three browse-level views is a **tab strip inside the
+window** (`LibraryBrowser.tsx`): **Tiles**, **Units**, and **Preview** (which
+holds the Connection Viewer and Tag Graph). The menu bar keeps the same entries
+— plus Help and Reset — but is no longer the only route. It used to be: switching
+between the tile and unit libraries meant opening a Win95 menu and picking an
+item, two taps with the first on a 35x17px target, for something you do
+constantly. Per Noah: "units and tiles are like two major tabs, and maybe
+preview would be a third tab?"
+
+**The tabs, the active tab's filter, and Create are pinned above a scrolling
+grid** — the same height-lock the encounter editor uses (`.shmup-enc-fill`;
+both share the `:has()` chain), so they stay reachable however far down a long
+library you scroll. Each tab carries:
+
+- a **filter dropdown**, defaulting to "Show All" — **tags** for Tiles (an edge
+  tag is per-slot free text, so a tile "has" a tag if any of its four edges
+  carries it, which makes the filter read as "show me everything that borders
+  water"), and **layer** (Ground/Air/Doodad) for Units;
+- a chunky **Create** button, replacing the menu bar's "New Tile..."/"New
+  Unit..." as the obvious way in.
+
+The standalone window is shrink-to-fit by default, which left the browse grid
+about two columns wide on a desktop viewport; it gets a real width
+(`min(1000px, 100%)`) when a library is showing.
 
 - **Tile list — a visual checker, not a metadata card grid.** Tiles
   render as pure art (`TileArt`, no schematic/edge-tag labels — that's
@@ -77,9 +97,21 @@ shows a plain heading for whichever view is active.
   footprint width so a 2x1 tile is visibly twice as wide as a neighboring
   1x1 — the point is judging how tiles' art reads *next to each other*,
   which matters a lot when the art comes from an AI image generator that
-  has no idea what tile sits next to it. Per-tile actions (Edit/Duplicate/
-  Delete) live behind a small "⋮" corner button instead of an
-  always-visible row, so they don't compete with the art for attention.
+  has no idea what tile sits next to it.
+
+  **The whole cell is the open-this button, and cells are 88px** (up from 56px).
+  Opening a tile used to mean hitting an 18x14px "⋮" in its corner and then
+  picking "Edit" from the menu that opened — two taps, the first on a target
+  well under half the size guidance, for the thing you almost always want.
+  **Duplicate and Delete moved into the tile/Unit editor**, which is where you
+  already are when you decide you want them and which has room for them at a
+  sane size; Delete arms with a Confirm/Keep step there, as it did in the old
+  menu. Both invoke from *inside* the editor now, so Delete also closes it
+  (otherwise you'd be left editing something that no longer exists) and
+  Duplicate opens the copy — silently appending to a library you can't
+  currently see is no feedback at all. A name caption sits along the bottom of
+  each cell, since the old grid put the name in a `title` tooltip, which does
+  not exist on touch.
 - **Tile editor form** — the schematic diagram itself *is* the edge editor:
   each edge cell is a dropdown (`EdgeSelect`) offering Hard Wall, every tag
   already used anywhere in the library, and "+ New tag..." (reveals an

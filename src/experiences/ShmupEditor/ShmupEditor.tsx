@@ -7,6 +7,7 @@ import TileEditorForm from "./TileEditorForm";
 import ConnectionViewer from "./ConnectionViewer";
 import TagGraph from "./TagGraph";
 import UnitList from "./UnitList";
+import LibraryBrowser, { ALL_FILTER, tileHasTag, tileTags, unitInLayer, type LibraryTab } from "./LibraryBrowser";
 import UnitStatsForm from "./UnitStatsForm";
 import PartEditor from "./PartEditor";
 import EncounterEditor from "./EncounterEditor";
@@ -35,6 +36,9 @@ export default function ShmupEditor() {
   const [editingPart, setEditingPart] = useState<UnitPart | null>(() => loadUnitDraft()?.activePart ?? null);
   const [editingTile, setEditingTile] = useState<TileDef | null>(() => loadTileSession()?.tile ?? null);
   const [editingEncounter, setEditingEncounter] = useState<EncounterDef | null>(() => loadTileSession()?.activeEncounter ?? null);
+  /** Tag filter for the Tiles tab and layer filter for the Units tab — view state, never persisted. */
+  const [tileTagFilter, setTileTagFilter] = useState<string>(ALL_FILTER);
+  const [unitLayerFilter, setUnitLayerFilter] = useState<string>(ALL_FILTER);
   const [view, setView] = useState<View>(() => {
     const unitDraft = loadUnitDraft();
     if (unitDraft?.activePart) return "part-edit";
@@ -120,10 +124,22 @@ export default function ShmupEditor() {
     const now = Date.now();
     const copy: TileDef = { ...tile, id: makeTileId(), name: `${tile.name} copy`, createdAt: now, modifiedAt: now };
     persist([...tiles, copy]);
+    // Opening the copy is the feedback: from inside the editor, silently
+    // appending to a library you can't currently see would look like nothing
+    // happened. The heading and the " copy" name make it obvious which one
+    // you're now editing.
+    setEditingTile(copy);
+    setEditingEncounter(null);
+    saveTileSession({ tile: copy, activeEncounter: null });
   }
 
+  /** Invoked from inside the tile editor now, so it has to close the editor too — otherwise you'd be left editing a tile that no longer exists. */
   function handleDeleteTile(tile: TileDef) {
     persist(tiles.filter((t) => t.id !== tile.id));
+    setEditingTile(null);
+    setEditingEncounter(null);
+    clearTileSession();
+    setView("list");
   }
 
   function handleSaveTile(tile: TileDef) {
@@ -260,10 +276,20 @@ export default function ShmupEditor() {
       modifiedAt: now,
     };
     persistUnits([...units, copy]);
+    // Same reasoning as handleDuplicateTile: open the copy so the duplicate is
+    // visible rather than silently appended to a library you can't see.
+    setEditingUnit(copy);
+    setEditingPart(null);
+    saveUnitDraft({ unit: copy, activePart: null });
   }
 
+  /** Invoked from inside the Unit editor now, so it has to close the editor too. */
   function handleDeleteUnit(unit: UnitDef) {
     persistUnits(units.filter((u) => u.id !== unit.id));
+    setEditingUnit(null);
+    setEditingPart(null);
+    clearUnitDraft();
+    setView("unit-list");
   }
 
   function handleSaveUnit(unit: UnitDef) {
@@ -374,14 +400,72 @@ export default function ShmupEditor() {
   // the title bar carries that context instead.
   useWindowTitle(view === "connections" ? "Connection Viewer" : null);
 
+  /** The library tab a browse-level view maps to, or null while an editor is open. */
+  const libraryTab: LibraryTab | null =
+    view === "list" ? "tiles" : view === "unit-list" ? "units" : view === "connections" || view === "graph" ? "preview" : null;
+
+  function openLibraryTab(next: LibraryTab) {
+    setView(next === "tiles" ? "list" : next === "units" ? "unit-list" : "connections");
+  }
+
+  const visibleTiles = useMemo(() => tiles.filter((t) => tileHasTag(t, tileTagFilter)), [tiles, tileTagFilter]);
+  const visibleUnits = useMemo(() => units.filter((u) => unitInLayer(u, unitLayerFilter)), [units, unitLayerFilter]);
+  const allTileTags = useMemo(() => tileTags(tiles), [tiles]);
+
   return (
     <div className="shmup-editor">
       <div className="shmup-editor__body">
-        {view === "list" && (
-          <>
-            <h3 className="shmup-editor__heading">Tile Library ({tiles.length})</h3>
-            <TileList tiles={tiles} onEdit={handleEditTile} onDuplicate={handleDuplicateTile} onDelete={handleDeleteTile} />
-          </>
+        {libraryTab && (
+          <LibraryBrowser
+            tab={libraryTab}
+            onTabChange={openLibraryTab}
+            tileCount={tiles.length}
+            unitCount={units.length}
+            createLabel={libraryTab === "tiles" ? "+ Create Tile" : "+ Create Unit"}
+            onCreate={libraryTab === "tiles" ? handleNewTile : libraryTab === "units" ? handleNewUnit : null}
+            filter={
+              libraryTab === "tiles" ? (
+                <label className="shmup-lib__filter">
+                  <span>Tag</span>
+                  <select className="shmup-input" value={tileTagFilter} onChange={(e) => setTileTagFilter(e.target.value)}>
+                    <option value={ALL_FILTER}>Show All</option>
+                    {allTileTags.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : libraryTab === "units" ? (
+                <label className="shmup-lib__filter">
+                  <span>Layer</span>
+                  <select className="shmup-input" value={unitLayerFilter} onChange={(e) => setUnitLayerFilter(e.target.value)}>
+                    <option value={ALL_FILTER}>Show All</option>
+                    <option value="ground">Ground</option>
+                    <option value="air">Air</option>
+                    <option value="doodad">Doodad</option>
+                  </select>
+                </label>
+              ) : null
+            }
+          >
+            {libraryTab === "tiles" && <TileList tiles={visibleTiles} onOpen={handleEditTile} filtered={tileTagFilter !== ALL_FILTER} />}
+            {libraryTab === "units" && <UnitList units={visibleUnits} onOpen={handleEditUnit} filtered={unitLayerFilter !== ALL_FILTER} />}
+            {libraryTab === "preview" && (
+              <div className="shmup-lib__preview">
+                <div className="shmup-lib__preview-switch">
+                  <button type="button" className={`shmup-btn ${view === "connections" ? "shmup-btn--active" : ""}`} onClick={() => setView("connections")}>
+                    Level Layout
+                  </button>
+                  <button type="button" className={`shmup-btn ${view === "graph" ? "shmup-btn--active" : ""}`} onClick={() => setView("graph")}>
+                    Tag Graph
+                  </button>
+                </div>
+                {view === "connections" && <ConnectionViewer tiles={tiles} />}
+                {view === "graph" && <TagGraph tiles={tiles} onEditTile={handleEditTile} />}
+              </div>
+            )}
+          </LibraryBrowser>
         )}
         {view === "edit" && editingTile && (
           <>
@@ -392,24 +476,13 @@ export default function ShmupEditor() {
               onRegisterTag={registerTag}
               onSave={handleSaveTile}
               onCancel={handleCancelEdit}
+              onDuplicate={tiles.some((t) => t.id === editingTile.id) ? () => handleDuplicateTile(editingTile) : null}
+              onDelete={tiles.some((t) => t.id === editingTile.id) ? () => handleDeleteTile(editingTile) : null}
               onDraftChange={handleTileDraftChange}
               onNewEncounter={handleNewEncounter}
               onEditEncounter={handleEditEncounter}
               onDeleteEncounter={handleDeleteEncounter}
             />
-          </>
-        )}
-        {view === "connections" && <ConnectionViewer tiles={tiles} />}
-        {view === "graph" && (
-          <>
-            <h3 className="shmup-editor__heading">Tag Graph</h3>
-            <TagGraph tiles={tiles} onEditTile={handleEditTile} />
-          </>
-        )}
-        {view === "unit-list" && (
-          <>
-            <h3 className="shmup-editor__heading">Unit Library ({units.length})</h3>
-            <UnitList units={units} onEdit={handleEditUnit} onDuplicate={handleDuplicateUnit} onDelete={handleDeleteUnit} />
           </>
         )}
         {view === "unit-edit" && editingUnit && (
@@ -420,6 +493,8 @@ export default function ShmupEditor() {
               units={units}
               onSave={handleSaveUnit}
               onCancel={handleCancelUnitEdit}
+              onDuplicate={units.some((u) => u.id === editingUnit.id) ? () => handleDuplicateUnit(editingUnit) : null}
+              onDelete={units.some((u) => u.id === editingUnit.id) ? () => handleDeleteUnit(editingUnit) : null}
               onDraftChange={handleUnitDraftChange}
               onNewPart={handleNewPart}
               onEditPart={handleEditPart}
