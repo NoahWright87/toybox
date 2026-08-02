@@ -581,8 +581,21 @@ export default function ShmupEditor() {
                 <li>Step timing is usually automatic (distance ÷ the step's own Action's Movement %) — pick a different (or Cloned) Action to retime a moving segment; drag-to-retime only works on a manually-timed (first or dwelling) step.</li>
                 <li>An Action's own duration (when it has an attack) is computed from its burst/telegraph/repeat fields, not hand-edited — shown as a read-only readout on a selected Part-track placement.</li>
                 <li>Scaling: Difficulty splits evenly across however many instances Min Cost affords, capped at Max Count. Low cost = a swarm; high cost = fewer, stronger.</li>
-                <li>+ Add filters the Unit picker by Layer (Ground/Air/Doodad) — a Unit only shows up under its own authored layer.</li>
-                <li>⊡ (top-left of canvas) toggles a real-scale hitbox preview: red boxes = enemies, red dots = bullets, green circle = reference player hitbox, thick yellow border = tile bounds, dotted border = roughly what's on screen at once.</li>
+                <li>
+                  Ground / Air (top right, by the timeline) switches which reference frame you're authoring in — they really are two different
+                  spaces. In Ground the tile holds still and the camera climbs it. In Air the camera holds still and the terrain slides down
+                  through it, because an aircraft isn't bolted to the ground.
+                </li>
+                <li>
+                  The other frame stays visible but dimmed and untappable, and its timeline track shrinks to a hairline — enough to line your
+                  timings up against, not enough to get in the way. + Add offers whichever roster matches the current frame (Doodad counts as
+                  Ground; it scrolls with the terrain too).
+                </li>
+                <li>
+                  Teal dashed line on an air track = where that Unit stops riding the terrain and locks to the screen. It happens the moment it
+                  first becomes visible, so it still flies in from wherever you drew it; everything left of that line is the entrance.
+                </li>
+                <li>⊡ (top-left of canvas) toggles a real-scale hitbox preview: red boxes = ground enemies, amber = air, red dots = bullets, green circle = reference player hitbox, thick yellow border = tile bounds, dotted border = roughly what's on screen at once.</li>
                 <li>⛶ (top-right of canvas) fills the screen with the viewport; Esc or tap it again to shrink back.</li>
                 <li>Dials: drag up/down to change, tap the number to type one, right-click or press-and-hold to reset.</li>
               </ul>

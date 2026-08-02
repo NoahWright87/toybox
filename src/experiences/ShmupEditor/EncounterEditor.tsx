@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import EncounterTileFrame from "./EncounterTileFrame";
 import EncounterTimeline from "./EncounterTimeline";
 import EncounterMinimap from "./EncounterMinimap";
@@ -17,9 +17,10 @@ import { computeInstanceHeadingDeg, computeInstancePreview, LAST_STEP_PREVIEW_WI
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, computePlayerRefLocalY, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
+import { authorLayerOf, computePinTimeSec, isScrollLocked, pinHorizonSec, pinShiftY, referenceShiftY, scrollOffsetY, type AuthorLayer } from "./airFrame";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
-import type { ActionAttack, ActionDef, UnitDef, UnitLayer } from "./unitTypes";
+import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
 
 interface EncounterEditorProps {
   tile: TileDef;
@@ -106,6 +107,10 @@ const NODE_HUD_MARGIN = 40;
 const NEW_STEP_SCREEN_GAP = 76;
 /** Ceiling for the E4 hitbox-preview mode's encounter-wide Difficulty slider — same range as UnitScalingPanel.tsx's per-instance preview slider, just driving every scaled instance in the encounter at once (specs/shmup-editor.todo.md's "Encounter-wide difficulty-preview slider" Remaining item). */
 const HITBOX_PREVIEW_DIFFICULTY_MAX = 100;
+/** How far the frame you *aren't* authoring fades back (airFrame.ts). Low enough to read as reference, high enough that you can still line an air path up against the terrain under it — the whole reason the other layer stays on screen at all. */
+const OFF_LAYER_OPACITY = 0.3;
+/** How far above the camera's top edge a freshly-placed air Unit starts, expressed as seconds of scroll — it flies in from just off the top rather than materialising mid-screen. See `addUnitInstance`. */
+const AIR_ENTRY_LEAD_SEC = 1;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -223,10 +228,32 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
    * what the old scroll-the-whole-page layout already did wrong.
    */
   const [panelExpanded, setPanelExpanded] = useState(false);
-  // Which roster the "+ Add" tab's Unit picker shows — Layer is a Unit
-  // definition (unitTypes.ts), not a placement, so this only filters the
-  // picker; it isn't saved anywhere.
-  const [addLayerFilter, setAddLayerFilter] = useState<UnitLayer>("ground");
+  /**
+   * **Which reference frame the canvas is currently drawn in** (airFrame.ts).
+   * Not saved anywhere — Layer is a property of the Unit definition
+   * (unitTypes.ts), never of a placement; this only decides what you're
+   * *looking at*, and it deliberately switches several things at once:
+   *
+   * - Ground: tile-local space, exactly as before. The tile is fixed and the
+   *   camera box climbs it; air units are dimmed and drift up the tile once
+   *   they pin.
+   * - Air: the camera is fixed and the terrain slides down through it. Ground
+   *   units and the tile itself are dimmed but stay visible, so an air path
+   *   can still be lined up against what it's flying over.
+   *
+   * Both modes show the *other* layer rather than hiding it — separate to
+   * author, together to check. The inactive layer is non-interactive though,
+   * so a stray tap can't grab a dimmed node in a frame you aren't editing.
+   */
+  const [authorLayer, setAuthorLayer] = useState<AuthorLayer>(() => {
+    // Open in the frame that actually holds this encounter's content. Ground
+    // is the right default for an empty encounter and for anything mixed, but
+    // an all-air encounter opening in ground mode would show every one of its
+    // units dimmed and unselectable, which reads as broken rather than as a
+    // mode you need to switch out of.
+    const placed = encounter.units.map((u) => units.find((d) => d.id === u.unitDefId)).filter((d): d is UnitDef => !!d);
+    return placed.length > 0 && placed.every((d) => authorLayerOf(d.layer) === "air") ? "air" : "ground";
+  });
   // E4 low-fi hitbox/boundary preview mode (specs/shmup-editor.todo.md) —
   // an alternate rendering of the same scrubTime/playing timeline already
   // above, not a separate playback engine. Ephemeral viewing aid, same
@@ -249,6 +276,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const bgPointersRef = useRef<Map<number, Vec2>>(new Map());
   const lastPinchRef = useRef<{ dist: number; midX: number; midY: number } | null>(null);
   const didFitViewRef = useRef(false);
+  /** Set by `switchAuthorLayer` so the reframe happens on the render *after* the mode change, once the stage's bounding box has grown to match. */
+  const pendingFitRef = useRef(false);
   const error = validate(draft);
 
   // Ephemeral preview state (scrub position, play/pause, scaling preview
@@ -257,6 +286,60 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // the actual steps/scaling config do.
   const allStepTimes = draft.units.flatMap((u) => u.steps.map((s) => s.time));
   const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + LAST_STEP_PREVIEW_WINDOW : 10;
+
+  /**
+   * When each air instance decouples from the scrolling tile frame
+   * (airFrame.ts's `computePinTimeSec` — the runtime's own
+   * pin-on-first-visible rule). Memoized on the authored content rather than
+   * recomputed per render: this samples a whole tile lifespan per instance,
+   * and the scrub advances 60x a second during playback.
+   *
+   * Memoizing on committed content is also what keeps a drag stable — the
+   * pin can't move under a node while that node is being positioned, since
+   * `draft` doesn't change until the drag commits.
+   */
+  const pinSecByInstance = useMemo(() => {
+    const horizon = pinHorizonSec(maxTime);
+    const map = new Map<string, number | null>();
+    for (const instance of draft.units) {
+      const unitDef = units.find((u) => u.id === instance.unitDefId);
+      const locked = unitDef ? isScrollLocked(unitDef.layer) : true;
+      map.set(instance.id, locked ? null : computePinTimeSec(instance, unitDef, tile.footprint, horizon));
+    }
+    return map;
+  }, [draft.units, units, tile.footprint, maxTime]);
+
+  /** Which authoring frame an instance belongs to — its Unit's layer, with doodad folded into ground (airFrame.ts). An unresolvable Unit falls back to ground so it still renders somewhere rather than vanishing. */
+  function instanceAuthorLayer(instance: EncounterUnit): AuthorLayer {
+    const unitDef = units.find((u) => u.id === instance.unitDefId);
+    return unitDef ? authorLayerOf(unitDef.layer) : "ground";
+  }
+
+  /** True when an instance belongs to the frame that isn't currently being authored — dimmed, and inert to pointers. */
+  function isOffLayer(instance: EncounterUnit): boolean {
+    return instanceAuthorLayer(instance) !== authorLayer;
+  }
+
+  /**
+   * The instance's decoupling offset at the current scrub (airFrame.ts's
+   * `pinShiftY`). Added to an authored position this gives the *effective*
+   * tile-local position — the space the player marker, attack anchors and
+   * `facePlayer` aim already live in, so relative geometry stays correct.
+   * The render-mode term (`refShiftY`) is applied separately and uniformly
+   * to the whole scene; folding it in here would double-count it.
+   */
+  function instancePinShiftY(instance: EncounterUnit): number {
+    const unitDef = units.find((u) => u.id === instance.unitDefId);
+    return pinShiftY(unitDef ? isScrollLocked(unitDef.layer) : true, pinSecByInstance.get(instance.id) ?? null, scrubTime);
+  }
+
+  /**
+   * The whole-scene translation that pins the camera in air mode. Applied
+   * uniformly at render time to everything — tile frame, camera box, player
+   * marker, every instance — so it never changes any relative geometry, only
+   * what the viewport is anchored to.
+   */
+  const refShiftY = referenceShiftY(authorLayer, scrubTime);
 
   useEffect(() => {
     if (!playing) return;
@@ -406,11 +489,23 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
   function addUnitInstance(unitDefId: string) {
     const index = draft.units.length;
+    const unitDef = units.find((u) => u.id === unitDefId);
     // Staggered diagonally (not just horizontally) so each new instance's
     // label doesn't render directly on top of the previous one's — still
     // just a default, since the move handle can reposition either.
-    const startPos: Vec2 = { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
-    const unitDef = units.find((u) => u.id === unitDefId);
+    //
+    // **Ground and air want different defaults**, because they enter the
+    // playfield by different routes. A ground unit is placed above the tile
+    // and scrolls in with its terrain. An air unit placed there would spend
+    // several seconds off-screen before the scroll even reached it (at clock
+    // zero the tile is a full screen above the camera), so it starts just
+    // above the *camera* instead — one second of scroll out, so it flies into
+    // the locked viewport almost immediately and there's something to look at
+    // the moment you place it.
+    const startPos: Vec2 =
+      unitDef && authorLayerOf(unitDef.layer) === "air"
+        ? { x: airCameraRect.x + airCameraRect.width / 2 + index * 110, y: airCameraRect.y - scrollOffsetY(AIR_ENTRY_LEAD_SEC) - index * 30 }
+        : { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
     // Defaults to the Unit's own defaultActionId (unitTypes.ts) rather than
     // null — a freshly-placed Unit should already do *something* sensible
     // (fly/patrol/idle-and-shoot, whatever its author set as the default)
@@ -597,12 +692,29 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // same math as JigsawPuzzle.tsx's piece-drag world-coordinate
   // conversion, rather than reading them back out of a transformed
   // element's own (harder-to-reason-about) getBoundingClientRect().
+  /**
+   * The total render shift currently applied to whichever instance is being
+   * dragged — `toWorld` has to undo it, or the authored position would be
+   * off by exactly the frame offset.
+   *
+   * This is what makes air-mode authoring do the intuitive thing: scrub to
+   * the moment you care about, drag the gunship to where it should be *on
+   * screen*, and the tile-local position that gets stored is whatever puts
+   * it there at that instant.
+   */
+  function activeDragShiftY(): number {
+    const id = dragPos?.instanceId ?? dragHandle?.instanceId ?? scalingDrag?.instanceId ?? null;
+    if (!id) return 0;
+    const instance = draft.units.find((u) => u.id === id);
+    return instance ? instancePinShiftY(instance) + refShiftY : 0;
+  }
+
   function toWorld(clientX: number, clientY: number): Vec2 | null {
     if (!arenaRef.current) return null;
     const rect = arenaRef.current.getBoundingClientRect();
     const stageX = (clientX - rect.left - panRef.current.x) / zoomRef.current;
     const stageY = (clientY - rect.top - panRef.current.y) / zoomRef.current;
-    return { x: stageX - PADDING + minX, y: stageY - PADDING + minY };
+    return { x: stageX - PADDING + minX, y: stageY - PADDING + minY - activeDragShiftY() };
   }
 
   function onStagePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
@@ -794,6 +906,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const selectedStep: EncounterStep | undefined = selection?.kind === "step" ? selectedInstance?.steps.find((s) => s.id === selection.stepId) : undefined;
   const selectedAttack: PartActionPlacement | undefined = selection?.kind === "attack" ? selectedInstance?.partActions.find((a) => a.id === selection.attackId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
+  /** The Unit roster the "+ Add" tab offers — whichever frame is being authored. Layer is a Unit-definition property (unitTypes.ts), so this filters the picker only; nothing about the placement records it. */
+  const addableUnits = units.filter((u) => authorLayerOf(u.layer) === authorLayer);
 
   /**
    * Tabs on offer right now. Step/Attack are still selection-contextual (they
@@ -837,12 +951,33 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // screen, which visually reads as the canvas sliding under the drag.
   // Content that's actually been placed still grows the frame normally —
   // this only defers that growth until the drag/handle actually commits.
+  /**
+   * The camera box's fixed position in air mode. `computeCameraBoundsRect`
+   * at t=0 *is* that rectangle: the box's own tile-local y moves by
+   * `-scroll(t)` and `refShiftY` adds exactly that back, so its rendered
+   * position is constant and equal to its t=0 one. Pre-computing it here
+   * (rather than special-casing air mode at each use) lets the bounding box
+   * below reserve room for it without depending on the scrub.
+   */
+  const airCameraRect = computeCameraBoundsRect(tile.footprint, 0);
   const allPositions: Vec2[] = [
     { x: 0, y: 0 },
     { x: tile.footprint * TILE_UNIT, y: TILE_UNIT },
     ...draft.units.flatMap((inst) => inst.steps.map((s) => s.pos)),
     ...(scalingOpenInstance ? scalingHandlesFor(scalingOpenInstance, false).map((h) => h.pos) : []),
     ...scalingGhostSlots,
+    // Air mode authors against the camera, which sits a whole tile-height
+    // below the tile itself (at clock zero the tile is entirely above the
+    // screen). Without this the box would fall outside the stage and
+    // fit-to-view would frame the wrong thing. Added only in air mode: in
+    // ground mode it would stretch the stage to nearly three screen-heights
+    // and zoom every tile out for no reason.
+    ...(authorLayer === "air"
+      ? [
+          { x: airCameraRect.x, y: airCameraRect.y },
+          { x: airCameraRect.x + airCameraRect.width, y: airCameraRect.y + airCameraRect.height },
+        ]
+      : []),
   ];
   const minX = Math.min(...allPositions.map((p) => p.x));
   const minY = Math.min(...allPositions.map((p) => p.y));
@@ -855,6 +990,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     return { x: pos.x - minX + PADDING, y: pos.y - minY + PADDING };
   }
 
+  /** `toStage` plus a vertical frame offset — the render-time half of airFrame.ts. Pass an instance's `instancePinShiftY(...) + refShiftY`, or just `refShiftY` for anything belonging to the tile itself. */
+  function toStageAt(pos: Vec2, shiftY: number): Vec2 {
+    const stage = toStage(pos);
+    return { x: stage.x, y: stage.y + shiftY };
+  }
+
+  /** Everything an instance's own rendering needs: its frame offset (pin term + mode term) and whether it's the dimmed, inert layer right now. */
+  function renderFrameFor(instance: EncounterUnit): { shiftY: number; offLayer: boolean } {
+    return { shiftY: instancePinShiftY(instance) + refShiftY, offLayer: isOffLayer(instance) };
+  }
+
   // Fits the whole stage (tile + everything placed on it) into the
   // viewport once, the first time both are known — mirrors
   // JigsawPuzzle.tsx's `fitView`. Only runs once per mount (not on every
@@ -862,18 +1008,63 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // auto-refit; opening a *different* encounter remounts this component
   // fresh via React's key-less-prop-change re-render, which is fine here
   // since `encounter`/`tile` are effectively identity props for this view.
-  useEffect(() => {
-    if (didFitViewRef.current) return;
+  /** Centres and zooms the view on a rectangle given in *stage* coordinates, with the same 1.15 breathing margin the mount-time fit has always used. */
+  function fitToStageRect(rect: { x: number; y: number; width: number; height: number }) {
     if (viewportSize.width === 0 || viewportSize.height === 0) return;
-    const fitZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(viewportSize.width / (width * 1.15), viewportSize.height / (height * 1.15))));
-    const nextPan = { x: viewportSize.width / 2 - (width / 2) * fitZoom, y: viewportSize.height / 2 - (height / 2) * fitZoom };
-    didFitViewRef.current = true;
+    const fitZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(viewportSize.width / (rect.width * 1.15), viewportSize.height / (rect.height * 1.15))));
+    const nextPan = {
+      x: viewportSize.width / 2 - (rect.x + rect.width / 2) * fitZoom,
+      y: viewportSize.height / 2 - (rect.y + rect.height / 2) * fitZoom,
+    };
     zoomRef.current = fitZoom;
     panRef.current = nextPan;
     setZoom(fitZoom);
     setPan(nextPan);
+  }
+
+  useEffect(() => {
+    if (didFitViewRef.current) return;
+    if (viewportSize.width === 0 || viewportSize.height === 0) return;
+    didFitViewRef.current = true;
+    fitToStageRect({ x: 0, y: 0, width, height });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewportSize.width, viewportSize.height]);
+
+  /**
+   * Reframe when the authoring frame changes — air mode's subject is the
+   * camera box, which sits a whole tile-height below the tile and is
+   * completely outside a ground-mode fit.
+   *
+   * Deferred into an effect rather than done in the toggle handler on
+   * purpose: the stage's bounding box only grows to include the camera box
+   * *after* `authorLayer` has changed, so fitting inline would measure the
+   * old stage and frame the wrong region.
+   */
+  useEffect(() => {
+    if (!pendingFitRef.current) return;
+    pendingFitRef.current = false;
+    if (authorLayer === "air") {
+      const topLeft = toStage({ x: airCameraRect.x, y: airCameraRect.y });
+      fitToStageRect({ x: topLeft.x, y: topLeft.y, width: airCameraRect.width, height: airCameraRect.height });
+    } else {
+      fitToStageRect({ x: 0, y: 0, width, height });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorLayer]);
+
+  /**
+   * Switching frames also drops the selection. A node in the frame you just
+   * left is dimmed and inert, so leaving it selected would leave the Step
+   * tab editing something you can no longer see or grab.
+   */
+  function switchAuthorLayer(next: AuthorLayer) {
+    if (next === authorLayer) return;
+    pendingFitRef.current = true;
+    setSelection(null);
+    setPendingDeleteKey(null);
+    setPickingAttackPartFor(null);
+    setAuthorLayer(next);
+  }
 
   /** Converts a scaling drag's final absolute position into a UnitScaling patch, per-handle-kind. */
   function scalingPatchForHandle(scaling: UnitScaling, handle: ScalingHandleId, offset: Vec2, absolute: Vec2): Partial<UnitScaling> {
@@ -911,18 +1102,21 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // Computed once, used both for the SVG stalk lines (visual only) and the
   // HTML drag-target buttons below (real touch targets — see file header:
   // raw SVG circles were both too small and too fiddly to hit on mobile).
+  /** The selected instance's own frame offset — its handles, node HUD anchor and scaling shape all have to travel with it. */
+  const selectedShiftY = selectedInstance ? renderFrameFor(selectedInstance).shiftY : 0;
+
   const handleDots: { which: "in" | "out"; stage: Vec2 }[] = [];
   if (selectedInstance && selectedStep && !scalingPanelOpen) {
     const turnRate = selectedUnitDef?.turnRate ?? 1;
     const effSelected = effectiveStep(selectedInstance.id, selectedStep);
     const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
-    if (prevStep) handleDots.push({ which: "in", stage: toStage(resolveHandleIn(effSelected, prevStep.pos, turnRate)) });
+    if (prevStep) handleDots.push({ which: "in", stage: toStageAt(resolveHandleIn(effSelected, prevStep.pos, turnRate), selectedShiftY) });
     if (selectedNextStep) {
       const effNext = effectiveStep(selectedInstance.id, selectedNextStep);
-      handleDots.push({ which: "out", stage: toStage(resolveHandleOut(effSelected, effNext.pos, turnRate)) });
+      handleDots.push({ which: "out", stage: toStageAt(resolveHandleOut(effSelected, effNext.pos, turnRate), selectedShiftY) });
     }
   }
-  const selectedNodeStage = selectedInstance && selectedStep ? toStage(effectiveStep(selectedInstance.id, selectedStep).pos) : null;
+  const selectedNodeStage = selectedInstance && selectedStep ? toStageAt(effectiveStep(selectedInstance.id, selectedStep).pos, selectedShiftY) : null;
   /**
    * The selected node's position in *viewport* pixels — where the screen-space
    * control HUD anchors (see `.shmup-enc-node-hud` in the JSX below). Clamped by
@@ -949,10 +1143,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const counterScale = Math.min(COUNTER_SCALE_MAX, 1 / zoom);
 
   const scalingHandleEntries = scalingPanelOpen && selectedInstance ? scalingHandlesFor(selectedInstance) : [];
-  const scalingOriginStage = scalingPanelOpen && selectedInstance?.steps[0] ? toStage(selectedInstance.steps[0].pos) : null;
+  const scalingOriginStage = scalingPanelOpen && selectedInstance?.steps[0] ? toStageAt(selectedInstance.steps[0].pos, selectedShiftY) : null;
 
-  const framePos = toStage({ x: 0, y: 0 });
+  const framePos = toStageAt({ x: 0, y: 0 }, refShiftY);
   const tileRectStage = { x: framePos.x, y: framePos.y, width: tileWidthPx, height: TILE_UNIT };
+  // The minimap is an overview of the authored layout, not of the current
+  // scrub, so it deliberately plots unshifted positions — a map whose
+  // contents slid around during playback would be useless for navigation.
+  const minimapTileRectStage = { ...toStage({ x: 0, y: 0 }), width: tileWidthPx, height: TILE_UNIT };
   const stepPointsStage = draft.units.flatMap((inst) => inst.steps.map((s) => toStage(s.pos)));
 
   // E4 hitbox/boundary preview (hitboxPreview.ts) — a static reference
@@ -965,20 +1163,31 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   // camera band climbs the tile and the player's ship climbs through it
   // from below. A static marker (which is what this was) is only ever one
   // frame of that. Geometry comes from the game's own shared scroll model.
+  // Both belong to the tile/camera rather than to any instance, so they take
+  // the bare mode term. In ground mode that's zero and they climb the tile as
+  // before; in air mode it cancels their own motion exactly, which is what
+  // "the viewport is locked" means.
   const playerRefWorld: Vec2 = { x: tileWidthPx / 2, y: computePlayerRefLocalY(scrubTime) };
-  const playerRefStage = toStage(playerRefWorld);
+  const playerRefStage = toStageAt(playerRefWorld, refShiftY);
   const cameraRectWorld = computeCameraBoundsRect(tile.footprint, scrubTime);
-  const cameraBoundsTopLeft = toStage({ x: cameraRectWorld.x, y: cameraRectWorld.y });
+  const cameraBoundsTopLeft = toStageAt({ x: cameraRectWorld.x, y: cameraRectWorld.y }, refShiftY);
   // toStage is a pure translation (zoom is a CSS transform on the whole
   // stage), so world sizes carry straight through.
   const cameraBoundsStage = { x: cameraBoundsTopLeft.x, y: cameraBoundsTopLeft.y, width: cameraRectWorld.width, height: cameraRectWorld.height };
 
-  const hitboxEnemyMarkers: { key: string; stage: Vec2; sizePx: number }[] = [];
-  const hitboxBulletMarkers: { key: string; stage: Vec2; diameterPx: number; alpha: number }[] = [];
+  const hitboxEnemyMarkers: { key: string; stage: Vec2; sizePx: number; layer: AuthorLayer; offLayer: boolean }[] = [];
+  const hitboxBulletMarkers: { key: string; stage: Vec2; diameterPx: number; alpha: number; offLayer: boolean }[] = [];
   if (hitboxPreviewOn) {
     for (const instance of draft.units) {
       const unitDef = units.find((u) => u.id === instance.unitDefId);
       if (!unitDef) continue;
+      // Split deliberately: `pinY` moves the instance into its effective
+      // tile-local position (so bullet aim against the player marker stays
+      // correct once it decouples), `refShiftY` is the uniform scene
+      // translation applied last, at render.
+      const pinY = instancePinShiftY(instance);
+      const instanceLayer = authorLayerOf(unitDef.layer);
+      const offLayer = instanceLayer !== authorLayer;
       const originPos = instance.steps[0]?.pos ?? computeInstancePreview(instance, unitDef, scrubTime)?.pos ?? { x: 0, y: 0 };
       // Scaled duplicates fire the exact same authored step/attack sequence
       // as the base instance, each anchored to its own slot — so every
@@ -1008,20 +1217,24 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         const dupPreview = computeInstancePreview(instance, unitDef, dupLocalTime);
         if (!dupPreview || dupPreview.invincible) return;
         const delta: Vec2 = { x: slot.x - originPos.x, y: slot.y - originPos.y };
-        const dupPos: Vec2 = { x: dupPreview.pos.x + delta.x, y: dupPreview.pos.y + delta.y };
-        hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStage(dupPos), sizePx: unitDef.size * 2 });
+        const dupPos: Vec2 = { x: dupPreview.pos.x + delta.x, y: dupPreview.pos.y + delta.y + pinY };
+        hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStageAt(dupPos, refShiftY), sizePx: unitDef.size * 2, layer: instanceLayer, offLayer });
         const headingDeg = computeInstanceHeadingDeg(instance, unitDef, dupLocalTime);
 
         function pushAttackBullets(key: string, facing: Pick<ActionDef, "facing" | "fixedFacingDeg">, attack: ActionAttack, anchor: Vec2, elapsedMs: number) {
+          // `anchor` and `playerRefWorld` are both effective tile-local here,
+          // so a "facePlayer" attack from a pinned air unit aims from where
+          // it actually is rather than from where it was authored.
           const aimDeg = resolveActionFacingDeg(facing, anchor, playerRefWorld, headingDeg);
           const durationMs = computeAttackDurationMs(attack);
           const bulletDiameterPx = resolveBulletRadius(attack, units) * 2;
           computeAttackBullets(attack, aimDeg, durationMs, elapsedMs).forEach((b, bi) => {
             hitboxBulletMarkers.push({
               key: `${key}-${bi}`,
-              stage: toStage({ x: anchor.x + b.x, y: anchor.y + b.y }),
+              stage: toStageAt({ x: anchor.x + b.x, y: anchor.y + b.y }, refShiftY),
               diameterPx: bulletDiameterPx,
               alpha: b.alpha,
+              offLayer,
             });
           });
         }
@@ -1041,7 +1254,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           const action = part?.actions.find((a) => a.id === attack.actionId);
           const baseAnchor = part && action?.attack ? attackAnchorWorld(instance, unitDef, attack, dupLocalTime) : null;
           if (!part || !action?.attack || !baseAnchor) continue;
-          const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y };
+          const anchor: Vec2 = { x: baseAnchor.x + delta.x, y: baseAnchor.y + delta.y + pinY };
           pushAttackBullets(`${instance.id}-${slotIdx}-${attack.id}`, action, action.attack, anchor, (dupLocalTime - attack.time) * 1000);
         }
       });
@@ -1063,6 +1276,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           onSelectStep={selectStep}
           onSelectAttack={selectAttack}
           onRetimeStep={handleRetimeStep}
+          authorLayer={authorLayer}
+          onAuthorLayerChange={switchAuthorLayer}
+          pinSecByInstance={pinSecByInstance}
         />
 
         <div className={`shmup-enc-viewport-pin${embiggen ? " shmup-enc-viewport-pin--embiggen" : ""}`}>
@@ -1111,7 +1327,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 } as CSSProperties
               }
             >
-              <div style={{ position: "absolute", left: framePos.x, top: framePos.y }}>
+              {/* In air mode the tile is no longer the thing you're authoring against — it slides down through a fixed camera, dimmed, as terrain reference. */}
+              <div className={authorLayer === "air" ? "shmup-enc-offlayer" : undefined} style={{ position: "absolute", left: framePos.x, top: framePos.y }}>
                 <EncounterTileFrame tile={tile} widthPx={tile.footprint * TILE_UNIT} heightPx={TILE_UNIT} />
               </div>
 
@@ -1124,14 +1341,15 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 {draft.units.flatMap((instance) => {
                   const unitDef = units.find((u) => u.id === instance.unitDefId);
                   const turnRate = unitDef?.turnRate ?? 1;
+                  const { shiftY, offLayer } = renderFrameFor(instance);
                   return instance.steps.slice(1).map((step, i) => {
                     const prev = effectiveStep(instance.id, instance.steps[i]);
                     const cur = effectiveStep(instance.id, step);
                     const { p0, p1, p2, p3 } = resolveSegment(prev, cur, turnRate);
-                    const a = toStage(p0);
-                    const b = toStage(p1);
-                    const c = toStage(p2);
-                    const d = toStage(p3);
+                    const a = toStageAt(p0, shiftY);
+                    const b = toStageAt(p1, shiftY);
+                    const c = toStageAt(p2, shiftY);
+                    const d = toStageAt(p3, shiftY);
                     return (
                       <path
                         key={step.id}
@@ -1139,7 +1357,8 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                         fill="none"
                         stroke="#ffcc88"
                         strokeWidth={2 * counterScale}
-                        markerEnd="url(#shmup-arrow)"
+                        opacity={offLayer ? OFF_LAYER_OPACITY : undefined}
+                        markerEnd={offLayer ? undefined : "url(#shmup-arrow)"}
                       />
                     );
                   });
@@ -1162,14 +1381,14 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 {/* Scaling shape stalks — origin to each handle, dashed, same visual language as bezier handle stalks. */}
                 {scalingOriginStage &&
                   scalingHandleEntries.map(({ handle, pos }, i) => {
-                    const stage = toStage(pos);
+                    const stage = toStageAt(pos, selectedShiftY);
                     // Each stalk hangs off whatever the handle is measured
                     // *from*, not always the instance origin: a ring's radius
                     // from its centre, a V's arm from its tip.
                     const anchorKind = handle.kind === "vArm" ? "vTip" : null;
                     const anchorStage =
                       anchorKind && selectedInstance
-                        ? toStage(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === anchorKind)?.pos ?? pos)
+                        ? toStageAt(scalingHandlesFor(selectedInstance).find((h) => h.handle.kind === anchorKind)?.pos ?? pos, selectedShiftY)
                         : scalingOriginStage;
                     return (
                       <line
@@ -1203,7 +1422,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               {/* A scaling positioning-shape's handles — one set per shape kind (Curve/V/Grid/Ring), only while that instance's Scaling tab is open. */}
               {selectedInstance &&
                 scalingHandleEntries.map(({ handle, pos }, i) => {
-                  const stage = toStage(pos);
+                  const stage = toStageAt(pos, selectedShiftY);
                   const title = SCALING_HANDLE_TITLES[handle.kind];
                   return (
                     <button
@@ -1219,20 +1438,21 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
 
               {/* Ghost slot preview — where duplicates would land at the panel's preview-Difficulty count, dim and non-interactive. */}
               {scalingGhostSlots.map((p, i) => {
-                const stage = toStage(p);
+                const stage = toStageAt(p, selectedShiftY);
                 return <div key={i} className="shmup-scaling-ghost-dot" style={{ left: stage.x, top: stage.y }} />;
               })}
 
               {draft.units.flatMap((instance) => {
                 const unitDef = units.find((u) => u.id === instance.unitDefId);
                 const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
+                const { shiftY, offLayer } = renderFrameFor(instance);
                 return instance.steps.map((step) => {
-                  const pos = toStage(effectiveStep(instance.id, step).pos);
+                  const pos = toStageAt(effectiveStep(instance.id, step).pos, shiftY);
                   const first = isFirstStep(instance, step.id);
                   const isSelected = selection?.kind === "step" && selection.instanceId === instance.id && selection.stepId === step.id;
                   const invincible = unitDef ? resolveInvincibleAt(instance.steps, unitDef.actions, step.time) : false;
                   return (
-                    <div key={step.id} className="shmup-enemy-node-wrap" style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
+                    <div key={step.id} className={`shmup-enemy-node-wrap${offLayer ? " shmup-enc-offlayer shmup-enc-offlayer--inert" : ""}`} style={{ left: pos.x - NODE_RADIUS, top: pos.y - NODE_RADIUS }}>
                       <button
                         type="button"
                         className={`shmup-enemy-node ${isSelected ? "shmup-enemy-node--selected" : ""} ${invincible ? "shmup-enemy-node--hidden" : ""}`}
@@ -1287,16 +1507,21 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
               {draft.units.flatMap((instance) => {
                 const unitDef = units.find((u) => u.id === instance.unitDefId);
                 if (!unitDef) return [];
+                const { shiftY, offLayer } = renderFrameFor(instance);
                 return instance.partActions.map((attack) => {
                   const part = unitDef.parts.find((p) => p.id === attack.partId);
                   const action = part?.actions.find((a) => a.id === attack.actionId);
                   const anchorWorld = attackAnchorWorld(instance, unitDef, attack);
                   if (!anchorWorld) return null;
-                  const pos = toStage(anchorWorld);
+                  const pos = toStageAt(anchorWorld, shiftY);
                   const isSelected = selection?.kind === "attack" && selection.instanceId === instance.id && selection.attackId === attack.id;
                   const partSpriteUrl = part ? resolveSpriteUrl(part.spriteId, part.customSprite) : null;
                   return (
-                    <div key={attack.id} className="shmup-attack-marker-wrap" style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}>
+                    <div
+                      key={attack.id}
+                      className={`shmup-attack-marker-wrap${offLayer ? " shmup-enc-offlayer shmup-enc-offlayer--inert" : ""}`}
+                      style={{ left: pos.x - ATTACK_MARKER_RADIUS, top: pos.y - ATTACK_MARKER_RADIUS }}
+                    >
                       <button
                         type="button"
                         className={`shmup-attack-marker ${isSelected ? "shmup-attack-marker--selected" : ""}`}
@@ -1335,22 +1560,41 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                   const preview = computeInstancePreview(instance, unitDef, scrubTime);
                   if (!preview || preview.invincible) return null;
                   const spriteUrl = unitDef ? resolveSpriteUrl(unitDef.spriteId, unitDef.customSprite) : null;
-                  const pos = toStage(preview.pos);
+                  const { shiftY, offLayer } = renderFrameFor(instance);
+                  const pos = toStageAt(preview.pos, shiftY);
                   return (
                     <div
                       key={`preview-${instance.id}`}
-                      className="shmup-enemy-preview-dot"
+                      className={`shmup-enemy-preview-dot${offLayer ? " shmup-enc-offlayer" : ""}`}
                       style={{ left: pos.x - PREVIEW_RADIUS, top: pos.y - PREVIEW_RADIUS, backgroundImage: spriteUrl ? `url(${spriteUrl})` : undefined }}
                       title={`${unitDef?.name ?? "?"} @ ${scrubTime.toFixed(1)}s`}
                     />
                   );
                 })}
 
+              {/*
+                The camera box is normally part of the hitbox preview, but in
+                air mode it's the thing being authored *against* — every air
+                position is really "where on screen, and when" — so it's drawn
+                unconditionally there. Without it the air canvas is an empty
+                black field with nothing to place anything relative to.
+              */}
+              {authorLayer === "air" && !hitboxPreviewOn && (
+                <div
+                  className="shmup-hitbox-camera-bounds shmup-hitbox-camera-bounds--locked"
+                  style={{ left: cameraBoundsStage.x, top: cameraBoundsStage.y, width: cameraBoundsStage.width, height: cameraBoundsStage.height }}
+                  title="The screen. Locked in air mode — the terrain scrolls past it."
+                />
+              )}
+
               {hitboxPreviewOn && (
                 <>
                   {/* Tile bounds — thick yellow, the tile's real footprint. Camera/playable bounds — dotted, roughly what's visible on screen at once (hitboxPreview.ts's computeCameraBoundsRect). Player reference — a static green circle at real hitboxRadiusNormal scale standing in for the (not simulated) player ship. */}
-                  <div className="shmup-hitbox-tile-bounds" style={{ left: tileRectStage.x, top: tileRectStage.y, width: tileRectStage.width, height: tileRectStage.height }} />
-                  <div className="shmup-hitbox-camera-bounds" style={{ left: cameraBoundsStage.x, top: cameraBoundsStage.y, width: cameraBoundsStage.width, height: cameraBoundsStage.height }} />
+                  <div className={`shmup-hitbox-tile-bounds${authorLayer === "air" ? " shmup-enc-offlayer" : ""}`} style={{ left: tileRectStage.x, top: tileRectStage.y, width: tileRectStage.width, height: tileRectStage.height }} />
+                  <div
+                    className={`shmup-hitbox-camera-bounds${authorLayer === "air" ? " shmup-hitbox-camera-bounds--locked" : ""}`}
+                    style={{ left: cameraBoundsStage.x, top: cameraBoundsStage.y, width: cameraBoundsStage.width, height: cameraBoundsStage.height }}
+                  />
                   <div
                     className="shmup-hitbox-player"
                     style={{
@@ -1361,17 +1605,18 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                     }}
                     title="Reference player hitbox (not simulated — a static stand-in)"
                   />
+                  {/* Ground and air read as different outlines (red vs. amber) so a crowded preview still says which frame each box belongs to — the two behave completely differently once the scroll starts, and at real hitbox scale they're otherwise identical rectangles. */}
                   {hitboxEnemyMarkers.map((m) => (
                     <div
                       key={m.key}
-                      className="shmup-hitbox-enemy"
+                      className={`shmup-hitbox-enemy shmup-hitbox-enemy--${m.layer}${m.offLayer ? " shmup-enc-offlayer" : ""}`}
                       style={{ left: m.stage.x - m.sizePx / 2, top: m.stage.y - m.sizePx / 2, width: m.sizePx, height: m.sizePx }}
                     />
                   ))}
                   {hitboxBulletMarkers.map((m) => (
                     <div
                       key={m.key}
-                      className="shmup-hitbox-bullet"
+                      className={`shmup-hitbox-bullet${m.offLayer ? " shmup-enc-offlayer" : ""}`}
                       style={{ left: m.stage.x - m.diameterPx / 2, top: m.stage.y - m.diameterPx / 2, width: m.diameterPx, height: m.diameterPx, opacity: m.alpha }}
                     />
                   ))}
@@ -1502,7 +1747,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             <EncounterMinimap
               stageWidth={width}
               stageHeight={height}
-              tileRectStage={tileRectStage}
+              tileRectStage={minimapTileRectStage}
               stepPointsStage={stepPointsStage}
               pan={pan}
               zoom={zoom}
@@ -1561,29 +1806,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             </div>
           )}
 
+          {/* The roster follows the frame toggle rather than offering its own filter — you add into the frame you're looking at, so two controls for one decision would only let them disagree. Doodad shows alongside ground because it's scroll-locked too (airFrame.ts). */}
           {effectiveTab === "add" && (
             <div className="shmup-panel">
-              <div className="shmup-btn-row">
-                {(["ground", "air", "doodad"] as UnitLayer[]).map((layer) => (
-                  <button
-                    key={layer}
-                    type="button"
-                    className={`shmup-btn shmup-btn--small ${addLayerFilter === layer ? "shmup-btn--active" : ""}`}
-                    onClick={() => setAddLayerFilter(layer)}
-                  >
-                    {layer[0].toUpperCase() + layer.slice(1)}
-                  </button>
-                ))}
-              </div>
               <div className="shmup-tile-picker">
-                {units.filter((u) => u.layer === addLayerFilter).length === 0 ? (
+                {addableUnits.length === 0 ? (
                   <p className="shmup-readout">
-                    No {addLayerFilter} Units yet — create one via the Units menu (set its Layer to {addLayerFilter}).
+                    No {authorLayer} Units yet — create one via the Units menu (set its Layer to {authorLayer}
+                    {authorLayer === "ground" ? " or doodad" : ""}).
                   </p>
                 ) : (
-                  units
-                    .filter((u) => u.layer === addLayerFilter)
-                    .map((u) => {
+                  addableUnits.map((u) => {
                       const url = resolveSpriteUrl(u.spriteId, u.customSprite);
                       return (
                         <button key={u.id} type="button" className="shmup-tile-picker__option" onClick={() => addUnitInstance(u.id)} title={u.name}>

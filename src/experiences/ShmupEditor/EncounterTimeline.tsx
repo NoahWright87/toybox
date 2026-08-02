@@ -4,6 +4,7 @@ import { isStepTimeDerived } from "./encounterTiming";
 import { resolveInvincibleAt } from "./actionState";
 import { actionCategoryColors } from "./actionCategory";
 import { spawnDelayOffsetsSec } from "./unitScaling";
+import { authorLayerOf, type AuthorLayer } from "./airFrame";
 import type { EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
@@ -21,6 +22,11 @@ interface EncounterTimelineProps {
   onSelectStep: (instanceId: string, stepId: string) => void;
   onSelectAttack: (instanceId: string, attackId: string) => void;
   onRetimeStep: (instanceId: string, stepId: string, time: number) => void;
+  /** Which reference frame the canvas is drawn in (airFrame.ts) — decides which tracks are authored in full and which collapse to timing hairlines. */
+  authorLayer: AuthorLayer;
+  onAuthorLayerChange: (layer: AuthorLayer) => void;
+  /** Per-instance decouple moment from `computePinTimeSec`, for the pin markers on air tracks. Absent/null = this instance never leaves the tile frame. */
+  pinSecByInstance: Map<string, number | null>;
 }
 
 const PX_PER_SEC = 50;
@@ -46,6 +52,16 @@ const STAGE_PADDING_LEFT = 12;
  * (see that file's header). Retiming a moving segment means picking a
  * different Action for the step that starts it (Step tab), not dragging
  * its arrival marker.
+ *
+ * **The Ground/Air frame toggle lives here**, at the top with the ruler,
+ * because it's a property of the whole view rather than of any selection —
+ * see `airFrame.ts` and `EncounterEditor.tsx`'s `authorLayer`. Tracks in the
+ * frame you aren't authoring collapse to a hairline: no label, no markers to
+ * mis-tap, just enough to see where their events fall against the ones you
+ * are authoring. That's the whole reason they stay on the ruler at all —
+ * choreographing a strafing run against the turret it's meant to outrun
+ * needs both timings side by side, even though their positions live in
+ * different frames.
  */
 export default function EncounterTimeline({
   units,
@@ -59,6 +75,9 @@ export default function EncounterTimeline({
   onSelectStep,
   onSelectAttack,
   onRetimeStep,
+  authorLayer,
+  onAuthorLayerChange,
+  pinSecByInstance,
 }: EncounterTimelineProps) {
   const [dragTime, setDragTime] = useState<{ instanceId: string; stepId: string; time: number } | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
@@ -107,6 +126,26 @@ export default function EncounterTimeline({
           {playing ? "⏸ Pause" : "▶ Play"}
         </button>
         <span className="shmup-timeline__readout">{scrubTime.toFixed(1)}s</span>
+        <div className="shmup-timeline__layer-toggle">
+          <button
+            type="button"
+            className={`shmup-btn shmup-btn--small ${authorLayer === "ground" ? "shmup-btn--active" : ""}`}
+            onClick={() => onAuthorLayerChange("ground")}
+            aria-pressed={authorLayer === "ground"}
+            title="Ground frame — the tile holds still and the camera climbs it. Air units are dimmed."
+          >
+            Ground
+          </button>
+          <button
+            type="button"
+            className={`shmup-btn shmup-btn--small ${authorLayer === "air" ? "shmup-btn--active" : ""}`}
+            onClick={() => onAuthorLayerChange("air")}
+            aria-pressed={authorLayer === "air"}
+            title="Air frame — the camera holds still and the terrain slides beneath it. Ground units and the tile are dimmed."
+          >
+            Air
+          </button>
+        </div>
       </div>
       <div className="shmup-timeline__scroll">
         <div
@@ -128,6 +167,31 @@ export default function EncounterTimeline({
 
           {units.map((instance) => {
             const unitDef = unitDefs.find((u) => u.id === instance.unitDefId);
+            const offLayer = (unitDef ? authorLayerOf(unitDef.layer) : "ground") !== authorLayer;
+            // A track in the frame you aren't authoring is reduced to bare
+            // timing hairlines — no label, no sprite, no Part sub-lanes, and
+            // nothing selectable. It exists purely so you can line your own
+            // events up against it; anything more would be clutter competing
+            // with the track you're actually editing.
+            if (offLayer) {
+              return (
+                <div key={instance.id} className="shmup-timeline__track shmup-timeline__track--compact">
+                  <div className="shmup-timeline__lane shmup-timeline__lane--compact" title={`${unitDef?.name ?? "?"} (other frame)`}>
+                    {instance.steps.map((step) => (
+                      <div key={step.id} className="shmup-timeline__hairline" style={{ left: stepTime(instance.id, step) * PX_PER_SEC + STAGE_PADDING_LEFT }} />
+                    ))}
+                    {instance.partActions.map((placement) => (
+                      <div key={placement.id} className="shmup-timeline__hairline shmup-timeline__hairline--attack" style={{ left: placement.time * PX_PER_SEC + STAGE_PADDING_LEFT }} />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            // Where this instance decouples from the scrolling tile frame
+            // (airFrame.ts). Only meaningful while authoring air — it's the
+            // moment its authored path stops being relative to the terrain,
+            // which is otherwise invisible on a ruler of plain times.
+            const pinSec = authorLayer === "air" ? pinSecByInstance.get(instance.id) ?? null : null;
             // Scaled duplicates beyond the base instance (slot 0, already drawn
             // below) spawn staggered by spawnDelayMs — ghost markers show
             // where each later slot's copy of the same step/attack lands,
@@ -142,6 +206,14 @@ export default function EncounterTimeline({
               <div key={instance.id} className="shmup-timeline__track">
                 <div className="shmup-timeline__track-label">{unitDef?.name ?? "?"}</div>
                 <div className="shmup-timeline__lane">
+                  {/* The pin: where this air unit stops riding the terrain and holds screen position. Everything left of it is the fly-in. */}
+                  {pinSec !== null && (
+                    <div
+                      className="shmup-timeline__pin"
+                      style={{ left: pinSec * PX_PER_SEC + STAGE_PADDING_LEFT }}
+                      title={`Decouples from the scrolling terrain at ${pinSec.toFixed(1)}s — flies in before this, holds screen position after`}
+                    />
+                  )}
                   <svg className="shmup-timeline__lane-svg" width={width} height={28}>
                     {instance.steps.slice(1).map((step, i) => {
                       const prev = instance.steps[i];
