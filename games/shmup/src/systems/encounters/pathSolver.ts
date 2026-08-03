@@ -175,6 +175,15 @@ function autoTangentDeg(points: PathPoint[], i: number, closed = false): number 
   if (prev && next) {
     const across = sub(next.pos, prev.pos);
     if (len(across) > POSITION_EPSILON) return dirDeg(across);
+    // Neighbours in the same place: this waypoint is the apex of a hairpin
+    // (out and straight back). Catmull-Rom degenerates here, and its
+    // fallback — heading back the way it came — is the one direction no
+    // Unit can fly at any radius, forcing the whole reversal to happen
+    // *before* the apex as one enormous loop. The perpendicular instead
+    // splits the reversal into two ordinary quarter-turns either side of
+    // it: a teardrop, which is how a real thing turns around.
+    const inbound = sub(points[i].pos, prev.pos);
+    if (len(inbound) > POSITION_EPSILON) return dirDeg(inbound) + 90;
   }
   if (next && len(sub(next.pos, points[i].pos)) > POSITION_EPSILON) return dirDeg(sub(next.pos, points[i].pos));
   if (prev && len(sub(points[i].pos, prev.pos)) > POSITION_EPSILON) return dirDeg(sub(points[i].pos, prev.pos));

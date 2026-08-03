@@ -6,19 +6,41 @@ const JET: UnitMotionStats = { speed: 220, minSpeed: 130, turnRateDegPerSec: 90 
 const TURRET: UnitMotionStats = { speed: 0, minSpeed: 0, turnRateDegPerSec: 120 };
 
 describe("buildDemoLap", () => {
-  it("closes the loop — four waypoints, four legs, ending back at the start", () => {
+  it("closes the loop — one leg per waypoint, ending back at the start", () => {
     const lap = buildDemoLap(JET);
     expect(lap.legs).toHaveLength(DEMO_WAYPOINTS.length);
     expect(lap.legs[lap.legs.length - 1].segment.p3).toEqual(DEMO_WAYPOINTS[0]);
   });
 
-  it("a Unit that can stop pivots the corners and drives the legs straight", () => {
+  it("runs out along the diagonal and straight back down it — a real 180", () => {
+    const [start, far, back] = DEMO_WAYPOINTS;
+    expect(start).toEqual(back);
+    expect(far).toEqual({ x: DEMO_LOOP_RADIUS, y: -DEMO_LOOP_RADIUS });
+  });
+
+  it("a Unit that can stop drives every leg straight", () => {
     const lap = buildDemoLap(TANK);
     expect(lap.pivots).toBe(true);
     expect(lap.minTurnRadius).toBe(0);
-    // 90 deg corners at 30 deg/sec.
-    for (const leg of lap.legs) expect(leg.pivotSec).toBeCloseTo(3, 4);
-    for (const leg of lap.legs) expect(leg.segment.length).toBeCloseTo(Math.hypot(DEMO_LOOP_RADIUS, DEMO_LOOP_RADIUS), 1);
+    const diagonal = 2 * Math.hypot(DEMO_LOOP_RADIUS, DEMO_LOOP_RADIUS);
+    const side = 2 * DEMO_LOOP_RADIUS;
+    expect(lap.legs.map((leg) => Math.round(leg.segment.length))).toEqual([
+      Math.round(diagonal), // out along the diagonal
+      Math.round(diagonal), // and back down it
+      side, // up the left side
+      side, // across the top
+      side, // down the right side
+      side, // back along the bottom
+    ]);
+  });
+
+  it("charges each corner in proportion to how sharp it is — the hairpin costs the most", () => {
+    const lap = buildDemoLap(TANK); // 30 deg/sec
+    // pivotSec[i] is the turn made at leg i's *starting* waypoint.
+    expect(lap.legs[1].pivotSec).toBeCloseTo(180 / 30, 4); // the 180 at the far end
+    expect(lap.legs[0].pivotSec).toBeCloseTo(135 / 30, 4); // leaving the start into the diagonal
+    expect(lap.legs[2].pivotSec).toBeCloseTo(135 / 30, 4); // arriving back, turning into the lap
+    for (const i of [3, 4, 5]) expect(lap.legs[i].pivotSec).toBeCloseTo(90 / 30, 4); // ordinary square corners
   });
 
   it("a Unit that cannot stop never pivots and never bends tighter than its turning circle", () => {
@@ -72,7 +94,7 @@ describe("sampleDemoLap", () => {
   it("holds position while pivoting, and turns while it does", () => {
     const lap = buildDemoLap(TANK);
     const quarterIn = sampleDemoLap(lap, 0.25);
-    const halfIn = sampleDemoLap(lap, 1.5);
+    const halfIn = sampleDemoLap(lap, 2.5);
     expect(quarterIn.pivoting).toBe(true);
     expect(halfIn.pivoting).toBe(true);
     expect(halfIn.pos).toEqual(quarterIn.pos); // stationary through the turn
@@ -84,6 +106,25 @@ describe("sampleDemoLap", () => {
     const moving = sampleDemoLap(lap, lap.legs[0].pivotSec + 0.5);
     expect(moving.pivoting).toBe(false);
     expect(moving.pos).not.toEqual(DEMO_WAYPOINTS[0]);
+  });
+
+  it("a Unit that cannot stop swings outside the circuit to make the hairpin", () => {
+    const lap = buildDemoLap(JET);
+    let furthest = 0;
+    for (let i = 0; i <= 400; i++) {
+      const { pos } = sampleDemoLap(lap, (lap.totalSec * i) / 400);
+      furthest = Math.max(furthest, Math.abs(pos.x), Math.abs(pos.y));
+    }
+    expect(furthest).toBeGreaterThan(DEMO_LOOP_RADIUS + 20);
+  });
+
+  it("a Unit that can stop never leaves the circuit at all", () => {
+    const lap = buildDemoLap(TANK);
+    for (let i = 0; i <= 400; i++) {
+      const { pos } = sampleDemoLap(lap, (lap.totalSec * i) / 400);
+      expect(Math.abs(pos.x)).toBeLessThanOrEqual(DEMO_LOOP_RADIUS + 0.01);
+      expect(Math.abs(pos.y)).toBeLessThanOrEqual(DEMO_LOOP_RADIUS + 0.01);
+    }
   });
 
   it("an arc Unit is never sampled mid-pivot, because it has none", () => {

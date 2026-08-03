@@ -115,6 +115,20 @@ describe("solvePath — arc units (minSpeed > 0)", () => {
     for (const segment of solved.segments) expect(segment.minRadius).toBeGreaterThanOrEqual(JET.minTurnRadius);
   });
 
+  it("turns around in a teardrop when a route doubles back on itself", () => {
+    // Out and *exactly* back: the apex's two neighbours are the same point, so
+    // the usual next-minus-previous tangent is degenerate there.
+    const there = at(0, 0);
+    const andBack = [there, at(300, -300), { ...there }, at(-200, 0)];
+    const solved = solvePath(andBack, JET);
+    expect(solved.feasible).toBe(true);
+    for (const segment of solved.segments) expect(segment.minRadius).toBeGreaterThanOrEqual(JET.minTurnRadius);
+    // The reversal is split either side of the apex rather than crammed in
+    // before it, so the excursion past the far waypoint stays modest.
+    const beyond = Math.max(...samples(solved.segments[0]).concat(samples(solved.segments[1])).map((p) => p.x));
+    expect(beyond).toBeLessThan(300 + 2 * JET.minTurnRadius);
+  });
+
   it("reports best effort — never throws or rejects — when the geometry is impossible", () => {
     // 60 units between waypoints with a 90 deg turn cannot be flown at an 89-unit radius by anything.
     const impossible = solvePath([at(0, 0), at(60, 0), at(60, 60)], JET);

@@ -687,6 +687,16 @@ For an arc Unit:
    heading 45°, so it dips wide *before* the waypoint and bulges wide
    *after* it rather than turning in place. An author-dragged handle
    overrides the direction for its waypoint.
+
+   **A waypoint whose two neighbours are the same place** (a route that
+   doubles back on itself) degenerates Catmull-Rom, and its natural
+   fallback — heading back the way it came — is the one direction nothing
+   can fly at any radius, which forces the entire reversal to happen
+   *before* the apex as one enormous loop. The perpendicular is used
+   instead, splitting the reversal into two ordinary quarter-turns either
+   side of it: a teardrop, which is how a real thing turns around. It
+   matters in practice: on the Stats circuit it halved a truck's detour
+   and took the battleship from best-effort to genuinely flyable.
 2. **Handle length** — defaults to a third of the chord (which reproduces
    an exactly straight line when the tangents are chord-aligned, so an
    ordinary path looks exactly as it always did), then searched over a
@@ -1673,12 +1683,25 @@ selects, and no picture of what any of it did.
 circuit forever, nose pointed along the curve.
 
 **It is solved by the same `pathSolver.ts` an encounter uses** (see
-"Turning" above), on a closed four-waypoint diamond. That's the whole
-value of it — the Stats tab isn't illustrating the numbers, it's
-rehearsing them:
+"Turning" above), on a closed circuit that deliberately mixes turn
+difficulties: **out along a diagonal, a full 180 back down it, then a lap
+of the square** (Noah — "so there are sharp turns and gentle ones"). That
+gives one 180, two 135s, three ordinary 90s and long straights between
+them. The earlier four-corner diamond couldn't show any of that ordering,
+since every turn on it cost exactly the same.
 
-- A Unit that can stop drives the diamond's legs dead straight and
-  visibly **pauses to rotate** at each corner.
+The square is sized (±150, ~⅖ of a tile) so an ordinary Unit clears the
+90s comfortably and only the hairpin really tests it. Scaled down far
+enough, every corner exceeds a fast Unit's turning circle and the path
+collapses into indistinguishable loops — which loses the very contrast the
+shape exists to show.
+
+That's the whole value of it — the Stats tab isn't illustrating the
+numbers, it's rehearsing them:
+
+- A Unit that can stop drives every leg dead straight and visibly
+  **pauses to rotate** at each corner, for longer at the sharper ones (a
+  30°/sec tank spends 6s on the 180, 3s on a 90).
 - A Unit that can't stop **swings wide** through every corner, on a curve
   that never bends tighter than its turning circle.
 - Dragging Min speed from 0 to anything above it switches the Unit
@@ -1689,8 +1712,8 @@ The lap is a *timed* schedule rather than a distance sweep, because a
 pivot is a pause: each leg costs its pivot plus its travel, and travel is
 the solved arc length ÷ the speed that leg's tightest bend allows — the
 same rule `encounterTiming.ts` times a real encounter with. The caption
-carries what the picture can't ("19.3s per lap · pivots corners (3.0s
-each)", or "4.2s per lap · turns no tighter than 83").
+carries what the picture can't ("53.3s per lap · pivots corners (up to
+6.0s)", or "15.5s per lap · turns no tighter than 83").
 
 Two rings are drawn: the **hitbox** at true scale against the path, with
 the sprite over it at `size × 3` (mirroring games/shmup's

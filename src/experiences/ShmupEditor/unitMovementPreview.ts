@@ -4,16 +4,22 @@
  * `turnRateDegPerSec` are something you can *watch* rather than three bare
  * numbers.
  *
- * **It is solved by the same `pathSolver.ts` an encounter uses**, on a
- * fixed four-waypoint diamond (~a third of a tile across; `TILE_UNIT` =
- * 720). That's the whole value of it: the Stats tab isn't showing a
- * decorative animation, it's showing precisely what this Unit will do when
- * an encounter author drops it on a route with corners in it.
+ * **It is solved by the same `pathSolver.ts` an encounter uses**, on the
+ * fixed circuit below (~⅖ of a tile across; `TILE_UNIT` = 720). That's the
+ * whole value of it: the Stats tab isn't showing a decorative animation,
+ * it's showing precisely what this Unit will do when an encounter author
+ * drops it on a route with corners in it.
  *
  * - A Unit that can stop drives the legs dead straight and **pivots** at
  *   each corner, standing still while it rotates.
- * - A Unit that can't stop **swings wide** through every corner, on a
- *   curve that never bends tighter than its `minTurnRadius`.
+ * - A Unit that can't stop **swings wide** through the corners it can't
+ *   make, on a curve that never bends tighter than its `minTurnRadius`.
+ *
+ * The circuit is sized so that an ordinary Unit clears the 90° corners
+ * comfortably and only the hairpin really tests it. Scaled down far
+ * enough, *every* corner exceeds a fast Unit's turning circle and the
+ * whole path collapses into indistinguishable loops — which shows the
+ * sharp/gentle ordering the shape exists to demonstrate.
  *
  * The lap is a *timed* schedule rather than a distance sweep, because a
  * pivot is a pause: each leg costs its pivot plus its travel, and travel
@@ -26,15 +32,35 @@ import { limitsFor, solvePathCached, type SolvedPath, type SolvedSegment } from 
 import { signedAngleDelta, speedThroughRadius } from "./turning";
 import type { Vec2 } from "./encounterTypes";
 
-/** Half-width of the demo diamond, in the same world units as an encounter canvas. */
-export const DEMO_LOOP_RADIUS = 90;
+/** Half-width of the demo square, in the same world units as an encounter canvas. */
+export const DEMO_LOOP_RADIUS = 150;
 
-/** Corners of the demo circuit, clockwise from the top. Four hard corners is where a difference in turning ability reads most clearly. */
+/**
+ * The demo circuit: **out along the diagonal, a full 180 back down it,
+ * then a lap of the square** (Noah — "so there are sharp turns and gentle
+ * ones"). One shape, four difficulties of turn:
+ *
+ * - the **180 at the top right** is the hardest thing a Unit can be asked
+ *   to do, and the clearest demonstration of the difference between the
+ *   two handling classes — a tank stops dead and rotates on the spot,
+ *   while a jet can only answer it by swinging way out and coming back;
+ * - the two **135s at the bottom left**, entering and leaving the lap;
+ * - three ordinary **90s** round the square;
+ * - and the long diagonals and sides in between, where nothing is being
+ *   asked of it and it simply runs.
+ *
+ * Four identical corners (the previous diamond) couldn't show any of that
+ * ordering: every turn cost the same, so nothing distinguished a Unit that
+ * handles a gentle bend well but a hairpin badly.
+ */
+const R = DEMO_LOOP_RADIUS;
 export const DEMO_WAYPOINTS: Vec2[] = [
-  { x: 0, y: -DEMO_LOOP_RADIUS },
-  { x: DEMO_LOOP_RADIUS, y: 0 },
-  { x: 0, y: DEMO_LOOP_RADIUS },
-  { x: -DEMO_LOOP_RADIUS, y: 0 },
+  { x: -R, y: R }, // bottom left — the start, and where the lap closes
+  { x: R, y: -R }, // top right, out along the diagonal
+  { x: -R, y: R }, // back down the same diagonal: a 180 at the far end
+  { x: -R, y: -R }, // top left, beginning the lap
+  { x: R, y: -R }, // top right
+  { x: R, y: R }, // bottom right, then back to the start
 ];
 
 /** Speed used to pace the demo when a Unit's own is 0 — a turret still has a turn rate worth watching, and a lap that never advances would show nothing at all. */

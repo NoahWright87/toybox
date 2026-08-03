@@ -13,8 +13,8 @@ interface UnitMovementPreviewProps {
 }
 
 const CANVAS_SIZE = 220;
-/** World units across the canvas. Sized to hold the demo circuit plus the widest swing a slow-turning Unit takes through its corners. */
-const WORLD_VIEW = 480;
+/** World units across the canvas. Sized to hold the demo circuit (±150) plus the widest swing any seeded Unit takes through the hairpin, with margin so even a battleship's loop doesn't graze the frame — a jet reaches ~245 out from centre, against this view's 290. */
+const WORLD_VIEW = 580;
 const SCALE = CANVAS_SIZE / WORLD_VIEW;
 const ORIGIN = CANVAS_SIZE / 2;
 
@@ -44,11 +44,16 @@ const MARKER_RADIUS = 9;
  * It flies the Unit around a fixed demo circuit solved by the very same
  * `pathSolver.ts` an encounter uses (`unitMovementPreview.ts`), so this
  * isn't an illustration of the stats, it's a rehearsal of them: a tank
- * drives the diamond's legs straight and visibly stops to rotate at each
- * corner, while a jet swings wide through corners it can't turn on the
+ * drives the circuit's legs straight and visibly stops to rotate at each
+ * corner, while a jet swings wide through the corners it can't turn on the
  * spot. Tuning Min speed from 0 to anything above it switches the Unit
  * between those two behaviors on screen, which is the fastest way to
  * understand what the stat does.
+ *
+ * The circuit deliberately mixes turn difficulties — a 180 at the far end
+ * of the diagonal, two 135s, three 90s, and long straights between them
+ * (`unitMovementPreview.ts`) — so a Unit that takes a gentle bend happily
+ * but wallows through a hairpin looks different from one that doesn't.
  *
  * The dashed ring is the Unit's own turning circle (`minTurnRadius`) — the
  * tightest curve it can hold, drawn to the same scale as the path, so
@@ -108,8 +113,10 @@ function caption(lap: DemoLap, speed: number): string {
   if (speed <= 0) return "Speed 0 — holds position, turns on the spot";
   const lapTime = `${lap.totalSec.toFixed(1)}s per lap`;
   if (lap.pivots) {
-    const pivot = lap.legs[0]?.pivotSec ?? 0;
-    return `${lapTime} · pivots corners (${pivot.toFixed(1)}s each)`;
+    // The circuit's corners are deliberately not all equal, so quote the
+    // worst of them — the 180 — rather than implying one flat rate.
+    const worst = Math.max(...lap.legs.map((leg) => leg.pivotSec), 0);
+    return `${lapTime} · pivots corners (up to ${worst.toFixed(1)}s)`;
   }
   return `${lapTime} · turns no tighter than ${Math.round(lap.minTurnRadius)}`;
 }
@@ -141,7 +148,7 @@ function draw(ctx: CanvasRenderingContext2D, lap: DemoLap, size: number, sprite:
     ctx.setLineDash([]);
   }
 
-  // The solved circuit — the path this Unit can actually fly through the four waypoints.
+  // The solved circuit — the path this Unit can actually fly through the waypoints.
   ctx.strokeStyle = "rgba(255, 204, 136, 0.4)";
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
