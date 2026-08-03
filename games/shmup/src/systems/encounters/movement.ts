@@ -17,8 +17,10 @@
  * outcome that can never look like "it kept traveling past its last
  * waypoint" — the same rule the editor's preview follows.
  */
-import { cubicBezierPoint, distanceBetween, resolveSegment } from "./bezier";
-import type { AuthoredAction, AuthoredStep, Vec2 } from "./authoredTypes";
+import { cubicBezierPoint, distanceBetween } from "./bezier";
+import { limitsFor, solvePathCached } from "./pathSolver";
+import { signedAngleDelta } from "./turning";
+import type { AuthoredAction, AuthoredStep, AuthoredUnitDef, Vec2 } from "./authoredTypes";
 
 /** Below this straight-line distance, a step is treated as dwelling at its predecessor's position rather than traveling. */
 const POSITION_EPSILON = 0.5;
@@ -46,8 +48,25 @@ export function activeStepIndexAt(steps: readonly AuthoredStep[], t: number): nu
   return index;
 }
 
-/** The instance's interpolated position at encounter-time `t`, or null if it hasn't spawned yet. */
-export function instanceStateAt(steps: readonly AuthoredStep[], turnRate: number, t: number): InstanceState | null {
+/** The motion stats a path solve needs from the owning Unit — narrowed so callers can pass a whole `AuthoredUnit`. */
+type MotionStats = Pick<AuthoredUnitDef, "speed" | "minSpeed" | "turnRateDegPerSec">;
+
+/** The instance's solved path — memoized in `pathSolver.ts`, so calling this every frame costs a map lookup. */
+function pathFor(steps: readonly AuthoredStep[], unit: MotionStats) {
+  return solvePathCached([...steps], limitsFor(unit));
+}
+
+/**
+ * The instance's interpolated position at encounter-time `t`, or null if it
+ * hasn't spawned yet.
+ *
+ * **A pivot is a real pause.** A Unit that corners by stopping
+ * (`minSpeed === 0`) spends `pivotSec` standing at the waypoint rotating
+ * before it sets off; the editor built that time into the next step's
+ * `time` when it derived the timeline, so replaying it here is what keeps
+ * the game on the same clock as the timeline the author scrubbed.
+ */
+export function instanceStateAt(steps: readonly AuthoredStep[], unit: MotionStats, t: number): InstanceState | null {
   const index = activeStepIndexAt(steps, t);
   if (index < 0) return null;
   const step = steps[index];
@@ -55,21 +74,48 @@ export function instanceStateAt(steps: readonly AuthoredStep[], turnRate: number
   if (!next || distanceBetween(step.pos, next.pos) <= POSITION_EPSILON) {
     return { pos: step.pos, step, stepIndex: index };
   }
-  const duration = next.time - step.time;
-  const u = duration > 0 ? Math.min(1, Math.max(0, (t - step.time) / duration)) : 0;
-  const { p0, p1, p2, p3 } = resolveSegment(step, next, turnRate);
-  return { pos: cubicBezierPoint(p0, p1, p2, p3, u), step, stepIndex: index };
+  const solved = pathFor(steps, unit);
+  const pivot = solved.pivotSec[index] ?? 0;
+  const elapsed = t - step.time;
+  if (elapsed <= pivot) return { pos: step.pos, step, stepIndex: index };
+
+  const duration = next.time - step.time - pivot;
+  const u = duration > 0 ? Math.min(1, Math.max(0, (elapsed - pivot) / duration)) : 0;
+  const segment = solved.segments[index];
+  if (!segment) return { pos: step.pos, step, stepIndex: index };
+  return { pos: cubicBezierPoint(segment.p0, segment.p1, segment.p2, segment.p3, u), step, stepIndex: index };
 }
 
-/** Direction of travel (degrees, 0 = +x, 90 = +y/down) at encounter-time `t`, numerically differentiated from the position curve. */
-export function instanceHeadingDegAt(steps: readonly AuthoredStep[], turnRate: number, t: number): number {
-  const a = instanceStateAt(steps, turnRate, t);
-  const b = instanceStateAt(steps, turnRate, t + HEADING_EPSILON_SEC);
-  if (!a || !b) return STATIONARY_HEADING_FALLBACK_DEG;
-  const dx = b.pos.x - a.pos.x;
-  const dy = b.pos.y - a.pos.y;
-  if (Math.hypot(dx, dy) < 0.01) return STATIONARY_HEADING_FALLBACK_DEG;
-  return (Math.atan2(dy, dx) * 180) / Math.PI;
+/**
+ * Direction of travel (degrees, 0 = +x, 90 = +y/down) at encounter-time
+ * `t`, numerically differentiated from the position curve — except while
+ * pivoting, where the position isn't changing and the heading instead
+ * sweeps from the solved arrival tangent to the departure one. That sweep
+ * *is* the pivot; without it a tank would sit motionless through its
+ * corner and then snap round.
+ */
+export function instanceHeadingDegAt(steps: readonly AuthoredStep[], unit: MotionStats, t: number): number {
+  const index = activeStepIndexAt(steps, t);
+  if (index < 0) return STATIONARY_HEADING_FALLBACK_DEG;
+  const solved = pathFor(steps, unit);
+  const pivot = solved.pivotSec[index] ?? 0;
+  const elapsed = t - steps[index].time;
+  if (pivot > 0 && elapsed <= pivot) {
+    const from = solved.headingInDeg[index] ?? STATIONARY_HEADING_FALLBACK_DEG;
+    const to = solved.headingOutDeg[index] ?? from;
+    return from + signedAngleDelta(from, to) * Math.min(1, Math.max(0, elapsed / pivot));
+  }
+
+  const a = instanceStateAt(steps, unit, t);
+  const b = instanceStateAt(steps, unit, t + HEADING_EPSILON_SEC);
+  if (a && b) {
+    const dx = b.pos.x - a.pos.x;
+    const dy = b.pos.y - a.pos.y;
+    if (Math.hypot(dx, dy) >= 0.01) return (Math.atan2(dy, dx) * 180) / Math.PI;
+  }
+  // Dwelling or past the last waypoint: keep pointing where the solve left it, unless it never travelled at all.
+  const travels = solved.segments.some((seg) => seg.length > POSITION_EPSILON);
+  return travels ? (solved.headingOutDeg[index] ?? STATIONARY_HEADING_FALLBACK_DEG) : STATIONARY_HEADING_FALLBACK_DEG;
 }
 
 interface TimedActionRef {

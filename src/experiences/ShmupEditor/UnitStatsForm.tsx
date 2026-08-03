@@ -4,6 +4,7 @@ import SpritePicker from "./SpritePicker";
 import ActionForm from "./ActionForm";
 import UnitMovementPreview from "./UnitMovementPreview";
 import { resolveSpriteUrl } from "./enemySprites";
+import { MIN_TURN_RATE_DEG_PER_SEC } from "./turning";
 import { cloneAction, clonePart, createBlankAction, type ActionDef, type UnitDef, type UnitLayer, type UnitPart } from "./unitTypes";
 
 interface UnitStatsFormProps {
@@ -159,17 +160,27 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDuplica
                 <input type="text" className="shmup-input" value={draft.name} onChange={(e) => update({ name: e.target.value })} />
               </label>
 
-              {/* Speed/Turn rate/Hitbox size are the three dials below it, so it sits directly above them rather than at the top of the tab. */}
+              {/* The movement dials are directly below it, so it sits with them rather than at the top of the tab. */}
               <UnitMovementPreview
                 spriteUrl={resolveSpriteUrl(draft.spriteId, draft.customSprite)}
                 speed={draft.speed}
-                turnRate={draft.turnRate}
+                minSpeed={draft.minSpeed}
+                turnRateDegPerSec={draft.turnRateDegPerSec}
                 size={draft.size}
               />
 
               <div className="shmup-dial-grid">
-                <Dial label="Speed" value={draft.speed} onChange={(v) => update({ speed: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
-                <Dial label="Turn rate" value={draft.turnRate} onChange={(v) => update({ turnRate: Math.max(0, v) })} min={0} step={0.1} showNudgeButtons />
+                {/* Lowering top speed drags the floor down with it — a minimum above the maximum isn't a Unit, it's a contradiction. */}
+                <Dial label="Speed" value={draft.speed} onChange={(v) => update({ speed: Math.max(0, v), minSpeed: Math.min(draft.minSpeed, Math.max(0, v)) })} min={0} step={10} showNudgeButtons />
+                <Dial label="Min speed" value={draft.minSpeed} onChange={(v) => update({ minSpeed: Math.min(draft.speed, Math.max(0, v)) })} min={0} max={draft.speed} step={5} showNudgeButtons />
+                <Dial
+                  label="Turn °/sec"
+                  value={draft.turnRateDegPerSec}
+                  onChange={(v) => update({ turnRateDegPerSec: Math.max(MIN_TURN_RATE_DEG_PER_SEC, v) })}
+                  min={MIN_TURN_RATE_DEG_PER_SEC}
+                  step={5}
+                  showNudgeButtons
+                />
                 <Dial label="Hitbox size" value={draft.size} onChange={(v) => update({ size: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
               </div>
               <div className="shmup-dial-grid">

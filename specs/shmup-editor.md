@@ -398,7 +398,7 @@ Weapon into Action costs nothing (Weapons were never actually shared
 across Units or even across a Unit's own Parts).
 
 The mental model: **a Unit has a layer, two movement stats (speed/
-turnRate), and its own reusable Action buffet — used directly when it has
+minSpeed/turnRateDegPerSec), and its own reusable Action buffet — used directly when it has
 no Parts, and always governing its own movement/facing/state regardless
 of how many Parts it has — plus a set of Parts, each owning its own
 independent Action buffet; an encounter places Units and walks each one
@@ -407,7 +407,8 @@ of the Unit's own Actions) while independently placing Action events on
 each Part's own timeline track.**
 
 - A **Unit** (`UnitDef`, `unitTypes.ts`) is a sprite + stats (HP, contact
-  damage, score value, `speed`, `turnRate`, hitbox size) + a **`layer`**
+  damage, score value, `speed`, `minSpeed`, `turnRateDegPerSec`, hitbox
+  size) + a **`layer`**
   (`"ground" | "air" | "doodad"`, see "Layers" below) + a
   **`defaultActionId`** (see below) + its own reusable **`actions:
   ActionDef[]`** buffet + `parts: UnitPart[]`, authored once and
@@ -452,7 +453,8 @@ each Part's own timeline track.**
   sharply-curving step sequence in one tile's encounter and a single
   stationary step in another's — path shape (and which Actions are
   referenced) belongs to the placement, not the Unit's identity; only
-  *speed*/*turnRate* and the Action buffet itself travel with the Unit.
+  *speed*/*minSpeed*/*turnRateDegPerSec* and the Action buffet itself
+  travel with the Unit.
 
 **Layers** (`UnitLayer`, `unitTypes.ts`) — `"ground" | "air" | "doodad"` —
 are a fixed property of the Unit definition itself, chosen once when
@@ -540,17 +542,11 @@ Unit's fixed `speed` (px/sec, a ceiling never touched by difficulty
 scaling — "never touch speed!" per Noah, since it's what keeps a level's
 pacing predictable) times whatever `movementPercent` the step's own
 referenced Action carries (0-100%, unitTypes.ts — 0 is a dwell, 100 is the
-Unit's full authored `speed`). `UnitDef.turnRate` caps how far a handle can
-extend, **as a multiple of
-that segment's straight-line length** — `turnRate: 1` allows a handle up
-to 100% of the segment length (a fairly pronounced bend); a stiffer/
-slower-turning Unit gets a lower `turnRate` and can only author gentler
-curves. This is a purely geometric constraint, not a physics simulation,
-and it's enforced wherever a handle is *read* (`resolveHandleOut`/
-`resolveHandleIn`), not just where it's written — lowering a Unit's
-`turnRate` after curves were authored at a higher one tightens every
-curve consistently rather than leaving stale, now-invalid handle data
-sitting around unused.
+Unit's full authored `speed`). **What shape those curves are allowed to
+take is decided by the Unit's own handling stats** — see "Turning:
+`minSpeed` + degrees/sec" below, which replaced an earlier `turnRate`
+that capped handle length as a multiple of the segment's straight-line
+length.
 
 **A null handle defaults to the straight-line-equivalent position** — a
 fresh step (or one whose handle was never dragged) behaves exactly like a
@@ -567,11 +563,11 @@ step of a sequence — no outgoing segment), one shaping the curve
 *arriving* at it (skipped on the first step — no incoming segment).
 Dragging either bends the connector, which renders as an SVG `<path>`
 cubic-bezier command instead of a straight `<line>`. The drag itself
-computes a raw offset from the pointer position, clamps it by `turnRate`
-immediately (so the dot visually "sticks" once you drag past the limit
-rather than floating past it), and stores the clamped value — the stored
-data always reflects exactly what the curve actually uses, never an
-unenforced excess. **The handle drag targets are real HTML `<button>`
+computes a raw offset from the pointer position, re-solves the path with
+that offset applied (`pathSolver.ts`), and stores the offset the solve
+*actually used* — so the dot visually "sticks" the moment you drag past
+what the Unit could fly, and the stored data always reflects exactly what
+the curve uses rather than an unenforced excess. **The handle drag targets are real HTML `<button>`
 elements** (`.shmup-handle-btn`), not SVG shapes — see "Canvas" below for
 why (mobile hit-testing).
 
@@ -590,11 +586,11 @@ needed a quadratic solve for `accel`; wave/spiral needed their own
 oscillation formulas). See "Timing" below for how `time` derivation
 itself works.
 
-**`turnRate`'s old meaning (homing toward the live player, degrees/sec)
-is gone along with the movement-kind system** — it was never actually
-simulated in the preview anyway (no live player exists at authoring
-time), so the "known approximation, not a bug" caveat that used to cover
-it no longer applies to anything.
+**Degrees/sec came back as the real meaning of turn rate** — see
+"Turning" below. The note that used to sit here (that the old homing
+sense of `turnRate` was gone along with the movement-kind system) is
+superseded: the stat is angular again, it just governs the *shape of the
+authored path* rather than live homing.
 
 **Bullets are no longer a separate type — see "Attacks" below.** An
 earlier pass kept a dedicated `BulletDef`/`MovementBehavior`
@@ -612,8 +608,146 @@ attack of its own.
 `shmup-editor.todo.md`'s Remaining list for the planned per-Unit
 "constant motion" property (a secondary offset the sprite/hitbox orbits
 or oscillates around its primary bezier-path position, independent of
-`speed`/`turnRate`) that will eventually cover what those movement kinds
+`speed`/turning stats) that will eventually cover what those movement kinds
 used to.
+
+### Turning: `minSpeed` + degrees/sec (`turning.ts`, `pathSolver.ts`)
+
+**A Unit's handling stats decide what routes an encounter author can draw
+with it.** Noah: "I want the stats to dictate the sorts of routes a
+designer could make on a level... we design Units thoughtfully so creating
+encounters is easy. And players would learn what to expect from certain
+enemies after a while."
+
+#### What the old `turnRate` was, and why it went
+
+`UnitDef.turnRate` used to cap how far a bezier handle could extend, as a
+multiple of its segment's straight-line length. It read as a
+ship-handling stat and behaved like nothing of the sort:
+
+- **It couldn't limit cornering at all.** A corner is the *junction
+  between* two segments, where the tangent jumps instantly; no clamp on
+  either segment's handles touches it. `turnRate: 0` forced every segment
+  straight, which made corners maximally sharp — the exact opposite of
+  what the name promised.
+- **On an un-dragged path it did nothing whatsoever.** A null handle
+  defaults to the straight-line-equivalent position, i.e. colinear with
+  the segment; clamping a colinear handle shorter still leaves a straight
+  line of identical arc length. Only the *pacing* within the segment
+  changed (below 1/3 it quietly added an ease-in/ease-out).
+- **Its effect wasn't monotonic.** A *short* perpendicular handle is the
+  tightest curve of all (the whole turn crammed into a few pixels), so
+  "drag less" made turns sharper; past the circle-approximation point
+  (~0.39 of the chord) more handle meant a wider bulge, then a cusp, then
+  a loop. One knob spanned straight → circle → square → loops.
+
+#### What replaced it
+
+Two stats on `UnitDef`, both physical:
+
+- **`turnRateDegPerSec`** — how fast it can change heading. Floored at
+  `MIN_TURN_RATE_DEG_PER_SEC` (1) rather than 0: a Unit that can never
+  change heading can't be routed anywhere.
+- **`minSpeed`** — the slowest speed it can sustain. **This is the stat
+  that makes the model work** (Noah's insight): it decides whether a
+  corner is a geometry problem at all.
+
+They combine into the one quantity every path decision is made against:
+
+```
+minTurnRadius = minSpeed / radians(turnRateDegPerSec)
+```
+
+- **`minSpeed === 0` — it can stop, so it can pivot.** Radius 0: no
+  corner is off-limits. A corner costs *time* instead — `pivotSeconds`
+  spent standing still while it rotates. Tanks, helicopters, turrets.
+- **`minSpeed > 0` — it can't stop, so it must arc.** It has a real
+  turning circle and its path is bent to respect it. Jets, ships,
+  anything on wheels. A jet's high speed limits its manoeuvres for free:
+  radius is speed ÷ rate, so 130 px/sec at 90°/sec can't corner tighter
+  than 83 units.
+
+The split is deliberately visible in play: a tank drives straight lines
+and rotates on the spot, a jet sweeps. That's the "players learn what to
+expect from certain enemies" goal, expressed as geometry rather than as a
+scripted behavior.
+
+#### The solver (`pathSolver.ts`)
+
+**Waypoints are hard constraints; the shape between them is derived.**
+The editor never rejects a placement and never marks anything invalid —
+it solves for the closest flyable path and draws *that*, both on the
+encounter canvas and in the timeline's motion preview.
+
+For an arc Unit:
+
+1. **Tangent direction per waypoint** — chordal Catmull-Rom
+   (`normalize(next - prev)`). This alone handles the motivating case: a
+   jet given (0,0) → (300,0) → (300,300) arrives at the corner already
+   heading 45°, so it dips wide *before* the waypoint and bulges wide
+   *after* it rather than turning in place. An author-dragged handle
+   overrides the direction for its waypoint.
+2. **Handle length** — defaults to a third of the chord (which reproduces
+   an exactly straight line when the tangents are chord-aligned, so an
+   ordinary path looks exactly as it always did), then searched over a
+   range, taking the value **closest to the default** that keeps the whole
+   segment at or above `minTurnRadius`. Nearest-to-default, not
+   largest-or-smallest, precisely because curvature isn't monotonic in
+   handle length.
+3. **Tangent relaxation, only if that fails** — rotate the offending
+   waypoints' tangents by the *smallest* deviation that makes their
+   segments flyable. This is what rescues a hairpin (a jet given a
+   direction reversal goes from a 38-unit tightest radius to 94, i.e.
+   flyable). Deliberately off the happy path: it's the expensive step, and
+   a step-2 solution is the one an author finds least surprising.
+4. **Best effort** — genuinely impossible geometry (waypoints 60 units
+   apart with a right-angle turn and an 89-unit minimum radius) keeps
+   whatever came closest and reports `feasible: false`. The path still
+   exists, still passes through every waypoint, and is still drawn.
+
+For a pivot Unit the legs stay straight and each corner yields
+`pivotSeconds(turn angle)` of standing still — no curvature constraint
+exists for something that can stop.
+
+A **closed** variant (`PathOptions.closed`) exists solely for the Stats
+tab's demo circuit, which has to lap forever without a seam. Encounter
+paths are always open.
+
+Solves are memoized (`solvePathCached`, a 64-entry insertion-ordered map)
+because the editor re-solves on every render and the runtime asks per
+frame.
+
+#### What it changes downstream
+
+- **Timing** (`encounterTiming.ts`) — a derived step time is now pivot +
+  solved arc length ÷ the speed that segment's tightest bend allows
+  (`speedThroughRadius`). A jet's swing-wide detour is genuinely longer
+  than the straight line and is timed as such; a tight arc forces a
+  slow-down; a tank's corner costs seconds of standing still.
+- **Heading** (`movementPreview.ts`, and the game's `movement.ts`) —
+  differentiated from the curve while travelling, but *interpolated across
+  the pivot* from the solved arrival tangent to the departure one. Without
+  that a tank would sit motionless through its corner and then snap.
+- **Handle drags** (`EncounterEditor.tsx`) — clamped live rather than on
+  release, by re-solving with the proposed handle and keeping what the
+  solve used (`effectiveHandleOut`/`effectiveHandleIn`). The dot, the
+  drawn curve and the stored value can never disagree.
+- **The game** mirrors `turning.ts` and `pathSolver.ts` verbatim
+  (`games/shmup/src/systems/encounters/`), the same re-declared-not-shared
+  stance `authoredTypes.ts` takes. It has to: the editor draws and *times*
+  the solved path, so any divergence is the game playing something other
+  than what was authored.
+
+#### Migration
+
+**No `SAVE_VERSION` bump** — same reasoning as `repairSeededSimpleEnemies`:
+a bump resets the whole library, discarding user-authored Units, and the
+stored shape otherwise didn't change. `unitStore.ts`'s `migrateMotionStats`
+fills the new fields in on load instead. There is no meaningful conversion
+from the old handle-multiplier `turnRate`, so seeded Units are re-stamped
+from the current specs by id and anything user-authored gets `minSpeed: 0`
+plus a neutral 90°/sec — making it a pivoter, which leaves every route it
+was already authored on flyable exactly as before.
 
 ### Authoring frames: Ground vs Air (`airFrame.ts`, `EncounterEditor.tsx`, `EncounterTimeline.tsx`)
 
@@ -733,7 +867,7 @@ resolves to at fire time:
   principled direction to derive in that case.
 - **`"facePlayer"`** — tracked continuously toward a reference point
   standing in for the player (not simulated in the live preview, same
-  no-live-player-at-authoring-time approximation `turnRate` already
+  no-live-player-at-authoring-time approximation the movement preview already
   accepted; the E4 hitbox preview does have a real static reference marker
   to aim at, see below).
 
@@ -949,7 +1083,7 @@ attack together instead of a standalone Weapon.)
     Parts-demo split). Each Unit also gets a `layer` (`"air"` for the
     helicopters/jets/prop plane, `"ground"` for everything else — trucks,
     tanks, motorcycles, trains, turrets, the battleship). Stats
-    (`hp`/`contactDamage`/`scoreValue`/`speed`/`turnRate`/`size`) are
+    (`hp`/`contactDamage`/`scoreValue`/`speed`/`minSpeed`/`turnRateDegPerSec`/`size`) are
     made-up placeholder numbers loosely scaled to each vehicle's apparent
     size/role, not balanced gameplay data.
 
@@ -1535,44 +1669,41 @@ selects, and no picture of what any of it did.
   is meaningless until the Unit has at least one Action.
 
 **`UnitMovementPreview.tsx`** is the Stats page's counterpart to
-`ActionPreview.tsx`: a 220px canvas in which the Unit laps a fixed
-synthetic circuit forever, nose pointed along the curve, so `speed`/
-`turnRate`/`size` are watched rather than guessed at. The geometry is
-pure and tested (`unitMovementPreview.ts`):
+`ActionPreview.tsx`: a 220px canvas in which the Unit laps a fixed demo
+circuit forever, nose pointed along the curve.
 
-- **The circuit is a diamond** ~a third of a tile across (`TILE_UNIT` =
-  720), not an authored path — there's no encounter in scope while
-  editing a Unit. Four hard corners is where a turn-rate difference reads
-  most clearly.
-- **`turnRate` clamps each handle** through `bezier.ts`'s own
-  `clampHandleOffset`, the same call the encounter canvas makes, so the
-  preview can't drift from what a real path does. The demo's own addition
-  is deliberately over-long handles (`DEMO_HANDLE_REACH` = 2× the segment
-  length, laid along the loop's tangent): a real step's handles default
-  to the straight-line-equivalent position, which no `turnRate` above 1/3
-  clamps at all, so a demo built on defaults would sit stone-still while
-  the knob turned. With the handles authored past every plausible
-  `turnRate`, the clamp is always what decides the shape — 0 draws the
-  bare sharp-cornered diamond, higher values bend the corners out into
-  progressively wider arcs, and past 2 the knob stops changing anything.
-- **`speed` paces travel as arc length ÷ speed**, per segment — the
-  identical model `encounterTiming.ts` uses to time a real step and
-  `movementPreview.ts` uses to interpolate along one. A caption under the
-  canvas carries the one number the picture can't ("4.7s per lap", or
-  "Speed 0 — holds position" for a turret).
-- **Distance is accumulated per frame** (`distance += speed * dt`), not
-  recomputed as `speed * elapsed`. Identical at a constant speed, but
-  only the accumulating form keeps the Unit where it is while the Speed
-  dial is being dragged; the closed-form one teleports it around the loop
-  on every change, which reads as a glitch rather than a speed-up.
-- **The hitbox draws as a ring at true scale** against the path, with the
-  sprite over it at `size × 3` — mirroring games/shmup's
-  `TUNING.encounters.artToHitboxRatio`, and rotated by the same nose-up
-  `ART_FACING_DEG` convention `spriteScale.ts` uses. Both are copied
-  constants, not imports: `spriteScale.ts` pulls in the game-only `TUNING`
-  object (`editorScale.ts`'s `scrollModel.ts` remains the single
-  shared-code exception). A motion trail of ghost dots spaced in *time*
-  stretches out on its own as speed climbs.
+**It is solved by the same `pathSolver.ts` an encounter uses** (see
+"Turning" above), on a closed four-waypoint diamond. That's the whole
+value of it — the Stats tab isn't illustrating the numbers, it's
+rehearsing them:
+
+- A Unit that can stop drives the diamond's legs dead straight and
+  visibly **pauses to rotate** at each corner.
+- A Unit that can't stop **swings wide** through every corner, on a curve
+  that never bends tighter than its turning circle.
+- Dragging Min speed from 0 to anything above it switches the Unit
+  between those two behaviors on screen, which is the fastest way to
+  understand what the stat does.
+
+The lap is a *timed* schedule rather than a distance sweep, because a
+pivot is a pause: each leg costs its pivot plus its travel, and travel is
+the solved arc length ÷ the speed that leg's tightest bend allows — the
+same rule `encounterTiming.ts` times a real encounter with. The caption
+carries what the picture can't ("19.3s per lap · pivots corners (3.0s
+each)", or "4.2s per lap · turns no tighter than 83").
+
+Two rings are drawn: the **hitbox** at true scale against the path, with
+the sprite over it at `size × 3` (mirroring games/shmup's
+`TUNING.encounters.artToHitboxRatio`, and rotated by the same nose-up
+`ART_FACING_DEG` convention `spriteScale.ts` uses — both copied
+constants, since `spriteScale.ts` pulls in the game-only `TUNING`), and
+the **turning circle**, in a different colour and dash rhythm so two
+dashed circles don't read as one shape.
+
+Distance accumulates from a per-frame clock rather than being recomputed
+as `speed × elapsed`: identical at a constant speed, but only the
+accumulating form keeps the Unit where it is while a dial is being
+dragged instead of teleporting it around the loop.
 
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 
@@ -1633,7 +1764,7 @@ save-file shape change.
 
 The bezier-curve movement pass (Movement, above) **did** need version
 bumps, being genuinely non-additive: `UnitDef.baseSpeed` was renamed
-`speed` (plus a new `turnRate`), `ActionDef` lost its `movement` field
+`speed` (plus turning stats), `ActionDef` lost its `movement` field
 entirely, and `EncounterStep` gained `handleIn`/`handleOut`. `unitStore.ts`'s
 `SAVE_VERSION` (4→5) and `TILE_SESSION_VERSION` (2→3), plus `tileStore.ts`'s
 `SAVE_VERSION` (3→4), all bumped for the same "reset rather than silently

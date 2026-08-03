@@ -1,47 +1,35 @@
 /**
- * The synthetic demo circuit the Unit editor's Stats tab flies a Unit
- * around (`UnitMovementPreview.tsx`), so `speed` and `turnRate` are
- * something you can *watch* rather than two bare numbers. Same reasoning as
- * `actionPreview.ts` vs. an attack's arc/count/spacing fields: this genre
- * is visual, and a knob you can't see the effect of is a knob you tune by
- * guessing.
+ * The demo circuit the Unit editor's Stats tab flies a Unit around
+ * (`UnitMovementPreview.tsx`), so `speed`, `minSpeed` and
+ * `turnRateDegPerSec` are something you can *watch* rather than three bare
+ * numbers.
  *
- * **The circuit is a fixed diamond, not an authored path** — there's no
- * encounter in scope while editing a Unit, so the preview supplies its own
- * closed loop (roughly a third of a tile across, `editorScale.ts`'s
- * `TILE_UNIT` = 720) and the Unit laps it forever. Only the *shape of the
- * corners* and *how fast it travels* come from the Unit.
+ * **It is solved by the same `pathSolver.ts` an encounter uses**, on a
+ * fixed four-waypoint diamond (~a third of a tile across; `TILE_UNIT` =
+ * 720). That's the whole value of it: the Stats tab isn't showing a
+ * decorative animation, it's showing precisely what this Unit will do when
+ * an encounter author drops it on a route with corners in it.
  *
- * **Both stats mean exactly what they mean in a real encounter.**
- * - `speed` is px/sec along the curve, and a segment is paced by its own
- *   arc length ÷ speed — the identical model `encounterTiming.ts` uses to
- *   derive a real step's duration and `movementPreview.ts` uses to
- *   interpolate along it.
- * - `turnRate` clamps each bezier handle to a multiple of its segment's
- *   straight-line length, via `bezier.ts`'s own `clampHandleOffset` — the
- *   one place that rule lives, so the preview can't drift from what the
- *   encounter canvas actually draws.
+ * - A Unit that can stop drives the legs dead straight and **pivots** at
+ *   each corner, standing still while it rotates.
+ * - A Unit that can't stop **swings wide** through every corner, on a
+ *   curve that never bends tighter than its `minTurnRadius`.
  *
- * The one thing the demo *adds* is deliberately over-long handles
- * (`DEMO_HANDLE_REACH` × the segment length, pointed along the loop's
- * tangent at each waypoint). A real step's handles default to the
- * straight-line-equivalent position, which no `turnRate` above 1/3 ever
- * clamps — so a demo built on defaults would sit stone-still while the knob
- * turned. Authoring handles past every plausible `turnRate` instead means
- * the clamp is always the thing deciding the shape: 0 draws the bare
- * sharp-cornered diamond, and higher values bend the corners out into
- * progressively wider, swoopier arcs.
+ * The lap is a *timed* schedule rather than a distance sweep, because a
+ * pivot is a pause: each leg costs its pivot plus its travel, and travel
+ * is the solved arc length divided by the speed that leg's tightest bend
+ * actually allows (`turning.ts`'s `speedThroughRadius` — the same rule
+ * `encounterTiming.ts` times a real encounter with).
  */
-import { clampHandleOffset, cubicBezierLength, cubicBezierPoint, distanceBetween } from "./bezier";
+import { cubicBezierPoint } from "./bezier";
+import { limitsFor, solvePathCached, type SolvedPath, type SolvedSegment } from "./pathSolver";
+import { signedAngleDelta, speedThroughRadius } from "./turning";
 import type { Vec2 } from "./encounterTypes";
 
-/** Half-width of the demo diamond, in the same world units as an encounter canvas (TILE_UNIT = 720 across). */
-export const DEMO_LOOP_RADIUS = 70;
+/** Half-width of the demo diamond, in the same world units as an encounter canvas. */
+export const DEMO_LOOP_RADIUS = 90;
 
-/** Authored handle length as a multiple of the segment's straight-line length — past the largest `turnRate` any seeded Unit uses (1.5), so the knob keeps visibly doing something across its whole useful range. */
-export const DEMO_HANDLE_REACH = 2;
-
-/** Corners of the demo circuit, clockwise from the top. A diamond (rather than a ring of many points) because four hard corners are where a turn-rate difference reads most clearly. */
+/** Corners of the demo circuit, clockwise from the top. Four hard corners is where a difference in turning ability reads most clearly. */
 export const DEMO_WAYPOINTS: Vec2[] = [
   { x: 0, y: -DEMO_LOOP_RADIUS },
   { x: DEMO_LOOP_RADIUS, y: 0 },
@@ -49,102 +37,87 @@ export const DEMO_WAYPOINTS: Vec2[] = [
   { x: -DEMO_LOOP_RADIUS, y: 0 },
 ];
 
-export interface DemoSegment {
-  p0: Vec2;
-  p1: Vec2;
-  p2: Vec2;
-  p3: Vec2;
-  /** Arc length of this segment — what paces travel along it (length ÷ speed), exactly as `encounterTiming.ts` times a real one. */
-  length: number;
+/** Speed used to pace the demo when a Unit's own is 0 — a turret still has a turn rate worth watching, and a lap that never advances would show nothing at all. */
+const STATIONARY_DEMO_SPEED = 60;
+
+export interface DemoLeg {
+  segment: SolvedSegment;
+  /** Seconds spent rotating on the spot at this leg's *starting* waypoint before setting off. */
+  pivotSec: number;
+  /** Seconds spent travelling the segment, at the speed its tightest bend allows. */
+  travelSec: number;
+  /** Lap time at which this leg's pivot begins. */
+  startSec: number;
 }
 
-/** Heading (degrees, 0 = +x/right, 90 = +y/down) used when the circuit has no length to derive one from — same convention and same "there's no principled direction here" stance as `movementPreview.ts`'s own stationary fallback. */
-const FALLBACK_HEADING_DEG = 90;
-
-/** Distance (world units) used to numerically differentiate the loop for its heading — small relative to the circuit, large enough to stay clear of floating-point noise. Mirrors `movementPreview.ts`'s HEADING_EPSILON_SEC in spirit. */
-const HEADING_EPSILON_UNITS = 0.5;
-
-function sub(a: Vec2, b: Vec2): Vec2 {
-  return { x: a.x - b.x, y: a.y - b.y };
+export interface DemoLap {
+  solved: SolvedPath;
+  legs: DemoLeg[];
+  totalSec: number;
+  /** The tightest circle this Unit can hold — 0 when it pivots instead. Drawn as a reference ring. */
+  minTurnRadius: number;
+  /** True when the Unit corners by stopping and rotating rather than arcing. */
+  pivots: boolean;
 }
 
-function scale(v: Vec2, s: number): Vec2 {
-  return { x: v.x * s, y: v.y * s };
+export interface UnitMotionStats {
+  speed: number;
+  minSpeed: number;
+  turnRateDegPerSec: number;
 }
 
-function normalize(v: Vec2): Vec2 {
-  const len = Math.hypot(v.x, v.y);
-  return len < 1e-6 ? { x: 0, y: 0 } : { x: v.x / len, y: v.y / len };
+/** Solves the demo circuit for these stats and builds its lap schedule. */
+export function buildDemoLap(stats: UnitMotionStats): DemoLap {
+  const limits = limitsFor(stats);
+  const points = DEMO_WAYPOINTS.map((pos) => ({ pos, handleIn: null, handleOut: null }));
+  const solved = solvePathCached(points, limits, { closed: true });
+  const cruise = stats.speed > 0 ? stats.speed : STATIONARY_DEMO_SPEED;
+
+  const legs: DemoLeg[] = [];
+  let clock = 0;
+  solved.segments.forEach((segment, i) => {
+    const pivotSec = solved.pivotSec[i] ?? 0;
+    const speed = speedThroughRadius(segment.minRadius, Math.min(stats.minSpeed, cruise), cruise, stats.turnRateDegPerSec);
+    const travelSec = segment.length / Math.max(1, speed);
+    legs.push({ segment, pivotSec, travelSec, startSec: clock });
+    clock += pivotSec + travelSec;
+  });
+
+  return { solved, legs, totalSec: clock, minTurnRadius: limits.minTurnRadius, pivots: limits.minTurnRadius <= 0 };
 }
 
-/** Direction the loop is travelling *through* waypoint `i` — the chord between its two neighbours, which is what makes a handle laid along it bend the path rather than just stretch a straight line. */
-function tangentAt(i: number): Vec2 {
-  const count = DEMO_WAYPOINTS.length;
-  const prev = DEMO_WAYPOINTS[(i - 1 + count) % count];
-  const next = DEMO_WAYPOINTS[(i + 1) % count];
-  return normalize(sub(next, prev));
-}
-
-/** The demo circuit's four bezier segments at a given `turnRate` — see the file header for why the handles are authored long and left to the clamp. */
-export function demoLoopSegments(turnRate: number): DemoSegment[] {
-  const count = DEMO_WAYPOINTS.length;
-  const segments: DemoSegment[] = [];
-  for (let i = 0; i < count; i++) {
-    const from = DEMO_WAYPOINTS[i];
-    const to = DEMO_WAYPOINTS[(i + 1) % count];
-    const segmentLength = distanceBetween(from, to);
-    const maxLength = Math.max(0, turnRate) * segmentLength;
-    const reach = DEMO_HANDLE_REACH * segmentLength;
-    const out = clampHandleOffset(scale(tangentAt(i), reach), maxLength);
-    const back = clampHandleOffset(scale(tangentAt((i + 1) % count), -reach), maxLength);
-    const p0 = from;
-    const p1 = { x: from.x + out.x, y: from.y + out.y };
-    const p2 = { x: to.x + back.x, y: to.y + back.y };
-    const p3 = to;
-    segments.push({ p0, p1, p2, p3, length: cubicBezierLength(p0, p1, p2, p3) });
-  }
-  return segments;
-}
-
-export function loopLength(segments: DemoSegment[]): number {
-  return segments.reduce((total, s) => total + s.length, 0);
-}
-
-export interface LoopSample {
+export interface LapSample {
   pos: Vec2;
   headingDeg: number;
+  /** True while the Unit is stopped rotating rather than travelling — the preview dims its motion trail so a pivot reads as a pivot. */
+  pivoting: boolean;
 }
 
-/** Position along the circuit at `distance` world units travelled, wrapping around the loop as many times as needed (negative distances wrap backwards). Within a segment, distance maps linearly onto the bezier parameter — the same approximation `movementPreview.ts` makes for a real step, so a lap here is paced exactly the way an encounter's path is. */
-export function positionAt(segments: DemoSegment[], distance: number): Vec2 {
-  const total = loopLength(segments);
-  if (total <= 0) return DEMO_WAYPOINTS[0];
-  let remaining = ((distance % total) + total) % total;
-  for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i];
-    // The last segment absorbs any leftover from floating-point drift rather than falling off the end of the list.
-    if (remaining > segment.length && i < segments.length - 1) {
-      remaining -= segment.length;
-      continue;
+/** Where the Unit is, and which way it points, `tSec` into an endlessly repeating lap. */
+export function sampleDemoLap(lap: DemoLap, tSec: number): LapSample {
+  const fallback: LapSample = { pos: DEMO_WAYPOINTS[0], headingDeg: 0, pivoting: false };
+  if (lap.legs.length === 0 || lap.totalSec <= 0) return fallback;
+  const t = ((tSec % lap.totalSec) + lap.totalSec) % lap.totalSec;
+
+  for (let i = 0; i < lap.legs.length; i++) {
+    const leg = lap.legs[i];
+    const local = t - leg.startSec;
+    if (local < 0 || local > leg.pivotSec + leg.travelSec) continue;
+
+    if (local <= leg.pivotSec && leg.pivotSec > 0) {
+      const from = lap.solved.headingInDeg[i];
+      const to = lap.solved.headingOutDeg[i];
+      return { pos: leg.segment.p0, headingDeg: from + signedAngleDelta(from, to) * (local / leg.pivotSec), pivoting: true };
     }
-    const u = segment.length > 0 ? Math.min(1, Math.max(0, remaining / segment.length)) : 0;
-    return cubicBezierPoint(segment.p0, segment.p1, segment.p2, segment.p3, u);
+
+    const u = leg.travelSec > 0 ? Math.min(1, (local - leg.pivotSec) / leg.travelSec) : 0;
+    const { p0, p1, p2, p3 } = leg.segment;
+    const pos = cubicBezierPoint(p0, p1, p2, p3, u);
+    const ahead = cubicBezierPoint(p0, p1, p2, p3, Math.min(1, u + 0.01));
+    const dx = ahead.x - pos.x;
+    const dy = ahead.y - pos.y;
+    const headingDeg = Math.hypot(dx, dy) < 1e-6 ? lap.solved.headingOutDeg[i] : (Math.atan2(dy, dx) * 180) / Math.PI;
+    return { pos, headingDeg, pivoting: false };
   }
-  return DEMO_WAYPOINTS[0];
-}
-
-/** Position *and* direction of travel at `distance`, the direction numerically differentiated from the same curve — a Unit in the preview always points where it's going (the `faceMovement` case), since that's what makes a turn read as a turn. */
-export function sampleLoop(segments: DemoSegment[], distance: number): LoopSample {
-  const pos = positionAt(segments, distance);
-  const ahead = positionAt(segments, distance + HEADING_EPSILON_UNITS);
-  const dx = ahead.x - pos.x;
-  const dy = ahead.y - pos.y;
-  if (Math.hypot(dx, dy) < 1e-6) return { pos, headingDeg: FALLBACK_HEADING_DEG };
-  return { pos, headingDeg: (Math.atan2(dy, dx) * 180) / Math.PI };
-}
-
-/** Seconds for one full lap at `speed` px/sec, or null when the Unit can't move at all (speed 0 — it just holds position, which is a legitimate authoring choice for a turret). */
-export function lapSeconds(segments: DemoSegment[], speed: number): number | null {
-  if (speed <= 0) return null;
-  return loopLength(segments) / speed;
+  return fallback;
 }

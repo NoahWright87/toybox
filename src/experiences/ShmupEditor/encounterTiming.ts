@@ -7,6 +7,16 @@
  * unit would sail straight past its next waypoint (or the last one,
  * forever) long before/after the timeline said it should.
  *
+ * **A derived time is now three things added together**, since a Unit's
+ * turning limits (`turning.ts`) shape both the route and its pace:
+ * the **pivot** it spends rotating on the spot before setting off (0
+ * unless it's a Unit that corners by stopping), plus the **arc length of
+ * the solved path** it can actually fly (`pathSolver.ts` — a jet's
+ * swing-wide detour is genuinely longer than the straight line between
+ * two waypoints, and is timed as such), divided by the **speed that
+ * segment's tightest bend allows** (`turning.ts`'s `speedThroughRadius` —
+ * a curve tighter than the Unit's cruise radius forces it to slow down).
+ *
  * **A step's `time` is derived whenever its position differs from its
  * predecessor's** — there's a real curve (`bezier.ts`) and a real speed
  * (the owning Unit's, unitTypes.ts) to compute a duration from. It stays
@@ -34,7 +44,9 @@
  * by wrapping its `updateInstance` helper rather than calling it at every
  * individual site.
  */
-import { cubicBezierLength, distanceBetween, resolveSegment } from "./bezier";
+import { distanceBetween } from "./bezier";
+import { limitsFor, solvePathCached } from "./pathSolver";
+import { speedThroughRadius } from "./turning";
 import type { EncounterStep, EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
@@ -54,10 +66,9 @@ export function segmentDuration(arcLength: number, speed: number, movementPercen
   return Math.max(MIN_STEP_DURATION, arcLength / effectiveSpeed);
 }
 
-/** The bezier arc length (bezier.ts) of the segment from `prev` to `cur`, resolved against `unitDef`'s turnRate. */
-export function segmentArcLength(prev: EncounterStep, cur: EncounterStep, unitDef: UnitDef): number {
-  const { p0, p1, p2, p3 } = resolveSegment(prev, cur, unitDef.turnRate);
-  return cubicBezierLength(p0, p1, p2, p3);
+/** The arc length of the solved segment leaving step `index` — the path the Unit can actually fly (`pathSolver.ts`), not the straight line between the waypoints. */
+export function segmentArcLength(instance: EncounterUnit, index: number, unitDef: UnitDef): number {
+  return solvePathCached(instance.steps, limitsFor(unitDef)).segments[index]?.length ?? 0;
 }
 
 /** True if `stepId`'s time is computed (its position differs from its predecessor's) rather than manually authored. */
@@ -84,13 +95,21 @@ function movementPercentFor(step: EncounterStep, unitDef: UnitDef): number {
  */
 export function recomputeStepTimes(instance: EncounterUnit, unitDef: UnitDef | undefined): EncounterUnit {
   if (instance.steps.length === 0 || !unitDef) return instance;
+  const solved = solvePathCached(instance.steps, limitsFor(unitDef));
   const steps: EncounterStep[] = instance.steps.map((s) => ({ ...s }));
   for (let i = 1; i < steps.length; i++) {
     const prev = steps[i - 1];
     const cur = steps[i];
     if (distanceBetween(prev.pos, cur.pos) > POSITION_EPSILON) {
-      const arcLength = segmentArcLength(prev, cur, unitDef);
-      cur.time = prev.time + segmentDuration(arcLength, unitDef.speed, movementPercentFor(prev, unitDef));
+      const segment = solved.segments[i - 1];
+      // A tight arc is a slow arc: a Unit can only hold a curve of radius r at
+      // turnRate x r, so the segment's own tightest bend caps the speed it can
+      // be flown at. This is why a heavy Unit's cornering *reads* as heavy
+      // rather than merely being drawn differently (turning.ts).
+      const cornerLimited = speedThroughRadius(segment?.minRadius ?? Infinity, unitDef.minSpeed, unitDef.speed, unitDef.turnRateDegPerSec);
+      const travel = segmentDuration(segment?.length ?? 0, cornerLimited, movementPercentFor(prev, unitDef));
+      // ...and a Unit that corners by stopping pays for the corner in standing-still time before it sets off at all.
+      cur.time = prev.time + (solved.pivotSec[i - 1] ?? 0) + travel;
     } else {
       cur.time = Math.max(cur.time, prev.time + MIN_STEP_DURATION);
     }

@@ -32,31 +32,33 @@ describe("segmentDuration", () => {
 });
 
 describe("segmentArcLength", () => {
-  it("equals the straight-line distance when both handles are null (default straight-line-equivalent curve)", () => {
-    const u = unit({ turnRate: 1 });
+  it("equals the straight-line distance when both handles are null (a straight leg)", () => {
+    const u = unit();
     let inst: EncounterUnit = createEncounterUnit(u.id);
     inst = addStep(inst, null, { x: 0, y: 0 });
     inst = addStep(inst, null, { x: 300, y: 0 });
-    expect(segmentArcLength(inst.steps[0], inst.steps[1], u)).toBeCloseTo(300, 1);
+    expect(segmentArcLength(inst, 0, u)).toBeCloseTo(300, 1);
   });
 
   it("is longer than the straight-line distance once a handle bulges the curve", () => {
-    const u = unit({ turnRate: 1 });
+    const u = unit();
     let inst: EncounterUnit = createEncounterUnit(u.id);
     inst = addStep(inst, null, { x: 0, y: 0 });
     inst = addStep(inst, null, { x: 300, y: 0 });
     inst = updateStep(inst, inst.steps[0].id, { handleOut: { x: 100, y: 150 } });
-    expect(segmentArcLength(inst.steps[0], inst.steps[1], u)).toBeGreaterThan(300);
+    expect(segmentArcLength(inst, 0, u)).toBeGreaterThan(300);
   });
 
-  it("a lower turnRate clamps the handle and shortens the resulting arc length", () => {
+  it("measures the swing-wide detour a Unit that cannot stop has to fly", () => {
+    // Same three waypoints, two Units: one pivots the corner, one must arc around it.
     let inst: EncounterUnit = createEncounterUnit("u");
     inst = addStep(inst, null, { x: 0, y: 0 });
     inst = addStep(inst, null, { x: 300, y: 0 });
-    inst = updateStep(inst, inst.steps[0].id, { handleOut: { x: 100, y: 500 } });
-    const loose = segmentArcLength(inst.steps[0], inst.steps[1], unit({ turnRate: 2 }));
-    const stiff = segmentArcLength(inst.steps[0], inst.steps[1], unit({ turnRate: 0.1 }));
-    expect(stiff).toBeLessThan(loose);
+    inst = addStep(inst, null, { x: 300, y: 300 });
+    const pivoter = unit({ minSpeed: 0, speed: 200, turnRateDegPerSec: 90 });
+    const arcer = unit({ minSpeed: 140, speed: 220, turnRateDegPerSec: 90 });
+    expect(segmentArcLength(inst, 0, pivoter)).toBeCloseTo(300, 1);
+    expect(segmentArcLength(inst, 0, arcer)).toBeGreaterThan(310);
   });
 });
 

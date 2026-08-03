@@ -142,7 +142,8 @@ function isValidUnitDef(v: unknown): v is UnitDef {
     typeof u.contactDamage === "number" &&
     typeof u.scoreValue === "number" &&
     typeof u.speed === "number" &&
-    typeof u.turnRate === "number" &&
+    typeof u.minSpeed === "number" &&
+    typeof u.turnRateDegPerSec === "number" &&
     typeof u.size === "number" &&
     (u.layer === "ground" || u.layer === "air" || u.layer === "doodad") &&
     (u.defaultActionId === null || typeof u.defaultActionId === "string") &&
@@ -167,6 +168,39 @@ function seedAndPersistDefaultLibrary(): UnitDef[] {
   return units;
 }
 
+/**
+ * Fills in the motion stats a pre-`turning.ts` save doesn't have, in place,
+ * **without a `SAVE_VERSION` bump** — same reasoning as
+ * `repairSeededSimpleEnemies`: a bump resets the whole library, throwing
+ * away every Unit the user authored themselves, and the stored *shape*
+ * otherwise didn't change.
+ *
+ * The old `turnRate` was a bezier-handle-length multiplier (0–1.5), not an
+ * angular rate, so there is no conversion that means anything — see
+ * `turning.ts`. Seeded Units are re-stamped from the current specs by id;
+ * anything else gets a neutral, forgiving default: a moderate 90°/sec and
+ * `minSpeed: 0`, which makes it a pivoter and leaves every route it was
+ * already authored on flyable exactly as before.
+ */
+function migrateMotionStats(units: unknown[]): unknown[] {
+  const seeded = new Map<string, UnitDef>(createDefaultUnitLibrary().map((u) => [u.id, u]));
+  return units.map((value) => {
+    if (typeof value !== "object" || value === null) return value;
+    const unit = value as Record<string, unknown>;
+    if (typeof unit.turnRateDegPerSec === "number" && typeof unit.minSpeed === "number") return unit;
+    const original = typeof unit.id === "string" ? seeded.get(unit.id) : undefined;
+    const { turnRate: _legacy, ...rest } = unit;
+    return {
+      ...rest,
+      minSpeed: original?.minSpeed ?? 0,
+      turnRateDegPerSec: original?.turnRateDegPerSec ?? DEFAULT_MIGRATED_TURN_RATE_DEG_PER_SEC,
+    };
+  });
+}
+
+/** What a user-authored Unit gets when its pre-`turning.ts` save is migrated — quick enough to feel responsive, slow enough that a heavy Unit re-tuned by hand still reads as an improvement. */
+const DEFAULT_MIGRATED_TURN_RATE_DEG_PER_SEC = 90;
+
 export function loadUnits(): UnitDef[] {
   const content = fsStore.getFile(SHMUP_EDITOR_UNITS_ID)?.content;
   if (!content) return seedAndPersistDefaultLibrary();
@@ -176,7 +210,7 @@ export function loadUnits(): UnitDef[] {
     // Content-level repair of the seeded enemies (Part-less Actions / inert
     // turret defaults) — see repairSeededSimpleEnemies. Deliberately not a
     // SAVE_VERSION bump, which would discard user-authored Units too.
-    return repairSeededSimpleEnemies(parsed.units.filter(isValidUnitDef));
+    return repairSeededSimpleEnemies(migrateMotionStats(parsed.units).filter(isValidUnitDef));
   } catch {
     return seedAndPersistDefaultLibrary();
   }
@@ -194,7 +228,10 @@ export function loadUnitDraft(): UnitEditSession | null {
   try {
     const parsed = JSON.parse(content) as SavedUnitDraft;
     if (parsed.version !== SAVE_VERSION || !parsed.session) return null;
-    const { unit, activePart } = parsed.session;
+    const { activePart } = parsed.session;
+    // Migrated the same way the library is, so a session interrupted before the
+    // motion-stat change resumes instead of being silently discarded.
+    const [unit] = migrateMotionStats([parsed.session.unit]);
     if (!isValidUnitDef(unit)) return null;
     if (activePart !== null && !isUnitPart(activePart)) return null;
     return { unit, activePart };

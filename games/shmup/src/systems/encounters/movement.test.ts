@@ -6,6 +6,11 @@ function step(id: string, x: number, y: number, time: number, actionId: string |
   return { id, pos: { x, y }, time, actionId, handleIn: null, handleOut: null };
 }
 
+/** A Unit that can stop, and so pivots corners rather than arcing through them. */
+const PIVOTER = { speed: 120, minSpeed: 0, turnRateDegPerSec: 90 };
+/** A Unit that cannot stop: it swings wide through anything sharper than its turning circle. */
+const ARCER = { speed: 220, minSpeed: 130, turnRateDegPerSec: 90 };
+
 function action(overrides: Partial<AuthoredAction> = {}): AuthoredAction {
   return {
     id: "a1",
@@ -41,42 +46,81 @@ describe("instanceStateAt", () => {
   const steps = [step("s0", 0, 0, 0), step("s1", 120, 0, 2)];
 
   it("returns nothing before the instance spawns", () => {
-    expect(instanceStateAt(steps, 1, -1)).toBeNull();
+    expect(instanceStateAt(steps, PIVOTER, -1)).toBeNull();
   });
 
   it("lands exactly on the destination at the end of the segment", () => {
-    const state = instanceStateAt(steps, 1, 2);
+    const state = instanceStateAt(steps, PIVOTER, 2);
     expect(state?.pos.x).toBeCloseTo(120, 6);
   });
 
   it("interpolates the curve in between", () => {
-    const state = instanceStateAt(steps, 1, 1);
+    const state = instanceStateAt(steps, PIVOTER, 1);
     expect(state?.pos.x).toBeGreaterThan(0);
     expect(state?.pos.x).toBeLessThan(120);
   });
 
   it("holds in place at a terminal step rather than continuing past its last waypoint", () => {
-    const a = instanceStateAt(steps, 1, 5);
-    const b = instanceStateAt(steps, 1, 50);
+    const a = instanceStateAt(steps, PIVOTER, 5);
+    const b = instanceStateAt(steps, PIVOTER, 50);
     expect(a?.pos).toEqual(b?.pos);
     expect(a?.pos.x).toBeCloseTo(120, 6);
   });
 
   it("holds in place while dwelling (a step at its predecessor's position)", () => {
     const dwell = [step("s0", 50, 50, 0), step("s1", 50, 50, 3)];
-    expect(instanceStateAt(dwell, 1, 1.5)?.pos).toEqual({ x: 50, y: 50 });
+    expect(instanceStateAt(dwell, PIVOTER, 1.5)?.pos).toEqual({ x: 50, y: 50 });
+  });
+});
+
+describe("turning limits shape the flown path", () => {
+  // The same right-angle route, flown by a Unit that can stop and one that can't.
+  const corner = [step("s0", 0, 0, 0), step("s1", 300, 0, 2), step("s2", 300, 300, 5)];
+
+  it("a Unit that can stop drives the leg straight", () => {
+    for (const t of [0.5, 1, 1.5]) {
+      expect(instanceStateAt(corner, PIVOTER, t)?.pos.y).toBeCloseTo(0, 6);
+    }
+  });
+
+  it("a Unit that cannot stop swings wide of the straight line to make the corner", () => {
+    const offsets = [0.6, 1, 1.4].map((t) => instanceStateAt(corner, ARCER, t)?.pos.y ?? 0);
+    expect(Math.min(...offsets)).toBeLessThan(-5);
+  });
+
+  it("both still pass through the authored waypoint", () => {
+    expect(instanceStateAt(corner, PIVOTER, 2)?.pos).toEqual({ x: 300, y: 0 });
+    const arcer = instanceStateAt(corner, ARCER, 2);
+    expect(arcer?.pos.x).toBeCloseTo(300, 6);
+    expect(arcer?.pos.y).toBeCloseTo(0, 6);
+  });
+
+  it("a pivoting Unit holds position while it rotates, and turns as it does", () => {
+    // 90 deg at 90 deg/sec = a 1s pivot at the corner before it sets off south.
+    const early = instanceHeadingDegAt(corner, PIVOTER, 2.1);
+    const late = instanceHeadingDegAt(corner, PIVOTER, 2.9);
+    expect(instanceStateAt(corner, PIVOTER, 2.5)?.pos).toEqual({ x: 300, y: 0 });
+    expect(early).toBeLessThan(late);
+    expect(early).toBeGreaterThanOrEqual(0);
+    expect(late).toBeLessThanOrEqual(90);
+  });
+
+  it("an arcing Unit never pauses — it is already moving at the waypoint", () => {
+    const before = instanceStateAt(corner, ARCER, 2.05)?.pos;
+    const after = instanceStateAt(corner, ARCER, 2.25)?.pos;
+    expect(before).not.toEqual(after);
   });
 });
 
 describe("instanceHeadingDegAt", () => {
   it("reads the direction of travel off the curve", () => {
     const steps = [step("s0", 0, 0, 0), step("s1", 0, 100, 2)];
-    expect(instanceHeadingDegAt(steps, 1, 1)).toBeCloseTo(90, 1); // due south
+    expect(instanceHeadingDegAt(steps, PIVOTER, 1)).toBeCloseTo(90, 1); // due south
   });
 
   it("falls back to a fixed stand-in when there is no travel to read", () => {
     const dwell = [step("s0", 10, 10, 0), step("s1", 10, 10, 2)];
-    expect(instanceHeadingDegAt(dwell, 1, 1)).toBe(90);
+    expect(instanceHeadingDegAt(dwell, PIVOTER, 1)).toBe(90);
   });
 });
 

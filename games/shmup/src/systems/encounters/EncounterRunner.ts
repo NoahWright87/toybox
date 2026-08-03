@@ -460,14 +460,14 @@ export class EncounterRunner {
     const steps = instance.steps;
     if (!steps) return;
     const localT = this.clockSec - instance.startSec;
-    const state = instanceStateAt(steps, instance.def.turnRate, localT);
+    const state = instanceStateAt(steps, instance.def, localT);
     if (!state) return;
 
     const screen = toScreen(this.frameFor(instance), state.pos);
     instance.entity.setPosition(screen.x, screen.y);
 
     const action = this.actionById(instance.def.actions, state.step.actionId);
-    const heading = instanceHeadingDegAt(steps, instance.def.turnRate, localT);
+    const heading = instanceHeadingDegAt(steps, instance.def, localT);
     instance.facingDeg = action ? this.facingFor(action, screen, heading) : heading;
     instance.entity.setRotation(facingToRotation(instance.facingDeg));
     instance.entity.setInvincible(invincibleAt(steps, instance.def.actions, localT));

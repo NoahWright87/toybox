@@ -1,94 +1,95 @@
 import { describe, it, expect } from "vitest";
-import { DEMO_LOOP_RADIUS, DEMO_WAYPOINTS, demoLoopSegments, lapSeconds, loopLength, positionAt, sampleLoop } from "./unitMovementPreview";
+import { DEMO_LOOP_RADIUS, DEMO_WAYPOINTS, buildDemoLap, sampleDemoLap, type UnitMotionStats } from "./unitMovementPreview";
 
-const STRAIGHT_LOOP_LENGTH = 4 * Math.hypot(DEMO_LOOP_RADIUS, DEMO_LOOP_RADIUS);
+const TANK: UnitMotionStats = { speed: 70, minSpeed: 0, turnRateDegPerSec: 30 };
+const JET: UnitMotionStats = { speed: 220, minSpeed: 130, turnRateDegPerSec: 90 };
+const TURRET: UnitMotionStats = { speed: 0, minSpeed: 0, turnRateDegPerSec: 120 };
 
-describe("demoLoopSegments", () => {
-  it("is a closed loop — every segment ends where the next one starts", () => {
-    const segments = demoLoopSegments(1);
-    segments.forEach((segment, i) => {
-      expect(segment.p3).toEqual(segments[(i + 1) % segments.length].p0);
-    });
+describe("buildDemoLap", () => {
+  it("closes the loop — four waypoints, four legs, ending back at the start", () => {
+    const lap = buildDemoLap(JET);
+    expect(lap.legs).toHaveLength(DEMO_WAYPOINTS.length);
+    expect(lap.legs[lap.legs.length - 1].segment.p3).toEqual(DEMO_WAYPOINTS[0]);
   });
 
-  it("turnRate 0 collapses every handle onto its waypoint — the bare straight-line diamond", () => {
-    const segments = demoLoopSegments(0);
-    for (const segment of segments) {
-      expect(segment.p1).toEqual(segment.p0);
-      expect(segment.p2).toEqual(segment.p3);
-      expect(segment.length).toBeCloseTo(Math.hypot(DEMO_LOOP_RADIUS, DEMO_LOOP_RADIUS), 4);
+  it("a Unit that can stop pivots the corners and drives the legs straight", () => {
+    const lap = buildDemoLap(TANK);
+    expect(lap.pivots).toBe(true);
+    expect(lap.minTurnRadius).toBe(0);
+    // 90 deg corners at 30 deg/sec.
+    for (const leg of lap.legs) expect(leg.pivotSec).toBeCloseTo(3, 4);
+    for (const leg of lap.legs) expect(leg.segment.length).toBeCloseTo(Math.hypot(DEMO_LOOP_RADIUS, DEMO_LOOP_RADIUS), 1);
+  });
+
+  it("a Unit that cannot stop never pivots and never bends tighter than its turning circle", () => {
+    const lap = buildDemoLap(JET);
+    expect(lap.pivots).toBe(false);
+    expect(lap.minTurnRadius).toBeGreaterThan(80);
+    for (const leg of lap.legs) {
+      expect(leg.pivotSec).toBe(0);
+      expect(leg.segment.minRadius).toBeGreaterThanOrEqual(lap.minTurnRadius);
     }
-    expect(loopLength(segments)).toBeCloseTo(STRAIGHT_LOOP_LENGTH, 4);
   });
 
-  it("a higher turnRate bends the path out into a longer lap", () => {
-    const lengths = [0, 0.5, 1, 1.5].map((rate) => loopLength(demoLoopSegments(rate)));
-    for (let i = 1; i < lengths.length; i++) {
-      expect(lengths[i]).toBeGreaterThan(lengths[i - 1]);
-    }
+  it("gives a Unit that cannot move at all a lap it still visibly travels", () => {
+    const lap = buildDemoLap(TURRET);
+    expect(lap.totalSec).toBeGreaterThan(0);
+    expect(Number.isFinite(lap.totalSec)).toBe(true);
   });
 
-  it("stops responding past DEMO_HANDLE_REACH — the authored handles are the ceiling the clamp works against", () => {
-    expect(loopLength(demoLoopSegments(2))).toBeCloseTo(loopLength(demoLoopSegments(5)), 4);
+  it("a slower Unit takes longer round the same circuit", () => {
+    const slow = buildDemoLap({ speed: 40, minSpeed: 15, turnRateDegPerSec: 8 });
+    const quick = buildDemoLap({ speed: 240, minSpeed: 140, turnRateDegPerSec: 100 });
+    expect(slow.totalSec).toBeGreaterThan(quick.totalSec);
   });
 
-  it("treats a negative turnRate as 0 rather than flipping the handles inside out", () => {
-    expect(loopLength(demoLoopSegments(-1))).toBeCloseTo(STRAIGHT_LOOP_LENGTH, 4);
+  it("charges a slow-turning pivoter more lap time than a fast-turning one", () => {
+    const slow = buildDemoLap({ speed: 70, minSpeed: 0, turnRateDegPerSec: 15 });
+    const fast = buildDemoLap({ speed: 70, minSpeed: 0, turnRateDegPerSec: 180 });
+    expect(slow.totalSec).toBeGreaterThan(fast.totalSec);
   });
 });
 
-describe("positionAt", () => {
-  it("starts on the first waypoint and returns to it after exactly one lap", () => {
-    const segments = demoLoopSegments(1);
-    const total = loopLength(segments);
-    expect(positionAt(segments, 0)).toEqual(DEMO_WAYPOINTS[0]);
-    const wrapped = positionAt(segments, total);
-    expect(wrapped.x).toBeCloseTo(DEMO_WAYPOINTS[0].x, 4);
-    expect(wrapped.y).toBeCloseTo(DEMO_WAYPOINTS[0].y, 4);
+describe("sampleDemoLap", () => {
+  it("starts on the first waypoint and returns there after a full lap", () => {
+    const lap = buildDemoLap(JET);
+    expect(sampleDemoLap(lap, 0).pos).toEqual(DEMO_WAYPOINTS[0]);
+    const wrapped = sampleDemoLap(lap, lap.totalSec);
+    expect(wrapped.pos.x).toBeCloseTo(DEMO_WAYPOINTS[0].x, 4);
+    expect(wrapped.pos.y).toBeCloseTo(DEMO_WAYPOINTS[0].y, 4);
   });
 
   it("wraps forwards and backwards rather than running off the end", () => {
-    const segments = demoLoopSegments(1);
-    const total = loopLength(segments);
-    const mid = positionAt(segments, total / 3);
-    for (const laps of [4, -4]) {
-      const wrapped = positionAt(segments, total / 3 + total * laps);
-      expect(wrapped.x).toBeCloseTo(mid.x, 4);
-      expect(wrapped.y).toBeCloseTo(mid.y, 4);
+    const lap = buildDemoLap(JET);
+    const mid = sampleDemoLap(lap, lap.totalSec / 3);
+    for (const laps of [3, -3]) {
+      const wrapped = sampleDemoLap(lap, lap.totalSec / 3 + lap.totalSec * laps);
+      expect(wrapped.pos.x).toBeCloseTo(mid.pos.x, 4);
+      expect(wrapped.pos.y).toBeCloseTo(mid.pos.y, 4);
     }
   });
 
-  it("passes through each waypoint in turn on a straight-line lap", () => {
-    const segments = demoLoopSegments(0);
-    const legLength = Math.hypot(DEMO_LOOP_RADIUS, DEMO_LOOP_RADIUS);
-    DEMO_WAYPOINTS.forEach((waypoint, i) => {
-      const pos = positionAt(segments, legLength * i);
-      expect(pos.x).toBeCloseTo(waypoint.x, 4);
-      expect(pos.y).toBeCloseTo(waypoint.y, 4);
-    });
-  });
-});
-
-describe("sampleLoop", () => {
-  it("heads clockwise — leaving the top waypoint means travelling right/east", () => {
-    const { headingDeg } = sampleLoop(demoLoopSegments(0), 0);
-    expect(headingDeg).toBeCloseTo(45, 1); // straight-line diamond: top corner to right corner
+  it("holds position while pivoting, and turns while it does", () => {
+    const lap = buildDemoLap(TANK);
+    const quarterIn = sampleDemoLap(lap, 0.25);
+    const halfIn = sampleDemoLap(lap, 1.5);
+    expect(quarterIn.pivoting).toBe(true);
+    expect(halfIn.pivoting).toBe(true);
+    expect(halfIn.pos).toEqual(quarterIn.pos); // stationary through the turn
+    expect(halfIn.headingDeg).not.toBeCloseTo(quarterIn.headingDeg, 1); // but rotating through it
   });
 
-  it("faces along the curve's own tangent at a rounded corner", () => {
-    // With the handles at full reach the path leaves the top waypoint due east, not diagonally.
-    const { headingDeg } = sampleLoop(demoLoopSegments(2), 0);
-    expect(Math.abs(headingDeg)).toBeLessThan(0.5);
-  });
-});
-
-describe("lapSeconds", () => {
-  it("is the loop's length divided by speed", () => {
-    const segments = demoLoopSegments(0);
-    expect(lapSeconds(segments, 100)).toBeCloseTo(STRAIGHT_LOOP_LENGTH / 100, 4);
+  it("travels once the pivot is paid for", () => {
+    const lap = buildDemoLap(TANK);
+    const moving = sampleDemoLap(lap, lap.legs[0].pivotSec + 0.5);
+    expect(moving.pivoting).toBe(false);
+    expect(moving.pos).not.toEqual(DEMO_WAYPOINTS[0]);
   });
 
-  it("is null at speed 0 — a Unit that holds position never completes a lap", () => {
-    expect(lapSeconds(demoLoopSegments(1), 0)).toBeNull();
+  it("an arc Unit is never sampled mid-pivot, because it has none", () => {
+    const lap = buildDemoLap(JET);
+    for (let i = 0; i < 40; i++) {
+      expect(sampleDemoLap(lap, (lap.totalSec * i) / 40).pivoting).toBe(false);
+    }
   });
 });

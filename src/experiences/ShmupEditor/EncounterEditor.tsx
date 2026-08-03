@@ -7,7 +7,7 @@ import PartActionPanel from "./PartActionPanel";
 import UnitScalingPanel from "./UnitScalingPanel";
 import { Dial } from "../../components/Dial/Dial";
 import { resolveSpriteUrl } from "./enemySprites";
-import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
+import { effectiveHandleIn, effectiveHandleOut, limitsFor, solvePathCached } from "./pathSolver";
 import { addStep, deleteStepsFrom, isFirstStep, moveStep, updateStep } from "./encounterSteps";
 import { addPartAction, deletePartAction, seedPartActions, updatePartAction } from "./partActions";
 import { isStepTimeDerived, recomputeStepTimes } from "./encounterTiming";
@@ -178,8 +178,17 @@ function partActionAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undef
  * shows up to two small draggable handle dots (⬦, teal) connected to it by
  * a dashed stalk — one shaping the curve leaving it (skipped on the last
  * step), one shaping the curve arriving at it (skipped on the first step)
- * — dragging either bends the curve, clamped by the owning Unit's
- * `turnRate` relative to that segment's straight-line length.
+ * — dragging either bends the curve, live-clamped to what the owning
+ * Unit's turning limits allow (`pathSolver.ts`).
+ *
+ * **The drawn curve is the solved path, not the raw handles.** Waypoints
+ * are hard constraints; the shape between them is derived from the Unit's
+ * `minSpeed`/`turnRateDegPerSec` (`turning.ts`). A jet given a right-angle
+ * corner swings wide through it because that's the only way it can pass
+ * through all three waypoints; a tank drives the legs straight and pivots
+ * on the spot, paying for the corner in time instead. Nothing is ever
+ * marked invalid — the editor solves for the closest flyable path and
+ * draws that.
  *
  * **Most steps' `time` is derived, not typed in.** `encounterTiming.ts`
  * computes it from the segment's arc length and the owning Unit's `speed`
@@ -642,20 +651,34 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragPos(null);
   }
 
-  /** Begins dragging `which` handle of `stepId`, seeding the drag from its current resolved (possibly-defaulted, turnRate-clamped) absolute position so the dot doesn't jump when you first touch it. */
+  /**
+   * The handle offset the path solver actually used for `which` side of
+   * step `idx` — optionally after pretending that handle was dragged to
+   * `proposed`. That "pretend" is how a drag stays honest: the dot follows
+   * the pointer only as far as the Unit's turning circle allows
+   * (`pathSolver.ts`), and refuses past it, instead of letting you author a
+   * curve the Unit can't fly and quietly redrawing something else.
+   */
+  function solvedHandleOffset(instance: EncounterUnit, idx: number, which: "in" | "out", proposed?: Vec2): Vec2 | null {
+    const unitDef = units.find((u) => u.id === instance.unitDefId);
+    if (!unitDef) return proposed ?? null;
+    const steps = instance.steps.map((s, i) => (i === idx && proposed ? { ...s, [which === "out" ? "handleOut" : "handleIn"]: proposed } : s));
+    const solved = solvePathCached(steps, limitsFor(unitDef));
+    return which === "out" ? effectiveHandleOut(solved, steps, idx) : effectiveHandleIn(solved, steps, idx);
+  }
+
+  /** Begins dragging `which` handle of `stepId`, seeding the drag from the handle's current solved position so the dot doesn't jump when you first touch it. */
   function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<HTMLButtonElement>) {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     const instance = draft.units.find((u) => u.id === instanceId);
     const idx = instance?.steps.findIndex((s) => s.id === stepId) ?? -1;
     if (!instance || idx === -1) return;
-    const step = instance.steps[idx];
     const other = which === "out" ? instance.steps[idx + 1] : instance.steps[idx - 1];
     if (!other) return;
-    const unitDef = units.find((u) => u.id === instance.unitDefId);
-    const turnRate = unitDef?.turnRate ?? 1;
-    const currentAbsolute = which === "out" ? resolveHandleOut(step, other.pos, turnRate) : resolveHandleIn(step, other.pos, turnRate);
-    setDragHandle({ instanceId, stepId, which, offset: { x: currentAbsolute.x - step.pos.x, y: currentAbsolute.y - step.pos.y } });
+    const offset = solvedHandleOffset(instance, idx, which);
+    if (!offset) return;
+    setDragHandle({ instanceId, stepId, which, offset });
   }
   function endHandleDrag() {
     if (!dragHandle) return;
@@ -738,11 +761,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         const step = instance.steps[idx];
         const other = dragHandle.which === "out" ? instance.steps[idx + 1] : instance.steps[idx - 1];
         if (other) {
-          const unitDef = units.find((u) => u.id === instance.unitDefId);
-          const turnRate = unitDef?.turnRate ?? 1;
-          const segmentLength = distanceBetween(step.pos, other.pos);
           const rawOffset: Vec2 = { x: worldPos.x - step.pos.x, y: worldPos.y - step.pos.y };
-          setDragHandle({ ...dragHandle, offset: clampHandleOffset(rawOffset, turnRate * segmentLength) });
+          // Clamped live rather than only on release: the offset stored here is
+          // already the one the Unit can fly, so the dot, the drawn curve and
+          // the value written back on release can never disagree.
+          const offset = solvedHandleOffset(instance, idx, dragHandle.which, rawOffset);
+          if (offset) setDragHandle({ ...dragHandle, offset });
         }
       }
     }
@@ -1113,15 +1137,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const selectedShiftY = selectedInstance ? renderFrameFor(selectedInstance).shiftY : 0;
 
   const handleDots: { which: "in" | "out"; stage: Vec2 }[] = [];
-  if (selectedInstance && selectedStep && !scalingPanelOpen) {
-    const turnRate = selectedUnitDef?.turnRate ?? 1;
-    const effSelected = effectiveStep(selectedInstance.id, selectedStep);
-    const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
-    if (prevStep) handleDots.push({ which: "in", stage: toStageAt(resolveHandleIn(effSelected, prevStep.pos, turnRate), selectedShiftY) });
-    if (selectedNextStep) {
-      const effNext = effectiveStep(selectedInstance.id, selectedNextStep);
-      handleDots.push({ which: "out", stage: toStageAt(resolveHandleOut(effSelected, effNext.pos, turnRate), selectedShiftY) });
-    }
+  if (selectedInstance && selectedStep && !scalingPanelOpen && selectedUnitDef) {
+    // Solved against the *effective* (mid-drag) steps, so the dots sit on the
+    // curve actually being drawn rather than on the pre-drag one.
+    const effSteps = selectedInstance.steps.map((s) => effectiveStep(selectedInstance.id, s));
+    const solved = solvePathCached(effSteps, limitsFor(selectedUnitDef));
+    const here = effSteps[selectedIdx].pos;
+    const push = (which: "in" | "out", offset: Vec2 | null) => {
+      if (offset) handleDots.push({ which, stage: toStageAt({ x: here.x + offset.x, y: here.y + offset.y }, selectedShiftY) });
+    };
+    if (selectedIdx > 0) push("in", effectiveHandleIn(solved, effSteps, selectedIdx));
+    if (selectedNextStep) push("out", effectiveHandleOut(solved, effSteps, selectedIdx));
   }
   const selectedNodeStage = selectedInstance && selectedStep ? toStageAt(effectiveStep(selectedInstance.id, selectedStep).pos, selectedShiftY) : null;
   /**
@@ -1348,12 +1374,16 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 </defs>
                 {draft.units.flatMap((instance) => {
                   const unitDef = units.find((u) => u.id === instance.unitDefId);
-                  const turnRate = unitDef?.turnRate ?? 1;
                   const { shiftY, offLayer } = renderFrameFor(instance);
+                  // The drawn curve is the solved one — what this Unit can
+                  // physically fly through these waypoints, swing-wide detours
+                  // and all (pathSolver.ts), not the raw handles.
+                  const effSteps = instance.steps.map((s) => effectiveStep(instance.id, s));
+                  const solved = unitDef ? solvePathCached(effSteps, limitsFor(unitDef)) : null;
                   return instance.steps.slice(1).map((step, i) => {
-                    const prev = effectiveStep(instance.id, instance.steps[i]);
-                    const cur = effectiveStep(instance.id, step);
-                    const { p0, p1, p2, p3 } = resolveSegment(prev, cur, turnRate);
+                    const segment = solved?.segments[i];
+                    if (!segment) return null;
+                    const { p0, p1, p2, p3 } = segment;
                     const a = toStageAt(p0, shiftY);
                     const b = toStageAt(p1, shiftY);
                     const c = toStageAt(p2, shiftY);

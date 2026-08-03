@@ -556,9 +556,11 @@ export default function ShmupEditor() {
             )}
             {helpTopic === "unit" && (
               <ul className="shmup-help-modal__list">
-                <li>The Stats tab's preview flies the Unit around a fixed demo circuit: Speed sets how fast it laps it, Turn rate how far its path bends out at the corners, and the ring under the sprite is its hitbox at true scale against that path.</li>
+                <li>The Stats tab's preview flies the Unit around a demo circuit solved exactly the way a real encounter is — so it shows what this Unit will actually do with a route that has corners in it. The orange ring is its hitbox at true scale; the purple ring is the tightest turn it can make.</li>
                 <li>Speed is a Unit's fixed max — an Action's Movement % dial selects how much of it is actually used, so difficulty scaling never has to touch Speed directly.</li>
-                <li>Turn rate caps how sharply a Unit can curve between an encounter's waypoints (a multiple of each segment's straight-line length). 0 = straight lines only.</li>
+                <li>Min speed is the slowest it can go. 0 means it can stop — so it drives straight lines and turns on the spot, spending time instead of distance on a corner (a tank, a helicopter). Above 0 it can never stop, so it has a real turning circle and swings wide through corners it can't make (a jet, a ship, anything on wheels).</li>
+                <li>Turn °/sec is how fast it changes heading. With Min speed it gives the turning circle: min speed ÷ turn rate. A fast jet with a good turn rate still corners wide, because it's carrying speed through the turn.</li>
+                <li>You never have to make a route "legal" — place the waypoints you want and the editor bends the path into something the Unit can actually fly through all of them, or gets as close as the geometry allows.</li>
                 <li>Layer (Ground/Air/Doodad) picks which roster a Unit shows up under in the Encounter editor's "+ Add" picker.</li>
                 <li>Visuals is the sprite (built-in or your own upload); animation will live there too once it exists.</li>
                 <li>Default Action (Actions tab) is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</li>
