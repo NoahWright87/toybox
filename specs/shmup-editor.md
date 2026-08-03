@@ -413,10 +413,10 @@ each Part's own timeline track.**
   ActionDef[]`** buffet + `parts: UnitPart[]`, authored once and
   referenced (not re-authored) from any encounter placement. A small
   **Units** menu (alongside **Tiles**) manages the library via
-  `UnitStatsForm.tsx` (stats fields, an Actions section, then a Parts
-  section — list + New/Edit/Delete, mirroring the tile editor's Encounters
-  section); `UnitList.tsx` is the same visual-checker sprite grid as the
-  tile list.
+  `UnitStatsForm.tsx` (a Stats page, a Visuals page, an Actions section,
+  then a Parts section — list + New/Edit/Delete, mirroring the tile
+  editor's Encounters section); `UnitList.tsx` is the same visual-checker
+  sprite grid as the tile list.
 - A **`UnitPart`** (`unitTypes.ts`) is `{id, name, offset, spriteId,
   customSprite, hasHitbox, hasHealth, hp, damageMultiplier, actions:
   ActionDef[]}` — see "Attacks" below for the Action model and "Per-Part
@@ -470,7 +470,7 @@ this editor doesn't need to know about.
 spawned *dynamically* — via another Action's `attack.spawnUnitId` — rather
 than hand-placed on a tile, since a dynamic spawn has no placement-time
 "choose a starting Action" step to draw from. Set via a picker on
-`UnitStatsForm.tsx`, listing that Unit's own `actions`.
+`UnitStatsForm.tsx`'s **Actions** tab, listing that Unit's own `actions`.
 
 **Three dedicated concepts dissolved into ordinary steps** rather
 than surviving as their own types, once behavior stopped living on a
@@ -1488,7 +1488,9 @@ paragraphs.** Reworked to match, same reasoning as the mobile-UX pass:
   /layer/default-Action), **Actions** (the Unit's own buffet — list +
   inline `ActionForm`), **Parts** (list, Edit still navigates to the
   dedicated `PartEditor.tsx` view — a Part is a full sub-form in its own
-  right, unlike an Action, so it doesn't fit inline).
+  right, unlike an Action, so it doesn't fit inline). *Basics has since
+  split into Stats + Visuals and lost the default-Action picker to the
+  Actions tab — see "The Unit editor's Stats page shows the stats" below.*
 - **`PartEditor.tsx`**: **Basics** (name/sprite/`PartPositionEditor` +
   Offset X/Y Dials), **Hitbox** (has-hitbox/damage-multiplier Dial/
   has-health/HP Dial), **Actions** (list + inline `ActionForm`, same as
@@ -1510,6 +1512,67 @@ generic and were never actually scoped to that one view. **Every removed
 Actions" topic** (`ShmupEditor.tsx`), alongside the pre-existing Tile
 Editor/Encounter Editor topics — same "explanatory text lives in Help, not
 inline" convention the Encounter editor's own tab pass established.
+
+### The Unit editor's Stats page shows the stats (`UnitStatsForm.tsx`, `UnitMovementPreview.tsx`, `unitMovementPreview.ts`)
+
+A later quality pass over the Unit editor specifically (Noah). The tab
+pass above gave `UnitStatsForm.tsx` tabs, but its **Basics** page was
+still a grab bag — a sprite picker sitting on top of six stat Dials, two
+selects, and no picture of what any of it did.
+
+**Basics split into Stats + Visuals**, and `defaultActionId` moved to
+**Actions**:
+
+- **Stats** — name, the live movement preview (below), Speed/Turn rate/
+  Hitbox size Dials, HP/Contact dmg/Score Dials, Layer.
+- **Visuals** — the `SpritePicker` alone today. It's its own tab because
+  it's the seam every future "how does this Unit look" field lands on
+  (per-Unit animation being the near-term one), and a tab that grows
+  beats a stats page that slowly becomes two unrelated pages.
+- **Actions** — the default-Action picker now sits at the top of this
+  tab, directly above the buffet it picks from. It was only ever on
+  Basics because that's where the plain `<select>`s happened to live; it
+  is meaningless until the Unit has at least one Action.
+
+**`UnitMovementPreview.tsx`** is the Stats page's counterpart to
+`ActionPreview.tsx`: a 220px canvas in which the Unit laps a fixed
+synthetic circuit forever, nose pointed along the curve, so `speed`/
+`turnRate`/`size` are watched rather than guessed at. The geometry is
+pure and tested (`unitMovementPreview.ts`):
+
+- **The circuit is a diamond** ~a third of a tile across (`TILE_UNIT` =
+  720), not an authored path — there's no encounter in scope while
+  editing a Unit. Four hard corners is where a turn-rate difference reads
+  most clearly.
+- **`turnRate` clamps each handle** through `bezier.ts`'s own
+  `clampHandleOffset`, the same call the encounter canvas makes, so the
+  preview can't drift from what a real path does. The demo's own addition
+  is deliberately over-long handles (`DEMO_HANDLE_REACH` = 2× the segment
+  length, laid along the loop's tangent): a real step's handles default
+  to the straight-line-equivalent position, which no `turnRate` above 1/3
+  clamps at all, so a demo built on defaults would sit stone-still while
+  the knob turned. With the handles authored past every plausible
+  `turnRate`, the clamp is always what decides the shape — 0 draws the
+  bare sharp-cornered diamond, higher values bend the corners out into
+  progressively wider arcs, and past 2 the knob stops changing anything.
+- **`speed` paces travel as arc length ÷ speed**, per segment — the
+  identical model `encounterTiming.ts` uses to time a real step and
+  `movementPreview.ts` uses to interpolate along one. A caption under the
+  canvas carries the one number the picture can't ("4.7s per lap", or
+  "Speed 0 — holds position" for a turret).
+- **Distance is accumulated per frame** (`distance += speed * dt`), not
+  recomputed as `speed * elapsed`. Identical at a constant speed, but
+  only the accumulating form keeps the Unit where it is while the Speed
+  dial is being dragged; the closed-form one teleports it around the loop
+  on every change, which reads as a glitch rather than a speed-up.
+- **The hitbox draws as a ring at true scale** against the path, with the
+  sprite over it at `size × 3` — mirroring games/shmup's
+  `TUNING.encounters.artToHitboxRatio`, and rotated by the same nose-up
+  `ART_FACING_DEG` convention `spriteScale.ts` uses. Both are copied
+  constants, not imports: `spriteScale.ts` pulls in the game-only `TUNING`
+  object (`editorScale.ts`'s `scrollModel.ts` remains the single
+  shared-code exception). A motion trail of ghost dots spaced in *time*
+  stretches out on its own as speed climbs.
 
 ### Sprites (`enemySprites.ts`, `SpritePicker.tsx`)
 

@@ -556,10 +556,12 @@ export default function ShmupEditor() {
             )}
             {helpTopic === "unit" && (
               <ul className="shmup-help-modal__list">
+                <li>The Stats tab's preview flies the Unit around a fixed demo circuit: Speed sets how fast it laps it, Turn rate how far its path bends out at the corners, and the ring under the sprite is its hitbox at true scale against that path.</li>
                 <li>Speed is a Unit's fixed max — an Action's Movement % dial selects how much of it is actually used, so difficulty scaling never has to touch Speed directly.</li>
-                <li>Turn rate caps how sharply a Unit can curve between an encounter's waypoints (a multiple of each segment's straight-line length).</li>
+                <li>Turn rate caps how sharply a Unit can curve between an encounter's waypoints (a multiple of each segment's straight-line length). 0 = straight lines only.</li>
                 <li>Layer (Ground/Air/Doodad) picks which roster a Unit shows up under in the Encounter editor's "+ Add" picker.</li>
-                <li>Default Action is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</li>
+                <li>Visuals is the sprite (built-in or your own upload); animation will live there too once it exists.</li>
+                <li>Default Action (Actions tab) is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</li>
                 <li>An Action's own Actions buffet is used directly when the Unit has no Parts; a Part's own Actions govern that Part's independent attack track instead.</li>
                 <li>A Part's Position tab: drag its sprite over the dimmed reference of the Unit's own body (or use the Offset dials) — this anchors that Part's Actions' facing/attack.</li>
                 <li>A Part's Hitbox tab: unchecked = fused to the Unit's body, damage attributed to the Unit. Checked = its own hitbox, subject to Damage x (a weak point &gt;1, armor &lt;1); its own HP pool if Has HP is also checked, otherwise damage passes through to the Unit's shared HP.</li>

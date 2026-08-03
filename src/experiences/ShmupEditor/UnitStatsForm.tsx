@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Dial } from "../../components/Dial/Dial";
 import SpritePicker from "./SpritePicker";
 import ActionForm from "./ActionForm";
+import UnitMovementPreview from "./UnitMovementPreview";
+import { resolveSpriteUrl } from "./enemySprites";
 import { cloneAction, clonePart, createBlankAction, type ActionDef, type UnitDef, type UnitLayer, type UnitPart } from "./unitTypes";
 
 interface UnitStatsFormProps {
@@ -19,7 +21,7 @@ interface UnitStatsFormProps {
   onDeletePart: (partId: string) => void;
 }
 
-type UnitTab = "basics" | "actions" | "parts";
+type UnitTab = "stats" | "visuals" | "actions" | "parts";
 
 function validate(unit: UnitDef): string | null {
   if (!unit.name.trim()) return "Name is required.";
@@ -47,18 +49,30 @@ function actionSummary(action: ActionDef): string {
  * PartEditor.tsx), authored once here and selected/placed repeatedly
  * across encounters (see EncounterEditor.tsx).
  *
- * **Tabbed (Basics/Actions/Parts) with `Dial` knobs for the stat fields**,
- * mirroring `EncounterEditor.tsx`'s tab treatment — explanatory text that
- * used to sit inline as `.shmup-hint` paragraphs now lives in the Help
- * menu's "Units & Actions" topic instead. Parts still navigate to a
+ * **Tabbed (Stats/Visuals/Actions/Parts) with `Dial` knobs for the stat
+ * fields**, mirroring `EncounterEditor.tsx`'s tab treatment — explanatory
+ * text that used to sit inline as `.shmup-hint` paragraphs now lives in the
+ * Help menu's "Units & Actions" topic instead. Parts still navigate to a
  * dedicated `PartEditor.tsx` view on Edit (a Part is a full sub-form in its
  * own right, not something that fits inline the way an Action does).
+ *
+ * **Visuals is its own tab, not part of Stats** (Noah) — today it holds
+ * only the sprite picker, but it's the seam everything about how a Unit
+ * *looks* lands on next (per-Unit animation being the near-term one), and a
+ * tab that grows is better than a stats page that slowly turns into two
+ * unrelated pages. `defaultActionId` moved off that page too, onto
+ * **Actions**, next to the buffet whose entries it picks from — it was only
+ * ever on Basics because that's where the plain fields happened to live.
+ *
+ * Stats leads with a live `UnitMovementPreview` — `speed`/`turnRate`/hitbox
+ * `size` are exactly the kind of numbers you can't judge without watching
+ * them, the same argument `ActionPreview.tsx` settles on the Action side.
  */
 export default function UnitStatsForm({ unit, units, onSave, onCancel, onDuplicate, onDelete, onDraftChange, onNewPart, onEditPart, onDeletePart }: UnitStatsFormProps) {
   /** Delete is destructive and sits next to Save, so it arms first. */
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState<UnitDef>(unit);
-  const [tab, setTab] = useState<UnitTab>("basics");
+  const [tab, setTab] = useState<UnitTab>("stats");
   const [pendingDeletePartId, setPendingDeletePartId] = useState<string | null>(null);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [pendingDeleteActionId, setPendingDeleteActionId] = useState<string | null>(null);
@@ -123,8 +137,11 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDuplica
     <div className="shmup-enemy-form">
       <div className="shmup-enc-tabs">
         <div className="shmup-enc-tabbar">
-          <button type="button" className={`shmup-enc-tab-btn ${tab === "basics" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("basics")}>
-            Basics
+          <button type="button" className={`shmup-enc-tab-btn ${tab === "stats" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("stats")}>
+            Stats
+          </button>
+          <button type="button" className={`shmup-enc-tab-btn ${tab === "visuals" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("visuals")}>
+            Visuals
           </button>
           <button type="button" className={`shmup-enc-tab-btn ${tab === "actions" ? "shmup-enc-tab-btn--active" : ""}`} onClick={() => setTab("actions")}>
             Actions ({draft.actions.length})
@@ -135,52 +152,63 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDuplica
         </div>
 
         <div className="shmup-enc-tab-content">
-          {tab === "basics" && (
+          {tab === "stats" && (
             <div className="shmup-panel">
               <label className="shmup-field shmup-field--inline">
                 <span>Name</span>
                 <input type="text" className="shmup-input" value={draft.name} onChange={(e) => update({ name: e.target.value })} />
               </label>
 
-              <SpritePicker spriteId={draft.spriteId} customSprite={draft.customSprite} onChange={(spriteId, customSprite) => update({ spriteId, customSprite })} />
+              {/* Speed/Turn rate/Hitbox size are the three dials below it, so it sits directly above them rather than at the top of the tab. */}
+              <UnitMovementPreview
+                spriteUrl={resolveSpriteUrl(draft.spriteId, draft.customSprite)}
+                speed={draft.speed}
+                turnRate={draft.turnRate}
+                size={draft.size}
+              />
 
-              <div className="shmup-dial-grid">
-                <Dial label="HP" value={draft.hp} onChange={(v) => update({ hp: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
-                <Dial label="Contact dmg" value={draft.contactDamage} onChange={(v) => update({ contactDamage: Math.max(0, v) })} min={0} step={1} showNudgeButtons />
-                <Dial label="Score" value={draft.scoreValue} onChange={(v) => update({ scoreValue: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
-              </div>
               <div className="shmup-dial-grid">
                 <Dial label="Speed" value={draft.speed} onChange={(v) => update({ speed: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
                 <Dial label="Turn rate" value={draft.turnRate} onChange={(v) => update({ turnRate: Math.max(0, v) })} min={0} step={0.1} showNudgeButtons />
                 <Dial label="Hitbox size" value={draft.size} onChange={(v) => update({ size: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
               </div>
-
-              <div className="shmup-field-row">
-                <label className="shmup-field shmup-field--inline">
-                  <span>Layer</span>
-                  <select className="shmup-input" value={draft.layer} onChange={(e) => update({ layer: e.target.value as UnitLayer })}>
-                    <option value="ground">Ground</option>
-                    <option value="air">Air</option>
-                    <option value="doodad">Doodad</option>
-                  </select>
-                </label>
-                <label className="shmup-field shmup-field--inline">
-                  <span>Default Action</span>
-                  <select className="shmup-input" value={draft.defaultActionId ?? ""} onChange={(e) => update({ defaultActionId: e.target.value === "" ? null : e.target.value })}>
-                    <option value="">(none)</option>
-                    {draft.actions.map((action) => (
-                      <option key={action.id} value={action.id}>
-                        {action.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="shmup-dial-grid">
+                <Dial label="HP" value={draft.hp} onChange={(v) => update({ hp: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
+                <Dial label="Contact dmg" value={draft.contactDamage} onChange={(v) => update({ contactDamage: Math.max(0, v) })} min={0} step={1} showNudgeButtons />
+                <Dial label="Score" value={draft.scoreValue} onChange={(v) => update({ scoreValue: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
               </div>
+
+              <label className="shmup-field shmup-field--inline">
+                <span>Layer</span>
+                <select className="shmup-input" value={draft.layer} onChange={(e) => update({ layer: e.target.value as UnitLayer })}>
+                  <option value="ground">Ground</option>
+                  <option value="air">Air</option>
+                  <option value="doodad">Doodad</option>
+                </select>
+              </label>
+            </div>
+          )}
+
+          {tab === "visuals" && (
+            <div className="shmup-panel">
+              <SpritePicker spriteId={draft.spriteId} customSprite={draft.customSprite} onChange={(spriteId, customSprite) => update({ spriteId, customSprite })} />
             </div>
           )}
 
           {tab === "actions" && (
             <div className="shmup-panel">
+              {/* Lives here rather than on Stats: it picks one of the Actions listed directly below it, and is meaningless until at least one exists. */}
+              <label className="shmup-field shmup-field--inline">
+                <span>Default Action</span>
+                <select className="shmup-input" value={draft.defaultActionId ?? ""} onChange={(e) => update({ defaultActionId: e.target.value === "" ? null : e.target.value })}>
+                  <option value="">(none)</option>
+                  {draft.actions.map((action) => (
+                    <option key={action.id} value={action.id}>
+                      {action.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <ul className="shmup-encounter-list">
                 {draft.actions.map((action) => (
                   <li key={action.id} className="shmup-encounter-list__row shmup-encounter-list__row--stack">

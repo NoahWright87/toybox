@@ -218,6 +218,29 @@
   image-rendering: pixelated;
 }
 
+/* ── Unit movement preview (UnitMovementPreview.tsx) ──────────────────
+   The Stats tab's counterpart to the weapon preview above: a Unit lapping
+   a synthetic circuit forever, so Speed/Turn rate/Hitbox size are watched
+   rather than guessed at. The caption carries the one number the picture
+   can't (seconds per lap). */
+.shmup-unit-motion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.shmup-unit-motion__canvas {
+  display: block;
+  border: 2px solid;
+  border-color: var(--win95-dark, #808080) var(--white, #fff) var(--white, #fff) var(--win95-dark, #808080);
+  image-rendering: pixelated;
+  max-width: 100%;
+}
+.shmup-unit-motion__caption {
+  font-size: 7px;
+  color: var(--purple-secondary, #5b2d8e);
+}
+
 /* ── Part position editor (PartPositionEditor.tsx) ────────────────────
    Dimmed body sprite as a reference frame, the Part's own sprite
    draggable on top, plus arrow-nudge buttons for pixel-precise placement
