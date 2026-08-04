@@ -1618,19 +1618,6 @@
   background: #ff8844;
 }
 
-/* Where an air unit stops riding the scrolling terrain and holds screen
-   position (airFrame.ts's computePinTimeSec — the runtime's own
-   pin-on-first-visible moment). Everything left of it is the fly-in, which
-   is the part that's otherwise invisible on a ruler of plain times. */
-.shmup-timeline__pin {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-left: 2px dashed #66ffee;
-  pointer-events: none;
-}
-
 .shmup-timeline__playhead {
   position: absolute;
   top: 0;

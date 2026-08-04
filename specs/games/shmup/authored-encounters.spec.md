@@ -122,26 +122,21 @@ frames: Ground vs Air":
 
 - **Ground and doodad stay scroll-locked**, resolving against the live frame
   forever.
-- **Air is time-locked, but not from spawn.** The tile's north edge is a full
-  `TILE_UNIT` above the screen at tile-clock zero, so a unit authored at the top
-  of its tile spawns at screen Y −720; pinning its frame there would strand it
-  off-screen forever instead of letting it fly in. An air unit tracks the
-  scrolling frame exactly as a ground unit does **until it is first genuinely on
-  screen**, and pins the frame origin at that moment (`pinnedOriginY`). It
-  therefore still enters on cue where the author drew it, and from then on the
-  only thing that moves it is its own authored path. Pinning the *current*
-  origin makes the handover positionally continuous — nothing jumps on the frame
-  it decouples.
-- **The pin deliberately uses a different visibility test from culling.** Culling
-  uses the generous `despawnMarginPx` so a path looping just off the edge isn't
-  deleted mid-manoeuvre; the pin needs true viewport containment, because keying
-  it off the margin decoupled air units 220px *above* the top edge, where they
-  held station off screen and never appeared at all.
+- **Air is time-locked from spawn.** An air instance captures the frame origin
+  the moment it spawns (`pinnedOriginY`), so its authored route is a route
+  *through the screen*: nothing but its own path ever moves it.
 
-Measured in the engine with a turret and a helicopter authored side by side on
-one tile: both descend together from y −515 to −28 as the tile scrolls in, then
-at the moment the helicopter crosses the top edge it pins at y 5 and holds while
-the turret carries on down (63 → 751) and off the bottom with its terrain.
+  **This replaced a pin-on-first-visibility rule**, under which an air unit rode
+  the scrolling frame until it was first genuinely on screen and pinned there —
+  the reasoning being that the tile's north edge is a full `TILE_UNIT` above the
+  screen at tile-clock zero, so a unit authored high in its tile would otherwise
+  start off-screen and stay there. It worked, but it meant an authored air route
+  slid with the terrain for its first few seconds and then stopped, so the path
+  drawn in the editor was not the path flown, and an author could not say where
+  on screen an aircraft would be. Flying in from off-screen is now something you
+  *draw* — first waypoint outside the camera box, a later one inside it — which
+  is more predictable and more expressive than having the scroll do it. The
+  editor's `airFrame.ts` mirrors this exactly.
 
 **A known consequence:** an air unit whose authored path leaves it parked on
 screen no longer scrolls away, so it is still there when its tile retires
@@ -203,9 +198,8 @@ always one screen across, and no longer stretches to a 3-wide tile.
 
 The editor's **Air** authoring frame is the same geometry read the other way
 round: it holds the camera box still and slides the tile through it, which is
-what an aircraft actually experiences. Air units are drawn riding the terrain
-until their pin moment and holding station after, matching `pinnedOriginY`
-above exactly.
+what an aircraft actually experiences. Air units are drawn holding station for
+their whole lives, matching `pinnedOriginY`-at-spawn above exactly.
 
 ## Display size vs. hitbox size
 

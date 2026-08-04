@@ -3,7 +3,7 @@ import { addStep, updateStep } from "./encounterSteps";
 import { recomputeStepTimes } from "./encounterTiming";
 import { createEncounterUnit, type EncounterUnit } from "./encounterTypes";
 import { createBlankUnit, type UnitDef } from "./unitTypes";
-import { authorLayerOf, computePinTimeSec, displayShiftY, isScrollLocked, pinHorizonSec, pinShiftY, referenceShiftY, scrollOffsetY } from "./airFrame";
+import { airPinSec, authorLayerOf, displayShiftY, isScrollLocked, pinShiftY, referenceShiftY, scrollOffsetY } from "./airFrame";
 import { computeCameraBoundsRect } from "./hitboxPreview";
 import { LEVEL_SCROLL_SPEED, TILE_UNIT, cameraLocalBand, cameraLocalXBand, playerTileLocalY } from "../../../games/shmup/src/systems/encounters/scrollModel";
 
@@ -38,16 +38,18 @@ describe("displayShiftY — ground mode (tile-local, the pre-existing behavior)"
     expect(displayShiftY({ mode: "ground", scrollLocked: true, pinSec: null, t: 7 })).toBe(0);
   });
 
-  it("leaves an air unit on the tile until it pins — the fly-in", () => {
-    expect(displayShiftY({ mode: "ground", scrollLocked: false, pinSec: 3, t: 0 })).toBe(0);
-    expect(displayShiftY({ mode: "ground", scrollLocked: false, pinSec: 3, t: 3 })).toBe(0);
+  it("moves an air unit relative to the terrain at a steady rate, crossing its authored spot at the pin", () => {
+    // It is never attached to the terrain, so in the terrain's own frame it is
+    // always moving — no fly-in phase where it rides along.
+    expect(displayShiftY({ mode: "ground", scrollLocked: false, pinSec: 3, t: 3 })).toBeCloseTo(0);
+    expect(displayShiftY({ mode: "ground", scrollLocked: false, pinSec: 3, t: 0 })).toBeCloseTo(3 * LEVEL_SCROLL_SPEED);
   });
 
   it("drifts a pinned air unit up the tile as the terrain passes beneath it", () => {
     expect(displayShiftY({ mode: "ground", scrollLocked: false, pinSec: 3, t: 5 })).toBeCloseTo(-2 * LEVEL_SCROLL_SPEED);
   });
 
-  it("treats an air unit that never becomes visible as riding the tile forever, like the runtime does", () => {
+  it("leaves an air unit with no pin at all on the tile, rather than guessing a frame for it", () => {
     expect(displayShiftY({ mode: "ground", scrollLocked: false, pinSec: null, t: 9 })).toBe(0);
   });
 });
@@ -57,15 +59,13 @@ describe("displayShiftY — air mode (viewport-locked)", () => {
     expect(displayShiftY({ mode: "air", scrollLocked: true, pinSec: null, t: 4 })).toBeCloseTo(4 * LEVEL_SCROLL_SPEED);
   });
 
-  it("still rides an air unit in with the tile before its pin", () => {
-    expect(displayShiftY({ mode: "air", scrollLocked: false, pinSec: 3, t: 1 })).toBeCloseTo(1 * LEVEL_SCROLL_SPEED);
-    expect(displayShiftY({ mode: "air", scrollLocked: false, pinSec: 3, t: 3 })).toBeCloseTo(3 * LEVEL_SCROLL_SPEED);
-  });
-
-  it("holds a pinned air unit perfectly still afterwards", () => {
+  it("holds an air unit perfectly still — at every scrub time, before its spawn as well as after", () => {
+    // This is the whole point of the rule: an authored air route renders in
+    // exactly one place, so what you draw is where it flies.
     const atPin = displayShiftY({ mode: "air", scrollLocked: false, pinSec: 3, t: 3 });
-    expect(displayShiftY({ mode: "air", scrollLocked: false, pinSec: 3, t: 5 })).toBeCloseTo(atPin);
-    expect(displayShiftY({ mode: "air", scrollLocked: false, pinSec: 3, t: 11 })).toBeCloseTo(atPin);
+    for (const t of [0, 1, 2.99, 3.01, 5, 11]) {
+      expect(displayShiftY({ mode: "air", scrollLocked: false, pinSec: 3, t })).toBeCloseTo(atPin);
+    }
   });
 
   it("is positionally continuous across the pin — nothing jumps on the frame it decouples", () => {
@@ -95,74 +95,30 @@ describe("referenceShiftY", () => {
   });
 });
 
-describe("computePinTimeSec", () => {
-  const horizon = pinHorizonSec(10);
-
-  it("pins a unit authored above the tile only once the scroll brings it into the camera", () => {
+describe("airPinSec", () => {
+  it("pins an air instance at its own spawn moment, not when the scroll happens to reveal it", () => {
     const u = unit({ layer: "air" });
-    // A full tile-height above the tile's own north edge: genuinely off
-    // screen at clock zero, which is the case pinning-at-spawn got wrong.
-    const inst = parked(u.id, { x: TILE_UNIT / 2, y: -TILE_UNIT });
-    const pin = computePinTimeSec(inst, u, 1, horizon);
-    expect(pin).not.toBeNull();
-    // Camera top is at tile-local `TILE_UNIT - LEVEL_SCROLL_SPEED*t`; it
-    // reaches y = -TILE_UNIT at t = 2*TILE_UNIT/speed.
-    expect(pin!).toBeCloseTo((2 * TILE_UNIT) / LEVEL_SCROLL_SPEED, 1);
+    expect(airPinSec(parked(u.id, { x: TILE_UNIT / 2, y: -TILE_UNIT }, 4), "air")).toBe(4);
+    expect(airPinSec(parked(u.id, { x: TILE_UNIT / 2, y: 0 }), "air")).toBe(0);
   });
 
-  it("pins immediately for a unit already inside the camera band at its spawn time", () => {
+  it("pins regardless of where the route sits, including entirely off screen", () => {
     const u = unit({ layer: "air" });
-    const band = cameraLocalBand(0);
-    const inst = parked(u.id, { x: TILE_UNIT / 2, y: (band.top + band.bottom) / 2 });
-    expect(computePinTimeSec(inst, u, 1, horizon)).toBeCloseTo(0);
+    // The old rule returned null here (the camera never reaches this column on
+    // a 3-wide tile) and the route rode the terrain forever as a result.
+    expect(airPinSec(parked(u.id, { x: 10, y: -TILE_UNIT * 3 }, 2), "air")).toBe(2);
   });
 
-  it("returns null for a unit the camera never reaches horizontally", () => {
+  it("never pins a scroll-locked layer — ground and doodad ride the tile by definition", () => {
+    const u = unit({ layer: "ground" });
+    expect(airPinSec(parked(u.id, { x: 0, y: 0 }), "ground")).toBeNull();
+    expect(airPinSec(parked(u.id, { x: 0, y: 0 }), "doodad")).toBeNull();
+  });
+
+  it("returns null when the layer can't be resolved, or the instance has no steps", () => {
     const u = unit({ layer: "air" });
-    // The camera is always one screen wide however wide the tile is
-    // (cameraLocalXBand), so on a 3-wide tile the outer columns are never
-    // on screen — a unit parked out there never pins.
-    const inst = parked(u.id, { x: 10, y: 0 });
-    expect(computePinTimeSec(inst, u, 3, horizon)).toBeNull();
-  });
-
-  it("returns null when the Unit def can't be resolved, rather than guessing a frame", () => {
-    const inst = parked("missing", { x: 0, y: 0 });
-    expect(computePinTimeSec(inst, undefined, 1, horizon)).toBeNull();
-  });
-
-  it("returns null for an instance with no steps at all", () => {
-    const u = unit({ layer: "air" });
-    expect(computePinTimeSec(createEncounterUnit(u.id), u, 1, horizon)).toBeNull();
-  });
-
-  it("does not report the spawn delay's worth of off-screen time as a pin", () => {
-    const u = unit({ layer: "air" });
-    const inst = parked(u.id, { x: TILE_UNIT / 2, y: -TILE_UNIT }, 4);
-    const pin = computePinTimeSec(inst, u, 1, horizon);
-    // Its first step is at t=4, so it does not exist (and cannot pin)
-    // before then — even though the camera band covered that y earlier.
-    expect(pin!).toBeGreaterThanOrEqual(4);
-  });
-
-  it("follows a moving path, pinning where the path actually enters the camera", () => {
-    const u = unit({ layer: "air", speed: 300 });
-    let inst = addStep(createEncounterUnit(u.id), null, { x: TILE_UNIT / 2, y: -TILE_UNIT * 2 });
-    inst = addStep(inst, null, { x: TILE_UNIT / 2, y: 0 });
-    inst = recomputeStepTimes(inst, u);
-    const pin = computePinTimeSec(inst, u, 1, horizon);
-    expect(pin).not.toBeNull();
-    // Flying south while the camera band climbs north closes the gap faster
-    // than scroll alone would: it must pin before a parked unit at the same
-    // starting height does.
-    const parkedPin = computePinTimeSec(parked(u.id, { x: TILE_UNIT / 2, y: -TILE_UNIT * 2 }), u, 1, horizon);
-    expect(pin!).toBeLessThan(parkedPin!);
-  });
-});
-
-describe("pinHorizonSec", () => {
-  it("looks well past the last authored step, so a unit that enters after its path ends still pins", () => {
-    expect(pinHorizonSec(0)).toBeGreaterThan((TILE_UNIT * 2) / LEVEL_SCROLL_SPEED);
+    expect(airPinSec(parked(u.id, { x: 0, y: 0 }), undefined)).toBeNull();
+    expect(airPinSec(createEncounterUnit(u.id), "air")).toBeNull();
   });
 });
 
@@ -172,13 +128,22 @@ describe("pinShiftY — the term geometry math uses, without the render-mode ter
     expect(pinShiftY(true, 2, 6)).toBe(0);
   });
 
-  it("is zero for an air unit that never pins, and before it pins", () => {
+  it("is zero for an air unit with no pin at all", () => {
     expect(pinShiftY(false, null, 6)).toBe(0);
-    expect(pinShiftY(false, 4, 2)).toBeCloseTo(0);
   });
 
-  it("cancels the scroll once pinned, so the unit holds screen position", () => {
+  it("cancels the scroll exactly, so a pinned unit holds screen position", () => {
     expect(pinShiftY(false, 4, 6)).toBeCloseTo(-2 * LEVEL_SCROLL_SPEED);
+  });
+
+  it("keeps cancelling it *before* the pin too, so the drawn route never slides", () => {
+    // Deliberately un-clamped: an air route is rigid in screen space at every
+    // scrub time, including before its own spawn. Clamping here is what used to
+    // make a route drift while you scrubbed toward it.
+    expect(pinShiftY(false, 4, 2)).toBeCloseTo(2 * LEVEL_SCROLL_SPEED);
+    for (const t of [0, 1, 4, 9]) {
+      expect(pinShiftY(false, 4, t) + referenceShiftY("air", t)).toBeCloseTo(4 * LEVEL_SCROLL_SPEED);
+    }
   });
 
   it("is mode-independent — the same effective tile-local position either way", () => {
@@ -199,9 +164,9 @@ describe("pinShiftY — the term geometry math uses, without the render-mode ter
     // if the render-mode term gets double-counted into the geometry.
     const gapAt = (t: number) => authoredY + pinShiftY(false, pin, t) - playerTileLocalY(t);
     expect(gapAt(5)).toBeCloseTo(gapAt(9));
-    // ...and before the pin it genuinely does change, since the unit is
-    // riding the terrain toward a player that isn't.
-    expect(gapAt(1)).not.toBeCloseTo(gapAt(2));
+    // ...and it holds from the very start now, since an air unit is pinned for
+    // its whole life rather than riding the terrain in first.
+    expect(gapAt(1)).toBeCloseTo(gapAt(9));
   });
 });
 

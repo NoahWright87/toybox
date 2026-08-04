@@ -17,7 +17,7 @@ import { computeInstanceHeadingDeg, computeInstancePreview, LAST_STEP_PREVIEW_WI
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, computePlayerRefLocalY, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
-import { authorLayerOf, computePinTimeSec, isScrollLocked, pinHorizonSec, pinShiftY, referenceShiftY, scrollOffsetY, type AuthorLayer } from "./airFrame";
+import { airPinSec, authorLayerOf, isScrollLocked, pinShiftY, referenceShiftY, type AuthorLayer } from "./airFrame";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
 import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
@@ -109,8 +109,8 @@ const NEW_STEP_SCREEN_GAP = 76;
 const HITBOX_PREVIEW_DIFFICULTY_MAX = 100;
 /** How far the frame you *aren't* authoring fades back (airFrame.ts). Low enough to read as reference, high enough that you can still line an air path up against the terrain under it — the whole reason the other layer stays on screen at all. */
 const OFF_LAYER_OPACITY = 0.3;
-/** How far above the camera's top edge a freshly-placed air Unit starts, expressed as seconds of scroll — it flies in from just off the top rather than materialising mid-screen. See `addUnitInstance`. */
-const AIR_ENTRY_LEAD_SEC = 1;
+/** How far down the camera box a freshly-placed air Unit starts, as a fraction of its height — high enough to read as "just arrived", far enough in to be plainly on screen. See `addUnitInstance`. */
+const AIR_ENTRY_DEPTH_FRACTION = 0.2;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -296,26 +296,19 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + LAST_STEP_PREVIEW_WINDOW : 10;
 
   /**
-   * When each air instance decouples from the scrolling tile frame
-   * (airFrame.ts's `computePinTimeSec` — the runtime's own
-   * pin-on-first-visible rule). Memoized on the authored content rather than
-   * recomputed per render: this samples a whole tile lifespan per instance,
-   * and the scrub advances 60x a second during playback.
-   *
-   * Memoizing on committed content is also what keeps a drag stable — the
-   * pin can't move under a node while that node is being positioned, since
-   * `draft` doesn't change until the drag commits.
+   * When each air instance's frame is pinned — its own spawn moment
+   * (airFrame.ts's `airPinSec`, mirroring the runtime). An air route is
+   * rigid in screen space for its whole life, so this is just a lookup of
+   * the first step's time rather than the tile-lifespan scan the old
+   * pin-on-first-visible rule needed.
    */
   const pinSecByInstance = useMemo(() => {
-    const horizon = pinHorizonSec(maxTime);
     const map = new Map<string, number | null>();
     for (const instance of draft.units) {
-      const unitDef = units.find((u) => u.id === instance.unitDefId);
-      const locked = unitDef ? isScrollLocked(unitDef.layer) : true;
-      map.set(instance.id, locked ? null : computePinTimeSec(instance, unitDef, tile.footprint, horizon));
+      map.set(instance.id, airPinSec(instance, units.find((u) => u.id === instance.unitDefId)?.layer));
     }
     return map;
-  }, [draft.units, units, tile.footprint, maxTime]);
+  }, [draft.units, units]);
 
   /** Which authoring frame an instance belongs to — its Unit's layer, with doodad folded into ground (airFrame.ts). An unresolvable Unit falls back to ground so it still renders somewhere rather than vanishing. */
   function instanceAuthorLayer(instance: EncounterUnit): AuthorLayer {
@@ -500,17 +493,20 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     // label doesn't render directly on top of the previous one's — still
     // just a default, since the move handle can reposition either.
     //
-    // **Ground and air want different defaults**, because they enter the
-    // playfield by different routes. A ground unit is placed above the tile
-    // and scrolls in with its terrain. An air unit placed there would spend
-    // several seconds off-screen before the scroll even reached it (at clock
-    // zero the tile is a full screen above the camera), so it starts just
-    // above the *camera* instead — one second of scroll out, so it flies into
-    // the locked viewport almost immediately and there's something to look at
-    // the moment you place it.
+    // **Ground and air want different defaults**, because they arrive by
+    // different routes. A ground unit is placed above the tile and scrolls in
+    // with its terrain. An air unit is pinned to the screen from the moment it
+    // spawns (airFrame.ts), so anything placed off-camera would simply sit
+    // there off-camera forever — it starts *inside* the camera box instead,
+    // near the top, so there's something to look at the moment you place it.
+    // Authoring an entrance is then a deliberate act: drag this first step out
+    // past the box and add the next one inside it.
     const startPos: Vec2 =
       unitDef && authorLayerOf(unitDef.layer) === "air"
-        ? { x: airCameraRect.x + airCameraRect.width / 2 + index * 110, y: airCameraRect.y - scrollOffsetY(AIR_ENTRY_LEAD_SEC) - index * 30 }
+        ? {
+            x: airCameraRect.x + airCameraRect.width / 2 + index * 110,
+            y: airCameraRect.y + airCameraRect.height * AIR_ENTRY_DEPTH_FRACTION + index * 30,
+          }
         : { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
     // Defaults to the Unit's own defaultActionId (unitTypes.ts) rather than
     // null — a freshly-placed Unit should already do *something* sensible
@@ -1312,7 +1308,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           onRetimeStep={handleRetimeStep}
           authorLayer={authorLayer}
           onAuthorLayerChange={switchAuthorLayer}
-          pinSecByInstance={pinSecByInstance}
         />
 
         <div className={`shmup-enc-viewport-pin${embiggen ? " shmup-enc-viewport-pin--embiggen" : ""}`}>

@@ -774,10 +774,24 @@ inventing an editor-side one**:
 
 - **Ground and doodad are scroll-locked.** Their authored position
   resolves against the live tile frame forever.
-- **Air is time-locked, but not from spawn.** An air unit rides the
-  scrolling frame exactly like a ground unit **until it is first genuinely
-  on screen**, and pins there. Pinning at spawn would strand it — at tile
-  clock zero the tile's north edge is a full `TILE_UNIT` above the screen.
+- **Air is time-locked from spawn.** An aircraft is never attached to the
+  terrain, so its authored route is a route *through the screen*: it
+  renders in exactly one place at every scrub time, and nothing but its own
+  path ever moves it.
+
+  **This replaced a pin-on-first-visibility rule.** Air used to ride the
+  scrolling frame until it first became genuinely on screen and pin there,
+  so that a unit authored high in its tile got carried into view by the
+  scroll rather than being stranded above it. What that produced in
+  practice was a route that slid for the first few seconds and then
+  stopped — so the drawn path was not the flown path, and scrubbing showed
+  the whole thing drifting (Noah: "the routes shifted... I want to design
+  where the air units will be on-screen as they fly around"). The case it
+  existed to serve is now simply *authored*: put the first waypoint outside
+  the camera box and a later one inside it, which is both more predictable
+  and more expressive than having the scroll do it for you. Changed on both
+  sides at once (`airFrame.ts` and `EncounterRunner.ts`'s `pinnedOriginY`),
+  since the editor drawing and the game flying have to agree.
 
 A **Ground/Air toggle** sits in the timeline toolbar (a view-wide mode,
 not a property of any selection). It switches several things at once:
@@ -785,17 +799,16 @@ not a property of any selection). It switches several things at once:
 | | Ground mode | Air mode |
 |---|---|---|
 | Tile + ground units | fixed | slide down past a fixed camera |
-| Air unit, pre-pin | rides the tile | rides the tile (descends into view) |
-| Air unit, post-pin | drifts *up* the tile as terrain passes beneath | holds still |
+| Air unit | drifts *up* the tile as terrain passes beneath | **holds still** |
 | Camera box | climbs the tile | fixed, drawn as a solid teal frame |
 | "+ Add" roster | ground + doodad Units | air Units |
 
 The frame you aren't authoring stays **visible but dimmed and
 non-interactive** (`.shmup-enc-offlayer`), and its timeline track collapses
-to bare timing hairlines — separate to author, together to check. An air
-track also carries a dashed teal **pin marker** at its decouple moment
-(`computePinTimeSec`), which is what makes the fly-in legible rather than
-implicit. The camera box is drawn unconditionally in air mode (not just in
+to bare timing hairlines — separate to author, together to check. (Air
+tracks used to carry a dashed teal **pin marker** at the decouple moment;
+with air pinning at spawn that marker sits exactly on the first step, so
+it was removed as redundant.) The camera box is drawn unconditionally in air mode (not just in
 the E4 hitbox preview) because there every authored position is really
 "where on screen, and when" — without it the air canvas is an empty field
 with nothing to place against.
@@ -818,16 +831,16 @@ anchors, `facePlayer` aim against the player marker — while
 render. Folding the mode term into relative geometry would double-count it
 and make a pinned unit slowly swing its aim for no authored reason.
 
-Two smaller consequences: a newly placed **air** Unit defaults to just
-above the camera (one second of scroll out) rather than above the tile,
-since the latter leaves it off-screen for several seconds before the
-scroll reaches it; and an encounter whose placed Units are *all* air opens
+Two smaller consequences: a newly placed **air** Unit defaults to *inside*
+the camera box, near the top, rather than above the tile — pinned at spawn,
+anything placed off-camera would simply stay off-camera, so an entrance is
+now a deliberate thing you drag rather than a default; and an encounter
+whose placed Units are *all* air opens
 in Air mode, because opening it in Ground would show every one of them
 dimmed and unselectable.
 
 **Still not built**: Parts don't move (see "Attacks" below — scheduling
-only), and the pin moment is sampled at `PIN_SAMPLE_SEC` rather than
-solved, since the path is a bezier and the camera band is a moving window.
+only).
 
 ### Attacks (`unitTypes.ts`, `partActions.ts`, `ActionForm.tsx`, `PartEditor.tsx`, `PartActionPanel.tsx`)
 

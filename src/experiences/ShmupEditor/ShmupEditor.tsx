@@ -602,8 +602,9 @@ export default function ShmupEditor() {
                   Ground; it scrolls with the terrain too).
                 </li>
                 <li>
-                  Teal dashed line on an air track = where that Unit stops riding the terrain and locks to the screen. It happens the moment it
-                  first becomes visible, so it still flies in from wherever you drew it; everything left of that line is the entrance.
+                  An air Unit's route is fixed to the screen for its whole life — it never rides the terrain, so what you draw in the Air frame is
+                  exactly where it flies. To have one enter from off-screen, draw that: put its first step outside the dotted camera box and a later
+                  one inside it.
                 </li>
                 <li>⊡ (top-left of canvas) toggles a real-scale hitbox preview: red boxes = ground enemies, amber = air, red dots = bullets, green circle = reference player hitbox, thick yellow border = tile bounds, dotted border = roughly what's on screen at once.</li>
                 <li>⛶ (top-right of canvas) fills the screen with the viewport; Esc or tap it again to shrink back.</li>
