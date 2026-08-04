@@ -1696,37 +1696,55 @@ selects, and no picture of what any of it did.
 circuit forever, nose pointed along the curve.
 
 **It is solved by the same `pathSolver.ts` an encounter uses** (see
-"Turning" above), on a closed circuit that deliberately mixes turn
-difficulties: **out along a diagonal, a full 180 back down it, then a lap
-of the square** (Noah — "so there are sharp turns and gentle ones"). That
-gives one 180, two 135s, three ordinary 90s and long straights between
-them. The earlier four-corner diamond couldn't show any of that ordering,
-since every turn on it cost exactly the same.
+"Turning" above), on a **route you pick** rather than one fixed shape
+(Noah: "give me more options of routes to visualize... they should include
+all the things a person might try to do"). No single shape asks a Unit
+every question — a lap of a square says nothing about turning around, a
+hairpin says nothing about holding a sustained curve — so
+`unitMovementPreview.ts` carries a small catalogue, ordered easiest to
+hardest, chosen from a dropdown under the canvas:
 
-The square is sized (±150, ~⅖ of a tile) so an ordinary Unit clears the
-90s comfortably and only the hairpin really tests it. Scaled down far
-enough, every corner exceeds a fast Unit's turning circle and the path
-collapses into indistinguishable loops — which loses the very contrast the
-shape exists to show.
+| Route | What it asks |
+|---|---|
+| Straight line | Corner to corner and back: nothing but a 180 at each end. |
+| Circle | One sustained curve — moving and turning at once, forever. |
+| Diamond | Four identical 90s on the diagonals. |
+| Square | Four identical 90s with longer straights between them. |
+| Five-point star | Five 144° turns in quick succession. |
+| Bit of everything | Long straights, a 180, two 135s and three 90s in one lap — the default. |
+
+Each route declares its own **`viewRadius`** rather than sharing one zoom:
+the shapes have genuinely different extents, and a route that fills only
+the middle third of the canvas wastes resolution where the interesting part
+is. It is fixed per route and never fitted to the solved path — auto-fitting
+would rescale the picture as you turned a dial, making the very change
+you're looking for impossible to see. A test pins that every route stays
+inside its own view for a pivoter, a jet and a battleship alike.
+
+The selected route is remembered at module scope for the session, because
+the Stats tab remounts whenever you open a different Unit and snapping back
+to the default is exactly wrong when the reason you switched Units was to
+compare two of them on the same shape. It is a view preference, so it is
+deliberately not persisted into `UNITS.DAT`.
 
 That's the whole value of it — the Stats tab isn't illustrating the
 numbers, it's rehearsing them:
 
 - A Unit that can stop drives every leg dead straight and visibly
   **pauses to rotate** at each corner, for longer at the sharper ones (a
-  30°/sec tank spends 6s on the 180, 3s on a 90).
-- A Unit that can't stop **swings wide** through every corner, on a curve
-  that never bends tighter than its turning circle.
-- Dragging Min speed from 0 to anything above it switches the Unit
-  between those two behaviors on screen, which is the fastest way to
-  understand what the stat does.
+  30°/sec tank spends 6s on a 180, 3s on a 90).
+- A Unit that can't stop **swings wide** through the corners it can't
+  make, on a curve that never bends tighter than its turning circle.
+- Dragging Min speed from 0 to anything above it switches the Unit between
+  those two behaviors on screen, which is the fastest way to understand
+  what the stat does.
 
-The lap is a *timed* schedule rather than a distance sweep, because a
-pivot is a pause: each leg costs its pivot plus its travel, and travel is
-the solved arc length ÷ the speed that leg's tightest bend allows — the
-same rule `encounterTiming.ts` times a real encounter with. The caption
-carries what the picture can't ("53.3s per lap · pivots corners (up to
-6.0s)", or "15.5s per lap · turns no tighter than 83").
+A lap is a *timed* schedule rather than a distance sweep, because a pivot
+is a pause: each leg costs its pivot plus its travel, and travel is the
+solved arc length ÷ the speed that leg's tightest bend allows — the same
+rule `encounterTiming.ts` times a real encounter with. The caption carries
+what the picture can't ("53.3s per lap · pivots corners (up to 6.0s)", or
+"15.5s per lap · turns no tighter than 83").
 
 Two rings are drawn: the **hitbox** at true scale against the path, with
 the sprite over it at `size × 3` (mirroring games/shmup's

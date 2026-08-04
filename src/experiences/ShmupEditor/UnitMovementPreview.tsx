@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { buildDemoLap, sampleDemoLap, type DemoLap } from "./unitMovementPreview";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_DEMO_ROUTE_ID, DEMO_ROUTES, buildDemoLap, demoRouteById, sampleDemoLap, type DemoLap } from "./unitMovementPreview";
 
 interface UnitMovementPreviewProps {
   spriteUrl: string | null;
@@ -13,10 +13,19 @@ interface UnitMovementPreviewProps {
 }
 
 const CANVAS_SIZE = 220;
-/** World units across the canvas. Sized to hold the demo circuit (±150) plus the widest swing any seeded Unit takes through the hairpin, with margin so even a battleship's loop doesn't graze the frame — a jet reaches ~245 out from centre, against this view's 290. */
-const WORLD_VIEW = 580;
-const SCALE = CANVAS_SIZE / WORLD_VIEW;
 const ORIGIN = CANVAS_SIZE / 2;
+
+/**
+ * Which route the picker last had selected, remembered for the session.
+ *
+ * The Stats tab remounts whenever you open a different Unit, so component
+ * state alone would snap back to the default every time — precisely the
+ * wrong behavior when the reason you're switching Units is to compare two
+ * of them on the same shape. Module-level rather than persisted, because
+ * it's a view preference, not authored content: it has no business in
+ * `UNITS.DAT`.
+ */
+let lastRouteId = DEFAULT_DEMO_ROUTE_ID;
 
 /**
  * Mirrors games/shmup's `TUNING.encounters.artToHitboxRatio` (3) — the game
@@ -41,19 +50,20 @@ const MARKER_RADIUS = 9;
  * Live animated visualization of how a Unit *handles* — Noah's request for
  * the Stats tab, same rationale as `ActionPreview.tsx` on the Action side.
  *
- * It flies the Unit around a fixed demo circuit solved by the very same
+ * It flies the Unit around a demo route solved by the very same
  * `pathSolver.ts` an encounter uses (`unitMovementPreview.ts`), so this
  * isn't an illustration of the stats, it's a rehearsal of them: a tank
- * drives the circuit's legs straight and visibly stops to rotate at each
- * corner, while a jet swings wide through the corners it can't turn on the
- * spot. Tuning Min speed from 0 to anything above it switches the Unit
- * between those two behaviors on screen, which is the fastest way to
- * understand what the stat does.
+ * drives the legs straight and visibly stops to rotate at each corner,
+ * while a jet swings wide through the corners it can't turn on the spot.
+ * Tuning Min speed from 0 to anything above it switches the Unit between
+ * those two behaviors on screen, which is the fastest way to understand
+ * what the stat does.
  *
- * The circuit deliberately mixes turn difficulties — a 180 at the far end
- * of the diagonal, two 135s, three 90s, and long straights between them
- * (`unitMovementPreview.ts`) — so a Unit that takes a gentle bend happily
- * but wallows through a hairpin looks different from one that doesn't.
+ * **The route is a picker, not a fixed shape** — a straight-line reversal,
+ * a sustained circle, a diamond, a square, a five-point star, and one that
+ * mixes every difficulty of turn in a single lap. No one shape asks a Unit
+ * every question (see `unitMovementPreview.ts`), and which one you want
+ * depends on what you're tuning.
  *
  * The dashed ring is the Unit's own turning circle (`minTurnRadius`) — the
  * tightest curve it can hold, drawn to the same scale as the path, so
@@ -65,8 +75,15 @@ export default function UnitMovementPreview({ spriteUrl, speed, minSpeed, turnRa
   const spriteRef = useRef<HTMLImageElement | null>(null);
   const clockRef = useRef(0);
   const lastFrameRef = useRef(performance.now());
+  const [routeId, setRouteId] = useState(lastRouteId);
 
-  const lap = useMemo(() => buildDemoLap({ speed, minSpeed, turnRateDegPerSec }), [speed, minSpeed, turnRateDegPerSec]);
+  const lap = useMemo(() => buildDemoLap({ speed, minSpeed, turnRateDegPerSec }, demoRouteById(routeId)), [speed, minSpeed, turnRateDegPerSec, routeId]);
+
+  function chooseRoute(id: string) {
+    lastRouteId = id;
+    setRouteId(id);
+    clockRef.current = 0; // start the new shape from its own beginning rather than mid-lap
+  }
 
   // The rAF loop is set up once and reads the current lap through this ref;
   // restarting it on every dial tick would reset the animation mid-circuit.
@@ -105,6 +122,17 @@ export default function UnitMovementPreview({ spriteUrl, speed, minSpeed, turnRa
     <div className="shmup-unit-motion">
       <canvas ref={canvasRef} className="shmup-unit-motion__canvas" width={CANVAS_SIZE} height={CANVAS_SIZE} />
       <span className="shmup-unit-motion__caption">{caption(lap, speed)}</span>
+      <label className="shmup-unit-motion__route">
+        <span>Route</span>
+        <select className="shmup-input" value={routeId} onChange={(e) => chooseRoute(e.target.value)} title={lap.route.about}>
+          {DEMO_ROUTES.map((route) => (
+            <option key={route.id} value={route.id}>
+              {route.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className="shmup-unit-motion__about">{lap.route.about}</span>
     </div>
   );
 }
@@ -121,18 +149,21 @@ function caption(lap: DemoLap, speed: number): string {
   return `${lapTime} · turns no tighter than ${Math.round(lap.minTurnRadius)}`;
 }
 
-function toCanvas(x: number, y: number): { x: number; y: number } {
-  return { x: ORIGIN + x * SCALE, y: ORIGIN + y * SCALE };
+function toCanvas(x: number, y: number, scale: number): { x: number; y: number } {
+  return { x: ORIGIN + x * scale, y: ORIGIN + y * scale };
 }
 
 function draw(ctx: CanvasRenderingContext2D, lap: DemoLap, size: number, sprite: HTMLImageElement | null, clock: number) {
+  // Each route sets its own zoom (see unitMovementPreview.ts) — fixed per
+  // route, never fitted to the solved path.
+  const SCALE = CANVAS_SIZE / (2 * lap.route.viewRadius);
   ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   ctx.fillStyle = "#180800";
   ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   ctx.imageSmoothingEnabled = false;
 
   const now = sampleDemoLap(lap, clock);
-  const here = toCanvas(now.pos.x, now.pos.y);
+  const here = toCanvas(now.pos.x, now.pos.y, SCALE);
 
   // The Unit's own turning circle, parked against its current position so it
   // reads as "this is the tightest turn it could make from right here".
@@ -154,10 +185,10 @@ function draw(ctx: CanvasRenderingContext2D, lap: DemoLap, size: number, sprite:
   ctx.setLineDash([3, 3]);
   ctx.beginPath();
   for (const { segment } of lap.legs) {
-    const p0 = toCanvas(segment.p0.x, segment.p0.y);
-    const p1 = toCanvas(segment.p1.x, segment.p1.y);
-    const p2 = toCanvas(segment.p2.x, segment.p2.y);
-    const p3 = toCanvas(segment.p3.x, segment.p3.y);
+    const p0 = toCanvas(segment.p0.x, segment.p0.y, SCALE);
+    const p1 = toCanvas(segment.p1.x, segment.p1.y, SCALE);
+    const p2 = toCanvas(segment.p2.x, segment.p2.y, SCALE);
+    const p3 = toCanvas(segment.p3.x, segment.p3.y, SCALE);
     ctx.moveTo(p0.x, p0.y);
     ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
   }
@@ -167,14 +198,14 @@ function draw(ctx: CanvasRenderingContext2D, lap: DemoLap, size: number, sprite:
   // The authored waypoints themselves — the fixed points every version of the path has to pass through.
   ctx.fillStyle = "rgba(102, 255, 238, 0.6)";
   for (const { segment } of lap.legs) {
-    const p = toCanvas(segment.p0.x, segment.p0.y);
+    const p = toCanvas(segment.p0.x, segment.p0.y, SCALE);
     ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
   }
 
   // Motion trail — long at speed, gone entirely while pivoting.
   for (let i = TRAIL_COUNT; i >= 1; i--) {
     const behind = sampleDemoLap(lap, clock - TRAIL_STEP_SEC * i);
-    const p = toCanvas(behind.pos.x, behind.pos.y);
+    const p = toCanvas(behind.pos.x, behind.pos.y, SCALE);
     ctx.fillStyle = `rgba(204, 68, 0, ${0.4 * (1 - i / (TRAIL_COUNT + 1))})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);

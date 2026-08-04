@@ -240,6 +240,25 @@
   font-size: 7px;
   color: var(--purple-secondary, #5b2d8e);
 }
+/* Route picker: no one shape asks a Unit every question, so the preview
+   offers several (unitMovementPreview.ts's DEMO_ROUTES). */
+.shmup-unit-motion__route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+}
+.shmup-unit-motion__route .shmup-input {
+  font-size: 10px;
+  padding: 2px 4px;
+}
+.shmup-unit-motion__about {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #444;
+  text-align: center;
+  max-width: 260px;
+}
 
 /* ── Part position editor (PartPositionEditor.tsx) ────────────────────
    Dimmed body sprite as a reference frame, the Part's own sprite

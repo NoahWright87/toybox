@@ -333,7 +333,9 @@ function solveArcPath(points: PathPoint[], limits: MotionLimits, closed: boolean
 }
 
 export function solvePath(points: PathPoint[], limits: MotionLimits, options: PathOptions = {}): SolvedPath {
-  const closed = options.closed === true && points.length > 2;
+  // Two waypoints can close: out and straight back, which is a legitimate
+  // shape (a patrol between two points) and the purest test of a reversal.
+  const closed = options.closed === true && points.length >= 2;
   if (points.length === 0) return { segments: [], headingInDeg: [], headingOutDeg: [], pivotSec: [], feasible: true };
   if (points.length === 1) return { segments: [], headingInDeg: [0], headingOutDeg: [0], pivotSec: [0], feasible: true };
   return limits.minTurnRadius <= 0 ? solvePivotPath(points, limits, closed) : solveArcPath(points, limits, closed);
