@@ -229,15 +229,21 @@ function solvePivotPath(points: PathPoint[], limits: MotionLimits, closed: boole
     const prev = points[prevIndex(points, i, closed)];
     const outChord = next && len(sub(next.pos, points[i].pos)) > POSITION_EPSILON ? dirDeg(sub(next.pos, points[i].pos)) : null;
     const inChord = prev && len(sub(points[i].pos, prev.pos)) > POSITION_EPSILON ? dirDeg(sub(points[i].pos, prev.pos)) : null;
-    // A dragged handle curves the leg; otherwise a pivot Unit drives it dead straight.
+    // A dragged handle curves the leg; otherwise a pivot Unit drives it dead
+    // straight. The override governs **both** headings, which is what makes it
+    // a smooth pass-through: the segment either side of this waypoint is built
+    // against that same tangent, so charging a pivot between the arrival chord
+    // and the departure tangent would bill the Unit for a turn it never makes
+    // — and leave it visibly snapping round mid-curve. Dragging a handle is
+    // precisely the author saying "carry your speed through here".
     headingOutDeg.push(override ?? outChord ?? inChord ?? 0);
-    headingInDeg.push(inChord ?? outChord ?? override ?? 0);
+    headingInDeg.push(override ?? inChord ?? outChord ?? 0);
   }
   const segments: SolvedSegment[] = [];
   for (let i = 0; i < segmentCount(points, closed); i++) {
     const j = nextIndex(points, i, closed);
     // The arrival tangent is the next waypoint's own incoming heading, which for an un-dragged path is this leg's chord — i.e. a straight line.
-    segments.push(solveSegment(points, i, j, headingOutDeg[i], overrideDirDeg(points[j]) ?? headingInDeg[j], limits));
+    segments.push(solveSegment(points, i, j, headingOutDeg[i], headingInDeg[j], limits));
   }
   // Nothing arrives at an open path's first waypoint, so it has no turn to make there.
   const pivotSec = points.map((_, i) => (i === 0 && !closed ? 0 : pivotSeconds(signedAngleDelta(headingInDeg[i], headingOutDeg[i]), limits.turnRateDegPerSec)));

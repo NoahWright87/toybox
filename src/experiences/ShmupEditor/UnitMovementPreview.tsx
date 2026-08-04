@@ -141,9 +141,12 @@ function caption(lap: DemoLap, speed: number): string {
   if (speed <= 0) return "Speed 0 — holds position, turns on the spot";
   const lapTime = `${lap.totalSec.toFixed(1)}s per lap`;
   if (lap.pivots) {
-    // The circuit's corners are deliberately not all equal, so quote the
-    // worst of them — the 180 — rather than implying one flat rate.
+    // A route's corners are deliberately not all equal, so quote the worst of
+    // them rather than implying one flat rate — and say so plainly when a
+    // route is all curves and the Unit never has to stop at all, which is the
+    // whole point of the rounded routes.
     const worst = Math.max(...lap.legs.map((leg) => leg.pivotSec), 0);
+    if (worst < 0.05) return `${lapTime} · turns under power, never stops`;
     return `${lapTime} · pivots corners (up to ${worst.toFixed(1)}s)`;
   }
   return `${lapTime} · turns no tighter than ${Math.round(lap.minTurnRadius)}`;

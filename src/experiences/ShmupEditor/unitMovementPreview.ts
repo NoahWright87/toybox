@@ -37,7 +37,7 @@
  * `encounterTiming.ts` times a real encounter with).
  */
 import { cubicBezierPoint } from "./bezier";
-import { limitsFor, solvePathCached, type SolvedPath, type SolvedSegment } from "./pathSolver";
+import { limitsFor, solvePathCached, type PathPoint, type SolvedPath, type SolvedSegment } from "./pathSolver";
 import { signedAngleDelta, speedThroughRadius } from "./turning";
 import type { Vec2 } from "./encounterTypes";
 
@@ -52,13 +52,49 @@ export interface DemoRoute {
   label: string;
   /** One-line description of what this shape is asking of the Unit. */
   about: string;
-  /** Waypoints, flown in order and then looped back to the first. */
-  waypoints: Vec2[];
+  /**
+   * Waypoints, flown in order and then looped back to the first. These are
+   * `PathPoint`s, not bare positions, so a route can carry **authored
+   * handles** — exactly what dragging a step's bezier handle in the
+   * encounter editor produces. See `curved` below on why that matters.
+   */
+  waypoints: PathPoint[];
   /** Half the world-space extent the canvas shows for this route — see the file header on why it's per route and fixed. */
   viewRadius: number;
 }
 
-/** `n` points evenly spaced round a circle of radius `radius`, starting at the top and going clockwise. */
+function fromDeg(deg: number, length: number): Vec2 {
+  const rad = (deg * Math.PI) / 180;
+  return { x: Math.cos(rad) * length, y: Math.sin(rad) * length };
+}
+
+/**
+ * A waypoint with no handles. The path arrives and leaves along the straight
+ * lines to its neighbours, so anything that can stop **pivots** here.
+ */
+function corner(pos: Vec2): PathPoint {
+  return { pos, handleIn: null, handleOut: null };
+}
+
+/**
+ * A waypoint the path curves smoothly *through*, carrying its speed — the
+ * shape you get by dragging that step's bezier handles in the encounter
+ * editor, with `tangentDeg` the direction you dragged and `reach` how far.
+ *
+ * **This is the difference between "can turn" and "can turn while moving".**
+ * Without handles every route is a polygon, and a Unit that can stop takes
+ * every corner by halting and rotating — which made the preview imply a
+ * tank couldn't corner under power at all (Noah: "a tank *can* turn while
+ * driving, but the Unit editor makes it seem impossible"). An authored
+ * handle is the author saying "carry your speed through here", and the
+ * solver honours it for both handling classes.
+ */
+function curved(pos: Vec2, tangentDeg: number, reach: number): PathPoint {
+  const out = fromDeg(tangentDeg, reach);
+  return { pos, handleOut: out, handleIn: { x: -out.x, y: -out.y } };
+}
+
+/** `n` positions evenly spaced round a circle of radius `radius`, starting at the top and going clockwise. */
 function ring(n: number, radius: number, startDeg = -90): Vec2[] {
   return Array.from({ length: n }, (_, i) => {
     const rad = ((startDeg + (360 * i) / n) * Math.PI) / 180;
@@ -67,8 +103,46 @@ function ring(n: number, radius: number, startDeg = -90): Vec2[] {
 }
 
 /**
+ * A true circle: `n` waypoints with handles laid along the tangent at the
+ * exact length that makes consecutive cubics reproduce a circular arc
+ * (`4/3 · tan(π/2n) · r`, the standard bezier-circle constant). Every Unit
+ * sweeps this continuously — nothing pivots anywhere on it.
+ */
+function circleRoute(n: number, radius: number): PathPoint[] {
+  const reach = (4 / 3) * Math.tan(Math.PI / (2 * n)) * radius;
+  return ring(n, radius).map((pos, i) => curved(pos, -90 + (360 * i) / n + 90, reach));
+}
+
+/**
+ * A figure eight: two circles of radius `r` stacked and crossed, sampled
+ * into waypoints whose handles follow the true tangent. Curves the whole way
+ * round like the circle, but **reverses which way it turns** halfway — the
+ * one thing a single circle can't show, and the closest thing here to how a
+ * real strafing run reads.
+ */
+function figureEightRoute(r: number): PathPoint[] {
+  const reach = (4 / 3) * Math.tan(Math.PI / 8) * r; // quarter-turn steps, same constant as circleRoute
+  const points: PathPoint[] = [];
+  // Upper loop, clockwise from the crossing; then the lower loop, anticlockwise.
+  for (const [centerY, clockwise] of [
+    [-r, true],
+    [r, false],
+  ] as [number, boolean][]) {
+    for (let i = 0; i < 4; i++) {
+      const posDeg = (clockwise ? 90 : -90) + (clockwise ? 1 : -1) * 90 * i;
+      const rad = (posDeg * Math.PI) / 180;
+      points.push(curved({ x: Math.cos(rad) * r, y: centerY + Math.sin(rad) * r }, posDeg + (clockwise ? 90 : -90), reach));
+    }
+  }
+  return points;
+}
+
+/**
  * The catalogue. Ordered roughly easiest-to-hardest, so scanning the picker
- * top to bottom asks progressively more of the Unit.
+ * top to bottom asks progressively more of the Unit — and deliberately
+ * covering both kinds of turn: **rounded** ones a Unit carries its speed
+ * through (`curved` waypoints, i.e. dragged handles) and **hard** ones it
+ * has to stop for (`corner` waypoints).
  */
 export const DEMO_ROUTES: DemoRoute[] = [
   {
@@ -78,26 +152,28 @@ export const DEMO_ROUTES: DemoRoute[] = [
     // Two waypoints, looped: out along the diagonal and back down it. The
     // purest test there is of "can this thing turn around, and what does it
     // cost" — a tank stops and rotates, a jet needs a whole teardrop.
-    waypoints: [
-      { x: -R, y: R },
-      { x: R, y: -R },
-    ],
+    waypoints: [corner({ x: -R, y: R }), corner({ x: R, y: -R })],
     viewRadius: 290,
   },
   {
     id: "circle",
     label: "Circle",
-    about: "One sustained curve — moving and turning at the same time, forever.",
-    // Eight points on a ring: an arc Unit holds a continuous turn the whole
-    // way round, which is the one thing a corner-based route can't show.
-    waypoints: ring(8, R),
-    viewRadius: 230,
+    about: "One sustained curve — everything turns while moving, nothing stops.",
+    waypoints: circleRoute(8, R),
+    viewRadius: 200,
+  },
+  {
+    id: "figure8",
+    label: "Figure eight",
+    about: "Curves all the way round, reversing which way it turns halfway.",
+    waypoints: figureEightRoute(R * 0.62),
+    viewRadius: 220,
   },
   {
     id: "diamond",
     label: "Diamond",
-    about: "Four identical 90° corners on the diagonals.",
-    waypoints: ring(4, R),
+    about: "Four identical 90° corners on the diagonals — hard turns, no curve.",
+    waypoints: ring(4, R).map(corner),
     viewRadius: 260,
   },
   {
@@ -109,7 +185,7 @@ export const DEMO_ROUTES: DemoRoute[] = [
       { x: R, y: -R },
       { x: R, y: R },
       { x: -R, y: R },
-    ],
+    ].map(corner),
     viewRadius: 270,
   },
   {
@@ -117,24 +193,28 @@ export const DEMO_ROUTES: DemoRoute[] = [
     label: "Five-point star",
     about: "Five 144° turns in quick succession — punishing for anything heavy.",
     // A pentagram: the five points of a ring visited every *other* point.
-    waypoints: [0, 2, 4, 1, 3].map((i) => ring(5, R)[i]),
+    waypoints: [0, 2, 4, 1, 3].map((i) => corner(ring(5, R)[i])),
     viewRadius: 280,
   },
   {
     id: "mixed",
     label: "Bit of everything",
-    about: "Long straights, a 180, two 135s and three 90s — the whole spread in one lap.",
+    about: "Straights, two rounded corners taken under power, three hard turns and a 180.",
     // Out along the diagonal, a full 180 back down it, then a lap of the
-    // square. One shape, four difficulties of turn, so a Unit that takes a
-    // gentle bend happily but wallows through a hairpin looks different from
-    // one that doesn't.
+    // square — with the two right-hand corners *rounded* (dragged handles)
+    // and the rest left hard. One lap therefore shows a Unit's whole
+    // vocabulary: running, sweeping through a bend, stopping to turn, and
+    // reversing.
     waypoints: [
-      { x: -R, y: R }, // bottom left — the start, and where the lap closes
-      { x: R, y: -R }, // top right, out along the diagonal
-      { x: -R, y: R }, // back down the same diagonal: a 180 at the far end
-      { x: -R, y: -R }, // top left, beginning the lap
-      { x: R, y: -R }, // top right
-      { x: R, y: R }, // bottom right, then back to the start
+      corner({ x: -R, y: R }), // bottom left — the start, and where the lap closes
+      corner({ x: R, y: -R }), // top right, out along the diagonal
+      corner({ x: -R, y: R }), // back down the same diagonal: a 180 at the far end
+      corner({ x: -R, y: -R }), // top left, beginning the lap — a hard 90
+      // Reach chosen so the bend is wide enough that an ordinary Unit carries
+      // most of its speed through it — a tighter one is honest but reads as
+      // "crawls round the corner", which isn't the point being made here.
+      curved({ x: R, y: -R }, 45, 115), // top right, rounded: swept through under power
+      curved({ x: R, y: R }, 135, 115), // bottom right, rounded the same way
     ],
     viewRadius: 290,
   },
@@ -180,8 +260,7 @@ export interface UnitMotionStats {
 /** Solves one demo route for these stats and builds its lap schedule. */
 export function buildDemoLap(stats: UnitMotionStats, route: DemoRoute = demoRouteById(DEFAULT_DEMO_ROUTE_ID)): DemoLap {
   const limits = limitsFor(stats);
-  const points = route.waypoints.map((pos) => ({ pos, handleIn: null, handleOut: null }));
-  const solved = solvePathCached(points, limits, { closed: true });
+  const solved = solvePathCached(route.waypoints, limits, { closed: true });
   const cruise = stats.speed > 0 ? stats.speed : STATIONARY_DEMO_SPEED;
 
   const legs: DemoLeg[] = [];
@@ -206,7 +285,7 @@ export interface LapSample {
 
 /** Where the Unit is, and which way it points, `tSec` into an endlessly repeating lap. */
 export function sampleDemoLap(lap: DemoLap, tSec: number): LapSample {
-  const fallback: LapSample = { pos: lap.route.waypoints[0] ?? { x: 0, y: 0 }, headingDeg: 0, pivoting: false };
+  const fallback: LapSample = { pos: lap.route.waypoints[0]?.pos ?? { x: 0, y: 0 }, headingDeg: 0, pivoting: false };
   if (lap.legs.length === 0 || lap.totalSec <= 0) return fallback;
   const t = ((tSec % lap.totalSec) + lap.totalSec) % lap.totalSec;
 

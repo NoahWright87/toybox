@@ -1704,14 +1704,34 @@ hairpin says nothing about holding a sustained curve — so
 `unitMovementPreview.ts` carries a small catalogue, ordered easiest to
 hardest, chosen from a dropdown under the canvas:
 
-| Route | What it asks |
-|---|---|
-| Straight line | Corner to corner and back: nothing but a 180 at each end. |
-| Circle | One sustained curve — moving and turning at once, forever. |
-| Diamond | Four identical 90s on the diagonals. |
-| Square | Four identical 90s with longer straights between them. |
-| Five-point star | Five 144° turns in quick succession. |
-| Bit of everything | Long straights, a 180, two 135s and three 90s in one lap — the default. |
+| Route | What it asks | Corners |
+|---|---|---|
+| Straight line | Corner to corner and back: nothing but a 180 at each end. | hard |
+| Circle | One sustained curve — everything turns while moving, nothing stops. | rounded |
+| Figure eight | Curves all the way round, reversing which way it turns halfway. | rounded |
+| Diamond | Four identical 90s on the diagonals. | hard |
+| Square | Four identical 90s with longer straights between them. | hard |
+| Five-point star | Five 144° turns in quick succession. | hard |
+| Bit of everything | Straights, two rounded corners taken under power, three hard turns and a 180 — the default. | both |
+
+**Routes carry authored handles, not just positions.** A waypoint built by
+`curved()` has the same `handleIn`/`handleOut` you get by dragging that
+step's bezier handles on the encounter canvas; one built by `corner()` has
+none. That distinction is the whole reason the rounded routes exist: without
+handles every route is a polygon, and a Unit that can stop takes every
+corner by halting and rotating — which made the preview imply a tank
+couldn't corner under power at all (Noah: "a tank *can* turn while driving,
+but the Unit editor makes it seem impossible"). On the circle, *every*
+Unit sweeps continuously and nothing pivots anywhere; on "bit of
+everything" a tank pivots at four waypoints and sweeps through two.
+
+Fixing that turned up a real solver bug rather than just a preview one: for
+a pivot Unit, `solvePivotPath` derived the *arrival* heading from the chord
+even when the waypoint carried an authored handle, while building the
+segment itself against the handle. A tank on a hand-curved path was
+therefore billed a phantom pivot at every such waypoint and visibly snapped
+round mid-curve. The override now governs both headings, which is what
+dragging a handle means: carry your speed through here.
 
 Each route declares its own **`viewRadius`** rather than sharing one zoom:
 the shapes have genuinely different extents, and a route that fills only

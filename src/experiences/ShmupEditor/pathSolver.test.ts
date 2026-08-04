@@ -154,6 +154,36 @@ describe("solvePath — authored handles", () => {
   });
 });
 
+describe("a Unit that can stop, on a hand-curved path", () => {
+  // Three waypoints in a right angle, with the corner's handles dragged out
+  // along the bisector — i.e. the author asked for a rounded corner.
+  const rounded: PathPoint[] = [
+    at(0, 0),
+    { pos: { x: 300, y: 0 }, handleIn: { x: -80, y: -80 }, handleOut: { x: 80, y: 80 } },
+    at(300, 300),
+  ];
+
+  it("sweeps the corner instead of stopping at it — a tank can turn while driving", () => {
+    const solved = solvePath(rounded, TANK);
+    expect(solved.pivotSec[1]).toBe(0);
+    // Both legs genuinely bend rather than being straight lines to the corner.
+    for (const segment of solved.segments) expect(segment.minRadius).toBeLessThan(Infinity);
+  });
+
+  it("still pivots at a corner whose handles were never touched", () => {
+    const solved = solvePath([at(0, 0), at(300, 0), at(300, 300)], TANK);
+    expect(solved.pivotSec[1]).toBeGreaterThan(0);
+    for (const segment of solved.segments) expect(segment.minRadius).toBe(Infinity);
+  });
+
+  it("arrives on the same heading it leaves, so nothing snaps mid-curve", () => {
+    const solved = solvePath(rounded, TANK);
+    expect(solved.headingInDeg[1]).toBeCloseTo(solved.headingOutDeg[1], 6);
+    // ...and that heading is the one the author dragged, not the chord.
+    expect(solved.headingOutDeg[1]).toBeCloseTo(45, 6);
+  });
+});
+
 describe("degenerate input", () => {
   it("handles an empty, single, and dwelling path", () => {
     expect(solvePath([], JET).segments).toHaveLength(0);
