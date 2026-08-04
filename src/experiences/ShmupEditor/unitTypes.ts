@@ -243,8 +243,27 @@ export interface UnitDef {
   scoreValue: number;
   /** Fixed max travel speed along its encounter steps' bezier curves, px/sec — never touched by difficulty scaling, see file header. An Action's movementPercent selects how much of this is actually used. */
   speed: number;
-  /** Caps how far a step's bezier handle can extend, as a multiple of that segment's straight-line length (1 = up to 100%). Higher = tighter/sharper turns allowed. */
-  turnRate: number;
+  /**
+   * Slowest speed this Unit can sustain, px/sec. **0 means it can stop**,
+   * and a Unit that can stop can pivot on the spot — no corner is too
+   * sharp for it, it just spends time rotating. Anything above 0 can't
+   * stop, so it has a real turning circle
+   * (`turning.ts`'s `minTurnRadius = minSpeed / radians(turnRateDegPerSec)`)
+   * and its encounter path gets bent to respect it (`pathSolver.ts`).
+   */
+  minSpeed: number;
+  /**
+   * How fast this Unit can change heading, **degrees per second**. With
+   * `minSpeed`, this is what decides the routes an encounter author can
+   * draw with it — see `turning.ts`.
+   *
+   * Replaced a `turnRate` field that was not a rate at all: it capped how
+   * far a bezier handle could stick out, as a multiple of the segment's
+   * straight-line length. That number couldn't limit cornering (a corner
+   * is the junction *between* two segments), did nothing whatsoever on a
+   * path whose handles were never hand-dragged, and wasn't even monotonic.
+   */
+  turnRateDegPerSec: number;
   /** Hitbox radius, px. */
   size: number;
   layer: UnitLayer;
@@ -272,7 +291,8 @@ export function createBlankUnit(existingCount: number): UnitDef {
     contactDamage: 1,
     scoreValue: 100,
     speed: 120,
-    turnRate: 1,
+    minSpeed: 0,
+    turnRateDegPerSec: 90,
     size: 16,
     layer: "ground",
     defaultActionId: null,
@@ -316,7 +336,8 @@ export function createDefaultBulletUnit(): UnitDef {
     contactDamage: 1,
     scoreValue: 0,
     speed: 300,
-    turnRate: 1,
+    minSpeed: 300,
+    turnRateDegPerSec: 30,
     size: 6,
     layer: "ground",
     defaultActionId: flyAction.id,
@@ -402,7 +423,10 @@ function createProjectileUnit(spec: ProjectileSpec, now: number): UnitDef {
     contactDamage: spec.contactDamage,
     scoreValue: 0,
     speed: spec.speed,
-    turnRate: 1,
+    // A projectile can't slow down, so minSpeed is its speed — which gives it
+    // a huge turning circle and keeps it flying essentially straight.
+    minSpeed: spec.speed,
+    turnRateDegPerSec: 30,
     size: spec.size,
     layer: "ground",
     defaultActionId: flyAction.id,
@@ -475,24 +499,25 @@ interface SimpleEnemySpec {
   contactDamage: number;
   scoreValue: number;
   speed: number;
-  turnRate: number;
+  minSpeed: number;
+  turnRateDegPerSec: number;
   size: number;
   fireIntervalMs: number;
 }
 
 const SIMPLE_ENEMY_SPECS: SimpleEnemySpec[] = [
-  { slug: "heli", name: "Attack Helicopter", spriteId: "heli", layer: "air", hp: 30, contactDamage: 3, scoreValue: 220, speed: 140, turnRate: 1.2, size: 16, fireIntervalMs: 950 },
-  { slug: "heli-transport", name: "Transport Helicopter", spriteId: "heli-transport", layer: "air", hp: 50, contactDamage: 2, scoreValue: 260, speed: 100, turnRate: 0.8, size: 20, fireIntervalMs: 1400 },
-  { slug: "jet-bomber", name: "Jet Bomber", spriteId: "jet-bomber", layer: "air", hp: 45, contactDamage: 4, scoreValue: 300, speed: 160, turnRate: 0.9, size: 20, fireIntervalMs: 1200 },
-  { slug: "jet-fighter", name: "Jet Fighter", spriteId: "jet-fighter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 220, speed: 220, turnRate: 1.4, size: 16, fireIntervalMs: 800 },
-  { slug: "jet-stealth", name: "Stealth Jet", spriteId: "jet-stealth", layer: "air", hp: 20, contactDamage: 4, scoreValue: 260, speed: 240, turnRate: 1.5, size: 15, fireIntervalMs: 750 },
-  { slug: "motorcycle-sidecar", name: "Motorcycle + Sidecar", spriteId: "motorcycle-sidecar", layer: "ground", hp: 18, contactDamage: 2, scoreValue: 150, speed: 150, turnRate: 1.3, size: 14, fireIntervalMs: 1000 },
-  { slug: "plane-prop", name: "Prop Plane", spriteId: "plane-prop", layer: "air", hp: 55, contactDamage: 3, scoreValue: 280, speed: 120, turnRate: 0.7, size: 22, fireIntervalMs: 1300 },
-  { slug: "truck-transport", name: "Transport Truck", spriteId: "truck-transport", layer: "ground", hp: 35, contactDamage: 2, scoreValue: 200, speed: 90, turnRate: 0.8, size: 18, fireIntervalMs: 1400 },
-  { slug: "turret", name: "Turret", spriteId: "turret", layer: "ground", hp: 30, contactDamage: 3, scoreValue: 200, speed: 0, turnRate: 0, size: 16, fireIntervalMs: 1000 },
-  { slug: "turret-4x", name: "Turret (Quad)", spriteId: "turret-4x", layer: "ground", hp: 40, contactDamage: 4, scoreValue: 260, speed: 0, turnRate: 0, size: 18, fireIntervalMs: 700 },
-  { slug: "train-front", name: "Train (Front)", spriteId: "train-front", layer: "ground", hp: 80, contactDamage: 4, scoreValue: 400, speed: 60, turnRate: 0.4, size: 26, fireIntervalMs: 1500 },
-  { slug: "train-rear", name: "Train (Rear)", spriteId: "train-rear", layer: "ground", hp: 60, contactDamage: 3, scoreValue: 320, speed: 60, turnRate: 0.4, size: 24, fireIntervalMs: 1500 },
+  { slug: "heli", name: "Attack Helicopter", spriteId: "heli", layer: "air", hp: 30, contactDamage: 3, scoreValue: 220, speed: 140, minSpeed: 0, turnRateDegPerSec: 180, size: 16, fireIntervalMs: 950 },
+  { slug: "heli-transport", name: "Transport Helicopter", spriteId: "heli-transport", layer: "air", hp: 50, contactDamage: 2, scoreValue: 260, speed: 100, minSpeed: 0, turnRateDegPerSec: 120, size: 20, fireIntervalMs: 1400 },
+  { slug: "jet-bomber", name: "Jet Bomber", spriteId: "jet-bomber", layer: "air", hp: 45, contactDamage: 4, scoreValue: 300, speed: 160, minSpeed: 90, turnRateDegPerSec: 60, size: 20, fireIntervalMs: 1200 },
+  { slug: "jet-fighter", name: "Jet Fighter", spriteId: "jet-fighter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 220, speed: 220, minSpeed: 130, turnRateDegPerSec: 90, size: 16, fireIntervalMs: 800 },
+  { slug: "jet-stealth", name: "Stealth Jet", spriteId: "jet-stealth", layer: "air", hp: 20, contactDamage: 4, scoreValue: 260, speed: 240, minSpeed: 140, turnRateDegPerSec: 100, size: 15, fireIntervalMs: 750 },
+  { slug: "motorcycle-sidecar", name: "Motorcycle + Sidecar", spriteId: "motorcycle-sidecar", layer: "ground", hp: 18, contactDamage: 2, scoreValue: 150, speed: 150, minSpeed: 30, turnRateDegPerSec: 150, size: 14, fireIntervalMs: 1000 },
+  { slug: "plane-prop", name: "Prop Plane", spriteId: "plane-prop", layer: "air", hp: 55, contactDamage: 3, scoreValue: 280, speed: 120, minSpeed: 60, turnRateDegPerSec: 70, size: 22, fireIntervalMs: 1300 },
+  { slug: "truck-transport", name: "Transport Truck", spriteId: "truck-transport", layer: "ground", hp: 35, contactDamage: 2, scoreValue: 200, speed: 90, minSpeed: 20, turnRateDegPerSec: 60, size: 18, fireIntervalMs: 1400 },
+  { slug: "turret", name: "Turret", spriteId: "turret", layer: "ground", hp: 30, contactDamage: 3, scoreValue: 200, speed: 0, minSpeed: 0, turnRateDegPerSec: 120, size: 16, fireIntervalMs: 1000 },
+  { slug: "turret-4x", name: "Turret (Quad)", spriteId: "turret-4x", layer: "ground", hp: 40, contactDamage: 4, scoreValue: 260, speed: 0, minSpeed: 0, turnRateDegPerSec: 90, size: 18, fireIntervalMs: 700 },
+  { slug: "train-front", name: "Train (Front)", spriteId: "train-front", layer: "ground", hp: 80, contactDamage: 4, scoreValue: 400, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 26, fireIntervalMs: 1500 },
+  { slug: "train-rear", name: "Train (Rear)", spriteId: "train-rear", layer: "ground", hp: 60, contactDamage: 3, scoreValue: 320, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 24, fireIntervalMs: 1500 },
 ];
 
 function enemyUnitId(slug: string): string {
@@ -524,7 +549,8 @@ function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
     contactDamage: spec.contactDamage,
     scoreValue: spec.scoreValue,
     speed: spec.speed,
-    turnRate: spec.turnRate,
+    minSpeed: spec.minSpeed,
+    turnRateDegPerSec: spec.turnRateDegPerSec,
     size: spec.size,
     layer: spec.layer,
     defaultActionId: stationary ? attackAction.id : moveAction.id,
@@ -547,20 +573,21 @@ interface TurretedEnemySpec {
   contactDamage: number;
   scoreValue: number;
   speed: number;
-  turnRate: number;
+  minSpeed: number;
+  turnRateDegPerSec: number;
   size: number;
   fireIntervalMs: number;
 }
 
 /** Vehicles split into a body + turret sprite (see enemies/README.md's "incoming" batch and the pre-existing armored-truck/battle-tank Parts-demo set) — each turret mount is its own Part, offset from center, carrying the Attack Action. */
 const TURRETED_ENEMY_SPECS: TurretedEnemySpec[] = [
-  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, speed: 90, turnRate: 0.8, size: 20, fireIntervalMs: 1000 },
-  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, speed: 70, turnRate: 0.6, size: 22, fireIntervalMs: 900 },
+  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, speed: 90, minSpeed: 20, turnRateDegPerSec: 55, size: 20, fireIntervalMs: 1000 },
+  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, speed: 70, minSpeed: 0, turnRateDegPerSec: 30, size: 22, fireIntervalMs: 900 },
   // Battleship hull art has 4 obvious circular turret barbettes (2 fore, 2 aft of the bridge) — one Turret Part each.
-  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffsets: [{ x: 0, y: -43 }, { x: 0, y: -25 }, { x: 0, y: 22 }, { x: 0, y: 39 }], layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, speed: 40, turnRate: 0.3, size: 34, fireIntervalMs: 1100 },
-  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffsets: [{ x: 0, y: -6 }], layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, speed: 85, turnRate: 0.8, size: 20, fireIntervalMs: 1300 },
+  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffsets: [{ x: 0, y: -43 }, { x: 0, y: -25 }, { x: 0, y: 22 }, { x: 0, y: 39 }], layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, speed: 40, minSpeed: 15, turnRateDegPerSec: 8, size: 34, fireIntervalMs: 1100 },
+  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffsets: [{ x: 0, y: -6 }], layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, speed: 85, minSpeed: 20, turnRateDegPerSec: 55, size: 20, fireIntervalMs: 1300 },
   // Train gun car body art has 3 obvious circular turret rings running down the roof.
-  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffsets: [{ x: 0, y: -41 }, { x: 0, y: -4 }, { x: 0, y: 33 }], layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, speed: 60, turnRate: 0.4, size: 24, fireIntervalMs: 850 },
+  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffsets: [{ x: 0, y: -41 }, { x: 0, y: -4 }, { x: 0, y: 33 }], layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 24, fireIntervalMs: 850 },
 ];
 
 function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef {
@@ -587,7 +614,8 @@ function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef 
     contactDamage: spec.contactDamage,
     scoreValue: spec.scoreValue,
     speed: spec.speed,
-    turnRate: spec.turnRate,
+    minSpeed: spec.minSpeed,
+    turnRateDegPerSec: spec.turnRateDegPerSec,
     size: spec.size,
     layer: spec.layer,
     defaultActionId: moveAction.id,

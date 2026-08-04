@@ -125,18 +125,22 @@ interface LiveInstance {
    */
   scrollLocked: boolean;
   /**
-   * The frame origin Y an air unit resolves against once it has decoupled, or
-   * `null` while it is still riding the scroll in.
+   * The frame origin Y an air unit resolves against, captured **at spawn**,
+   * or `null` for a scroll-locked one that never decouples.
    *
-   * Air units deliberately do **not** pin at spawn. The tile's north edge is a
-   * full `TILE_UNIT` above the screen at tile-clock zero, so a unit authored at
-   * the top of its tile spawns at screen Y -720; pinning there would strand it
-   * off-screen forever instead of letting it fly in. Instead an air unit tracks
-   * the scrolling frame exactly as before **until it first becomes visible**,
-   * and pins at that moment — so it still enters on cue where the author drew
-   * it, and from then on the only thing that moves it is its own authored path.
-   * Pinning the *current* origin makes the handover positionally continuous:
-   * nothing jumps on the frame it decouples.
+   * Air units used to ride the scrolling frame until they first became
+   * visible and pin there, so that a unit authored high in its tile got
+   * carried on screen by the scroll rather than being stranded above it.
+   * The cost was that an authored air route was not the route flown: it slid
+   * with the terrain for the first few seconds and then stopped, which made
+   * the editor's own drawing of it wrong and left an author unable to say
+   * where on screen an aircraft would actually be.
+   *
+   * Pinning at spawn makes an air route rigid in screen space for its whole
+   * life. Flying in from off-screen is still perfectly possible — it is now
+   * simply *authored*, by putting the first waypoint above the camera and a
+   * later one inside it, which is both more predictable and more expressive
+   * than having the scroll do it. Mirrored by the editor's `airFrame.ts`.
    */
   pinnedOriginY: number | null;
   /** The Action a dynamically spawned instance runs (its `defaultActionId`). Null for a placed one, which reads its Action off each step. */
@@ -374,7 +378,9 @@ export class EncounterRunner {
       pathEndSec: p.startSec + p.steps[p.steps.length - 1].time,
       seenOnScreen: false,
       scrollLocked: isScrollLocked(p.def.layer),
-      pinnedOriginY: null,
+      // Air pins immediately: its authored path is a path through the screen,
+      // not across the terrain (see `pinnedOriginY`).
+      pinnedOriginY: isScrollLocked(p.def.layer) ? null : this.frame.originY,
       spawnedAction: null,
       startSec: p.startSec,
       power: p.power,
@@ -460,14 +466,14 @@ export class EncounterRunner {
     const steps = instance.steps;
     if (!steps) return;
     const localT = this.clockSec - instance.startSec;
-    const state = instanceStateAt(steps, instance.def.turnRate, localT);
+    const state = instanceStateAt(steps, instance.def, localT);
     if (!state) return;
 
     const screen = toScreen(this.frameFor(instance), state.pos);
     instance.entity.setPosition(screen.x, screen.y);
 
     const action = this.actionById(instance.def.actions, state.step.actionId);
-    const heading = instanceHeadingDegAt(steps, instance.def.turnRate, localT);
+    const heading = instanceHeadingDegAt(steps, instance.def, localT);
     instance.facingDeg = action ? this.facingFor(action, screen, heading) : heading;
     instance.entity.setRotation(facingToRotation(instance.facingDeg));
     instance.entity.setInvincible(invincibleAt(steps, instance.def.actions, localT));
@@ -668,21 +674,12 @@ export class EncounterRunner {
       }
       const offScreen =
         entity.x < -margin || entity.x > GAME_WIDTH + margin || entity.y < -margin || entity.y > GAME_HEIGHT + margin;
-      // Note the two different tests. Culling uses the generous despawn margin,
-      // so a path that loops just off the edge isn't deleted mid-manoeuvre. The
-      // air-unit pin needs *actual* visibility: pinning on the margin version
-      // decoupled a unit 220px above the top edge, where it then held station
-      // off screen forever instead of flying in.
+      // Culling uses the generous despawn margin, so a path that loops just
+      // off the edge isn't deleted mid-manoeuvre; `seenOnScreen` uses actual
+      // visibility, so something that never made it into view isn't treated as
+      // having been and gone.
       const onScreen = entity.x >= 0 && entity.x <= GAME_WIDTH && entity.y >= 0 && entity.y <= GAME_HEIGHT;
-      if (onScreen) {
-        // The instant an air unit is genuinely on screen it stops riding the
-        // scroll and holds the frame it entered on. Pinning here rather than at
-        // spawn is what lets it fly in from above the tile first.
-        if (!instance.seenOnScreen && !instance.scrollLocked && instance.steps !== null) {
-          instance.pinnedOriginY = this.frame.originY;
-        }
-        instance.seenOnScreen = true;
-      }
+      if (onScreen) instance.seenOnScreen = true;
       const done = shouldCull({
         placed: instance.steps !== null,
         offScreen,

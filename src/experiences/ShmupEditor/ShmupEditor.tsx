@@ -556,10 +556,14 @@ export default function ShmupEditor() {
             )}
             {helpTopic === "unit" && (
               <ul className="shmup-help-modal__list">
+                <li>The Stats tab's preview flies the Unit around a demo circuit solved exactly the way a real encounter is — so it shows what this Unit will actually do with a route that has corners in it. The orange ring is its hitbox at true scale; the purple ring is the tightest turn it can make.</li>
                 <li>Speed is a Unit's fixed max — an Action's Movement % dial selects how much of it is actually used, so difficulty scaling never has to touch Speed directly.</li>
-                <li>Turn rate caps how sharply a Unit can curve between an encounter's waypoints (a multiple of each segment's straight-line length).</li>
+                <li>Min speed is the slowest it can go. 0 means it can stop — so it drives straight lines and turns on the spot, spending time instead of distance on a corner (a tank, a helicopter). Above 0 it can never stop, so it has a real turning circle and swings wide through corners it can't make (a jet, a ship, anything on wheels).</li>
+                <li>Turn °/sec is how fast it changes heading. With Min speed it gives the turning circle: min speed ÷ turn rate. A fast jet with a good turn rate still corners wide, because it's carrying speed through the turn.</li>
+                <li>You never have to make a route "legal" — place the waypoints you want and the editor bends the path into something the Unit can actually fly through all of them, or gets as close as the geometry allows.</li>
                 <li>Layer (Ground/Air/Doodad) picks which roster a Unit shows up under in the Encounter editor's "+ Add" picker.</li>
-                <li>Default Action is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</li>
+                <li>Visuals is the sprite (built-in or your own upload); animation will live there too once it exists.</li>
+                <li>Default Action (Actions tab) is used when this Unit is spawned dynamically (e.g. as another Action's projectile) rather than hand-placed on a tile.</li>
                 <li>An Action's own Actions buffet is used directly when the Unit has no Parts; a Part's own Actions govern that Part's independent attack track instead.</li>
                 <li>A Part's Position tab: drag its sprite over the dimmed reference of the Unit's own body (or use the Offset dials) — this anchors that Part's Actions' facing/attack.</li>
                 <li>A Part's Hitbox tab: unchecked = fused to the Unit's body, damage attributed to the Unit. Checked = its own hitbox, subject to Damage x (a weak point &gt;1, armor &lt;1); its own HP pool if Has HP is also checked, otherwise damage passes through to the Unit's shared HP.</li>
@@ -598,8 +602,9 @@ export default function ShmupEditor() {
                   Ground; it scrolls with the terrain too).
                 </li>
                 <li>
-                  Teal dashed line on an air track = where that Unit stops riding the terrain and locks to the screen. It happens the moment it
-                  first becomes visible, so it still flies in from wherever you drew it; everything left of that line is the entrance.
+                  An air Unit's route is fixed to the screen for its whole life — it never rides the terrain, so what you draw in the Air frame is
+                  exactly where it flies. To have one enter from off-screen, draw that: put its first step outside the dotted camera box and a later
+                  one inside it.
                 </li>
                 <li>⊡ (top-left of canvas) toggles a real-scale hitbox preview: red boxes = ground enemies, amber = air, red dots = bullets, green circle = reference player hitbox, thick yellow border = tile bounds, dotted border = roughly what's on screen at once.</li>
                 <li>⛶ (top-right of canvas) fills the screen with the viewport; Esc or tap it again to shrink back.</li>

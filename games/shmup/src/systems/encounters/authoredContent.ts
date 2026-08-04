@@ -144,7 +144,8 @@ export function isAuthoredUnitDef(v: unknown): v is AuthoredUnitDef {
     isNum(u.contactDamage) &&
     isNum(u.scoreValue) &&
     isNum(u.speed) &&
-    isNum(u.turnRate) &&
+    isNum(u.minSpeed) &&
+    isNum(u.turnRateDegPerSec) &&
     isNum(u.size) &&
     (u.layer === "ground" || u.layer === "air" || u.layer === "doodad") &&
     (u.defaultActionId === null || isStr(u.defaultActionId)) &&

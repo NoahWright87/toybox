@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampHandleOffset, cubicBezierLength, cubicBezierPoint, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
-import type { EncounterStep } from "./encounterTypes";
-
-function step(pos: { x: number; y: number }, overrides: Partial<EncounterStep> = {}): EncounterStep {
-  return { id: "s", pos, visible: true, time: 0, speedMultiplier: 1, handleIn: null, handleOut: null, ...overrides };
-}
+import { cubicBezierLength, cubicBezierPoint, minCurveRadius } from "./bezier";
 
 describe("cubicBezierPoint", () => {
   it("starts at p0 and ends at p3", () => {
@@ -55,53 +50,22 @@ describe("cubicBezierLength", () => {
   });
 });
 
-describe("clampHandleOffset", () => {
-  it("leaves a short offset untouched", () => {
-    const offset = { x: 10, y: 0 };
-    expect(clampHandleOffset(offset, 100)).toEqual(offset);
+describe("minCurveRadius", () => {
+  it("is Infinity for a straight line — nothing bends, so nothing constrains it", () => {
+    expect(minCurveRadius({ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }, { x: 300, y: 0 })).toBe(Infinity);
   });
 
-  it("scales an overlong offset down to maxLength, preserving direction", () => {
-    const offset = { x: 100, y: 0 };
-    const clamped = clampHandleOffset(offset, 25);
-    expect(clamped.x).toBeCloseTo(25);
-    expect(clamped.y).toBeCloseTo(0);
-  });
-});
-
-describe("resolveHandleOut / resolveHandleIn", () => {
-  it("defaults to 1/3 of the way toward the other endpoint when handleOut is null", () => {
-    const from = step({ x: 0, y: 0 });
-    const resolved = resolveHandleOut(from, { x: 300, y: 0 }, 1);
-    expect(resolved).toEqual({ x: 100, y: 0 });
+  it("approximates a circular arc's own radius", () => {
+    // The standard 4-point cubic approximation of a quarter circle of radius 100.
+    const k = 100 * 0.5523;
+    const radius = minCurveRadius({ x: 100, y: 0 }, { x: 100, y: k }, { x: k, y: 100 }, { x: 0, y: 100 });
+    expect(radius).toBeGreaterThan(97);
+    expect(radius).toBeLessThan(103);
   });
 
-  it("defaults to 1/3 of the way back toward the other endpoint when handleIn is null", () => {
-    const to = step({ x: 300, y: 0 });
-    const resolved = resolveHandleIn(to, { x: 0, y: 0 }, 1);
-    expect(resolved).toEqual({ x: 200, y: 0 });
-  });
-
-  it("uses the authored handleOut offset when present, clamped by turnRate", () => {
-    const from = step({ x: 0, y: 0 }, { handleOut: { x: 0, y: 500 } }); // way off to the side
-    const resolved = resolveHandleOut(from, { x: 300, y: 0 }, 0.5); // turnRate 0.5 -> max 150px
-    expect(resolved.x).toBeCloseTo(0);
-    expect(resolved.y).toBeCloseTo(150);
-  });
-
-  it("a zero-length segment clamps handles to zero regardless of authored offset", () => {
-    const from = step({ x: 50, y: 50 }, { handleOut: { x: 0, y: 500 } });
-    const resolved = resolveHandleOut(from, { x: 50, y: 50 }, 5); // same position -> maxLength 0
-    expect(resolved).toEqual({ x: 50, y: 50 });
-  });
-});
-
-describe("resolveSegment", () => {
-  it("produces a straight-line-equivalent segment when both steps have null handles", () => {
-    const from = step({ x: 0, y: 0 });
-    const to = step({ x: 300, y: 0 });
-    const seg = resolveSegment(from, to, 1);
-    const mid = cubicBezierPoint(seg.p0, seg.p1, seg.p2, seg.p3, 0.5);
-    expect(mid).toEqual({ x: 150, y: 0 });
+  it("reports a tighter radius the harder the curve bends", () => {
+    const gentle = minCurveRadius({ x: 0, y: 0 }, { x: 100, y: 20 }, { x: 200, y: 20 }, { x: 300, y: 0 });
+    const sharp = minCurveRadius({ x: 0, y: 0 }, { x: 100, y: 200 }, { x: 200, y: 200 }, { x: 300, y: 0 });
+    expect(sharp).toBeLessThan(gentle);
   });
 });

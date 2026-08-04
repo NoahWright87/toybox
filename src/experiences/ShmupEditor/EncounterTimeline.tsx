@@ -27,8 +27,6 @@ interface EncounterTimelineProps {
   /** Which reference frame the canvas is drawn in (airFrame.ts) — decides which tracks are authored in full and which collapse to timing hairlines. */
   authorLayer: AuthorLayer;
   onAuthorLayerChange: (layer: AuthorLayer) => void;
-  /** Per-instance decouple moment from `computePinTimeSec`, for the pin markers on air tracks. Absent/null = this instance never leaves the tile frame. */
-  pinSecByInstance: Map<string, number | null>;
 }
 
 const PX_PER_SEC = 50;
@@ -80,7 +78,6 @@ export default function EncounterTimeline({
   onRetimeStep,
   authorLayer,
   onAuthorLayerChange,
-  pinSecByInstance,
 }: EncounterTimelineProps) {
   const [dragTime, setDragTime] = useState<{ instanceId: string; stepId: string; time: number } | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
@@ -190,11 +187,6 @@ export default function EncounterTimeline({
                 </div>
               );
             }
-            // Where this instance decouples from the scrolling tile frame
-            // (airFrame.ts). Only meaningful while authoring air — it's the
-            // moment its authored path stops being relative to the terrain,
-            // which is otherwise invisible on a ruler of plain times.
-            const pinSec = authorLayer === "air" ? pinSecByInstance.get(instance.id) ?? null : null;
             // "Is my Unit selected" is the entire collapse rule (Noah's
             // call). Nothing to toggle, nothing to persist, and picking up a
             // different Unit folds the last one on its own.
@@ -213,14 +205,6 @@ export default function EncounterTimeline({
               <div key={instance.id} className="shmup-timeline__track">
                 <div className="shmup-timeline__track-label">{unitDef?.name ?? "?"}</div>
                 <div className="shmup-timeline__lane">
-                  {/* The pin: where this air unit stops riding the terrain and holds screen position. Everything left of it is the fly-in. */}
-                  {pinSec !== null && (
-                    <div
-                      className="shmup-timeline__pin"
-                      style={{ left: pinSec * PX_PER_SEC + STAGE_PADDING_LEFT }}
-                      title={`Decouples from the scrolling terrain at ${pinSec.toFixed(1)}s — flies in before this, holds screen position after`}
-                    />
-                  )}
                   <svg className="shmup-timeline__lane-svg" width={width} height={28}>
                     {instance.steps.slice(1).map((step, i) => {
                       const prev = instance.steps[i];

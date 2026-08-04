@@ -7,7 +7,7 @@ import PartActionPanel from "./PartActionPanel";
 import UnitScalingPanel from "./UnitScalingPanel";
 import { Dial } from "../../components/Dial/Dial";
 import { resolveSpriteUrl } from "./enemySprites";
-import { clampHandleOffset, distanceBetween, resolveHandleIn, resolveHandleOut, resolveSegment } from "./bezier";
+import { effectiveHandleIn, effectiveHandleOut, limitsFor, solvePathCached } from "./pathSolver";
 import { addStep, deleteStepsFrom, isFirstStep, moveStep, updateStep } from "./encounterSteps";
 import { addPartAction, deletePartAction, seedPartActions, updatePartAction } from "./partActions";
 import { isStepTimeDerived, recomputeStepTimes } from "./encounterTiming";
@@ -17,7 +17,7 @@ import { computeInstanceHeadingDeg, computeInstancePreview, LAST_STEP_PREVIEW_WI
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, computePlayerRefLocalY, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
-import { authorLayerOf, computePinTimeSec, isScrollLocked, pinHorizonSec, pinShiftY, referenceShiftY, scrollOffsetY, type AuthorLayer } from "./airFrame";
+import { airPinSec, authorLayerOf, isScrollLocked, pinShiftY, referenceShiftY, type AuthorLayer } from "./airFrame";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
 import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
@@ -109,8 +109,8 @@ const NEW_STEP_SCREEN_GAP = 76;
 const HITBOX_PREVIEW_DIFFICULTY_MAX = 100;
 /** How far the frame you *aren't* authoring fades back (airFrame.ts). Low enough to read as reference, high enough that you can still line an air path up against the terrain under it — the whole reason the other layer stays on screen at all. */
 const OFF_LAYER_OPACITY = 0.3;
-/** How far above the camera's top edge a freshly-placed air Unit starts, expressed as seconds of scroll — it flies in from just off the top rather than materialising mid-screen. See `addUnitInstance`. */
-const AIR_ENTRY_LEAD_SEC = 1;
+/** How far down the camera box a freshly-placed air Unit starts, as a fraction of its height — high enough to read as "just arrived", far enough in to be plainly on screen. See `addUnitInstance`. */
+const AIR_ENTRY_DEPTH_FRACTION = 0.2;
 
 function validate(encounter: EncounterDef): string | null {
   if (!encounter.name.trim()) return "Name is required.";
@@ -178,8 +178,17 @@ function partActionAnchorWorld(instance: EncounterUnit, unitDef: UnitDef | undef
  * shows up to two small draggable handle dots (⬦, teal) connected to it by
  * a dashed stalk — one shaping the curve leaving it (skipped on the last
  * step), one shaping the curve arriving at it (skipped on the first step)
- * — dragging either bends the curve, clamped by the owning Unit's
- * `turnRate` relative to that segment's straight-line length.
+ * — dragging either bends the curve, live-clamped to what the owning
+ * Unit's turning limits allow (`pathSolver.ts`).
+ *
+ * **The drawn curve is the solved path, not the raw handles.** Waypoints
+ * are hard constraints; the shape between them is derived from the Unit's
+ * `minSpeed`/`turnRateDegPerSec` (`turning.ts`). A jet given a right-angle
+ * corner swings wide through it because that's the only way it can pass
+ * through all three waypoints; a tank drives the legs straight and pivots
+ * on the spot, paying for the corner in time instead. Nothing is ever
+ * marked invalid — the editor solves for the closest flyable path and
+ * draws that.
  *
  * **Most steps' `time` is derived, not typed in.** `encounterTiming.ts`
  * computes it from the segment's arc length and the owning Unit's `speed`
@@ -287,26 +296,19 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const maxTime = allStepTimes.length > 0 ? Math.max(...allStepTimes) + LAST_STEP_PREVIEW_WINDOW : 10;
 
   /**
-   * When each air instance decouples from the scrolling tile frame
-   * (airFrame.ts's `computePinTimeSec` — the runtime's own
-   * pin-on-first-visible rule). Memoized on the authored content rather than
-   * recomputed per render: this samples a whole tile lifespan per instance,
-   * and the scrub advances 60x a second during playback.
-   *
-   * Memoizing on committed content is also what keeps a drag stable — the
-   * pin can't move under a node while that node is being positioned, since
-   * `draft` doesn't change until the drag commits.
+   * When each air instance's frame is pinned — its own spawn moment
+   * (airFrame.ts's `airPinSec`, mirroring the runtime). An air route is
+   * rigid in screen space for its whole life, so this is just a lookup of
+   * the first step's time rather than the tile-lifespan scan the old
+   * pin-on-first-visible rule needed.
    */
   const pinSecByInstance = useMemo(() => {
-    const horizon = pinHorizonSec(maxTime);
     const map = new Map<string, number | null>();
     for (const instance of draft.units) {
-      const unitDef = units.find((u) => u.id === instance.unitDefId);
-      const locked = unitDef ? isScrollLocked(unitDef.layer) : true;
-      map.set(instance.id, locked ? null : computePinTimeSec(instance, unitDef, tile.footprint, horizon));
+      map.set(instance.id, airPinSec(instance, units.find((u) => u.id === instance.unitDefId)?.layer));
     }
     return map;
-  }, [draft.units, units, tile.footprint, maxTime]);
+  }, [draft.units, units]);
 
   /** Which authoring frame an instance belongs to — its Unit's layer, with doodad folded into ground (airFrame.ts). An unresolvable Unit falls back to ground so it still renders somewhere rather than vanishing. */
   function instanceAuthorLayer(instance: EncounterUnit): AuthorLayer {
@@ -491,17 +493,20 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     // label doesn't render directly on top of the previous one's — still
     // just a default, since the move handle can reposition either.
     //
-    // **Ground and air want different defaults**, because they enter the
-    // playfield by different routes. A ground unit is placed above the tile
-    // and scrolls in with its terrain. An air unit placed there would spend
-    // several seconds off-screen before the scroll even reached it (at clock
-    // zero the tile is a full screen above the camera), so it starts just
-    // above the *camera* instead — one second of scroll out, so it flies into
-    // the locked viewport almost immediately and there's something to look at
-    // the moment you place it.
+    // **Ground and air want different defaults**, because they arrive by
+    // different routes. A ground unit is placed above the tile and scrolls in
+    // with its terrain. An air unit is pinned to the screen from the moment it
+    // spawns (airFrame.ts), so anything placed off-camera would simply sit
+    // there off-camera forever — it starts *inside* the camera box instead,
+    // near the top, so there's something to look at the moment you place it.
+    // Authoring an entrance is then a deliberate act: drag this first step out
+    // past the box and add the next one inside it.
     const startPos: Vec2 =
       unitDef && authorLayerOf(unitDef.layer) === "air"
-        ? { x: airCameraRect.x + airCameraRect.width / 2 + index * 110, y: airCameraRect.y - scrollOffsetY(AIR_ENTRY_LEAD_SEC) - index * 30 }
+        ? {
+            x: airCameraRect.x + airCameraRect.width / 2 + index * 110,
+            y: airCameraRect.y + airCameraRect.height * AIR_ENTRY_DEPTH_FRACTION + index * 30,
+          }
         : { x: (tile.footprint * TILE_UNIT) / 2 + index * 110, y: -TILE_UNIT * 0.6 - index * 30 };
     // Defaults to the Unit's own defaultActionId (unitTypes.ts) rather than
     // null — a freshly-placed Unit should already do *something* sensible
@@ -642,20 +647,34 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     setDragPos(null);
   }
 
-  /** Begins dragging `which` handle of `stepId`, seeding the drag from its current resolved (possibly-defaulted, turnRate-clamped) absolute position so the dot doesn't jump when you first touch it. */
+  /**
+   * The handle offset the path solver actually used for `which` side of
+   * step `idx` — optionally after pretending that handle was dragged to
+   * `proposed`. That "pretend" is how a drag stays honest: the dot follows
+   * the pointer only as far as the Unit's turning circle allows
+   * (`pathSolver.ts`), and refuses past it, instead of letting you author a
+   * curve the Unit can't fly and quietly redrawing something else.
+   */
+  function solvedHandleOffset(instance: EncounterUnit, idx: number, which: "in" | "out", proposed?: Vec2): Vec2 | null {
+    const unitDef = units.find((u) => u.id === instance.unitDefId);
+    if (!unitDef) return proposed ?? null;
+    const steps = instance.steps.map((s, i) => (i === idx && proposed ? { ...s, [which === "out" ? "handleOut" : "handleIn"]: proposed } : s));
+    const solved = solvePathCached(steps, limitsFor(unitDef));
+    return which === "out" ? effectiveHandleOut(solved, steps, idx) : effectiveHandleIn(solved, steps, idx);
+  }
+
+  /** Begins dragging `which` handle of `stepId`, seeding the drag from the handle's current solved position so the dot doesn't jump when you first touch it. */
   function beginHandleDrag(instanceId: string, stepId: string, which: "in" | "out", e: ReactPointerEvent<HTMLButtonElement>) {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     const instance = draft.units.find((u) => u.id === instanceId);
     const idx = instance?.steps.findIndex((s) => s.id === stepId) ?? -1;
     if (!instance || idx === -1) return;
-    const step = instance.steps[idx];
     const other = which === "out" ? instance.steps[idx + 1] : instance.steps[idx - 1];
     if (!other) return;
-    const unitDef = units.find((u) => u.id === instance.unitDefId);
-    const turnRate = unitDef?.turnRate ?? 1;
-    const currentAbsolute = which === "out" ? resolveHandleOut(step, other.pos, turnRate) : resolveHandleIn(step, other.pos, turnRate);
-    setDragHandle({ instanceId, stepId, which, offset: { x: currentAbsolute.x - step.pos.x, y: currentAbsolute.y - step.pos.y } });
+    const offset = solvedHandleOffset(instance, idx, which);
+    if (!offset) return;
+    setDragHandle({ instanceId, stepId, which, offset });
   }
   function endHandleDrag() {
     if (!dragHandle) return;
@@ -738,11 +757,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         const step = instance.steps[idx];
         const other = dragHandle.which === "out" ? instance.steps[idx + 1] : instance.steps[idx - 1];
         if (other) {
-          const unitDef = units.find((u) => u.id === instance.unitDefId);
-          const turnRate = unitDef?.turnRate ?? 1;
-          const segmentLength = distanceBetween(step.pos, other.pos);
           const rawOffset: Vec2 = { x: worldPos.x - step.pos.x, y: worldPos.y - step.pos.y };
-          setDragHandle({ ...dragHandle, offset: clampHandleOffset(rawOffset, turnRate * segmentLength) });
+          // Clamped live rather than only on release: the offset stored here is
+          // already the one the Unit can fly, so the dot, the drawn curve and
+          // the value written back on release can never disagree.
+          const offset = solvedHandleOffset(instance, idx, dragHandle.which, rawOffset);
+          if (offset) setDragHandle({ ...dragHandle, offset });
         }
       }
     }
@@ -1113,15 +1133,17 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const selectedShiftY = selectedInstance ? renderFrameFor(selectedInstance).shiftY : 0;
 
   const handleDots: { which: "in" | "out"; stage: Vec2 }[] = [];
-  if (selectedInstance && selectedStep && !scalingPanelOpen) {
-    const turnRate = selectedUnitDef?.turnRate ?? 1;
-    const effSelected = effectiveStep(selectedInstance.id, selectedStep);
-    const prevStep = selectedIdx > 0 ? effectiveStep(selectedInstance.id, selectedInstance.steps[selectedIdx - 1]) : undefined;
-    if (prevStep) handleDots.push({ which: "in", stage: toStageAt(resolveHandleIn(effSelected, prevStep.pos, turnRate), selectedShiftY) });
-    if (selectedNextStep) {
-      const effNext = effectiveStep(selectedInstance.id, selectedNextStep);
-      handleDots.push({ which: "out", stage: toStageAt(resolveHandleOut(effSelected, effNext.pos, turnRate), selectedShiftY) });
-    }
+  if (selectedInstance && selectedStep && !scalingPanelOpen && selectedUnitDef) {
+    // Solved against the *effective* (mid-drag) steps, so the dots sit on the
+    // curve actually being drawn rather than on the pre-drag one.
+    const effSteps = selectedInstance.steps.map((s) => effectiveStep(selectedInstance.id, s));
+    const solved = solvePathCached(effSteps, limitsFor(selectedUnitDef));
+    const here = effSteps[selectedIdx].pos;
+    const push = (which: "in" | "out", offset: Vec2 | null) => {
+      if (offset) handleDots.push({ which, stage: toStageAt({ x: here.x + offset.x, y: here.y + offset.y }, selectedShiftY) });
+    };
+    if (selectedIdx > 0) push("in", effectiveHandleIn(solved, effSteps, selectedIdx));
+    if (selectedNextStep) push("out", effectiveHandleOut(solved, effSteps, selectedIdx));
   }
   const selectedNodeStage = selectedInstance && selectedStep ? toStageAt(effectiveStep(selectedInstance.id, selectedStep).pos, selectedShiftY) : null;
   /**
@@ -1286,7 +1308,6 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           onRetimeStep={handleRetimeStep}
           authorLayer={authorLayer}
           onAuthorLayerChange={switchAuthorLayer}
-          pinSecByInstance={pinSecByInstance}
         />
 
         <div className={`shmup-enc-viewport-pin${embiggen ? " shmup-enc-viewport-pin--embiggen" : ""}`}>
@@ -1348,12 +1369,16 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
                 </defs>
                 {draft.units.flatMap((instance) => {
                   const unitDef = units.find((u) => u.id === instance.unitDefId);
-                  const turnRate = unitDef?.turnRate ?? 1;
                   const { shiftY, offLayer } = renderFrameFor(instance);
+                  // The drawn curve is the solved one — what this Unit can
+                  // physically fly through these waypoints, swing-wide detours
+                  // and all (pathSolver.ts), not the raw handles.
+                  const effSteps = instance.steps.map((s) => effectiveStep(instance.id, s));
+                  const solved = unitDef ? solvePathCached(effSteps, limitsFor(unitDef)) : null;
                   return instance.steps.slice(1).map((step, i) => {
-                    const prev = effectiveStep(instance.id, instance.steps[i]);
-                    const cur = effectiveStep(instance.id, step);
-                    const { p0, p1, p2, p3 } = resolveSegment(prev, cur, turnRate);
+                    const segment = solved?.segments[i];
+                    if (!segment) return null;
+                    const { p0, p1, p2, p3 } = segment;
                     const a = toStageAt(p0, shiftY);
                     const b = toStageAt(p1, shiftY);
                     const c = toStageAt(p2, shiftY);

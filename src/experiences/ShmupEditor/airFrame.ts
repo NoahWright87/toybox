@@ -17,13 +17,30 @@
  * - **Ground and doodad are scroll-locked.** Their authored position
  *   resolves against the live tile frame forever — a turret is bolted to the
  *   terrain and rides it off the bottom of the screen.
- * - **Air is time-locked, but not from spawn.** At a tile's clock zero its
- *   north edge is a full `TILE_UNIT` above the screen, so pinning an air
- *   unit's frame at spawn would strand it off-screen forever. An air unit
- *   therefore tracks the scrolling frame exactly like a ground unit **until
- *   it is first genuinely on screen**, and pins there. It still enters on
- *   cue where the author drew it; from that moment the only thing moving it
- *   is its own authored path.
+ * - **Air is time-locked from the moment it spawns.** An aircraft is not
+ *   attached to the terrain at any point, so its authored route is a route
+ *   *through the screen*: whatever the author drew is where it flies,
+ *   full stop, and nothing but its own path ever moves it.
+ *
+ * ## Air used to pin at first visibility, and that was wrong
+ *
+ * The previous rule had an air unit ride the scrolling tile frame until it
+ * first became genuinely visible and pin *there*, on the reasoning that a
+ * unit authored high in the tile starts above the screen and needs the
+ * scroll to carry it in. What that actually produced was a route that
+ * slid for the first few seconds and then stopped sliding — so the path an
+ * author drew was not the path that got flown, and scrubbing the timeline
+ * showed the whole thing drifting (Noah: "the routes shifted... I never
+ * asked for that, and it doesn't make any sense. I want to design where
+ * the air units will be on-screen as they fly around").
+ *
+ * Pinning at spawn instead makes an air route rigid: it renders in exactly
+ * one place for every scrub time, and the author positions it against the
+ * camera box in Air mode. The case the old rule existed to serve — flying
+ * in from off-screen — is now simply *drawn*: put the first waypoint above
+ * the camera box and the second one inside it. That is both more
+ * predictable and more expressive, since the entrance becomes something
+ * you author rather than something the scroll does to you.
  *
  * ## What this module does *not* change
  *
@@ -39,10 +56,9 @@
  *    (`encounterTiming.ts`, `bezier.ts`'s `cubicBezierLength`) is unaffected
  *    by which mode you authored in. No save-version bump, no migration.
  */
-import { computeInstancePreview } from "./movementPreview";
-import { cameraLocalBand, cameraLocalXBand, LEVEL_SCROLL_SPEED, tileLifespanSec } from "../../../games/shmup/src/systems/encounters/scrollModel";
+import { LEVEL_SCROLL_SPEED } from "../../../games/shmup/src/systems/encounters/scrollModel";
 import type { EncounterUnit } from "./encounterTypes";
-import type { UnitDef, UnitLayer } from "./unitTypes";
+import type { UnitLayer } from "./unitTypes";
 
 /**
  * Which authoring frame a Unit belongs to. Deliberately two-valued while
@@ -68,68 +84,17 @@ export function scrollOffsetY(t: number): number {
 }
 
 /**
- * Sampling interval for `computePinTimeSec`. 50ms is ~9 world units of
- * scroll at `LEVEL_SCROLL_SPEED` — far finer than the pin moment can be
- * perceived at, and cheap enough to sample a whole tile lifespan per
- * instance.
- */
-export const PIN_SAMPLE_SEC = 0.05;
-
-/**
- * How far out to look for an instance's pin moment. Deliberately past the
- * encounter's own last step: a unit authored well above the tile may not
- * reach the camera until several seconds after its path has finished, and
- * stopping the search at the last step time would report "never pins" for
- * exactly the units that most need the air treatment.
- */
-export function pinHorizonSec(maxTime: number): number {
-  return maxTime + tileLifespanSec();
-}
-
-/**
- * The encounter time at which an air instance first becomes genuinely
- * visible — the moment the runtime pins its frame — or `null` if the scroll
- * never brings it on screen at all (in which case it rides the tile forever,
- * same as a ground unit, which is what the runtime does too).
+ * The encounter time an air instance's frame is pinned at: **the moment it
+ * spawns**, which is its first step's own time. No search, no sampling —
+ * see the file header on why this replaced a scan for first visibility.
  *
- * Sampled rather than solved: the path is a cubic bezier and the camera band
- * is a moving window, so there is no closed form. The runtime effectively
- * samples this per frame; this samples at `PIN_SAMPLE_SEC`.
- *
- * **Deliberately uses the *pre-pin* trajectory** — an authored tile-local
- * position, unshifted — because that is precisely how the unit moves before
- * it pins. Feeding a post-pin position back in would be circular.
- *
- * **Deliberately uses committed positions** (whatever is in `instance`), not
- * a live drag override. Recomputing the pin mid-drag would move the frame
- * the dragged node is being positioned in, which reads as the canvas sliding
- * under your finger — the same reasoning `EncounterEditor.tsx`'s bounding
- * box already applies to `minX`/`minY`.
+ * `null` when the instance has no steps at all (nothing to pin), or for a
+ * scroll-locked layer, which never decouples.
  */
-export function computePinTimeSec(
-  instance: EncounterUnit,
-  unitDef: UnitDef | undefined,
-  footprint: number,
-  horizonSec: number,
-  sampleSec: number = PIN_SAMPLE_SEC
-): number | null {
-  if (!unitDef) return null;
+export function airPinSec(instance: EncounterUnit, layer: UnitLayer | undefined): number | null {
+  if (layer === undefined || isScrollLocked(layer)) return null;
   const first = instance.steps[0];
-  if (!first) return null;
-  const xBand = cameraLocalXBand(footprint);
-  const stride = Math.max(sampleSec, 1e-3);
-  for (let t = Math.max(0, first.time); t <= horizonSec; t += stride) {
-    const preview = computeInstancePreview(instance, unitDef, t);
-    if (!preview) continue;
-    if (preview.pos.x < xBand.left || preview.pos.x > xBand.right) continue;
-    // The camera's band of tile-local y climbs the tile as the level
-    // scrolls, so containment has to be tested against the band at *this*
-    // instant, not a fixed rectangle.
-    const band = cameraLocalBand(t);
-    if (preview.pos.y < band.top || preview.pos.y > band.bottom) continue;
-    return t;
-  }
-  return null;
+  return first ? first.time : null;
 }
 
 /**
@@ -149,7 +114,12 @@ export function computePinTimeSec(
  */
 export function pinShiftY(scrollLocked: boolean, pinSec: number | null, t: number): number {
   if (scrollLocked || pinSec === null) return 0;
-  return -scrollOffsetY(t - pinSec);
+  // Deliberately **not** clamped at the pin the way `scrollOffsetY` clamps at
+  // zero. An air route is rigid in screen space at every scrub time, including
+  // before the instance spawns; clamping would let the drawn path slide around
+  // ahead of its own spawn moment, which is the exact behavior this rule
+  // exists to remove.
+  return -LEVEL_SCROLL_SPEED * (t - pinSec);
 }
 
 export interface DisplayShiftArgs {
@@ -176,18 +146,19 @@ export interface DisplayShiftArgs {
  *   the scroll the camera band subtracts, which holds the camera still and
  *   slides the terrain down through it instead.
  * - **The pin term** (`-scroll(t - pinSec)`, air layers only) is the
- *   decoupling. Before the pin it's zero, so an air unit rides the tile in
- *   both modes — that's the fly-in, and it's the part authors most often get
- *   wrong. After the pin it cancels the scroll, so the unit holds screen
- *   position.
+ *   decoupling, and since an air unit pins at spawn it applies for the
+ *   instance's whole life. It cancels the scroll exactly, so the unit holds
+ *   screen position from the first frame to the last.
  *
- * The four combinations that fall out:
+ * The combinations that fall out:
  *
  * | | ground mode | air mode |
  * |---|---|---|
  * | tile / ground unit | static | slides down past a fixed camera |
- * | air unit, pre-pin | rides the tile | rides the tile (descends into view) |
- * | air unit, post-pin | drifts *up* the tile as terrain passes beneath | holds still |
+ * | air unit | drifts *up* the tile as terrain passes beneath | **holds still** |
+ *
+ * That bottom-right cell is the whole point: in Air mode an authored air
+ * route is drawn in one fixed place, so what you draw is what it flies.
  */
 export function displayShiftY({ mode, scrollLocked, pinSec, t }: DisplayShiftArgs): number {
   return pinShiftY(scrollLocked, pinSec, t) + referenceShiftY(mode, t);

@@ -218,6 +218,48 @@
   image-rendering: pixelated;
 }
 
+/* ── Unit movement preview (UnitMovementPreview.tsx) ──────────────────
+   The Stats tab's counterpart to the weapon preview above: a Unit lapping
+   a synthetic circuit forever, so Speed/Turn rate/Hitbox size are watched
+   rather than guessed at. The caption carries the one number the picture
+   can't (seconds per lap). */
+.shmup-unit-motion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.shmup-unit-motion__canvas {
+  display: block;
+  border: 2px solid;
+  border-color: var(--win95-dark, #808080) var(--white, #fff) var(--white, #fff) var(--win95-dark, #808080);
+  image-rendering: pixelated;
+  max-width: 100%;
+}
+.shmup-unit-motion__caption {
+  font-size: 7px;
+  color: var(--purple-secondary, #5b2d8e);
+}
+/* Route picker: no one shape asks a Unit every question, so the preview
+   offers several (unitMovementPreview.ts's DEMO_ROUTES). */
+.shmup-unit-motion__route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+}
+.shmup-unit-motion__route .shmup-input {
+  font-size: 10px;
+  padding: 2px 4px;
+}
+.shmup-unit-motion__about {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #444;
+  text-align: center;
+  max-width: 260px;
+}
+
 /* ── Part position editor (PartPositionEditor.tsx) ────────────────────
    Dimmed body sprite as a reference frame, the Part's own sprite
    draggable on top, plus arrow-nudge buttons for pixel-precise placement
@@ -1593,19 +1635,6 @@
 }
 .shmup-timeline__hairline--part {
   background: #ff8844;
-}
-
-/* Where an air unit stops riding the scrolling terrain and holds screen
-   position (airFrame.ts's computePinTimeSec — the runtime's own
-   pin-on-first-visible moment). Everything left of it is the fly-in, which
-   is the part that's otherwise invisible on a ruler of plain times. */
-.shmup-timeline__pin {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-left: 2px dashed #66ffee;
-  pointer-events: none;
 }
 
 .shmup-timeline__playhead {

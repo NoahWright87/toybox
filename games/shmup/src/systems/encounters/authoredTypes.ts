@@ -129,8 +129,10 @@ export interface AuthoredUnitDef {
   scoreValue: number;
   /** Fixed max travel speed along the encounter's bezier curves, px/sec. */
   speed: number;
-  /** Caps a step's bezier handle length as a multiple of the segment's straight-line length. */
-  turnRate: number;
+  /** Slowest speed this Unit can sustain, px/sec. 0 = it can stop, and therefore pivot on the spot; above 0 it must arc through every corner (`turning.ts`). */
+  minSpeed: number;
+  /** How fast it can change heading, degrees/sec. With `minSpeed` this gives its minimum turning radius, which is what shapes the path it flies (`pathSolver.ts`). */
+  turnRateDegPerSec: number;
   /** Hitbox radius, px. */
   size: number;
   layer: AuthoredUnitLayer;
