@@ -668,11 +668,116 @@ export function repairSeededSimpleEnemies(units: UnitDef[]): UnitDef[] {
   });
 }
 
+// ── Default map-test Units (stable ids) ─────────────────────────────────
+
+/**
+ * `types.ts`'s `createDefaultTileLibrary` gives every default tile a
+ * starter Encounter placing one of each of these, so a freshly generated
+ * or playtested map always has at least one ground and one air unit on
+ * every tile type (Noah: "so I can test a full map with all tile types").
+ *
+ * These need **stable, hardcoded ids** rather than the usual
+ * `makeUnitId()`/`makeActionId()` — the tile library and the Unit library
+ * are seeded independently (`tileStore.ts` / `unitStore.ts`, two different
+ * FS files, not guaranteed to be (re)seeded in the same session), so an id
+ * generated fresh at construction time could never be relied on to still
+ * match by the time a tile's Encounter looks it up. Same reasoning as
+ * `DEFAULT_BULLET_UNIT_ID` above, just extended to the Action id too, since
+ * an `EncounterStep.actionId` needs a matching reference on this exact Unit.
+ */
+export const DEFAULT_TEST_GROUND_UNIT_ID = "unit-default-test-ground";
+export const DEFAULT_TEST_GROUND_ATTACK_ACTION_ID = "action-default-test-ground-attack";
+export const DEFAULT_TEST_AIR_UNIT_ID = "unit-default-test-air";
+export const DEFAULT_TEST_AIR_MOVE_ACTION_ID = "action-default-test-air-move";
+
+/** Stationary, fires at the player — the ground half of every default tile's starter Encounter. */
+function createDefaultTestGroundUnit(now: number): UnitDef {
+  const attackAction: ActionDef = {
+    id: DEFAULT_TEST_GROUND_ATTACK_ACTION_ID,
+    name: "Attack",
+    movementPercent: 0,
+    facing: "facePlayer",
+    fixedFacingDeg: 90,
+    setsInvincible: null,
+    requiresInvincible: false,
+    attack: {
+      arcStartDeg: 0,
+      arcEndDeg: 0,
+      count: 1,
+      spacing: "even",
+      perShotDelayMs: 0,
+      sweepSpeedDeg: 0,
+      pingPong: false,
+      burstIntervalMs: 1200,
+      telegraphMs: 0,
+      repeatCount: null,
+      spawnUnitId: DEFAULT_BULLET_UNIT_ID,
+      spawnScale: 1,
+      spawnGroup: "enemyProjectile",
+    },
+  };
+  const main: UnitPart = { ...createDefaultPart(), actions: [cloneAction(attackAction)] };
+  return {
+    id: DEFAULT_TEST_GROUND_UNIT_ID,
+    name: "Test Turret",
+    spriteId: "turret",
+    customSprite: null,
+    hp: 30,
+    contactDamage: 3,
+    scoreValue: 200,
+    speed: 0,
+    minSpeed: 0,
+    turnRateDegPerSec: 120,
+    size: 16,
+    layer: "ground",
+    defaultActionId: attackAction.id,
+    actions: [attackAction],
+    parts: [main],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
+/** Flies a short diagonal path across the screen — the air half of every default tile's starter Encounter. */
+function createDefaultTestAirUnit(now: number): UnitDef {
+  const moveAction: ActionDef = {
+    id: DEFAULT_TEST_AIR_MOVE_ACTION_ID,
+    name: "Move",
+    movementPercent: 100,
+    facing: "faceMovement",
+    fixedFacingDeg: 90,
+    setsInvincible: null,
+    requiresInvincible: false,
+    attack: null,
+  };
+  return {
+    id: DEFAULT_TEST_AIR_UNIT_ID,
+    name: "Test Jet",
+    spriteId: "jet-fighter",
+    customSprite: null,
+    hp: 25,
+    contactDamage: 3,
+    scoreValue: 220,
+    speed: 180,
+    minSpeed: 100,
+    turnRateDegPerSec: 90,
+    size: 16,
+    layer: "air",
+    defaultActionId: moveAction.id,
+    actions: [moveAction],
+    parts: [createDefaultPart()],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
 /** The full default Unit library a brand-new/reset session starts with. */
 export function createDefaultUnitLibrary(): UnitDef[] {
   const now = Date.now();
   return [
     createDefaultBulletUnit(),
+    createDefaultTestGroundUnit(now),
+    createDefaultTestAirUnit(now),
     ...PROJECTILE_SPECS.map((spec) => createProjectileUnit(spec, now)),
     ...SIMPLE_ENEMY_SPECS.map((spec) => createSimpleEnemyUnit(spec, now)),
     ...TURRETED_ENEMY_SPECS.map((spec) => createTurretedEnemyUnit(spec, now)),

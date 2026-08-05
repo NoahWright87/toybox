@@ -1108,7 +1108,12 @@ attack together instead of a standalone Weapon.)
     tanks, motorcycles, trains, turrets, the battleship). Stats
     (`hp`/`contactDamage`/`scoreValue`/`speed`/`minSpeed`/`turnRateDegPerSec`/`size`) are
     made-up placeholder numbers loosely scaled to each vehicle's apparent
-    size/role, not balanced gameplay data.
+    size/role, not balanced gameplay data;
+  - two small purpose-built Units with **hardcoded stable ids** (not the
+    usual `makeUnitId()`) — `createDefaultTestGroundUnit`'s stationary
+    "Test Turret" and `createDefaultTestAirUnit`'s "Test Jet" — that exist
+    only so every default tile's starter Encounter (see "Persistence"
+    below) has something fixed to place.
 
     **Two seeding bugs, since fixed** (`createSimpleEnemyUnit`, plus
     `repairSeededSimpleEnemies` for already-saved libraries). Noah's report:
@@ -2253,6 +2258,22 @@ are tagged and its other two are hardwalled, since a mixed/gradient edge
 has no single tag that could describe it — see that file for the exact
 per-tile breakdown). The seed is saved immediately, same pattern as
 `unitStore.ts`'s pre-existing default-Unit-library seeding (below).
+
+**Every default tile also ships with one starter Encounter** (`types.ts`'s
+`createDefaultTestEncounter`, weight 1, named "Air & Ground Test"), so a
+freshly generated or playtested map always has at least one ground and one
+air unit on every tile type to sanity-check rendering/culling/air-pinning
+against every biome's art (Noah: "so I can test a full map with all tile
+types"). It places a stationary Test Turret (fires at the player) and a
+Test Jet flying a short diagonal path — two small purpose-built Units
+(`unitTypes.ts`'s `createDefaultTestGroundUnit`/`createDefaultTestAirUnit`,
+part of `createDefaultUnitLibrary`) with **hardcoded stable ids** for both
+the Unit and its one Action, unlike every other seeded enemy — the tile
+library and the Unit library it references are seeded independently (two
+different `.DAT` files, not guaranteed to (re)seed together), so an id
+generated fresh at construction time (`makeUnitId()`/`makeActionId()`)
+could never be relied on to still resolve by the time a tile's `EncounterStep.actionId`
+looks it up.
 Purely-additive optional fields (`customImage`) don't bump
 `SAVE_VERSION` — a pre-existing save missing it is still valid and gets
 backfilled to its default (`null`) on load, rather than the whole

@@ -7,7 +7,14 @@
  * (specs/games/shmup/levels-and-tiles.spec.todo.md), not the code.
  */
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID, tileImageById } from "./tileImages";
-import type { EncounterDef } from "./encounterTypes";
+import { createEncounterUnit, makeEncounterId, makeStepId, type EncounterDef, type EncounterStep, type EncounterUnit } from "./encounterTypes";
+import { TILE_UNIT } from "./editorScale";
+import {
+  DEFAULT_TEST_AIR_MOVE_ACTION_ID,
+  DEFAULT_TEST_AIR_UNIT_ID,
+  DEFAULT_TEST_GROUND_ATTACK_ACTION_ID,
+  DEFAULT_TEST_GROUND_UNIT_ID,
+} from "./unitTypes";
 
 export type EdgeTag = string;
 
@@ -160,9 +167,60 @@ function verticalSplitTile(name: string, imageId: string, west: EdgeTag, east: E
   };
 }
 
+/**
+ * One stationary Test Turret plus one Test Jet flying a short diagonal path
+ * — the starter Encounter every default tile ships with, so a freshly
+ * generated or playtested map always has at least one ground and one air
+ * unit on every tile type (Noah: "so I can test a full map with all tile
+ * types"). Placed at the center of a footprint-1 tile (every default tile
+ * is footprint 1 — see file header); the two Units it places are
+ * `unitTypes.ts`'s `createDefaultTestGroundUnit`/`createDefaultTestAirUnit`,
+ * referenced by their stable ids since this tile library and the Unit
+ * library it points into are seeded independently.
+ */
+function createDefaultTestEncounter(): EncounterDef {
+  const now = Date.now();
+  const groundStep: EncounterStep = {
+    id: makeStepId(),
+    pos: { x: TILE_UNIT / 2, y: TILE_UNIT / 2 },
+    time: 0,
+    actionId: DEFAULT_TEST_GROUND_ATTACK_ACTION_ID,
+    handleIn: null,
+    handleOut: null,
+  };
+  const groundUnit: EncounterUnit = { ...createEncounterUnit(DEFAULT_TEST_GROUND_UNIT_ID), steps: [groundStep] };
+
+  const airStart: EncounterStep = {
+    id: makeStepId(),
+    pos: { x: TILE_UNIT * 0.2, y: -TILE_UNIT * 0.25 },
+    time: 1,
+    actionId: DEFAULT_TEST_AIR_MOVE_ACTION_ID,
+    handleIn: null,
+    handleOut: null,
+  };
+  const airEnd: EncounterStep = {
+    id: makeStepId(),
+    pos: { x: TILE_UNIT * 0.8, y: TILE_UNIT * 0.6 },
+    time: 5,
+    actionId: DEFAULT_TEST_AIR_MOVE_ACTION_ID,
+    handleIn: null,
+    handleOut: null,
+  };
+  const airUnit: EncounterUnit = { ...createEncounterUnit(DEFAULT_TEST_AIR_UNIT_ID), steps: [airStart, airEnd] };
+
+  return {
+    id: makeEncounterId(),
+    name: "Air & Ground Test",
+    weight: 1,
+    units: [groundUnit, airUnit],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
 function makeDefaultTile(spec: Omit<TileDef, "id" | "createdAt" | "modifiedAt">): TileDef {
   const now = Date.now();
-  return { ...spec, id: makeTileId(), createdAt: now, modifiedAt: now };
+  return { ...spec, encounters: [createDefaultTestEncounter()], id: makeTileId(), createdAt: now, modifiedAt: now };
 }
 
 /**
