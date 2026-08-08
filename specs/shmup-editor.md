@@ -1108,7 +1108,36 @@ attack together instead of a standalone Weapon.)
     tanks, motorcycles, trains, turrets, the battleship). Stats
     (`hp`/`contactDamage`/`scoreValue`/`speed`/`minSpeed`/`turnRateDegPerSec`/`size`) are
     made-up placeholder numbers loosely scaled to each vehicle's apparent
-    size/role, not balanced gameplay data.
+    size/role, not balanced gameplay data;
+  - a doodad set of 93 inert scenery Units — one per sprite in the doodad
+    batch (foliage, rocks, desert flora, a military camp kit and its desert
+    recolor, urban street furniture, industrial clutter, and large rooftop
+    structures; see `public/shmup-editor/doodads/README.md`) — built by
+    `DOODAD_SPECS`/`createDoodadUnit`. A doodad reuses `UnitDef` wholesale
+    rather than getting a parallel type (this file's header: a Unit "also
+    covers non-combatant doodads"), so encounter placement, scaling and
+    preview all work on it for free. What makes one inert is a specific
+    combination: `layer: "doodad"`, `speed: 0`, `actions: []` with
+    `defaultActionId: null` (which the Step tab reads as "(none — holds
+    position)"), `contactDamage: 0`, `scoreValue: 0`, and the default Part's
+    `hasHitbox: false` — scenery to fly over, not an obstacle, though an
+    author can switch the hitbox on per placement. Note the null default is
+    deliberately *not* the inert `createMoveAction(false)` that
+    `repairSeededSimpleEnemies` exists to undo for turrets: a turret with no
+    Action was a bug because a turret is meant to shoot, whereas a rock doing
+    nothing is the entire point. `size` is hand-tuned per prop (a manhole
+    cover 12, a warehouse roof 56) because the sprites are all fitted to one
+    256px square canvas and so carry no usable scale of their own.
+
+    Because the batch is purely *additive* seed content, a library saved
+    before it shipped gains it via `backfillDoodads` on load rather than a
+    `SAVE_VERSION` bump — the same reasoning that makes
+    `repairSeededSimpleEnemies` a content-level repair: a bump resets the
+    library and discards every Unit the user authored. A one-shot
+    `doodadsSeeded` flag on the saved record (optional, so pre-existing saves
+    parse as not-yet-backfilled) guards it, so the batch lands exactly once
+    and a doodad the user deliberately deletes stays deleted instead of
+    reappearing on every load.
 
     **Two seeding bugs, since fixed** (`createSimpleEnemyUnit`, plus
     `repairSeededSimpleEnemies` for already-saved libraries). Noah's report:
@@ -1784,13 +1813,29 @@ dragged instead of teleporting it around the loop.
 Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly.
 Built-in set: a body-split-from-turret Parts-demo pair (armored truck,
 battle tank) Noah supplied directly, plus a growing "incoming" vehicle
-batch and a curated projectile set (see
-`public/shmup-editor/enemies/README.md` and
-`public/shmup-editor/projectiles/README.md` for sourcing/processing
-details) — every built-in is a single static pose, no animation frames.
-Processing is a one-time Jimp-based script per batch that chroma-key
-flood-fills real alpha transparency in, trims to content, and pads to a
-square icon. Custom upload reuses the same
+batch, a curated projectile set, and a 93-piece doodad set of top-down
+scenery props (see `public/shmup-editor/enemies/README.md`,
+`public/shmup-editor/projectiles/README.md` and
+`public/shmup-editor/doodads/README.md` for sourcing/processing details)
+— every built-in is a single static pose, no animation frames.
+Processing is a one-time Jimp-based script per batch that chroma-keys real
+alpha transparency in, trims to content, and pads to a square icon.
+
+The doodad batch (`scripts/prepare-doodads.mjs`) differs from the earlier
+scripts in two ways worth knowing before adding art like it. Its eight
+contact sheets have no cell borders to measure, so per-prop boxes are
+derived from the art by `scripts/doodadSegment.mjs` (band-splitting on runs
+of empty rows/columns, so a deliberately scattered prop like a pebble field
+or a run of bollards stays one sprite instead of shattering into a dozen)
+rather than hand-listed like `prepare-projectiles.mjs`'s `SHEET_CELLS`. And
+it keys every magenta pixel wherever it sits, not just what an edge flood
+fill can reach, because several props are meshes whose holes show the
+backdrop through them — camo netting, the fenced rooftop — which a flood
+fill leaves as magenta confetti baked inside the sprite. The key is a soft
+one that un-mixes the backdrop's contribution out of partially-covered edge
+pixels, measuring contamination as red-and-blue-in-excess-of-green rather
+than as distance from the backdrop color; a distance threshold wide enough
+to catch the real halo also swallows every neutral gray rock on the sheets. Custom upload reuses the same
 `paletteQuantize.ts`/`indexedPng.ts` pipeline as tile art, generalized in
 `imageUpload.ts` into `decodeUpload`/`canvasToIndexedPngDataUrl` helpers
 shared by both `loadTileImageFile` (cover-fit crop, opaque — fills a whole
