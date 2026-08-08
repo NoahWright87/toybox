@@ -224,9 +224,9 @@ export default function ConnectionViewer({ tiles }: ConnectionViewerProps) {
           >
             −
           </button>
-          {/* Difficulty is not decoration: an instance whose minCostPerInstance
-              exceeds it doesn't spawn at all, so a level played too low is
-              legitimately empty. */}
+          {/* Difficulty is not decoration: an instance whose Unit cost
+              (unitTypes.ts's UnitDef.cost) exceeds it doesn't spawn at all, so
+              a level played too low is legitimately empty. */}
           <span className="shmup-connection-viewer__difficulty-value">Diff. {difficulty}</span>
           <button
             type="button"

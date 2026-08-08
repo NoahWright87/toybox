@@ -37,7 +37,11 @@ import { createDefaultTileLibrary, type EdgeSlot, type TileDef } from "./types";
 // `actionId`; embedded EncounterAttack was replaced by PartActionPlacement
 // (`encounterTypes.ts`) — Actions are back. Bumping for the same reason as
 // v6 (the mirror-image change, when Actions were cut).
-const SAVE_VERSION = 9;
+// v10: embedded UnitScaling's `minCostPerInstance` was removed — a Unit's
+// Difficulty cost moved onto `UnitDef.cost` (unitTypes.ts, unitStore.ts's
+// matching SAVE_VERSION v10) so it's authored once per Unit instead of once
+// per placement. Bumping for the same "dead/moved field" reason as v8.
+const SAVE_VERSION = 10;
 
 interface SavedLibrary {
   version: number;

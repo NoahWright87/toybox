@@ -241,6 +241,17 @@ export interface UnitDef {
   hp: number;
   contactDamage: number;
   scoreValue: number;
+  /**
+   * The Difficulty share one instance of this Unit needs to justify
+   * existing at all — lives here, not on the placement's `UnitScaling`
+   * (`unitScaling.ts`), so a Unit's power budget is authored once and
+   * every Encounter that places it inherits the same balance instead of
+   * being able to spawn it dirt-cheap by an encounter-author's oversight.
+   * `resolveScaling` reads this directly; `UnitScaling.minCostPerInstance`
+   * doesn't exist. Low = cheap = swarms readily; high = expensive =
+   * rare/late-game/miniboss-leaning.
+   */
+  cost: number;
   /** Fixed max travel speed along its encounter steps' bezier curves, px/sec — never touched by difficulty scaling, see file header. An Action's movementPercent selects how much of this is actually used. */
   speed: number;
   /**
@@ -290,6 +301,7 @@ export function createBlankUnit(existingCount: number): UnitDef {
     hp: 10,
     contactDamage: 1,
     scoreValue: 100,
+    cost: 1,
     speed: 120,
     minSpeed: 0,
     turnRateDegPerSec: 90,
@@ -335,6 +347,7 @@ export function createDefaultBulletUnit(): UnitDef {
     hp: 1,
     contactDamage: 1,
     scoreValue: 0,
+    cost: 1,
     speed: 300,
     minSpeed: 300,
     turnRateDegPerSec: 30,
@@ -422,6 +435,9 @@ function createProjectileUnit(spec: ProjectileSpec, now: number): UnitDef {
     hp: spec.hp,
     contactDamage: spec.contactDamage,
     scoreValue: 0,
+    // Never placed/scaled directly — always dynamically spawned via some
+    // other Unit's attack.spawnUnitId, which doesn't consult cost at all.
+    cost: 1,
     speed: spec.speed,
     // A projectile can't slow down, so minSpeed is its speed — which gives it
     // a huge turning circle and keeps it flying essentially straight.
@@ -440,6 +456,43 @@ function createProjectileUnit(spec: ProjectileSpec, now: number): UnitDef {
 // ── Default enemy Units, pre-wired with a basic movement + attack Action ──
 
 /**
+ * Stable, deterministic id helpers for every default-library Unit/Action/
+ * Part below — replacing `makeUnitId()`/`makeActionId()`/`makePartId()`'s
+ * random ids for anything seeded. A hand-authored default tile's Encounter
+ * (`types.ts`'s `createDefaultTileLibrary`) references a specific enemy's
+ * specific Action (or a turret Part's specific Action) by id — and since
+ * the tile library and the Unit library are seeded independently (two
+ * different `.DAT` files, not guaranteed to (re)seed in the same session),
+ * an id generated fresh at construction time could never be relied on to
+ * still match by the time an `EncounterStep.actionId`/`PartActionPlacement`
+ * looks it up. Deterministic ids sidestep that entirely: the same slug
+ * always produces the same id, every time `createDefaultUnitLibrary()` runs.
+ */
+export function enemyUnitId(slug: string): string {
+  return `unit-default-${slug}`;
+}
+/** A mobile simple enemy's "Move" Action id (fixed/inert for a stationary one — see `createMoveAction`). */
+export function enemyMoveActionId(slug: string): string {
+  return `action-default-${slug}-move`;
+}
+/** A simple enemy's stationary, face-player "Attack" Action id — also every turreted enemy's per-turret Attack, via `enemyTurretAttackActionId` instead. */
+export function enemyAttackActionId(slug: string): string {
+  return `action-default-${slug}-attack`;
+}
+/** The "fire while moving" Action every mobile simple enemy gets alongside Move/Attack — see `createSimpleEnemyUnit`. */
+export function enemyStrafeActionId(slug: string): string {
+  return `action-default-${slug}-strafe`;
+}
+/** A turreted enemy's Nth Turret Part id (`createTurretedEnemyUnit`) — index matches `TurretedEnemySpec.turretOffsets`' order. */
+export function enemyTurretPartId(slug: string, index: number): string {
+  return `part-default-${slug}-turret-${index}`;
+}
+/** That Turret Part's own Attack Action id — referenced from a `PartActionPlacement`, not a base-Unit `EncounterStep.actionId`. */
+export function enemyTurretAttackActionId(slug: string, index: number): string {
+  return `action-default-${slug}-turret-${index}-attack`;
+}
+
+/**
  * Every enemy Unit below is seeded with two Actions: a "Move" Action
  * (`movementPercent: 100`, facing the direction of travel — or, for the
  * two stationary turrets, `movementPercent: 0`/fixed facing) on the
@@ -450,9 +503,9 @@ function createProjectileUnit(spec: ProjectileSpec, now: number): UnitDef {
  * have their own independent Action buffet. `defaultActionId` points at
  * the Move Action, same convention as createDefaultBulletUnit's "Fly".
  */
-function createMoveAction(canMove: boolean): ActionDef {
+function createMoveAction(id: string, canMove: boolean): ActionDef {
   return {
-    id: makeActionId(),
+    id,
     name: "Move",
     movementPercent: canMove ? 100 : 0,
     facing: canMove ? "faceMovement" : "fixed",
@@ -463,12 +516,12 @@ function createMoveAction(canMove: boolean): ActionDef {
   };
 }
 
-function createAttackAction(burstIntervalMs: number): ActionDef {
+function createAttackAction(id: string, burstIntervalMs: number, facing: FacingMode = "facePlayer", movementPercent = 0): ActionDef {
   return {
-    id: makeActionId(),
-    name: "Attack",
-    movementPercent: 0,
-    facing: "facePlayer",
+    id,
+    name: facing === "facePlayer" ? "Attack" : "Strafe",
+    movementPercent,
+    facing,
     fixedFacingDeg: 90,
     setsInvincible: null,
     requiresInvincible: false,
@@ -498,6 +551,8 @@ interface SimpleEnemySpec {
   hp: number;
   contactDamage: number;
   scoreValue: number;
+  /** Difficulty share one instance needs to justify existing — see `UnitDef.cost`. */
+  cost: number;
   speed: number;
   minSpeed: number;
   turnRateDegPerSec: number;
@@ -506,27 +561,31 @@ interface SimpleEnemySpec {
 }
 
 const SIMPLE_ENEMY_SPECS: SimpleEnemySpec[] = [
-  { slug: "heli", name: "Attack Helicopter", spriteId: "heli", layer: "air", hp: 30, contactDamage: 3, scoreValue: 220, speed: 140, minSpeed: 0, turnRateDegPerSec: 180, size: 16, fireIntervalMs: 950 },
-  { slug: "heli-transport", name: "Transport Helicopter", spriteId: "heli-transport", layer: "air", hp: 50, contactDamage: 2, scoreValue: 260, speed: 100, minSpeed: 0, turnRateDegPerSec: 120, size: 20, fireIntervalMs: 1400 },
-  { slug: "jet-bomber", name: "Jet Bomber", spriteId: "jet-bomber", layer: "air", hp: 45, contactDamage: 4, scoreValue: 300, speed: 160, minSpeed: 90, turnRateDegPerSec: 60, size: 20, fireIntervalMs: 1200 },
-  { slug: "jet-fighter", name: "Jet Fighter", spriteId: "jet-fighter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 220, speed: 220, minSpeed: 130, turnRateDegPerSec: 90, size: 16, fireIntervalMs: 800 },
-  { slug: "jet-stealth", name: "Stealth Jet", spriteId: "jet-stealth", layer: "air", hp: 20, contactDamage: 4, scoreValue: 260, speed: 240, minSpeed: 140, turnRateDegPerSec: 100, size: 15, fireIntervalMs: 750 },
-  { slug: "motorcycle-sidecar", name: "Motorcycle + Sidecar", spriteId: "motorcycle-sidecar", layer: "ground", hp: 18, contactDamage: 2, scoreValue: 150, speed: 150, minSpeed: 30, turnRateDegPerSec: 150, size: 14, fireIntervalMs: 1000 },
-  { slug: "plane-prop", name: "Prop Plane", spriteId: "plane-prop", layer: "air", hp: 55, contactDamage: 3, scoreValue: 280, speed: 120, minSpeed: 60, turnRateDegPerSec: 70, size: 22, fireIntervalMs: 1300 },
-  { slug: "truck-transport", name: "Transport Truck", spriteId: "truck-transport", layer: "ground", hp: 35, contactDamage: 2, scoreValue: 200, speed: 90, minSpeed: 20, turnRateDegPerSec: 60, size: 18, fireIntervalMs: 1400 },
-  { slug: "turret", name: "Turret", spriteId: "turret", layer: "ground", hp: 30, contactDamage: 3, scoreValue: 200, speed: 0, minSpeed: 0, turnRateDegPerSec: 120, size: 16, fireIntervalMs: 1000 },
-  { slug: "turret-4x", name: "Turret (Quad)", spriteId: "turret-4x", layer: "ground", hp: 40, contactDamage: 4, scoreValue: 260, speed: 0, minSpeed: 0, turnRateDegPerSec: 90, size: 18, fireIntervalMs: 700 },
-  { slug: "train-front", name: "Train (Front)", spriteId: "train-front", layer: "ground", hp: 80, contactDamage: 4, scoreValue: 400, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 26, fireIntervalMs: 1500 },
-  { slug: "train-rear", name: "Train (Rear)", spriteId: "train-rear", layer: "ground", hp: 60, contactDamage: 3, scoreValue: 320, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 24, fireIntervalMs: 1500 },
+  { slug: "heli", name: "Attack Helicopter", spriteId: "heli", layer: "air", hp: 30, contactDamage: 3, scoreValue: 220, cost: 3, speed: 140, minSpeed: 0, turnRateDegPerSec: 180, size: 16, fireIntervalMs: 950 },
+  { slug: "heli-transport", name: "Transport Helicopter", spriteId: "heli-transport", layer: "air", hp: 50, contactDamage: 2, scoreValue: 260, cost: 3, speed: 100, minSpeed: 0, turnRateDegPerSec: 120, size: 20, fireIntervalMs: 1400 },
+  { slug: "jet-bomber", name: "Jet Bomber", spriteId: "jet-bomber", layer: "air", hp: 45, contactDamage: 4, scoreValue: 300, cost: 4, speed: 160, minSpeed: 90, turnRateDegPerSec: 60, size: 20, fireIntervalMs: 1200 },
+  { slug: "jet-fighter", name: "Jet Fighter", spriteId: "jet-fighter", layer: "air", hp: 25, contactDamage: 3, scoreValue: 220, cost: 3, speed: 220, minSpeed: 130, turnRateDegPerSec: 90, size: 16, fireIntervalMs: 800 },
+  { slug: "jet-stealth", name: "Stealth Jet", spriteId: "jet-stealth", layer: "air", hp: 20, contactDamage: 4, scoreValue: 260, cost: 4, speed: 240, minSpeed: 140, turnRateDegPerSec: 100, size: 15, fireIntervalMs: 750 },
+  { slug: "motorcycle-sidecar", name: "Motorcycle + Sidecar", spriteId: "motorcycle-sidecar", layer: "ground", hp: 18, contactDamage: 2, scoreValue: 150, cost: 1, speed: 150, minSpeed: 30, turnRateDegPerSec: 150, size: 14, fireIntervalMs: 1000 },
+  { slug: "plane-prop", name: "Prop Plane", spriteId: "plane-prop", layer: "air", hp: 55, contactDamage: 3, scoreValue: 280, cost: 3, speed: 120, minSpeed: 60, turnRateDegPerSec: 70, size: 22, fireIntervalMs: 1300 },
+  { slug: "truck-transport", name: "Transport Truck", spriteId: "truck-transport", layer: "ground", hp: 35, contactDamage: 2, scoreValue: 200, cost: 2, speed: 90, minSpeed: 20, turnRateDegPerSec: 60, size: 18, fireIntervalMs: 1400 },
+  { slug: "turret", name: "Turret", spriteId: "turret", layer: "ground", hp: 30, contactDamage: 3, scoreValue: 200, cost: 2, speed: 0, minSpeed: 0, turnRateDegPerSec: 120, size: 16, fireIntervalMs: 1000 },
+  { slug: "turret-4x", name: "Turret (Quad)", spriteId: "turret-4x", layer: "ground", hp: 40, contactDamage: 4, scoreValue: 260, cost: 3, speed: 0, minSpeed: 0, turnRateDegPerSec: 90, size: 18, fireIntervalMs: 700 },
+  { slug: "train-front", name: "Train (Front)", spriteId: "train-front", layer: "ground", hp: 80, contactDamage: 4, scoreValue: 400, cost: 6, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 26, fireIntervalMs: 1500 },
+  { slug: "train-rear", name: "Train (Rear)", spriteId: "train-rear", layer: "ground", hp: 60, contactDamage: 3, scoreValue: 320, cost: 5, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 24, fireIntervalMs: 1500 },
 ];
 
-function enemyUnitId(slug: string): string {
-  return `unit-default-${slug}`;
-}
-
 function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
-  const moveAction = createMoveAction(spec.speed > 0);
-  const attackAction = createAttackAction(spec.fireIntervalMs);
+  const canMove = spec.speed > 0;
+  const moveAction = createMoveAction(enemyMoveActionId(spec.slug), canMove);
+  const attackAction = createAttackAction(enemyAttackActionId(spec.slug), spec.fireIntervalMs);
+  // Every mobile enemy also gets a "Strafe" Action — Attack's facePlayer +
+  // 0% movement is right for something that plants and fires (a turret), but
+  // wrong for a vehicle meant to fire *while* moving (a jet's strafing run):
+  // Strafe keeps facing the direction of travel instead of snapping to face
+  // the player, same fire pattern otherwise. A stationary unit has nothing to
+  // move through while firing, so it doesn't get one.
+  const strafeAction = canMove ? createAttackAction(enemyStrafeActionId(spec.slug), spec.fireIntervalMs, "faceMovement", 100) : null;
   // The attack lives on the Part, not just in the Unit-level buffet. The
   // encounter editor's 🔫+ node control gates on
   // `parts.some(p => p.actions.length > 0)`, so a Part with `actions: []` left
@@ -539,7 +598,7 @@ function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
   // construction — movementPercent 0, attack null — so a freshly placed turret
   // stood there doing precisely nothing until you hand-picked an Action for it,
   // once per placement. Things that can actually move still default to moving.
-  const stationary = spec.speed <= 0;
+  const stationary = !canMove;
   return {
     id: enemyUnitId(spec.slug),
     name: spec.name,
@@ -548,13 +607,14 @@ function createSimpleEnemyUnit(spec: SimpleEnemySpec, now: number): UnitDef {
     hp: spec.hp,
     contactDamage: spec.contactDamage,
     scoreValue: spec.scoreValue,
+    cost: spec.cost,
     speed: spec.speed,
     minSpeed: spec.minSpeed,
     turnRateDegPerSec: spec.turnRateDegPerSec,
     size: spec.size,
     layer: spec.layer,
     defaultActionId: stationary ? attackAction.id : moveAction.id,
-    actions: [moveAction, attackAction],
+    actions: strafeAction ? [moveAction, attackAction, strafeAction] : [moveAction, attackAction],
     parts: [main],
     createdAt: now,
     modifiedAt: now,
@@ -572,6 +632,8 @@ interface TurretedEnemySpec {
   hp: number;
   contactDamage: number;
   scoreValue: number;
+  /** Difficulty share one instance needs to justify existing — see `UnitDef.cost`. */
+  cost: number;
   speed: number;
   minSpeed: number;
   turnRateDegPerSec: number;
@@ -581,20 +643,20 @@ interface TurretedEnemySpec {
 
 /** Vehicles split into a body + turret sprite (see enemies/README.md's "incoming" batch and the pre-existing armored-truck/battle-tank Parts-demo set) — each turret mount is its own Part, offset from center, carrying the Attack Action. */
 const TURRETED_ENEMY_SPECS: TurretedEnemySpec[] = [
-  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, speed: 90, minSpeed: 20, turnRateDegPerSec: 55, size: 20, fireIntervalMs: 1000 },
-  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, speed: 70, minSpeed: 0, turnRateDegPerSec: 30, size: 22, fireIntervalMs: 900 },
+  { slug: "armored-truck", name: "Armored Truck", bodySpriteId: "armored-truck-body", turretSpriteId: "armored-truck-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 40, contactDamage: 3, scoreValue: 250, cost: 3, speed: 90, minSpeed: 20, turnRateDegPerSec: 55, size: 20, fireIntervalMs: 1000 },
+  { slug: "battle-tank", name: "Battle Tank", bodySpriteId: "battle-tank-body", turretSpriteId: "battle-tank-turret", turretOffsets: [{ x: 0, y: 0 }], layer: "ground", hp: 60, contactDamage: 4, scoreValue: 350, cost: 4, speed: 70, minSpeed: 0, turnRateDegPerSec: 30, size: 22, fireIntervalMs: 900 },
   // Battleship hull art has 4 obvious circular turret barbettes (2 fore, 2 aft of the bridge) — one Turret Part each.
-  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffsets: [{ x: 0, y: -43 }, { x: 0, y: -25 }, { x: 0, y: 22 }, { x: 0, y: 39 }], layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, speed: 40, minSpeed: 15, turnRateDegPerSec: 8, size: 34, fireIntervalMs: 1100 },
-  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffsets: [{ x: 0, y: -6 }], layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, speed: 85, minSpeed: 20, turnRateDegPerSec: 55, size: 20, fireIntervalMs: 1300 },
+  { slug: "battleship", name: "Battleship", bodySpriteId: "battleship-hull", turretSpriteId: "battleship-turret", turretOffsets: [{ x: 0, y: -43 }, { x: 0, y: -25 }, { x: 0, y: 22 }, { x: 0, y: 39 }], layer: "ground", hp: 150, contactDamage: 6, scoreValue: 800, cost: 10, speed: 40, minSpeed: 15, turnRateDegPerSec: 8, size: 34, fireIntervalMs: 1100 },
+  { slug: "missile-truck", name: "Missile Truck", bodySpriteId: "missile-truck-body", turretSpriteId: "missile-truck-turret", turretOffsets: [{ x: 0, y: -6 }], layer: "ground", hp: 45, contactDamage: 5, scoreValue: 320, cost: 3, speed: 85, minSpeed: 20, turnRateDegPerSec: 55, size: 20, fireIntervalMs: 1300 },
   // Train gun car body art has 3 obvious circular turret rings running down the roof.
-  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffsets: [{ x: 0, y: -41 }, { x: 0, y: -4 }, { x: 0, y: 33 }], layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 24, fireIntervalMs: 850 },
+  { slug: "train-gun-car", name: "Train (Gun Car)", bodySpriteId: "train-gun-car-body", turretSpriteId: "train-gun-car-turret", turretOffsets: [{ x: 0, y: -41 }, { x: 0, y: -4 }, { x: 0, y: 33 }], layer: "ground", hp: 70, contactDamage: 5, scoreValue: 380, cost: 6, speed: 60, minSpeed: 60, turnRateDegPerSec: 5, size: 24, fireIntervalMs: 850 },
 ];
 
 function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef {
-  const moveAction = createMoveAction(spec.speed > 0);
+  const moveAction = createMoveAction(enemyMoveActionId(spec.slug), spec.speed > 0);
   const main = createDefaultPart();
   const turrets: UnitPart[] = spec.turretOffsets.map((offset, i) => ({
-    id: makePartId(),
+    id: enemyTurretPartId(spec.slug, i),
     name: spec.turretOffsets.length > 1 ? `Turret ${i + 1}` : "Turret",
     offset,
     spriteId: spec.turretSpriteId,
@@ -603,7 +665,7 @@ function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef 
     hasHealth: false,
     hp: 10,
     damageMultiplier: 1,
-    actions: [createAttackAction(spec.fireIntervalMs)],
+    actions: [createAttackAction(enemyTurretAttackActionId(spec.slug, i), spec.fireIntervalMs)],
   }));
   return {
     id: enemyUnitId(spec.slug),
@@ -613,6 +675,7 @@ function createTurretedEnemyUnit(spec: TurretedEnemySpec, now: number): UnitDef 
     hp: spec.hp,
     contactDamage: spec.contactDamage,
     scoreValue: spec.scoreValue,
+    cost: spec.cost,
     speed: spec.speed,
     minSpeed: spec.minSpeed,
     turnRateDegPerSec: spec.turnRateDegPerSec,
@@ -668,116 +731,11 @@ export function repairSeededSimpleEnemies(units: UnitDef[]): UnitDef[] {
   });
 }
 
-// ── Default map-test Units (stable ids) ─────────────────────────────────
-
-/**
- * `types.ts`'s `createDefaultTileLibrary` gives every default tile a
- * starter Encounter placing one of each of these, so a freshly generated
- * or playtested map always has at least one ground and one air unit on
- * every tile type (Noah: "so I can test a full map with all tile types").
- *
- * These need **stable, hardcoded ids** rather than the usual
- * `makeUnitId()`/`makeActionId()` — the tile library and the Unit library
- * are seeded independently (`tileStore.ts` / `unitStore.ts`, two different
- * FS files, not guaranteed to be (re)seeded in the same session), so an id
- * generated fresh at construction time could never be relied on to still
- * match by the time a tile's Encounter looks it up. Same reasoning as
- * `DEFAULT_BULLET_UNIT_ID` above, just extended to the Action id too, since
- * an `EncounterStep.actionId` needs a matching reference on this exact Unit.
- */
-export const DEFAULT_TEST_GROUND_UNIT_ID = "unit-default-test-ground";
-export const DEFAULT_TEST_GROUND_ATTACK_ACTION_ID = "action-default-test-ground-attack";
-export const DEFAULT_TEST_AIR_UNIT_ID = "unit-default-test-air";
-export const DEFAULT_TEST_AIR_MOVE_ACTION_ID = "action-default-test-air-move";
-
-/** Stationary, fires at the player — the ground half of every default tile's starter Encounter. */
-function createDefaultTestGroundUnit(now: number): UnitDef {
-  const attackAction: ActionDef = {
-    id: DEFAULT_TEST_GROUND_ATTACK_ACTION_ID,
-    name: "Attack",
-    movementPercent: 0,
-    facing: "facePlayer",
-    fixedFacingDeg: 90,
-    setsInvincible: null,
-    requiresInvincible: false,
-    attack: {
-      arcStartDeg: 0,
-      arcEndDeg: 0,
-      count: 1,
-      spacing: "even",
-      perShotDelayMs: 0,
-      sweepSpeedDeg: 0,
-      pingPong: false,
-      burstIntervalMs: 1200,
-      telegraphMs: 0,
-      repeatCount: null,
-      spawnUnitId: DEFAULT_BULLET_UNIT_ID,
-      spawnScale: 1,
-      spawnGroup: "enemyProjectile",
-    },
-  };
-  const main: UnitPart = { ...createDefaultPart(), actions: [cloneAction(attackAction)] };
-  return {
-    id: DEFAULT_TEST_GROUND_UNIT_ID,
-    name: "Test Turret",
-    spriteId: "turret",
-    customSprite: null,
-    hp: 30,
-    contactDamage: 3,
-    scoreValue: 200,
-    speed: 0,
-    minSpeed: 0,
-    turnRateDegPerSec: 120,
-    size: 16,
-    layer: "ground",
-    defaultActionId: attackAction.id,
-    actions: [attackAction],
-    parts: [main],
-    createdAt: now,
-    modifiedAt: now,
-  };
-}
-
-/** Flies a short diagonal path across the screen — the air half of every default tile's starter Encounter. */
-function createDefaultTestAirUnit(now: number): UnitDef {
-  const moveAction: ActionDef = {
-    id: DEFAULT_TEST_AIR_MOVE_ACTION_ID,
-    name: "Move",
-    movementPercent: 100,
-    facing: "faceMovement",
-    fixedFacingDeg: 90,
-    setsInvincible: null,
-    requiresInvincible: false,
-    attack: null,
-  };
-  return {
-    id: DEFAULT_TEST_AIR_UNIT_ID,
-    name: "Test Jet",
-    spriteId: "jet-fighter",
-    customSprite: null,
-    hp: 25,
-    contactDamage: 3,
-    scoreValue: 220,
-    speed: 180,
-    minSpeed: 100,
-    turnRateDegPerSec: 90,
-    size: 16,
-    layer: "air",
-    defaultActionId: moveAction.id,
-    actions: [moveAction],
-    parts: [createDefaultPart()],
-    createdAt: now,
-    modifiedAt: now,
-  };
-}
-
 /** The full default Unit library a brand-new/reset session starts with. */
 export function createDefaultUnitLibrary(): UnitDef[] {
   const now = Date.now();
   return [
     createDefaultBulletUnit(),
-    createDefaultTestGroundUnit(now),
-    createDefaultTestAirUnit(now),
     ...PROJECTILE_SPECS.map((spec) => createProjectileUnit(spec, now)),
     ...SIMPLE_ENEMY_SPECS.map((spec) => createSimpleEnemyUnit(spec, now)),
     ...TURRETED_ENEMY_SPECS.map((spec) => createTurretedEnemyUnit(spec, now)),

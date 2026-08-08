@@ -1108,12 +1108,22 @@ attack together instead of a standalone Weapon.)
     tanks, motorcycles, trains, turrets, the battleship). Stats
     (`hp`/`contactDamage`/`scoreValue`/`speed`/`minSpeed`/`turnRateDegPerSec`/`size`) are
     made-up placeholder numbers loosely scaled to each vehicle's apparent
-    size/role, not balanced gameplay data;
-  - two small purpose-built Units with **hardcoded stable ids** (not the
-    usual `makeUnitId()`) — `createDefaultTestGroundUnit`'s stationary
-    "Test Turret" and `createDefaultTestAirUnit`'s "Test Jet" — that exist
-    only so every default tile's starter Encounter (see "Persistence"
-    below) has something fixed to place.
+    size/role, not balanced gameplay data. Every one of these — Unit id,
+    Action id (Move/Attack/Strafe), and each turreted enemy's per-turret
+    Part id/Action id — is **deterministic**, not the usual random
+    `makeUnitId()`/`makeActionId()`/`makePartId()`: `enemyUnitId(slug)` and
+    its siblings (`enemyMoveActionId`, `enemyAttackActionId`,
+    `enemyStrafeActionId`, `enemyTurretPartId`, `enemyTurretAttackActionId`)
+    always produce the same id for the same slug. That's what lets
+    `types.ts`'s hand-authored default-tile Encounters (see "Persistence"
+    below) reference "the Attack Action on the seeded Turret" by a fixed
+    string, even though the tile library and the Unit library are two
+    separate `.DAT` files seeded independently. A mobile simple enemy also
+    gets a third Action, **Strafe** — `enemyAttackActionId`'s stationary,
+    face-player Attack is right for something that plants and fires (a
+    Turret), wrong for a vehicle meant to fire *while* moving (a jet's
+    strafing run); Strafe keeps facing the direction of travel instead,
+    same fire pattern otherwise.
 
     **Two seeding bugs, since fixed** (`createSimpleEnemyUnit`, plus
     `repairSeededSimpleEnemies` for already-saved libraries). Noah's report:
@@ -1965,7 +1975,7 @@ doubles as elite/late-game gating with no separate system needed). Both
 fields were removed. **Current algorithm** (`resolveScaling()`,
 `unitScaling.ts`): a single incoming Difficulty value spreads evenly, not
 split by any weighting field —
-`count = min(floor(D / minCostPerInstance), maxCount)`, floored at 0, then
+`count = min(floor(D / cost), maxCount)`, floored at 0, then
 `power = floor(D / count)` — the *whole* remaining Difficulty divided
 evenly across however many instances actually spawned (not each
 instance's own cost), rounding in the player's favor. No curve-shape
@@ -1973,11 +1983,29 @@ choice anywhere. `power` is a representative preview number only, same
 "no shared runtime yet to match" caveat `ActionPreview.tsx` already
 documents for its own approximations — retrofitting real per-param curves
 onto Unit/Action stats stays out of scope (see `shmup-editor.todo.md`).
-`maxCount`/`minCostPerInstance` are authored via `Dial` (`src/components/
-Dial/`), a new reusable FL-Studio-style vertical-drag knob component —
-right-click or long-press to reset, tap the value to type a number
-directly, optional +/- nudge buttons — built for reuse across Doors 97,
-not scoped to this editor.
+`maxCount` is authored via `Dial` (`src/components/Dial/`), a reusable
+FL-Studio-style vertical-drag knob component — right-click or long-press
+to reset, tap the value to type a number directly, optional +/- nudge
+buttons — built for reuse across Doors 97, not scoped to this editor.
+
+**`cost` moved off this per-placement panel and onto the Unit itself**
+(Noah: "I want to shift cost from the encounter to the unit. Encounters
+shouldn't be able to spawn a stupidly powerful unit just because the cost
+is set too low there... [so] we don't have to manually balance EVERY
+encounter against each other"). `UnitScaling.minCostPerInstance` is gone;
+`UnitDef.cost` (`unitTypes.ts`), authored on the Unit Stats page next to
+HP/contact damage/score, is what `resolveScaling` reads now — a Unit's
+Difficulty budget is set once and every Encounter that places it inherits
+the same number, instead of each Encounter author setting (and
+potentially under-pricing) it independently. The Scaling panel
+(`UnitScalingPanel.tsx`) shows the owning Unit's cost read-only, next to
+the count/power readout it feeds, rather than authoring it. This is a
+required-shape change, not a purely-additive one, so it bumps
+`SAVE_VERSION` in both `tileStore.ts` and `unitStore.ts` (and the game's
+matching `AUTHORED_TILES_VERSION`/`AUTHORED_UNITS_VERSION`) — same
+"reset rather than silently carry a mismatched shape" precedent as every
+prior `EncounterUnit`/`UnitDef` shape change in this file's version-bump
+comments.
 
 **Positioning shape has real draggable canvas handles, not number-only
 fields** — per §6/§8.2, `ScalingShapeKind` is `curve`/`v`/`grid`/`ring`,
@@ -2259,21 +2287,71 @@ has no single tag that could describe it — see that file for the exact
 per-tile breakdown). The seed is saved immediately, same pattern as
 `unitStore.ts`'s pre-existing default-Unit-library seeding (below).
 
-**Every default tile also ships with one starter Encounter** (`types.ts`'s
-`createDefaultTestEncounter`, weight 1, named "Air & Ground Test"), so a
-freshly generated or playtested map always has at least one ground and one
-air unit on every tile type to sanity-check rendering/culling/air-pinning
-against every biome's art (Noah: "so I can test a full map with all tile
-types"). It places a stationary Test Turret (fires at the player) and a
-Test Jet flying a short diagonal path — two small purpose-built Units
-(`unitTypes.ts`'s `createDefaultTestGroundUnit`/`createDefaultTestAirUnit`,
-part of `createDefaultUnitLibrary`) with **hardcoded stable ids** for both
-the Unit and its one Action, unlike every other seeded enemy — the tile
-library and the Unit library it references are seeded independently (two
-different `.DAT` files, not guaranteed to (re)seed together), so an id
-generated fresh at construction time (`makeUnitId()`/`makeActionId()`)
-could never be relied on to still resolve by the time a tile's `EncounterStep.actionId`
-looks it up.
+**Four default tiles also ship with hand-authored starter Encounters** —
+`Grass` and the three `Road (*)` tiles (`types.ts`'s
+`grassEncounters`/`roadStraightEncounters`/`roadCurveEncounters`/
+`roadTrailheadEncounters`), each placing real roster Units from
+`createDefaultUnitLibrary`, referenced by their deterministic ids (see
+"A default Unit library is seeded automatically" above). Every other
+default tile stays `encounters: []`. Two goals drove the choice of
+content, not just "something on every tile": showing off what the editor
+can actually author (formations, convoys, a scripted strafing run, a Part
+firing independently of its hull's own movement), and making a playtest
+of a generated map more fun to watch than one enemy standing still on
+every tile (Noah, after an earlier all-tiles pass that put one static
+instance on each: "some of the things you did don't make any sense, like
+having a turret in the middle of water... it's just one guy on each tile,
+that's boring").
+
+Each of the four tiles offers **multiple separate Encounters** rather than
+one that mixes everything — a ground-only one, an air-only one, and (on
+Grass and Road (Straight)) a mixed one that combines a lighter version of
+both, plus a harmless "flyby" variation folded in either as its own
+Encounter (Grass's "Heli Flyby") or as an extra unthreatening element
+inside another (Road (Curve)'s "Bend Ambush"). All weights are equal
+(`1`), so which Encounter a tile spawns with is a uniform random pick —
+Encounters aren't combined, per-tile weighting reflects only "this
+Encounter vs. that Encounter on the same tile," matching how the rest of
+the tile library already used `weight`.
+
+- **Grass**: *Turret Line* (a `grid`-scaled rank of Turrets, `maxCount: 5`,
+  a single row via `gridDepth: 0`), *Helicopter Loiter* (Attack
+  Helicopters fly in and hold near the top of the screen rather than
+  flying through and off it — the dwell is a step at the same position as
+  its predecessor, per `encounterTiming.ts`'s rule for that), *Overwatch*
+  (a lighter Turret pair plus one loitering Transport Helicopter — the
+  "mixed" option), *Heli Flyby* (a `v`-shaped formation of Transport
+  Helicopters that only ever reference their Move Action, never Attack —
+  pure bonus points, "no risk of hurting you").
+- **Road (Straight)**: *Convoy* (a Battle Tank leads, its Turret Part
+  firing independently via a `PartActionPlacement` while the hull just
+  drives — the base Unit's own steps and a Part's Action track running on
+  the same shared clock, completely decoupled; Transport Trucks queue up
+  behind it via `curve`-shaped scaling with a `spawnDelayMs` stagger),
+  *Strafing Run* (a Jet Fighter enters fast, loops, then switches to its
+  **Strafe** Action for a low pass across the road, then peels off — the
+  speed/maneuverability showcase Noah asked for by name), *Escort* (a
+  shorter Convoy plus one Jet Fighter making a single strafing pass
+  overhead — the mixed option).
+- **Road (Curve)**: *Bend Ambush* (an Armored Truck follows the road's
+  visual bend — three steps bending left then right, not a straight
+  line — with a Turret (Quad) guarding the inside of the curve, plus a
+  folded-in harmless helicopter flyby pair), *Strafing Run* (the same
+  showcase as Road (Straight)'s, flown along the curve's diagonal instead
+  of straight down — no separate Mixed Encounter here, Bend Ambush already
+  covers "ground plus incidental air").
+- **Road (Trailhead)**: kept deliberately lean, since this tile is a
+  level's opening/closing stretch rather than a set-piece — *Checkpoint*
+  (a light Turret pair) and *Recon Pass* (a single Prop Plane flythrough,
+  not the full loop-and-strafe).
+
+Every step's `time` in this hand-authored content is computed from
+straight-line distance at the Unit's `speed` (`types.ts`'s `stepAfter`)
+rather than `encounterTiming.ts`'s full arc-length/turning-aware
+derivation — close enough for authored-by-hand default content, since the
+runtime only ever interpolates against whatever `time` a step already
+carries; the fuller derivation only matters for the *editor's own
+timeline UI* staying honest while a human drags things around.
 Purely-additive optional fields (`customImage`) don't bump
 `SAVE_VERSION` — a pre-existing save missing it is still valid and gets
 backfilled to its default (`null`) on load, rather than the whole

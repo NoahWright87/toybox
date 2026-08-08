@@ -7,13 +7,26 @@
  * (specs/games/shmup/levels-and-tiles.spec.todo.md), not the code.
  */
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID, tileImageById } from "./tileImages";
-import { createEncounterUnit, makeEncounterId, makeStepId, type EncounterDef, type EncounterStep, type EncounterUnit } from "./encounterTypes";
-import { TILE_UNIT } from "./editorScale";
 import {
-  DEFAULT_TEST_AIR_MOVE_ACTION_ID,
-  DEFAULT_TEST_AIR_UNIT_ID,
-  DEFAULT_TEST_GROUND_ATTACK_ACTION_ID,
-  DEFAULT_TEST_GROUND_UNIT_ID,
+  createEncounterUnit,
+  makeEncounterId,
+  makePartActionPlacementId,
+  makeStepId,
+  type EncounterDef,
+  type EncounterStep,
+  type EncounterUnit,
+  type PartActionPlacement,
+  type Vec2,
+} from "./encounterTypes";
+import { TILE_UNIT } from "./editorScale";
+import { createDefaultScaling, type UnitScaling } from "./unitScaling";
+import {
+  enemyAttackActionId,
+  enemyMoveActionId,
+  enemyStrafeActionId,
+  enemyTurretAttackActionId,
+  enemyTurretPartId,
+  enemyUnitId,
 } from "./unitTypes";
 
 export type EdgeTag = string;
@@ -167,60 +180,206 @@ function verticalSplitTile(name: string, imageId: string, west: EdgeTag, east: E
   };
 }
 
-/**
- * One stationary Test Turret plus one Test Jet flying a short diagonal path
- * — the starter Encounter every default tile ships with, so a freshly
- * generated or playtested map always has at least one ground and one air
- * unit on every tile type (Noah: "so I can test a full map with all tile
- * types"). Placed at the center of a footprint-1 tile (every default tile
- * is footprint 1 — see file header); the two Units it places are
- * `unitTypes.ts`'s `createDefaultTestGroundUnit`/`createDefaultTestAirUnit`,
- * referenced by their stable ids since this tile library and the Unit
- * library it points into are seeded independently.
- */
-function createDefaultTestEncounter(): EncounterDef {
-  const now = Date.now();
-  const groundStep: EncounterStep = {
-    id: makeStepId(),
-    pos: { x: TILE_UNIT / 2, y: TILE_UNIT / 2 },
-    time: 0,
-    actionId: DEFAULT_TEST_GROUND_ATTACK_ACTION_ID,
-    handleIn: null,
-    handleOut: null,
-  };
-  const groundUnit: EncounterUnit = { ...createEncounterUnit(DEFAULT_TEST_GROUND_UNIT_ID), steps: [groundStep] };
-
-  const airStart: EncounterStep = {
-    id: makeStepId(),
-    pos: { x: TILE_UNIT * 0.2, y: -TILE_UNIT * 0.25 },
-    time: 1,
-    actionId: DEFAULT_TEST_AIR_MOVE_ACTION_ID,
-    handleIn: null,
-    handleOut: null,
-  };
-  const airEnd: EncounterStep = {
-    id: makeStepId(),
-    pos: { x: TILE_UNIT * 0.8, y: TILE_UNIT * 0.6 },
-    time: 5,
-    actionId: DEFAULT_TEST_AIR_MOVE_ACTION_ID,
-    handleIn: null,
-    handleOut: null,
-  };
-  const airUnit: EncounterUnit = { ...createEncounterUnit(DEFAULT_TEST_AIR_UNIT_ID), steps: [airStart, airEnd] };
-
-  return {
-    id: makeEncounterId(),
-    name: "Air & Ground Test",
-    weight: 1,
-    units: [groundUnit, airUnit],
-    createdAt: now,
-    modifiedAt: now,
-  };
-}
-
 function makeDefaultTile(spec: Omit<TileDef, "id" | "createdAt" | "modifiedAt">): TileDef {
   const now = Date.now();
-  return { ...spec, encounters: [createDefaultTestEncounter()], id: makeTileId(), createdAt: now, modifiedAt: now };
+  return { ...spec, id: makeTileId(), createdAt: now, modifiedAt: now };
+}
+
+// ── Default content: hand-authored starter Encounters for a handful of
+// tiles (Noah: variety to show off the editor, and to make playtesting
+// fun) — Grass and the road family for this pass; every other default
+// tile stays `encounters: []`. All four are footprint 1 (see file header),
+// so every position below is tile-local x:[0,720]/y:[0,720] against a
+// single `TILE_UNIT` square. ──────────────────────────────────────────
+
+function step(pos: Vec2, time: number, actionId: string | null): EncounterStep {
+  return { id: makeStepId(), pos, time, actionId, handleIn: null, handleOut: null };
+}
+
+function dist(a: Vec2, b: Vec2): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+/**
+ * A step whose `time` is derived from straight-line distance at `speed` —
+ * close enough for hand-authored default content, which doesn't need
+ * `encounterTiming.ts`'s full arc-length/turning-aware derivation (that
+ * only matters for the editor's own timeline UI; the runtime just
+ * interpolates position against whatever `time` a step carries).
+ */
+function stepAfter(prev: EncounterStep, pos: Vec2, speed: number, actionId: string | null): EncounterStep {
+  return step(pos, prev.time + dist(prev.pos, pos) / speed, actionId);
+}
+
+function placedUnit(unitDefId: string, steps: EncounterStep[], scalingPatch: Partial<UnitScaling> = {}, partActions: PartActionPlacement[] = []): EncounterUnit {
+  return { ...createEncounterUnit(unitDefId), steps, partActions, scaling: { ...createDefaultScaling(), ...scalingPatch } };
+}
+
+/** A turreted enemy's Nth Turret Part opening fire at `time` — see `unitTypes.ts`'s `enemyTurretPartId`/`enemyTurretAttackActionId`. */
+function turretFire(slug: string, index: number, time: number): PartActionPlacement {
+  return { id: makePartActionPlacementId(), partId: enemyTurretPartId(slug, index), time, actionId: enemyTurretAttackActionId(slug, index) };
+}
+
+function encounter(name: string, units: EncounterUnit[]): EncounterDef {
+  const now = Date.now();
+  return { id: makeEncounterId(), name, weight: 1, units, createdAt: now, modifiedAt: now };
+}
+
+function grassEncounters(): EncounterDef[] {
+  // Ground: a defensive line of Turrets across the tile.
+  const turretLine = placedUnit(enemyUnitId("turret"), [step({ x: 360, y: 420 }, 0, enemyAttackActionId("turret"))], {
+    maxCount: 5,
+    shape: "grid",
+    gridWidth: TILE_UNIT * 0.78,
+    gridDepth: 0,
+  });
+
+  // Air: Attack Helicopters fly in and hold near the top of the screen,
+  // firing continuously rather than flying through and off.
+  const heliIn = step({ x: 360, y: 200 }, 2, enemyMoveActionId("heli"));
+  const heliHold = stepAfter(heliIn, { x: 360, y: 500 }, 140, enemyAttackActionId("heli"));
+  const heliDwell = step({ x: 360, y: 500 }, 9.5, enemyAttackActionId("heli"));
+  const heliLoiter = placedUnit(enemyUnitId("heli"), [heliIn, heliHold, heliDwell], {
+    maxCount: 4,
+    shape: "grid",
+    gridWidth: TILE_UNIT * 0.5,
+    gridDepth: 0,
+    spawnDelayMs: 300,
+  });
+
+  // Mixed: a lighter turret pair plus one loitering Transport Helicopter overhead.
+  const overwatchTurrets = placedUnit(enemyUnitId("turret"), [step({ x: 260, y: 420 }, 0, enemyAttackActionId("turret"))], {
+    maxCount: 2,
+    shape: "grid",
+    gridWidth: 260,
+    gridDepth: 0,
+  });
+  const owHeliIn = step({ x: 540, y: 220 }, 2, enemyMoveActionId("heli-transport"));
+  const owHeliHold = stepAfter(owHeliIn, { x: 540, y: 480 }, 100, enemyAttackActionId("heli-transport"));
+  const owHeliDwell = step({ x: 540, y: 480 }, 9.5, enemyAttackActionId("heli-transport"));
+  const overwatchHeli = placedUnit(enemyUnitId("heli-transport"), [owHeliIn, owHeliHold, owHeliDwell]);
+
+  // Filler: a loose "V" formation of Transport Helicopters crossing left to
+  // right — never fires (its Move Action is the only one ever referenced),
+  // so it's pure bonus points, not a threat.
+  const flyIn = step({ x: -80, y: 260 }, 1, enemyMoveActionId("heli-transport"));
+  const flyOut = stepAfter(flyIn, { x: 800, y: 260 }, 100, enemyMoveActionId("heli-transport"));
+  const flyby = placedUnit(enemyUnitId("heli-transport"), [flyIn, flyOut], {
+    maxCount: 4,
+    shape: "v",
+    vTip: { x: -180, y: 0 },
+    vWidth: 260,
+    spawnDelayMs: 250,
+  });
+
+  return [
+    encounter("Turret Line", [turretLine]),
+    encounter("Helicopter Loiter", [heliLoiter]),
+    encounter("Overwatch", [overwatchTurrets, overwatchHeli]),
+    encounter("Heli Flyby", [flyby]),
+  ];
+}
+
+function roadStraightEncounters(): EncounterDef[] {
+  // Ground: a Battle Tank leads (its Turret Part fires independently while
+  // it drives), Transport Trucks queue up behind it along the road.
+  const tankIn = step({ x: 360, y: 60 }, 0, enemyMoveActionId("battle-tank"));
+  const tankOut = stepAfter(tankIn, { x: 360, y: 680 }, 70, enemyMoveActionId("battle-tank"));
+  const tank = placedUnit(enemyUnitId("battle-tank"), [tankIn, tankOut], {}, [turretFire("battle-tank", 0, 1.5)]);
+
+  const truckIn = step({ x: 320, y: 0 }, 0, enemyMoveActionId("truck-transport"));
+  const truckOut = stepAfter(truckIn, { x: 320, y: 700 }, 90, enemyMoveActionId("truck-transport"));
+  const trucks = placedUnit(enemyUnitId("truck-transport"), [truckIn, truckOut], {
+    maxCount: 3,
+    shape: "curve",
+    curveEnd: { x: 0, y: 220 },
+    spawnDelayMs: 900,
+  });
+
+  // Air: a Jet Fighter (a wingman joins at higher Difficulty) enters fast,
+  // loops around, then strafes low across the road before peeling off —
+  // the speed-and-maneuverability showcase.
+  const j0 = step({ x: 100, y: -260 }, 0, enemyMoveActionId("jet-fighter"));
+  const j1 = stepAfter(j0, { x: 560, y: 120 }, 220, enemyMoveActionId("jet-fighter"));
+  const j2 = stepAfter(j1, { x: 150, y: 340 }, 220, enemyStrafeActionId("jet-fighter"));
+  const j3 = stepAfter(j2, { x: 650, y: 520 }, 220, enemyMoveActionId("jet-fighter"));
+  const j4 = stepAfter(j3, { x: 800, y: 200 }, 220, enemyMoveActionId("jet-fighter"));
+  const jet = placedUnit(enemyUnitId("jet-fighter"), [j0, j1, j2, j3, j4], {
+    maxCount: 2,
+    shape: "curve",
+    curveEnd: { x: 80, y: 0 },
+    spawnDelayMs: 600,
+  });
+
+  // Mixed: a shorter Convoy plus one Jet Fighter making a single strafing pass overhead.
+  const escortTruckIn = step({ x: 320, y: 0 }, 0, enemyMoveActionId("truck-transport"));
+  const escortTruckOut = stepAfter(escortTruckIn, { x: 320, y: 700 }, 90, enemyMoveActionId("truck-transport"));
+  const escortTrucks = placedUnit(enemyUnitId("truck-transport"), [escortTruckIn, escortTruckOut], {
+    maxCount: 2,
+    shape: "curve",
+    curveEnd: { x: 0, y: 220 },
+    spawnDelayMs: 900,
+  });
+  const e0 = step({ x: 150, y: -200 }, 1, enemyMoveActionId("jet-fighter"));
+  const e1 = stepAfter(e0, { x: 600, y: 350 }, 220, enemyStrafeActionId("jet-fighter"));
+  const e2 = stepAfter(e1, { x: 750, y: 550 }, 220, enemyMoveActionId("jet-fighter"));
+  const escortJet = placedUnit(enemyUnitId("jet-fighter"), [e0, e1, e2]);
+
+  return [
+    encounter("Convoy", [tank, trucks]),
+    encounter("Strafing Run", [jet]),
+    encounter("Escort", [escortTrucks, escortJet]),
+  ];
+}
+
+function roadCurveEncounters(): EncounterDef[] {
+  // Ground: an Armored Truck follows the road's bend (its Turret fires
+  // independently once it's rounded the first curve), a Turret (Quad)
+  // guards the inside of the bend.
+  const bendIn = step({ x: 400, y: 40 }, 0, enemyMoveActionId("armored-truck"));
+  const bendMid = stepAfter(bendIn, { x: 180, y: 340 }, 90, enemyMoveActionId("armored-truck"));
+  const bendOut = stepAfter(bendMid, { x: 520, y: 660 }, 90, enemyMoveActionId("armored-truck"));
+  const truck = placedUnit(enemyUnitId("armored-truck"), [bendIn, bendMid, bendOut], {}, [turretFire("armored-truck", 0, 2)]);
+
+  const guardTurret = placedUnit(enemyUnitId("turret-4x"), [step({ x: 250, y: 400 }, 0, enemyAttackActionId("turret-4x"))]);
+
+  // Filler folded in rather than a separate encounter — a pair of harmless Transport Helicopters crossing high overhead.
+  const flyIn = step({ x: -80, y: 180 }, 1, enemyMoveActionId("heli-transport"));
+  const flyOut = stepAfter(flyIn, { x: 800, y: 180 }, 100, enemyMoveActionId("heli-transport"));
+  const flyby = placedUnit(enemyUnitId("heli-transport"), [flyIn, flyOut], { maxCount: 2, shape: "grid", gridWidth: 150, gridDepth: 100 });
+
+  // Air: the same Strafing Run showcase as Road (Straight), flown along the curve's diagonal instead.
+  const s0 = step({ x: 600, y: -260 }, 0, enemyMoveActionId("jet-fighter"));
+  const s1 = stepAfter(s0, { x: 150, y: 150 }, 220, enemyMoveActionId("jet-fighter"));
+  const s2 = stepAfter(s1, { x: 550, y: 380 }, 220, enemyStrafeActionId("jet-fighter"));
+  const s3 = stepAfter(s2, { x: 120, y: 560 }, 220, enemyMoveActionId("jet-fighter"));
+  const s4 = stepAfter(s3, { x: -100, y: 250 }, 220, enemyMoveActionId("jet-fighter"));
+  const jet = placedUnit(enemyUnitId("jet-fighter"), [s0, s1, s2, s3, s4], {
+    maxCount: 2,
+    shape: "curve",
+    curveEnd: { x: -80, y: 0 },
+    spawnDelayMs: 600,
+  });
+
+  return [encounter("Bend Ambush", [truck, guardTurret, flyby]), encounter("Strafing Run", [jet])];
+}
+
+function roadTrailheadEncounters(): EncounterDef[] {
+  // Ground: a light Turret checkpoint guarding the road's entrance. Kept
+  // lean — this tile is a level opener/closer, not a set-piece.
+  const checkpoint = placedUnit(enemyUnitId("turret"), [step({ x: 360, y: 180 }, 0, enemyAttackActionId("turret"))], {
+    maxCount: 2,
+    shape: "grid",
+    gridWidth: 220,
+    gridDepth: 0,
+  });
+
+  // Air: a single Prop Plane pass-through — a taste, not the full loop-and-strafe.
+  const p0 = step({ x: 100, y: -200 }, 0, enemyMoveActionId("plane-prop"));
+  const p1 = stepAfter(p0, { x: 650, y: 650 }, 120, enemyMoveActionId("plane-prop"));
+  const reconPass = placedUnit(enemyUnitId("plane-prop"), [p0, p1]);
+
+  return [encounter("Checkpoint", [checkpoint]), encounter("Recon Pass", [reconPass])];
 }
 
 /**
@@ -235,7 +394,7 @@ export function createDefaultTileLibrary(): TileDef[] {
   return [
     // Plain biomes — every edge open to more of the same.
     makeDefaultTile(plainTile("Water", "water", "water")),
-    makeDefaultTile(plainTile("Grass", "grass", "grass")),
+    { ...makeDefaultTile(plainTile("Grass", "grass", "grass")), encounters: grassEncounters() },
     makeDefaultTile(plainTile("Sand", "sand", "sand")),
     makeDefaultTile(plainTile("Swamp", "swamp", "swamp")),
     makeDefaultTile(plainTile("Lava", "lava", "lava")),
@@ -277,45 +436,54 @@ export function createDefaultTileLibrary(): TileDef[] {
     }),
 
     // Roads — grass on both sides, "grass-road" tag continues the path north/south. Tagged by biome (not just "road") since desert/concrete roads etc. are a different, non-matching tag.
-    makeDefaultTile({
-      name: "Road (Straight)",
-      footprint: 1,
-      north: [edgeSlot("grass-road")],
-      south: [edgeSlot("grass-road")],
-      east: edgeSlot("grass"),
-      west: edgeSlot("grass"),
-      isConnector: false,
-      weight: 1,
-      imageId: "grass-road-straight",
-      customImage: null,
-      encounters: [],
-    }),
-    makeDefaultTile({
-      name: "Road (Curve)",
-      footprint: 1,
-      north: [edgeSlot("grass-road")],
-      south: [edgeSlot("grass-road")],
-      east: edgeSlot("grass"),
-      west: edgeSlot("grass"),
-      isConnector: false,
-      weight: 1,
-      imageId: "grass-road-curve",
-      customImage: null,
-      encounters: [],
-    }),
-    makeDefaultTile({
-      name: "Road (Trailhead)",
-      footprint: 1,
-      north: [edgeSlot("grass-road")],
-      south: [edgeSlot("grass")],
-      east: edgeSlot("grass"),
-      west: edgeSlot("grass"),
-      isConnector: false,
-      weight: 1,
-      imageId: "grass-road-start",
-      customImage: null,
-      encounters: [],
-    }),
+    {
+      ...makeDefaultTile({
+        name: "Road (Straight)",
+        footprint: 1,
+        north: [edgeSlot("grass-road")],
+        south: [edgeSlot("grass-road")],
+        east: edgeSlot("grass"),
+        west: edgeSlot("grass"),
+        isConnector: false,
+        weight: 1,
+        imageId: "grass-road-straight",
+        customImage: null,
+        encounters: [],
+      }),
+      encounters: roadStraightEncounters(),
+    },
+    {
+      ...makeDefaultTile({
+        name: "Road (Curve)",
+        footprint: 1,
+        north: [edgeSlot("grass-road")],
+        south: [edgeSlot("grass-road")],
+        east: edgeSlot("grass"),
+        west: edgeSlot("grass"),
+        isConnector: false,
+        weight: 1,
+        imageId: "grass-road-curve",
+        customImage: null,
+        encounters: [],
+      }),
+      encounters: roadCurveEncounters(),
+    },
+    {
+      ...makeDefaultTile({
+        name: "Road (Trailhead)",
+        footprint: 1,
+        north: [edgeSlot("grass-road")],
+        south: [edgeSlot("grass")],
+        east: edgeSlot("grass"),
+        west: edgeSlot("grass"),
+        isConnector: false,
+        weight: 1,
+        imageId: "grass-road-start",
+        customImage: null,
+        encounters: [],
+      }),
+      encounters: roadTrailheadEncounters(),
+    },
     makeDefaultTile(horizontalSplitTile("Road / Concrete Gate", "grass-road-concrete", "concrete", "grass-road")),
   ];
 }

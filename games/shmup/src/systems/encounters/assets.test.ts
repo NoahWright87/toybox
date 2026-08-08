@@ -16,6 +16,7 @@ function unit(id: string, spriteId: string, actions: AuthoredAction[] = []): Aut
     minSpeed: 0,
     turnRateDegPerSec: 90,
     size: 16,
+    cost: 1,
     layer: "air",
     defaultActionId: null,
     actions,
@@ -67,7 +68,6 @@ function encounter(id: string, unitDefId: string): AuthoredEncounter {
         partActions: [],
         scaling: {
           maxCount: 1,
-          minCostPerInstance: 1,
           spawnDelayMs: 0,
           shape: "curve",
           curvePoints: [],

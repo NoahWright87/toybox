@@ -46,12 +46,13 @@ const UNITS_NODE_ID = "fs:shmup-editor-units";
 
 /**
  * Must match `src/experiences/ShmupEditor/tileStore.ts` and
- * `unitStore.ts`'s `SAVE_VERSION`. Both are at 9 (the "Actions are back"
- * shape). Bump here in lockstep whenever either bumps there, or the game
- * silently stops seeing authored content.
+ * `unitStore.ts`'s `SAVE_VERSION`. Both are at 10 (`UnitDef` gained `cost`;
+ * `UnitScaling`/`AuthoredScaling` lost `minCostPerInstance` — see
+ * `authoredTypes.ts`'s matching note). Bump here in lockstep whenever
+ * either bumps there, or the game silently stops seeing authored content.
  */
-export const AUTHORED_TILES_VERSION = 9;
-export const AUTHORED_UNITS_VERSION = 9;
+export const AUTHORED_TILES_VERSION = 10;
+export const AUTHORED_UNITS_VERSION = 10;
 
 interface FsNodeLite {
   id: string;
@@ -147,6 +148,7 @@ export function isAuthoredUnitDef(v: unknown): v is AuthoredUnitDef {
     isNum(u.minSpeed) &&
     isNum(u.turnRateDegPerSec) &&
     isNum(u.size) &&
+    isNum(u.cost) &&
     (u.layer === "ground" || u.layer === "air" || u.layer === "doodad") &&
     (u.defaultActionId === null || isStr(u.defaultActionId)) &&
     Array.isArray(u.actions) &&
@@ -180,7 +182,6 @@ function isScaling(v: unknown): v is AuthoredScaling {
   const s = v as Record<string, unknown>;
   return (
     isNum(s.maxCount) &&
-    isNum(s.minCostPerInstance) &&
     isNum(s.spawnDelayMs) &&
     (s.shape === "curve" || s.shape === "v" || s.shape === "grid" || s.shape === "ring") &&
     Array.isArray(s.curvePoints) &&

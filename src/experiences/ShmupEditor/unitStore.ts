@@ -38,7 +38,15 @@ import type { TileDef } from "./types";
 // hasHitbox/hasHealth/hp/damageMultiplier/actions (dropped `weapons`);
 // UnitDef gained layer/defaultActionId/actions. Bumping for the same
 // "required shape changed, don't try to backfill" reasoning as v6/v8.
-const SAVE_VERSION = 9;
+// v10: UnitDef gained a required `cost` — an Encounter's per-placement
+// `UnitScaling.minCostPerInstance` moved here so a Unit's Difficulty budget
+// is authored once and shared by every Encounter that places it, instead of
+// each Encounter setting its own price for the same Unit (see
+// unitScaling.ts's SAVE_VERSION-matching bump in tileStore.ts, which drops
+// `minCostPerInstance` on the other end of the same move). Bumping for the
+// same "required field, don't try to backfill a price out of nowhere"
+// reasoning as v6/v8/v9.
+const SAVE_VERSION = 10;
 
 interface SavedLibrary {
   version: number;
@@ -141,6 +149,7 @@ function isValidUnitDef(v: unknown): v is UnitDef {
     typeof u.hp === "number" &&
     typeof u.contactDamage === "number" &&
     typeof u.scoreValue === "number" &&
+    typeof u.cost === "number" &&
     typeof u.speed === "number" &&
     typeof u.minSpeed === "number" &&
     typeof u.turnRateDegPerSec === "number" &&
@@ -269,7 +278,10 @@ export function clearUnitDraft(): void {
 // v8: EncounterStep dropped `visible`/`speedMultiplier`, gained `actionId`;
 // EncounterAttack was replaced by PartActionPlacement (`encounterTypes.ts`)
 // — Actions are back. Bumping for the same reason as SAVE_VERSION's v9.
-const TILE_SESSION_VERSION = 8;
+// v9: UnitScaling's `minCostPerInstance` was removed (moved onto UnitDef.cost
+// — see this file's SAVE_VERSION v10) — bumping for the same reason as
+// tileStore.ts's matching SAVE_VERSION bump.
+const TILE_SESSION_VERSION = 9;
 
 export interface TileEditSession {
   tile: TileDef;
