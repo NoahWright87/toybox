@@ -8,6 +8,7 @@ import type { LevelLayout, TilePlacement } from "./levelLayout";
 import { TILE_UNIT, tileEngageSec, tileFullyOffScreen, tileLifespanSec } from "./scrollModel";
 import type { AuthoredContent, AuthoredEncounter, AuthoredTile, Vec2 } from "./authoredTypes";
 import type { AuthoredUnit } from "../../entities/AuthoredUnit";
+import { DEPTH } from "../depth";
 
 /**
  * Scrolls a level past the player and runs each tile's encounter as it
@@ -39,7 +40,7 @@ import type { AuthoredUnit } from "../../entities/AuthoredUnit";
  */
 
 /** Tile art sits above the parallax backdrop (-20) and below every gameplay sprite (1+). */
-const TILE_ART_DEPTH = -15;
+const TILE_ART_DEPTH = DEPTH.tileArt;
 
 interface LiveTile {
   placement: TilePlacement;

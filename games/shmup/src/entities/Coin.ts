@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
+import { DEPTH } from "../systems/depth";
 
 /**
  * Physical gold (economy.spec.todo.md): enemies explode into coins the
@@ -39,6 +40,8 @@ export class Coin extends Phaser.Physics.Arcade.Sprite {
     this.ageSec = 0;
     this.magnetized = false;
     this.setPosition(x, y);
+    // Explicit depth, not the default 0 — see systems/depth.ts (above terrain so it reads, below fire so it never hides a bullet).
+    this.setDepth(DEPTH.coin);
     this.setActive(true);
     this.setVisible(true);
 

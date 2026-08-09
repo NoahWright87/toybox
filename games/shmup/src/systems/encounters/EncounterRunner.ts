@@ -3,6 +3,7 @@ import { TUNING } from "../../tuning";
 import { GAME_WIDTH, GAME_HEIGHT } from "../../config";
 import { AuthoredUnit } from "../../entities/AuthoredUnit";
 import { editorSpriteTextureKey } from "../../sprites/editorArt";
+import { DEPTH, PART_DEPTH_OFFSET, authoredLayerDepth } from "../depth";
 import { advanceAttackTrack, freshAttackTrack, isTelegraphing, type AttackTrack } from "./attacks";
 import { instanceHeadingDegAt, instanceStateAt, invincibleAt, lastAuthoredTime, resolveFacingDeg } from "./movement";
 import { applyPingPong, resolveScaling, resolveScalingSlots, spawnDelayOffsetsSec } from "./scaling";
@@ -71,10 +72,10 @@ import type {
  * mirrored copy.
  */
 
-/** Depth per authored layer, keeping ground clutter under air traffic and both under the player (depth 10). */
-const LAYER_DEPTH: Record<string, number> = { doodad: 1, ground: 2, air: 4 };
-const PART_DEPTH_OFFSET = 1;
-const PROJECTILE_DEPTH = 6;
+// Depths come from the shared render stack (`systems/depth.ts`) rather than
+// being redeclared here — the pooled entities in `PlayScene` have to agree
+// with these values or a whole layer renders behind another, which is exactly
+// what happened when everything pooled sat at the default depth 0.
 
 /** Alpha applied to a firing anchor during an attack's telegraph wind-up — the runtime read of the editor timeline's telegraph colour. */
 const TELEGRAPH_ALPHA = 0.55;
@@ -387,7 +388,7 @@ export class EncounterRunner {
       collisionGroup: "enemy",
       // Scenery renders and scrolls but is never hittable — see `isCollidableLayer`.
       hasCollision: isCollidableLayer(p.def.layer),
-      depth: LAYER_DEPTH[p.def.layer] ?? LAYER_DEPTH.ground,
+      depth: authoredLayerDepth(p.def.layer),
     });
 
     const instance: LiveInstance = {
@@ -636,7 +637,7 @@ export class EncounterRunner {
       contactDamage: def.contactDamage,
       scoreValue: def.scoreValue,
       collisionGroup: attack.spawnGroup,
-      depth: PROJECTILE_DEPTH,
+      depth: DEPTH.enemyProjectile,
     });
     entity.setRotation(facingToRotation(angleDeg));
 

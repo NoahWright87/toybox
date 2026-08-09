@@ -88,6 +88,48 @@ files into the matching `assets/sprites/{category}/` folder, and updates
 the affected manifest entries' `path` (and frame fields, if it's a sheet).
 No code changes.
 
+## Render stack (`systems/depth.ts`)
+
+Every gameplay object's depth comes from one shared `DEPTH` table, because
+Phaser resolves ties in a display list by insertion order — so anything that
+never calls `setDepth` sits at 0 in whatever order it happened to spawn.
+
+That was survivable while *all* the pooled entities (player bullets, enemy
+bullets, built-in enemies, coins) were at 0 and merely tied with each other.
+Authored units, though, set real depths, so the entire pooled layer silently
+rendered **beneath** every authored unit on the field. Doodads are what made
+it visible — a tree canopy or a warehouse roof is a large opaque sprite, so
+player fire disappeared behind the scenery it was flying over.
+
+Ordering, roughly "the more urgent it is to see, the higher it goes":
+
+| Layer | Depth |
+|---|---|
+| Space backdrop | -20 |
+| Authored tile terrain art | -15 |
+| Starfield (stock episodes only) | -10 |
+| Authored `doodad` — scenery | 1 |
+| Authored `ground` | 2 |
+| Built-in pooled `Enemy` | 3 |
+| Authored `air` | 4 |
+| Coins | 6 |
+| Player bullets | 7 |
+| Enemy fire, built-in and authored | 8 |
+| Player | 10 |
+| Physics debug graphic | 50 |
+| HUD | 100 |
+| Floating combat text | 150 |
+
+Two rules carry the intent, and `depth.test.ts` pins them as *relationships*
+rather than as numbers, so the values stay free to move:
+
+- **Projectiles clear every unit.** You must always be able to see your own
+  fire, and enemy fire sits highest of all because dodging it is the game —
+  incoming fire hidden behind a doodad is a hazard the player cannot react to.
+- **A Part renders just above its hull** (`PART_DEPTH_OFFSET`), and the
+  spacing above leaves room for that without a ground unit's turret reaching
+  the air layer.
+
 ## Multi-frame sprites
 
 `frameCount` + `frameDuration` describe a horizontal spritesheet
