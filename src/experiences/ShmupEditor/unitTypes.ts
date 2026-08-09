@@ -689,12 +689,11 @@ export function repairSeededSimpleEnemies(units: UnitDef[]): UnitDef[] {
  *    rock doing nothing is the entire point.
  *  - `contactDamage: 0` — touching a tree does not hurt, and the default
  *    Part's `hasHitbox: false` adds no *second* hitbox on top of the Unit's
- *    own. Note this does **not** make a doodad non-collidable: the runtime
- *    spawns every authored Unit into `collisionGroup: "enemy"` with
- *    `hitRadius: def.size` (`EncounterRunner.ts`), so player fire still hits
- *    scenery and its `hp: 1` still pops. Making scenery see-through to
- *    bullets is a runtime collision-model change, not something this seed
- *    data can express — see `shmup-editor.todo.md`.
+ *    own. Note that not being *shootable* is enforced by the runtime rather
+ *    than by anything here: `EncounterRunner.ts`'s `isCollidableLayer` spawns
+ *    the doodad layer with its physics body disabled, keyed off the layer
+ *    alone. These stats are what a doodad would be if it somehow were hit,
+ *    not what stops it being hit.
  *  - `scoreValue: 0` — scenery is not a kill.
  *
  * `size` is hand-tuned per prop rather than derived from the art, because

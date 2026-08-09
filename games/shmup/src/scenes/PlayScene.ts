@@ -832,12 +832,25 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     }
   }
 
-  /** Everything a player shot may currently hit — built-in enemies plus every live authored hostile. Also what homing searches. */
+  /**
+   * Everything a player shot may currently hit — built-in enemies plus every
+   * live authored hostile. Also what homing searches.
+   *
+   * `hasCollision` is checked alongside `hittable` because the two mean
+   * different things and both have to hold. `hittable` is about invincibility
+   * (a temporarily shielded turret), which is a state that comes and goes;
+   * `hasCollision` is a permanent property of the spawn — false for scenery
+   * on the doodad layer and for a purely decorative Part. Those have no
+   * physics body enabled, so an overlap could never fire against them
+   * anyway; the reason to filter here too is homing, which would otherwise
+   * happily lock onto a tree or a turret's cosmetic art and chase something
+   * it can never damage.
+   */
   playerTargets(): PlayerTarget[] {
     const out: PlayerTarget[] = [];
     for (const enemy of this.enemies.getChildren() as Enemy[]) if (enemy.active) out.push(enemy);
     for (const unit of this.authoredHostiles.getChildren() as AuthoredUnit[]) {
-      if (unit.active && unit.hittable) out.push(unit);
+      if (unit.active && unit.hasCollision && unit.hittable) out.push(unit);
     }
     return out;
   }

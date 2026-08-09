@@ -863,19 +863,18 @@ query string; the game skips its menus and drops straight into the episode.
 
 ## Open questions
 
-- **Doodads are collidable, and probably shouldn't be.** The seeded doodad
-  Units are inert in every way the editor's data can express — no Actions, no
-  scaling, no contact damage, no score — but "inert" stops at the runtime's
-  collision model. `EncounterRunner.ts` spawns *every* authored Unit into
-  `collisionGroup: "enemy"` with `hitRadius: def.size`, so player fire hits a
-  tree and its `hp: 1` pops it. Options, roughly in increasing order of
-  ambition: skip collider registration for the `"doodad"` layer outright (a
-  tree becomes pure backdrop); give doodads their own collision group that the
-  matrix checks against nothing; or keep them hittable on purpose and lean
-  into destructible scenery, which would want real `hp`/debris rather than the
-  placeholder `hp: 1` they carry now. This is a game-side design call, not an
-  editor one — the editor already says what it means by putting them on their
-  own layer.
+~~**Doodads are collidable, and probably shouldn't be.**~~ — **resolved
+(Noah's call): scenery is not shootable.** `EncounterRunner.ts` gained
+`isCollidableLayer`, and the doodad layer now spawns with `hasCollision:
+false`, which leaves the Arcade body disabled so no overlap can ever fire
+against a tree. `PlayScene.playerTargets()` filters on `hasCollision` as well,
+since homing searches that list directly and would otherwise lock onto
+scenery it can never damage — that check also retires a latent bug where a
+purely *decorative* Part (art, no hitbox) was a valid homing target. The
+editor's E4 hitbox preview skips doodads to match, so it can't promise a
+collision the game doesn't perform. Destructible scenery is still open as a
+*feature* — it would want real `hp` and debris rather than the placeholder
+`hp: 1` doodads carry — but it is no longer the accidental default.
 
 ~~Exact landing directory + filename convention inside `games/shmup/src/`
 for exported tiles/enemies/spawn-nodes.~~ — **moot: nothing lands there,

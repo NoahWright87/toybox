@@ -1258,7 +1258,13 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         if (!dupPreview || dupPreview.invincible) return;
         const delta: Vec2 = { x: slot.x - originPos.x, y: slot.y - originPos.y };
         const dupPos: Vec2 = { x: dupPreview.pos.x + delta.x, y: dupPreview.pos.y + delta.y + pinY };
-        hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStageAt(dupPos, refShiftY), sizePx: unitDef.size * 2, layer: instanceLayer, offLayer });
+        // Scenery has no hitbox at runtime (`EncounterRunner.ts`'s
+        // `isCollidableLayer`), so drawing one here would be the editor
+        // promising a collision the game never performs — the exact
+        // shows-X-does-Y drift this preview exists to catch.
+        if (instanceLayer !== "doodad") {
+          hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStageAt(dupPos, refShiftY), sizePx: unitDef.size * 2, layer: instanceLayer, offLayer });
+        }
         const headingDeg = computeInstanceHeadingDeg(instance, unitDef, dupLocalTime);
 
         function pushAttackBullets(key: string, facing: Pick<ActionDef, "facing" | "fixedFacingDeg">, attack: ActionAttack, anchor: Vec2, elapsedMs: number) {

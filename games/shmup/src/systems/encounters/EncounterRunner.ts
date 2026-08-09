@@ -193,6 +193,23 @@ export function isScrollLocked(layer: string): boolean {
 }
 
 /**
+ * Whether a layer takes part in collision at all. Doodads do not: they are
+ * scenery — a tree, a sandbag wall, a rooftop — that renders and scrolls with
+ * the terrain but is never in the collision set.
+ *
+ * Without this every authored Unit spawned into `collisionGroup: "enemy"`
+ * with a real `hitRadius`, so player fire hit the scenery and popped it
+ * (doodads carry `hp: 1`). The editor already declares the intent by putting
+ * them on their own layer with no Actions, no scaling, no contact damage and
+ * no score; this is the runtime honoring it. Note the layer is the *only*
+ * thing consulted — `hasHitbox` on a Unit's Parts is a separate, per-Part
+ * concern that was never about the hull.
+ */
+export function isCollidableLayer(layer: string): boolean {
+  return layer !== "doodad";
+}
+
+/**
  * Whether a live instance should be recycled this frame. Pure and exported so
  * the rule can be tested without standing up a Phaser entity — it encodes a
  * regression that cost a lot of authored content: see `seenOnScreen`.
@@ -368,6 +385,8 @@ export class EncounterRunner {
       contactDamage: p.def.contactDamage,
       scoreValue: p.def.scoreValue,
       collisionGroup: "enemy",
+      // Scenery renders and scrolls but is never hittable — see `isCollidableLayer`.
+      hasCollision: isCollidableLayer(p.def.layer),
       depth: LAYER_DEPTH[p.def.layer] ?? LAYER_DEPTH.ground,
     });
 

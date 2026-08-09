@@ -1144,12 +1144,12 @@ attack together instead of a standalone Weapon.)
     `defaultActionId: null` (which the Step tab reads as "(none — holds
     position)"), `contactDamage: 0`, `scoreValue: 0`, and the default Part's
     `hasHitbox: false` (which adds no *second* hitbox over the Unit's own).
-    **This does not make a doodad non-collidable**: the runtime spawns every
-    authored Unit into `collisionGroup: "enemy"` with `hitRadius: def.size`
-    (`EncounterRunner.ts`), so player fire still hits scenery and its `hp: 1`
-    still pops it — see `shmup-editor.todo.md`, since making scenery
-    see-through to bullets is a runtime collision-model change that seed data
-    can't express. Note the null default is
+    **Not being shootable is enforced runtime-side, not by these stats**:
+    `EncounterRunner.ts`'s `isCollidableLayer` spawns the doodad layer with
+    its physics body disabled, keyed off the layer alone, so player fire
+    passes straight through scenery and homing never locks onto it. The stats
+    above are what a doodad would be if it somehow were hit, not what stops it
+    being hit. Note the null default is
     deliberately *not* the inert `createMoveAction(false)` that
     `repairSeededSimpleEnemies` exists to undo for turrets: a turret with no
     Action was a bug because a turret is meant to shoot, whereas a rock doing

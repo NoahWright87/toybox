@@ -118,13 +118,35 @@ scroll-locked/time-locked reference-frame split `shmup-editor.todo.md` had
 deferred. **The editor has since caught up** — its Ground/Air authoring
 frames (`airFrame.ts`) mirror the rule below rather than deriving their own,
 so what you draw is what plays; see `specs/shmup-editor.md`'s "Authoring
-frames: Ground vs Air":
+frames: Ground / Air / Doodads":
 
 - **Ground and doodad stay scroll-locked**, resolving against the live frame
   forever.
 - **Air is time-locked from spawn.** An air instance captures the frame origin
   the moment it spawns (`pinnedOriginY`), so its authored route is a route
   *through the screen*: nothing but its own path ever moves it.
+
+**Doodads are scenery, and scenery is not shootable.** `isCollidableLayer`
+(`EncounterRunner.ts`) spawns the `"doodad"` layer with `hasCollision: false`,
+which leaves its Arcade body disabled, so no overlap can fire against it —
+player fire passes straight through a tree instead of popping it. Keyed off
+the layer alone: `hasHitbox` on a Unit's Parts is a separate per-Part concern
+and was never about the hull.
+
+`PlayScene.playerTargets()` filters on `hasCollision` as well as `hittable`,
+because homing reads that list directly and a disabled body would otherwise
+leave a missile chasing something it can never damage. The two flags mean
+different things and both have to hold: `hittable` is transient invincibility
+(a shielded turret), `hasCollision` is a permanent property of the spawn. That
+filter also covers a purely *decorative* Part — art with no hitbox — which was
+a valid homing target before this.
+
+Doodads still carry `hp`/`contactDamage`/`scoreValue` in their authored data
+(`unitTypes.ts`'s `DOODAD_SPECS` zeroes what it can). Those describe what a
+doodad would be if it somehow were hit; they are not what stops it being hit.
+Destructible scenery remains open as a deliberate feature — it would want real
+`hp` and debris rather than the placeholder `hp: 1` — but it is no longer the
+accidental default.
 
   **This replaced a pin-on-first-visibility rule**, under which an air unit rode
   the scrolling frame until it was first genuinely on screen and pinned there —
