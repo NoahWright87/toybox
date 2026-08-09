@@ -687,9 +687,14 @@ export function repairSeededSimpleEnemies(units: UnitDef[]): UnitDef[] {
  *    `repairSeededSimpleEnemies` exists to undo for turrets: a turret with
  *    no Action was a bug because a turret is supposed to shoot, whereas a
  *    rock doing nothing is the entire point.
- *  - `contactDamage: 0` and the default Part's `hasHitbox: false` — scenery
- *    the player can fly over, not an invisible wall. An author who wants a
- *    solid obstacle can switch the hitbox on per placement.
+ *  - `contactDamage: 0` — touching a tree does not hurt, and the default
+ *    Part's `hasHitbox: false` adds no *second* hitbox on top of the Unit's
+ *    own. Note this does **not** make a doodad non-collidable: the runtime
+ *    spawns every authored Unit into `collisionGroup: "enemy"` with
+ *    `hitRadius: def.size` (`EncounterRunner.ts`), so player fire still hits
+ *    scenery and its `hp: 1` still pops. Making scenery see-through to
+ *    bullets is a runtime collision-model change, not something this seed
+ *    data can express — see `shmup-editor.todo.md`.
  *  - `scoreValue: 0` — scenery is not a kill.
  *
  * `size` is hand-tuned per prop rather than derived from the art, because

@@ -863,6 +863,20 @@ query string; the game skips its menus and drops straight into the episode.
 
 ## Open questions
 
+- **Doodads are collidable, and probably shouldn't be.** The seeded doodad
+  Units are inert in every way the editor's data can express — no Actions, no
+  scaling, no contact damage, no score — but "inert" stops at the runtime's
+  collision model. `EncounterRunner.ts` spawns *every* authored Unit into
+  `collisionGroup: "enemy"` with `hitRadius: def.size`, so player fire hits a
+  tree and its `hp: 1` pops it. Options, roughly in increasing order of
+  ambition: skip collider registration for the `"doodad"` layer outright (a
+  tree becomes pure backdrop); give doodads their own collision group that the
+  matrix checks against nothing; or keep them hittable on purpose and lean
+  into destructible scenery, which would want real `hp`/debris rather than the
+  placeholder `hp: 1` they carry now. This is a game-side design call, not an
+  editor one — the editor already says what it means by putting them on their
+  own layer.
+
 ~~Exact landing directory + filename convention inside `games/shmup/src/`
 for exported tiles/enemies/spawn-nodes.~~ — **moot: nothing lands there,
 see E5 above.**

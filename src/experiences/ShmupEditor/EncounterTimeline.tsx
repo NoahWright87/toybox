@@ -4,7 +4,7 @@ import { isStepTimeDerived } from "./encounterTiming";
 import { resolveInvincibleAt } from "./actionState";
 import { actionCategoryColors } from "./actionCategory";
 import { spawnDelayOffsetsSec } from "./unitScaling";
-import { authorLayerOf, type AuthorLayer } from "./airFrame";
+import { type AuthorLayer } from "./airFrame";
 import type { EncounterUnit } from "./encounterTypes";
 import type { UnitDef } from "./unitTypes";
 
@@ -53,7 +53,7 @@ const STAGE_PADDING_LEFT = 12;
  * different Action for the step that starts it (Step tab), not dragging
  * its arrival marker.
  *
- * **The Ground/Air frame toggle lives here**, at the top with the ruler,
+ * **The frame toggle lives here**, at the top with the ruler,
  * because it's a property of the whole view rather than of any selection —
  * see `airFrame.ts` and `EncounterEditor.tsx`'s `authorLayer`. Tracks in the
  * frame you aren't authoring collapse to a hairline: no label, no markers to
@@ -63,6 +63,18 @@ const STAGE_PADDING_LEFT = 12;
  * needs both timings side by side, even though their positions live in
  * different frames.
  */
+/**
+ * The frame toggle's buttons, in the order they read on the toolbar: the two
+ * combat layers first, then scenery. Doodads is a real third mode even though
+ * it draws identically to Ground — it swaps the roster and the dimming, which
+ * is what makes dressing a tile its own pass (airFrame.ts's `AuthorLayer`).
+ */
+const LAYER_TOGGLES: { layer: AuthorLayer; label: string; title: string }[] = [
+  { layer: "ground", label: "Ground", title: "Ground frame — the tile holds still and the camera climbs it. Air units and doodads are dimmed." },
+  { layer: "air", label: "Air", title: "Air frame — the camera holds still and the terrain slides beneath it. Ground units, doodads and the tile are dimmed." },
+  { layer: "doodad", label: "Doodads", title: "Doodad frame — scenery, drawn in the same frame as Ground. Only doodad Units can be placed; ground and air units are dimmed." },
+];
+
 export default function EncounterTimeline({
   units,
   unitDefs,
@@ -127,24 +139,18 @@ export default function EncounterTimeline({
         </button>
         <span className="shmup-timeline__readout">{scrubTime.toFixed(1)}s</span>
         <div className="shmup-timeline__layer-toggle">
-          <button
-            type="button"
-            className={`shmup-btn shmup-btn--small ${authorLayer === "ground" ? "shmup-btn--active" : ""}`}
-            onClick={() => onAuthorLayerChange("ground")}
-            aria-pressed={authorLayer === "ground"}
-            title="Ground frame — the tile holds still and the camera climbs it. Air units are dimmed."
-          >
-            Ground
-          </button>
-          <button
-            type="button"
-            className={`shmup-btn shmup-btn--small ${authorLayer === "air" ? "shmup-btn--active" : ""}`}
-            onClick={() => onAuthorLayerChange("air")}
-            aria-pressed={authorLayer === "air"}
-            title="Air frame — the camera holds still and the terrain slides beneath it. Ground units and the tile are dimmed."
-          >
-            Air
-          </button>
+          {LAYER_TOGGLES.map(({ layer, label, title }) => (
+            <button
+              key={layer}
+              type="button"
+              className={`shmup-btn shmup-btn--small ${authorLayer === layer ? "shmup-btn--active" : ""}`}
+              onClick={() => onAuthorLayerChange(layer)}
+              aria-pressed={authorLayer === layer}
+              title={title}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
       <div className="shmup-timeline__scroll">
@@ -167,7 +173,7 @@ export default function EncounterTimeline({
 
           {units.map((instance) => {
             const unitDef = unitDefs.find((u) => u.id === instance.unitDefId);
-            const offLayer = (unitDef ? authorLayerOf(unitDef.layer) : "ground") !== authorLayer;
+            const offLayer = (unitDef?.layer ?? "ground") !== authorLayer;
             // A track in the frame you aren't authoring is reduced to bare
             // timing hairlines — no label, no sprite, no Part sub-lanes, and
             // nothing selectable. It exists purely so you can line your own

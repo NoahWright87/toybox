@@ -61,21 +61,27 @@ import type { EncounterUnit } from "./encounterTypes";
 import type { UnitLayer } from "./unitTypes";
 
 /**
- * Which authoring frame a Unit belongs to. Deliberately two-valued while
- * `UnitLayer` is three-valued: doodad is scroll-locked exactly like ground
- * (`isScrollLocked` below), so it shares ground's frame and there is nothing
- * for a third mode to show differently.
+ * Which authoring frame a Unit belongs to — one per `UnitLayer`.
+ *
+ * **This used to be two-valued, folding doodad in with ground**, on the
+ * reasoning that the two share a reference frame (both are scroll-locked, see
+ * `isScrollLocked`) and so a third mode would have nothing to draw
+ * differently. That was true about the *geometry* and wrong about the
+ * *authoring*: it left every doodad in the ground roster, so placing a few
+ * trees meant scrolling past them to find the tank, and there was no way to
+ * pick a tile's scenery separately from its ground opposition. A frame is
+ * really two things at once — a reference frame and a roster — and doodad
+ * only ever matched ground on the first.
+ *
+ * So doodad mode renders exactly like ground mode (`referenceShiftY` returns
+ * the same 0 for both) and differs only in which Units it offers and which
+ * ones it dims. That is the intended shape, not an oversight.
  */
-export type AuthorLayer = "ground" | "air";
+export type AuthorLayer = UnitLayer;
 
 /** Mirrors `EncounterRunner.ts`'s own `isScrollLocked` — air is the only layer that decouples from the scrolling tile frame. */
 export function isScrollLocked(layer: UnitLayer): boolean {
   return layer !== "air";
-}
-
-/** Which authoring frame a Unit's layer puts it in. Doodad rides with ground; see `AuthorLayer`. */
-export function authorLayerOf(layer: UnitLayer): AuthorLayer {
-  return layer === "air" ? "air" : "ground";
 }
 
 /** How far the level has scrolled, in world units, `t` seconds after the tile engaged. Negative times clamp to 0 — nothing has scrolled before the encounter starts. */
@@ -173,6 +179,9 @@ export function displayShiftY({ mode, scrollLocked, pinSec, t }: DisplayShiftArg
  * Note this makes the camera box and the player marker *constant* in air
  * mode: both already compute a tile-local position that moves by
  * `-scroll(t)`, and this adds exactly that back.
+ *
+ * Air is the only mode with a nonzero term, so ground and doodad mode draw
+ * identically — see `AuthorLayer` on why doodad is still its own mode.
  */
 export function referenceShiftY(mode: AuthorLayer, t: number): number {
   return mode === "air" ? scrollOffsetY(t) : 0;

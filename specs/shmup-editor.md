@@ -759,7 +759,7 @@ from the current specs by id and anything user-authored gets `minSpeed: 0`
 plus a neutral 90°/sec — making it a pivoter, which leaves every route it
 was already authored on flyable exactly as before.
 
-### Authoring frames: Ground vs Air (`airFrame.ts`, `EncounterEditor.tsx`, `EncounterTimeline.tsx`)
+### Authoring frames: Ground / Air / Doodads (`airFrame.ts`, `EncounterEditor.tsx`, `EncounterTimeline.tsx`)
 
 **A Unit's layer decides which reference frame it lives in, and the
 canvas can be drawn in either one.** This is the editor half of a split
@@ -793,15 +793,38 @@ inventing an editor-side one**:
   sides at once (`airFrame.ts` and `EncounterRunner.ts`'s `pinnedOriginY`),
   since the editor drawing and the game flying have to agree.
 
-A **Ground/Air toggle** sits in the timeline toolbar (a view-wide mode,
-not a property of any selection). It switches several things at once:
+A **Ground/Air/Doodads toggle** sits in the timeline toolbar (a view-wide
+mode, not a property of any selection). It switches several things at once:
 
-| | Ground mode | Air mode |
-|---|---|---|
-| Tile + ground units | fixed | slide down past a fixed camera |
-| Air unit | drifts *up* the tile as terrain passes beneath | **holds still** |
-| Camera box | climbs the tile | fixed, drawn as a solid teal frame |
-| "+ Add" roster | ground + doodad Units | air Units |
+| | Ground mode | Air mode | Doodads mode |
+|---|---|---|---|
+| Tile + ground units | fixed | slide down past a fixed camera | fixed |
+| Air unit | drifts *up* the tile as terrain passes beneath | **holds still** | drifts up, dimmed |
+| Camera box | climbs the tile | fixed, drawn as a solid teal frame | climbs the tile |
+| "+ Add" roster | ground Units | air Units | doodad Units |
+
+**A frame is two things at once — a reference frame and a roster — and
+doodad only ever matched ground on the first.** `AuthorLayer` used to be
+deliberately two-valued, folding doodad in with ground on the reasoning
+that both are scroll-locked so a third mode would have nothing to draw
+differently. The geometry half of that is still true and Doodads mode
+renders identically to Ground (`referenceShiftY` returns the same 0 for
+both, pinned by a test). The authoring half was wrong: it left every
+doodad in the ground roster, so dressing a tile meant hunting for the tank
+among the trees, and a tile's scenery couldn't be picked apart from its
+ground opposition. `AuthorLayer` is now simply `UnitLayer`, one mode per
+layer, and `authorLayerOf` is gone — a Unit's frame is just its layer.
+
+**Doodads are also missing two things the combat layers have**, because
+neither means anything for scenery:
+
+- **No Action picker.** A doodad's Unit ships `actions: []` by
+  construction, so the Step tab drops the row rather than rendering its red
+  "(no Actions on this Unit yet)" warning — for a doodad that state is
+  correct and permanent, not a gap to go fill.
+- **No Scaling tab.** Scaling is a difficulty response ("throw more of
+  these at a stronger player"); set dressing doesn't scale, so the tab is
+  withheld rather than shown offering a knob that shouldn't be turned.
 
 The frame you aren't authoring stays **visible but dimmed and
 non-interactive** (`.shmup-enc-offlayer`), and its timeline track collapses
@@ -1120,8 +1143,13 @@ attack together instead of a standalone Weapon.)
     combination: `layer: "doodad"`, `speed: 0`, `actions: []` with
     `defaultActionId: null` (which the Step tab reads as "(none — holds
     position)"), `contactDamage: 0`, `scoreValue: 0`, and the default Part's
-    `hasHitbox: false` — scenery to fly over, not an obstacle, though an
-    author can switch the hitbox on per placement. Note the null default is
+    `hasHitbox: false` (which adds no *second* hitbox over the Unit's own).
+    **This does not make a doodad non-collidable**: the runtime spawns every
+    authored Unit into `collisionGroup: "enemy"` with `hitRadius: def.size`
+    (`EncounterRunner.ts`), so player fire still hits scenery and its `hp: 1`
+    still pops it — see `shmup-editor.todo.md`, since making scenery
+    see-through to bullets is a runtime collision-model change that seed data
+    can't express. Note the null default is
     deliberately *not* the inert `createMoveAction(false)` that
     `repairSeededSimpleEnemies` exists to undo for turrets: a turret with no
     Action was a bug because a turret is meant to shoot, whereas a rock doing
