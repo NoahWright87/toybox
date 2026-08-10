@@ -18,6 +18,7 @@ function unit(overrides: Partial<AuthoredUnitDef> = {}): AuthoredUnitDef {
     hp: 25,
     contactDamage: 3,
     scoreValue: 220,
+    cost: 3,
     speed: 220,
     minSpeed: 0,
     turnRateDegPerSec: 120,

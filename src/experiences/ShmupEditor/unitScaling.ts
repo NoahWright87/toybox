@@ -21,34 +21,42 @@
  * `power` will eventually affect; it only needs this one resolution step.
  *
  * **`resolveScaling` — the whole algorithm, corrected from two earlier
- * (wrong) attempts:**
+ * (wrong) attempts, plus one relocation:**
  * 1. A first pass split the incoming budget by a separate authored
  *    `powerSplit` percentage plus a `minCostPerInstance` floor — two
  *    knobs doing overlapping jobs, confusing in the UI, and mathematically
  *    broken: once `count` saturated at `maxCount`, any further Difficulty
  *    increase was simply discarded (routed to neither pool), so a maxed-out
  *    swarm became permanently unresponsive to difficulty past that point.
- * 2. The actual model has **one pool**, not two: `minCostPerInstance` only
- *    answers "how many of these can this budget afford, at minimum" — it
- *    is a minimum viable power *threshold*, not an amount that gets spent.
- *    Once `count` is known, the *entire* incoming Difficulty (not a
- *    leftover remainder) is redistributed evenly across it. `powerSplit`
- *    doesn't exist; the split falls out entirely from the relationship
- *    between `minCostPerInstance` and `maxCount`. There is no saturation
- *    bug: once `count` hits `maxCount`, `power` keeps rising with
- *    Difficulty forever (`D ÷ count` with `count` now fixed), nothing is
- *    ever discarded except the sub-1 remainder of the final division
- *    (floored, deliberately rounding in the player's favor).
- * 3. `count`'s true floor is **zero**, not one — an instance whose
- *    `minCostPerInstance` exceeds the incoming Difficulty simply doesn't
- *    spawn at all. This is a deliberate, useful property, not an edge case
- *    to guard against: an "elite" instance with a high cost naturally
- *    doesn't appear until Difficulty is high enough to afford it, with no
- *    separate difficulty-range-gating system needed for that case. The
- *    placed instance still exists as authored content either way — a
- *    resolved `count` of 0 just means nothing spawns from it *at this
- *    particular Difficulty*, which the Scaling panel's preview slider
- *    already surfaces directly (zero ghost dots).
+ * 2. The actual model has **one pool**, not two: cost only answers "how
+ *    many of these can this budget afford, at minimum" — it is a minimum
+ *    viable power *threshold*, not an amount that gets spent. Once `count`
+ *    is known, the *entire* incoming Difficulty (not a leftover remainder)
+ *    is redistributed evenly across it. `powerSplit` doesn't exist; the
+ *    split falls out entirely from the relationship between cost and
+ *    `maxCount`. There is no saturation bug: once `count` hits `maxCount`,
+ *    `power` keeps rising with Difficulty forever (`D ÷ count` with `count`
+ *    now fixed), nothing is ever discarded except the sub-1 remainder of
+ *    the final division (floored, deliberately rounding in the player's
+ *    favor).
+ * 3. `count`'s true floor is **zero**, not one — an instance whose Unit's
+ *    `cost` (unitTypes.ts's `UnitDef.cost`) exceeds the incoming Difficulty
+ *    simply doesn't spawn at all. This is a deliberate, useful property,
+ *    not an edge case to guard against: an "elite" Unit naturally doesn't
+ *    appear until Difficulty is high enough to afford it, with no separate
+ *    difficulty-range-gating system needed for that case. The placed
+ *    instance still exists as authored content either way — a resolved
+ *    `count` of 0 just means nothing spawns from it *at this particular
+ *    Difficulty*, which the Scaling panel's preview slider already
+ *    surfaces directly (zero ghost dots).
+ * 4. **Cost moved off this file's own `UnitScaling` and onto the Unit
+ *    itself** (`minCostPerInstance` is gone) — an Encounter author placing
+ *    a Unit no longer sets its own price, which used to let the same
+ *    powerful Unit be dirt-cheap in one carelessly-configured Encounter and
+ *    correctly expensive in another. A Unit's cost is authored once, on its
+ *    Stats page, and every Encounter that places it inherits the same
+ *    balance — `resolveScaling` below takes it as a separate parameter
+ *    instead of reading it off `scaling`.
  *
  * **Positioning shape** (`ScalingShapeKind`) has real draggable canvas
  * handles (`EncounterEditor.tsx`), not number-only fields — per §6/§8.2,
@@ -67,8 +75,6 @@ export type ScalingShapeKind = "curve" | "v" | "grid" | "ring";
 export interface UnitScaling {
   /** >1 is what enables the rest of this panel (shape/handles/ping-pong) — at 1 (the default), scaling is a no-op and the instance behaves exactly as before this feature existed. The floor is always 1 here (the instance you actually placed) — `resolveScaling`'s *resolved* count can still go to 0 at low Difficulty, that's a runtime/preview outcome, not an authoring bound. */
   maxCount: number;
-  /** The minimum viable power (a share of Difficulty) one instance needs to justify existing at all — determines both whether this spawns (count is 0 below this) and, together with `maxCount`, how quickly count grows vs. how quickly power grows once count saturates. Low = cheap = swarms readily; high = expensive = rare/late-game/miniboss-leaning. */
-  minCostPerInstance: number;
   /** Time between successive instance spawns, ms — 0 = simultaneous, >0 = a staggered queue (shown as stacked nodes on the timeline). */
   spawnDelayMs: number;
   shape: ScalingShapeKind;
@@ -95,7 +101,6 @@ export interface UnitScaling {
 export function createDefaultScaling(): UnitScaling {
   return {
     maxCount: 1,
-    minCostPerInstance: 1,
     spawnDelayMs: 0,
     shape: "curve",
     curvePoints: [],
@@ -131,15 +136,16 @@ export interface ScalingResolution {
 
 /**
  * The one scaling algorithm — see file header for the two prior (wrong)
- * attempts this corrects. `count` is however many instances this budget
- * can afford at `minCostPerInstance` each, capped at `maxCount`; `power`
- * is the *entire* incoming Difficulty split evenly across however many
- * instances resulted, floored (rounds in the player's favor — an enemy is
- * never made stronger by a rounding artifact).
+ * attempts this corrects, plus point 4 on where `unitCost` (the owning
+ * Unit's `UnitDef.cost`, unitTypes.ts) comes from. `count` is however many
+ * instances this budget can afford at `unitCost` each, capped at
+ * `maxCount`; `power` is the *entire* incoming Difficulty split evenly
+ * across however many instances resulted, floored (rounds in the player's
+ * favor — an enemy is never made stronger by a rounding artifact).
  */
-export function resolveScaling(scaling: UnitScaling, difficulty: number): ScalingResolution {
+export function resolveScaling(scaling: UnitScaling, unitCost: number, difficulty: number): ScalingResolution {
   const d = Math.max(0, difficulty);
-  const affordable = scaling.minCostPerInstance > 0 ? Math.floor(d / scaling.minCostPerInstance) : scaling.maxCount;
+  const affordable = unitCost > 0 ? Math.floor(d / unitCost) : scaling.maxCount;
   const count = Math.min(scaling.maxCount, Math.max(0, affordable));
   const power = count > 0 ? Math.floor(d / count) : 0;
   return { count, power };

@@ -135,6 +135,8 @@ export interface AuthoredUnitDef {
   turnRateDegPerSec: number;
   /** Hitbox radius, px. */
   size: number;
+  /** The Difficulty share one instance of this Unit needs to justify existing — authored once per Unit rather than per Encounter placement, see `AuthoredScaling`'s file-header note on where `minCostPerInstance` went. `resolveScaling` (`scaling.ts`) takes this directly. */
+  cost: number;
   layer: AuthoredUnitLayer;
   /** The Action a dynamically-spawned instance (a projectile) runs — it has no steps to draw one from. */
   defaultActionId: string | null;
@@ -148,9 +150,15 @@ export interface AuthoredUnitDef {
 
 export type AuthoredScalingShape = "curve" | "v" | "grid" | "ring";
 
+/**
+ * `minCostPerInstance` used to live here, per placement — it moved onto
+ * `AuthoredUnitDef.cost` instead, so a Unit's Difficulty budget is
+ * authored once and shared by every Encounter that places it, rather than
+ * each Encounter setting its own price for the same Unit. `resolveScaling`
+ * (`scaling.ts`) now takes the owning Unit's cost as a separate parameter.
+ */
 export interface AuthoredScaling {
   maxCount: number;
-  minCostPerInstance: number;
   spawnDelayMs: number;
   shape: AuthoredScalingShape;
   curvePoints: Vec2[];

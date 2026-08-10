@@ -10,12 +10,13 @@
  *
  * `resolveScaling` is the whole algorithm, and its two sharp edges are
  * load-bearing rather than accidental:
- * - **`count`'s floor is zero, not one.** An instance whose
- *   `minCostPerInstance` exceeds the incoming Difficulty simply doesn't
- *   spawn — that's how an "elite" placement gates itself out of low-D runs
- *   with no separate difficulty-range system. It also means a playtest at
- *   Difficulty 0 spawns *nothing at all*, which is why the encounter picker
- *   defaults to a non-zero Difficulty.
+ * - **`count`'s floor is zero, not one.** An instance whose owning Unit's
+ *   `cost` (`AuthoredUnitDef.cost` — authored once per Unit, not per
+ *   placement; see `authoredTypes.ts`) exceeds the incoming Difficulty
+ *   simply doesn't spawn — that's how an "elite" Unit gates itself out of
+ *   low-D runs with no separate difficulty-range system. It also means a
+ *   playtest at Difficulty 0 spawns *nothing at all*, which is why the
+ *   encounter picker defaults to a non-zero Difficulty.
  * - **Once `count` saturates at `maxCount`, `power` keeps rising forever**
  *   (`D / count` with `count` now fixed). Nothing is discarded but the
  *   sub-1 remainder of the final division, floored in the player's favor.
@@ -34,9 +35,9 @@ export interface ScalingResolution {
   power: number;
 }
 
-export function resolveScaling(scaling: AuthoredScaling, difficulty: number): ScalingResolution {
+export function resolveScaling(scaling: AuthoredScaling, unitCost: number, difficulty: number): ScalingResolution {
   const d = Math.max(0, difficulty);
-  const affordable = scaling.minCostPerInstance > 0 ? Math.floor(d / scaling.minCostPerInstance) : scaling.maxCount;
+  const affordable = unitCost > 0 ? Math.floor(d / unitCost) : scaling.maxCount;
   const count = Math.min(scaling.maxCount, Math.max(0, affordable));
   const power = count > 0 ? Math.floor(d / count) : 0;
   return { count, power };

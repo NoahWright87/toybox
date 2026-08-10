@@ -3,6 +3,8 @@ import { resolveScaling, type ScalingShapeKind, type UnitScaling } from "./unitS
 
 interface UnitScalingPanelProps {
   scaling: UnitScaling;
+  /** The placed instance's owning Unit's `cost` (unitTypes.ts) — authored on the Unit's own Stats page now, not here; read-only in this panel. */
+  unitCost: number;
   previewDifficulty: number;
   onPreviewDifficultyChange: (difficulty: number) => void;
   onChange: (patch: Partial<UnitScaling>) => void;
@@ -21,29 +23,27 @@ const MAX_COUNT_CEILING = 30;
  * notes live in the Help menu, not inline — see specs/shmup-editor.md's
  * Per-instance scaling section for the rest.
  */
-export default function UnitScalingPanel({ scaling, previewDifficulty, onPreviewDifficultyChange, onChange, onAddCurvePoint, onRemoveCurvePoint }: UnitScalingPanelProps) {
+export default function UnitScalingPanel({ scaling, unitCost, previewDifficulty, onPreviewDifficultyChange, onChange, onAddCurvePoint, onRemoveCurvePoint }: UnitScalingPanelProps) {
   const scalingEnabled = scaling.maxCount > 1;
-  const resolution = resolveScaling(scaling, previewDifficulty);
+  const resolution = resolveScaling(scaling, unitCost, previewDifficulty);
 
   return (
     <div className="shmup-panel">
-      {/* Max count and Cost are ALWAYS present, whatever maxCount is.
-          Cost used to be gated behind maxCount > 1, which hid the single most
-          important budget property in exactly the case that needs it most: a
-          lone expensive instance. Difficulty is one currency spent top down — a
-          tile splits its budget across what it spawns, and an instance whose
-          cost exceeds its share doesn't spawn at all — so cost is what gates a
-          miniboss out of early runs and into the endgame, with no separate
-          difficulty-range system. That's a property of *one* instance, not of a
-          group, so it belongs outside the group section.
+      {/* Max count is ALWAYS present, whatever its value is — it used to share
+          a wrapping flex row with the group fields below, so turning scaling on
+          re-flowed the very dial you were touching.
 
-          Max count keeps its own row: it used to share a wrapping flex row with
-          the group fields, so turning scaling on re-flowed the very dial you
-          were touching. */}
+          Cost itself isn't authored here anymore — it moved onto the Unit's own
+          Stats page (unitTypes.ts's UnitDef.cost) so an Encounter author placing
+          a Unit can't accidentally under-price it relative to every other
+          Encounter that also places it. This panel only shows it read-only, next
+          to the budget readout it feeds. */}
       <div className="shmup-dial-grid">
         <Dial label="Max count" value={scaling.maxCount} onChange={(v) => onChange({ maxCount: v })} min={1} max={MAX_COUNT_CEILING} showNudgeButtons />
-        <Dial label="Cost each" value={scaling.minCostPerInstance} onChange={(v) => onChange({ minCostPerInstance: Math.max(0.01, v) })} step={1} showNudgeButtons />
       </div>
+      <p className="shmup-readout">
+        Cost each: <strong>{unitCost}</strong> <span className="shmup-hint">(set on this Unit's Stats page)</span>
+      </p>
 
       {/* The budget outcome, always visible for the same reason: at maxCount 1
           this is the "does this thing spawn at all, at this Difficulty" readout,

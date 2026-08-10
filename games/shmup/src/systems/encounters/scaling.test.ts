@@ -5,7 +5,6 @@ import type { AuthoredScaling } from "./authoredTypes";
 function scaling(overrides: Partial<AuthoredScaling> = {}): AuthoredScaling {
   return {
     maxCount: 1,
-    minCostPerInstance: 1,
     spawnDelayMs: 0,
     shape: "curve",
     curvePoints: [],
@@ -23,29 +22,29 @@ function scaling(overrides: Partial<AuthoredScaling> = {}): AuthoredScaling {
 
 describe("resolveScaling", () => {
   it("spawns nothing when Difficulty can't afford even one instance — the gate that makes an 'elite' placement late-game", () => {
-    expect(resolveScaling(scaling({ minCostPerInstance: 20 }), 5)).toEqual({ count: 0, power: 0 });
+    expect(resolveScaling(scaling(), 20, 5)).toEqual({ count: 0, power: 0 });
   });
 
   it("spawns nothing at all at Difficulty 0, which is why the playtest never defaults there", () => {
-    expect(resolveScaling(scaling(), 0).count).toBe(0);
+    expect(resolveScaling(scaling(), 1, 0).count).toBe(0);
   });
 
   it("buys as many instances as the budget affords, up to maxCount", () => {
-    expect(resolveScaling(scaling({ maxCount: 8, minCostPerInstance: 3 }), 12).count).toBe(4);
+    expect(resolveScaling(scaling({ maxCount: 8 }), 3, 12).count).toBe(4);
   });
 
   it("caps count at maxCount", () => {
-    expect(resolveScaling(scaling({ maxCount: 3, minCostPerInstance: 1 }), 100).count).toBe(3);
+    expect(resolveScaling(scaling({ maxCount: 3 }), 1, 100).count).toBe(3);
   });
 
   it("keeps raising power once count saturates, instead of discarding the surplus", () => {
-    const s = scaling({ maxCount: 2, minCostPerInstance: 1 });
-    expect(resolveScaling(s, 10)).toEqual({ count: 2, power: 5 });
-    expect(resolveScaling(s, 100)).toEqual({ count: 2, power: 50 });
+    const s = scaling({ maxCount: 2 });
+    expect(resolveScaling(s, 1, 10)).toEqual({ count: 2, power: 5 });
+    expect(resolveScaling(s, 1, 100)).toEqual({ count: 2, power: 50 });
   });
 
   it("floors power, rounding in the player's favour", () => {
-    expect(resolveScaling(scaling({ maxCount: 3, minCostPerInstance: 1 }), 10).power).toBe(3);
+    expect(resolveScaling(scaling({ maxCount: 3 }), 1, 10).power).toBe(3);
   });
 });
 

@@ -25,9 +25,9 @@ const GAME_URL = "/shmup/index.html";
 /**
  * Difficulty a playtest launches at when the caller has nothing better to
  * offer. Deliberately non-zero: `resolveScaling` floors an instance's count
- * at zero, so a run below an instance's `minCostPerInstance` correctly
- * spawns nothing at all, which reads as "it's broken" the first time you
- * see it.
+ * at zero, so a run below an instance's Unit's cost (unitTypes.ts's
+ * UnitDef.cost) correctly spawns nothing at all, which reads as "it's
+ * broken" the first time you see it.
  */
 export const DEFAULT_PLAYTEST_DIFFICULTY = 10;
 

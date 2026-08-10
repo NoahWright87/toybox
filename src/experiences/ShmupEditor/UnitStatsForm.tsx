@@ -187,6 +187,8 @@ export default function UnitStatsForm({ unit, units, onSave, onCancel, onDuplica
                 <Dial label="HP" value={draft.hp} onChange={(v) => update({ hp: Math.max(1, v) })} min={1} step={1} showNudgeButtons />
                 <Dial label="Contact dmg" value={draft.contactDamage} onChange={(v) => update({ contactDamage: Math.max(0, v) })} min={0} step={1} showNudgeButtons />
                 <Dial label="Score" value={draft.scoreValue} onChange={(v) => update({ scoreValue: Math.max(0, v) })} min={0} step={10} showNudgeButtons />
+                {/* The Difficulty share one instance of this Unit needs to justify existing — used to be set per-placement in the Encounter editor's Scaling tab (UnitScaling.minCostPerInstance), which let the same Unit be dirt-cheap in one Encounter and correctly expensive in another. Authored once here instead, so every Encounter that places this Unit shares the same balance. */}
+                <Dial label="Cost" value={draft.cost} onChange={(v) => update({ cost: Math.max(0.01, v) })} min={0.01} step={1} showNudgeButtons />
               </div>
 
               <label className="shmup-field shmup-field--inline">

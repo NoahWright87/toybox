@@ -319,7 +319,7 @@ export class EncounterRunner {
       // that one instance rather than failing the whole encounter.
       if (!def || placement.steps.length === 0) continue;
 
-      const { count, power } = resolveScaling(placement.scaling, difficulty);
+      const { count, power } = resolveScaling(placement.scaling, def.cost, difficulty);
       if (count <= 0) continue; // priced out at this Difficulty — see scaling.ts
 
       const origin = placement.steps[0].pos;

@@ -976,7 +976,11 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const scalingOpenInstance = scalingPanelOpen ? selectedInstance : undefined;
   const scalingGhostSlots = scalingOpenInstance
     ? applyPingPong(
-        resolveScalingSlots(scalingOpenInstance.scaling, scalingOpenInstance.steps[0]?.pos ?? { x: 0, y: 0 }, resolveScaling(scalingOpenInstance.scaling, scalingPreviewDifficulty).count),
+        resolveScalingSlots(
+          scalingOpenInstance.scaling,
+          scalingOpenInstance.steps[0]?.pos ?? { x: 0, y: 0 },
+          resolveScaling(scalingOpenInstance.scaling, selectedUnitDef?.cost ?? 1, scalingPreviewDifficulty).count
+        ),
         scalingOpenInstance.scaling,
         tileWidthPx
       )
@@ -1250,7 +1254,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // returns null (dupLocalTime before the first step's time) and the
       // slot simply doesn't render yet — matches a real staggered spawn
       // queue rather than every duplicate popping in at once.
-      const count = instance.scaling.maxCount > 1 ? resolveScaling(instance.scaling, hitboxPreviewDifficulty).count : 1;
+      const count = instance.scaling.maxCount > 1 ? resolveScaling(instance.scaling, unitDef.cost, hitboxPreviewDifficulty).count : 1;
       const slots = applyPingPong(resolveScalingSlots(instance.scaling, originPos, count), instance.scaling, tileWidthPx);
       slots.forEach((slot, slotIdx) => {
         const dupLocalTime = scrubTime - (instance.scaling.spawnDelayMs * slotIdx) / 1000;
@@ -1888,6 +1892,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
           {scalingPanelOpen && selectedInstance && (
             <UnitScalingPanel
               scaling={selectedInstance.scaling}
+              unitCost={selectedUnitDef?.cost ?? 1}
               previewDifficulty={scalingPreviewDifficulty}
               onPreviewDifficultyChange={setScalingPreviewDifficulty}
               onChange={(patch) => updateScaling(selectedInstance.id, patch)}
