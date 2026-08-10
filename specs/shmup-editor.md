@@ -2335,15 +2335,25 @@ are corrected by `repairSeededTiles` (`types.ts`) on load:
   there, so the matcher would butt it against a road tile to the north and
   draw a road that stops dead at the seam. Now `grass` north/west,
   `grass-road` south/east.
-- **"Grass / Sand"** (image id `grass-sand`) is rocky scrubland over grass —
-  its top half is `rocky.png`'s own texture, boulders and all — but was
-  tagged `sand`, so it sat flush against real sand tiles where the seam is
-  glaring (Noah spotted it in the Connection Viewer). Renamed **"Grass /
-  Rocky"** and retagged `rocky`. The *image id* deliberately keeps its
-  original `grass-sand` spelling: ids are stored references on every tile
-  saved against them, and renaming one would blank their art. Only the label
-  changed. The genuine grass↔sand transition is the separate
+- **"Grass / Sand"** is rocky scrubland over grass — its top half is
+  `rocky.png`'s own texture, boulders and all — but was named and tagged
+  `sand`, so it sat flush against real sand tiles where the seam is glaring
+  (Noah spotted it in the Connection Viewer). Renamed **"Grass / Rocky"**,
+  retagged `rocky`, and the image id/file renamed `grass-sand` ->
+  `grass-rocky` to match. The genuine grass↔sand transition is the separate
   `grass-sand-natural` tile, which was always correct.
+
+  Renaming a built-in image *id* is normally off the table — ids are stored
+  references on every tile saved against them, so a rename blanks their art.
+  It was taken here because the editor has no real users yet (Noah's call),
+  and `RENAMED_IMAGE_IDS` covers the sessions that do exist. That map is
+  applied to **every** tile, user-authored ones included, and deliberately
+  *not* gated on matching a seeded signature the way the tag fixes are:
+  repointing a moved reference is not overwriting authoring, and leaving a
+  user's tile "alone" here would break it rather than protect it. It runs
+  after the tag fixes (which still match on the pre-rename id), so a library
+  lands correctly whether it is fully stale or was already tag-repaired by an
+  earlier build and left holding the old id.
 
 The repair is a targeted content fix rather than a `SAVE_VERSION` bump, for
 the same reason as `repairSeededSimpleEnemies`: a bump resets the library and

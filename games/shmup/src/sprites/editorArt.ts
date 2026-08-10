@@ -195,7 +195,7 @@ const TILE_PATHS: Record<string, string> = {
   concrete: "tiles/concrete.png",
   forest: "tiles/forest.png",
   "grass-water": "tiles/grass-water.png",
-  "grass-sand": "tiles/grass-sand.png",
+  "grass-rocky": "tiles/grass-rocky.png",
   "grass-sand-natural": "tiles/grass-sand-natural.png",
   "grass-swamp": "tiles/grass-swamp.png",
   "sand-rocky": "tiles/sand-rocky.png",

@@ -37,8 +37,7 @@ describe("seeded tile tags match their art", () => {
     const rocky = seeded("Grass / Rocky");
     expect(slotTag(rocky.north[0])).toBe("rocky");
     expect(slotTag(rocky.south[0])).toBe("grass");
-    // The art id keeps its original spelling — ids are stored references.
-    expect(rocky.imageId).toBe("grass-sand");
+    expect(rocky.imageId).toBe("grass-rocky");
   });
 
   it("keeps the genuine grass/sand transition tagged sand", () => {
@@ -61,9 +60,9 @@ describe("repairSeededTiles", () => {
     };
   }
 
-  /** "Grass / Sand" as it was stored before the fix. */
+  /** "Grass / Sand" as it was stored before the fix — old name, old tag, old image id. */
   function staleRocky(overrides: Partial<TileDef> = {}): TileDef {
-    return { ...seeded("Grass / Rocky"), name: "Grass / Sand", north: [edgeSlot("sand")], ...overrides };
+    return { ...seeded("Grass / Rocky"), name: "Grass / Sand", imageId: "grass-sand", north: [edgeSlot("sand")], ...overrides };
   }
 
   it("re-routes a stale Road (Curve)", () => {
@@ -74,11 +73,23 @@ describe("repairSeededTiles", () => {
     expect(slotTag(fixed.west)).toBe("grass");
   });
 
-  it("renames and retags a stale Grass / Sand", () => {
+  it("renames, retags and repoints a stale Grass / Sand", () => {
     const [fixed] = repairSeededTiles([staleRocky()]);
     expect(fixed.name).toBe("Grass / Rocky");
     expect(slotTag(fixed.north[0])).toBe("rocky");
     expect(slotTag(fixed.south[0])).toBe("grass");
+    expect(fixed.imageId).toBe("grass-rocky");
+  });
+
+  it("repoints a library an earlier build already tag-repaired but left on the old image id", () => {
+    // The intermediate state: name and tags corrected by a previous release,
+    // image id not yet renamed. The signature match no longer fires, so the
+    // id rename has to be what carries it — otherwise the art goes blank.
+    const partly = { ...seeded("Grass / Rocky"), imageId: "grass-sand" };
+    const [fixed] = repairSeededTiles([partly]);
+    expect(fixed.imageId).toBe("grass-rocky");
+    expect(fixed.name).toBe("Grass / Rocky");
+    expect(slotTag(fixed.north[0])).toBe("rocky");
   });
 
   it("never touches a tile the user renamed", () => {
@@ -94,9 +105,15 @@ describe("repairSeededTiles", () => {
     expect(repairSeededTiles([mine])[0]).toEqual(mine);
   });
 
-  it("never touches a user tile built on the same art", () => {
+  it("keeps a user tile's own name and tags while still repointing its art", () => {
+    // The one thing that *does* apply to user-authored tiles: the art file
+    // moved, so a tile left on the old id would render blank. Everything the
+    // user actually authored is untouched.
     const mine = staleRocky({ name: "My Scrubland" });
-    expect(repairSeededTiles([mine])[0]).toEqual(mine);
+    const [fixed] = repairSeededTiles([mine]);
+    expect(fixed.name).toBe("My Scrubland");
+    expect(slotTag(fixed.north[0])).toBe("sand");
+    expect(fixed.imageId).toBe("grass-rocky");
   });
 
   it("leaves every other seeded tile alone", () => {
