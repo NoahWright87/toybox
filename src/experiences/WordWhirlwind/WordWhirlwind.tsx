@@ -1027,7 +1027,7 @@ export default function WordWhirlwind({ onQuit }: { onQuit?: () => void } = {}) 
       } else if (e.key === "Escape") {
         e.preventDefault();
         clearBoard();
-      } else if (e.key === "h" || e.key === "H") {
+      } else if (e.key === "?") {
         e.preventDefault();
         revealNextLetter();
       } else if (/^[a-zA-Z]$/.test(e.key)) {

@@ -10,7 +10,7 @@ export default function BombFinderPage() {
         <>
           <ul>
             <li><strong>Left-click</strong> to reveal a cell</li>
-            <li><strong>Right-click</strong> to place or remove a flag 🚩</li>
+            <li><strong>Right-click</strong> or <strong>Ctrl+click</strong> to place or remove a flag 🚩</li>
             <li>Your first click is always safe — no bomb within 1 square</li>
             <li>Numbers show how many bombs touch that cell</li>
             <li>Clear all non-bomb cells to win</li>
