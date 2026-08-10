@@ -884,6 +884,10 @@ function createDoodadUnit(spec: DoodadSpec, now: number): UnitDef {
     hp: 1,
     contactDamage: 0,
     scoreValue: 0,
+    // Cheapest tier deliberately — scenery isn't a combat budget decision,
+    // so it should show up at essentially any nonzero Difficulty rather
+    // than being gated the way an "elite" enemy's cost gates it out.
+    cost: 1,
     speed: 0,
     minSpeed: 0,
     turnRateDegPerSec: 0,
