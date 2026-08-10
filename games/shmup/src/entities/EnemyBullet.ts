@@ -4,6 +4,7 @@ import { TUNING } from "../tuning";
 import type { Polarity } from "../systems/chassis";
 import { nextSpawnId } from "./spawnId";
 import type { ShmupPlayScene } from "./types";
+import { DEPTH } from "../systems/depth";
 
 /** Pooled enemy bullet — fixed damage, no pierce/blast (those are player-weapon-only mechanics). */
 export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
@@ -23,6 +24,8 @@ export class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
     this.spawnId = nextSpawnId();
     this.setPosition(x, y);
     this.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
+    // Explicit depth, not the default 0 — see systems/depth.ts (the highest gameplay layer — incoming fire hidden behind a doodad is a hazard the player cannot dodge).
+    this.setDepth(DEPTH.enemyProjectile);
     this.setActive(true);
     this.setVisible(true);
     const body = this.body as Phaser.Physics.Arcade.Body;

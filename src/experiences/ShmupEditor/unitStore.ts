@@ -16,7 +16,7 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILE_DRAFT_ID, SHMUP_EDITOR_UNIT_DRAFT_ID, SHMUP_EDITOR_UNITS_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import type { EncounterDef } from "./encounterTypes";
-import { createDefaultUnitLibrary, repairSeededSimpleEnemies, type ActionDef, type CollisionGroup, type UnitDef, type UnitPart } from "./unitTypes";
+import { backfillDoodads, createDefaultUnitLibrary, repairSeededSimpleEnemies, type ActionDef, type CollisionGroup, type UnitDef, type UnitPart } from "./unitTypes";
 import type { TileDef } from "./types";
 
 // v6: Attacks moved off ActionDef entirely and onto a Unit's Parts
@@ -51,6 +51,13 @@ const SAVE_VERSION = 10;
 interface SavedLibrary {
   version: number;
   units: UnitDef[];
+  /**
+   * Set once the doodad batch has been merged into this library — see
+   * `backfillDoodads`. Optional so a save written before the batch existed
+   * (which is every v9 save) still parses and is simply treated as
+   * not-yet-backfilled.
+   */
+  doodadsSeeded?: boolean;
 }
 
 interface SavedUnitDraft {
@@ -219,14 +226,18 @@ export function loadUnits(): UnitDef[] {
     // Content-level repair of the seeded enemies (Part-less Actions / inert
     // turret defaults) — see repairSeededSimpleEnemies. Deliberately not a
     // SAVE_VERSION bump, which would discard user-authored Units too.
-    return repairSeededSimpleEnemies(migrateMotionStats(parsed.units).filter(isValidUnitDef));
+    const units = repairSeededSimpleEnemies(migrateMotionStats(parsed.units).filter(isValidUnitDef));
+    if (parsed.doodadsSeeded) return units;
+    const backfilled = backfillDoodads(units);
+    saveUnits(backfilled);
+    return backfilled;
   } catch {
     return seedAndPersistDefaultLibrary();
   }
 }
 
 export function saveUnits(units: UnitDef[]): void {
-  const saved: SavedLibrary = { version: SAVE_VERSION, units };
+  const saved: SavedLibrary = { version: SAVE_VERSION, units, doodadsSeeded: true };
   fsStore.writeFile(SHMUP_EDITOR_UNITS_ID, JSON.stringify(saved));
 }
 

@@ -8,7 +8,7 @@ import { fsStore } from "../NsDoors97/filesystem/FileSystemStore";
 import { SHMUP_EDITOR_TILES_ID } from "../NsDoors97/filesystem/types";
 import { isValidEncounter } from "./encounterValidation";
 import { CUSTOM_IMAGE_ID, NONE_IMAGE_ID } from "./tileImages";
-import { createDefaultTileLibrary, type EdgeSlot, type TileDef } from "./types";
+import { createDefaultTileLibrary, repairSeededTiles, type EdgeSlot, type TileDef } from "./types";
 
 // v2: `color` swatch replaced by `imageId` (tileImages.ts) — bumping so a
 // pre-v2 save (missing imageId) is discarded rather than half-loaded.
@@ -116,7 +116,19 @@ export function loadTiles(): TileDef[] {
   try {
     const parsed = JSON.parse(content) as SavedLibrary;
     if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.tiles)) return seedAndPersistDefaultLibrary();
-    return parsed.tiles.filter(isValidTileDef).map(normalizeTile);
+    // Content-level repair of two seeded tiles whose edge tags contradicted
+    // their own art — see repairSeededTiles. Deliberately not a SAVE_VERSION
+    // bump, which would discard user-authored tiles too.
+    const loaded = parsed.tiles.filter(isValidTileDef).map(normalizeTile);
+    const repaired = repairSeededTiles(loaded);
+    // Written back, not just returned. `games/shmup` reads `TILES.DAT`
+    // straight out of the FS with no idea this repair exists, so a fix that
+    // lived only in the editor's memory would leave the *played* level still
+    // matching on the bad tags until the user happened to re-save.
+    // `repairSeededTiles` returns untouched tiles by identity, so this writes
+    // exactly once, on the first load after the fix ships.
+    if (repaired.some((tile, i) => tile !== loaded[i])) saveTiles(repaired);
+    return repaired;
   } catch {
     return seedAndPersistDefaultLibrary();
   }

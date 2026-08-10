@@ -6,6 +6,7 @@ import type { EnemyArchetypeId, ScaledEnemyStats } from "../systems/difficulty";
 import type { Polarity } from "../systems/chassis";
 import { nextSpawnId } from "./spawnId";
 import type { PlayerTarget, ShmupPlayScene } from "./types";
+import { DEPTH } from "../systems/depth";
 
 /**
  * Pooled enemy (run-structure.spec.todo.md's Difficulty (D) scaling, F8
@@ -51,6 +52,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite implements PlayerTarget 
     this.polarity = Math.random() < 0.5 ? "red" : "blue";
     this.applyPolarityTint();
     this.setPosition(x, y);
+    // Explicit depth, not the default 0 — see systems/depth.ts (between the two authored unit layers).
+    this.setDepth(DEPTH.enemy);
     this.setActive(true);
     this.setVisible(true);
     const body = this.body as Phaser.Physics.Arcade.Body;

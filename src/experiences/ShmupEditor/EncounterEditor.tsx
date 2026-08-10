@@ -17,7 +17,7 @@ import { computeInstanceHeadingDeg, computeInstancePreview, LAST_STEP_PREVIEW_WI
 import { resolveScaling, type UnitScaling } from "./unitScaling";
 import { applyPingPong, resolveScalingSlots } from "./unitScalingShapes";
 import { computeAttackBullets, computeAttackDurationMs, computeCameraBoundsRect, computePlayerRefLocalY, resolveActionFacingDeg, resolveBulletRadius, PLAYER_REFERENCE_HITBOX_RADIUS } from "./hitboxPreview";
-import { airPinSec, authorLayerOf, isScrollLocked, pinShiftY, referenceShiftY, type AuthorLayer } from "./airFrame";
+import { airPinSec, isScrollLocked, pinShiftY, referenceShiftY, type AuthorLayer } from "./airFrame";
 import { TILE_UNIT } from "./editorScale";
 import type { TileDef } from "./types";
 import type { ActionAttack, ActionDef, UnitDef } from "./unitTypes";
@@ -248,19 +248,27 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
    * - Air: the camera is fixed and the terrain slides down through it. Ground
    *   units and the tile itself are dimmed but stay visible, so an air path
    *   can still be lined up against what it's flying over.
+   * - Doodads: geometrically identical to Ground (scenery is scroll-locked
+   *   too, so there is no third reference frame — see `airFrame.ts`'s
+   *   `AuthorLayer`). What it changes is the *roster* and the dimming: only
+   *   doodad Units are offered, and the combat layers dim out of the way, so
+   *   dressing a tile with scenery is its own pass rather than a search
+   *   through the ground roster for the tank among the trees.
    *
-   * Both modes show the *other* layer rather than hiding it — separate to
-   * author, together to check. The inactive layer is non-interactive though,
+   * Every mode shows the *other* layers rather than hiding them — separate to
+   * author, together to check. The inactive layers are non-interactive though,
    * so a stray tap can't grab a dimmed node in a frame you aren't editing.
    */
   const [authorLayer, setAuthorLayer] = useState<AuthorLayer>(() => {
     // Open in the frame that actually holds this encounter's content. Ground
     // is the right default for an empty encounter and for anything mixed, but
-    // an all-air encounter opening in ground mode would show every one of its
-    // units dimmed and unselectable, which reads as broken rather than as a
-    // mode you need to switch out of.
+    // a single-layer encounter opening in the wrong mode would show every one
+    // of its units dimmed and unselectable, which reads as broken rather than
+    // as a mode you need to switch out of. Applies to an all-doodad encounter
+    // (a pure scenery pass) exactly as it does to an all-air one.
     const placed = encounter.units.map((u) => units.find((d) => d.id === u.unitDefId)).filter((d): d is UnitDef => !!d);
-    return placed.length > 0 && placed.every((d) => authorLayerOf(d.layer) === "air") ? "air" : "ground";
+    const first = placed[0]?.layer;
+    return first && placed.every((d) => d.layer === first) ? first : "ground";
   });
   // E4 low-fi hitbox/boundary preview mode (specs/shmup-editor.todo.md) —
   // an alternate rendering of the same scrubTime/playing timeline already
@@ -310,10 +318,9 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     return map;
   }, [draft.units, units]);
 
-  /** Which authoring frame an instance belongs to — its Unit's layer, with doodad folded into ground (airFrame.ts). An unresolvable Unit falls back to ground so it still renders somewhere rather than vanishing. */
+  /** Which authoring frame an instance belongs to — simply its Unit's layer (airFrame.ts). An unresolvable Unit falls back to ground so it still renders somewhere rather than vanishing. */
   function instanceAuthorLayer(instance: EncounterUnit): AuthorLayer {
-    const unitDef = units.find((u) => u.id === instance.unitDefId);
-    return unitDef ? authorLayerOf(unitDef.layer) : "ground";
+    return units.find((u) => u.id === instance.unitDefId)?.layer ?? "ground";
   }
 
   /** True when an instance belongs to the frame that isn't currently being authored — dimmed, and inert to pointers. */
@@ -502,7 +509,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
     // Authoring an entrance is then a deliberate act: drag this first step out
     // past the box and add the next one inside it.
     const startPos: Vec2 =
-      unitDef && authorLayerOf(unitDef.layer) === "air"
+      unitDef?.layer === "air"
         ? {
             x: airCameraRect.x + airCameraRect.width / 2 + index * 110,
             y: airCameraRect.y + airCameraRect.height * AIR_ENTRY_DEPTH_FRACTION + index * 30,
@@ -935,7 +942,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const selectedPlacement: PartActionPlacement | undefined = selection?.kind === "partAction" ? selectedInstance?.partActions.find((a) => a.id === selection.placementId) : undefined;
   const selectedUnitDef = selectedInstance ? units.find((u) => u.id === selectedInstance.unitDefId) : undefined;
   /** The Unit roster the "+ Add" tab offers — whichever frame is being authored. Layer is a Unit-definition property (unitTypes.ts), so this filters the picker only; nothing about the placement records it. */
-  const addableUnits = units.filter((u) => authorLayerOf(u.layer) === authorLayer);
+  const addableUnits = units.filter((u) => u.layer === authorLayer);
 
   /**
    * Tabs on offer right now. Step/Attack are still selection-contextual (they
@@ -950,7 +957,11 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
   const availableTabs: EditorTab[] = ["basics", "add"];
   if (selection?.kind === "step") availableTabs.push("step");
   if (selection?.kind === "partAction") availableTabs.push("partAction");
-  if (selectedInstance) availableTabs.push("scaling");
+  // Scaling is a difficulty-response concept — "throw more of these at a
+  // stronger player" — which scenery has no part in. A doodad is set
+  // dressing: it doesn't scale with difficulty, so the tab is withheld
+  // rather than shown offering a knob that shouldn't be turned.
+  if (selectedInstance && selectedUnitDef?.layer !== "doodad") availableTabs.push("scaling");
   // Auto-focus the tab matching a freshly selected node, but never strand the
   // user on a tab that no longer exists (its node got deleted / nothing is
   // selected) — fall back to whatever the selection does offer, else Basics.
@@ -1219,7 +1230,7 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
       // correct once it decouples), `refShiftY` is the uniform scene
       // translation applied last, at render.
       const pinY = instancePinShiftY(instance);
-      const instanceLayer = authorLayerOf(unitDef.layer);
+      const instanceLayer = unitDef.layer;
       const offLayer = instanceLayer !== authorLayer;
       const originPos = instance.steps[0]?.pos ?? computeInstancePreview(instance, unitDef, scrubTime)?.pos ?? { x: 0, y: 0 };
       // Scaled duplicates fire the exact same authored step/attack sequence
@@ -1251,7 +1262,13 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
         if (!dupPreview || dupPreview.invincible) return;
         const delta: Vec2 = { x: slot.x - originPos.x, y: slot.y - originPos.y };
         const dupPos: Vec2 = { x: dupPreview.pos.x + delta.x, y: dupPreview.pos.y + delta.y + pinY };
-        hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStageAt(dupPos, refShiftY), sizePx: unitDef.size * 2, layer: instanceLayer, offLayer });
+        // Scenery has no hitbox at runtime (`EncounterRunner.ts`'s
+        // `isCollidableLayer`), so drawing one here would be the editor
+        // promising a collision the game never performs — the exact
+        // shows-X-does-Y drift this preview exists to catch.
+        if (instanceLayer !== "doodad") {
+          hitboxEnemyMarkers.push({ key: `${instance.id}-${slotIdx}`, stage: toStageAt(dupPos, refShiftY), sizePx: unitDef.size * 2, layer: instanceLayer, offLayer });
+        }
         const headingDeg = computeInstanceHeadingDeg(instance, unitDef, dupLocalTime);
 
         function pushAttackBullets(key: string, facing: Pick<ActionDef, "facing" | "fixedFacingDeg">, attack: ActionAttack, anchor: Vec2, elapsedMs: number) {
@@ -1821,15 +1838,12 @@ export default function EncounterEditor({ tile, units, encounter, onSave, onCanc
             </div>
           )}
 
-          {/* The roster follows the frame toggle rather than offering its own filter — you add into the frame you're looking at, so two controls for one decision would only let them disagree. Doodad shows alongside ground because it's scroll-locked too (airFrame.ts). */}
+          {/* The roster follows the frame toggle rather than offering its own filter — you add into the frame you're looking at, so two controls for one decision would only let them disagree. One roster per layer, doodads included (airFrame.ts's AuthorLayer). */}
           {effectiveTab === "add" && (
             <div className="shmup-panel">
               <div className="shmup-tile-picker">
                 {addableUnits.length === 0 ? (
-                  <p className="shmup-readout">
-                    No {authorLayer} Units yet — create one via the Units menu (set its Layer to {authorLayer}
-                    {authorLayer === "ground" ? " or doodad" : ""}).
-                  </p>
+                  <p className="shmup-readout">No {authorLayer} Units yet — create one via the Units menu (set its Layer to {authorLayer}).</p>
                 ) : (
                   addableUnits.map((u) => {
                       const url = resolveSpriteUrl(u.spriteId, u.customSprite);
