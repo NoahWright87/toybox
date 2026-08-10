@@ -2326,6 +2326,37 @@ are tagged and its other two are hardwalled, since a mixed/gradient edge
 has no single tag that could describe it — see that file for the exact
 per-tile breakdown). The seed is saved immediately, same pattern as
 `unitStore.ts`'s pre-existing default-Unit-library seeding (below).
+**Two seeded tiles shipped with tags that contradicted their own art**, and
+are corrected by `repairSeededTiles` (`types.ts`) on load:
+
+- **Road (Curve)** was seeded with Road (Straight)'s edges — `grass-road`
+  north *and* south — but the art enters from the south and exits **east**.
+  It claimed a road continued off the top of a tile that plainly shows grass
+  there, so the matcher would butt it against a road tile to the north and
+  draw a road that stops dead at the seam. Now `grass` north/west,
+  `grass-road` south/east.
+- **"Grass / Sand"** (image id `grass-sand`) is rocky scrubland over grass —
+  its top half is `rocky.png`'s own texture, boulders and all — but was
+  tagged `sand`, so it sat flush against real sand tiles where the seam is
+  glaring (Noah spotted it in the Connection Viewer). Renamed **"Grass /
+  Rocky"** and retagged `rocky`. The *image id* deliberately keeps its
+  original `grass-sand` spelling: ids are stored references on every tile
+  saved against them, and renaming one would blank their art. Only the label
+  changed. The genuine grass↔sand transition is the separate
+  `grass-sand-natural` tile, which was always correct.
+
+The repair is a targeted content fix rather than a `SAVE_VERSION` bump, for
+the same reason as `repairSeededSimpleEnemies`: a bump resets the library and
+discards every tile the user authored. Seeded tiles get *random* ids
+(`makeTileId`), so unlike the Unit repair there is no stable id to match on —
+each fix instead matches the **entire stale signature** (image id, name, every
+edge) and rewrites only on an exact hit, so a tile the user renamed, retagged,
+or rebuilt on the same art is left completely alone. Unlike the Unit repairs,
+this one is **written back to `TILES.DAT`** when it changes something (once,
+on the first load after the fix): `games/shmup` reads that file directly with
+no idea the repair exists, so a fix living only in the editor's memory would
+leave the played level still matching on the bad tags.
+
 Purely-additive optional fields (`customImage`) don't bump
 `SAVE_VERSION` — a pre-existing save missing it is still valid and gets
 backfilled to its default (`null`) on load, rather than the whole

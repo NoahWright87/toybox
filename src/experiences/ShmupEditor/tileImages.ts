@@ -35,7 +35,11 @@ export const TILE_IMAGES: TileImageOption[] = [
   { id: "forest", label: "Forest", url: "/shmup-editor/tiles/forest.png" },
   // Horizontal (north/south) biome transitions
   { id: "grass-water", label: "Grass → Water", url: "/shmup-editor/tiles/grass-water.png" },
-  { id: "grass-sand", label: "Grass → Sand", url: "/shmup-editor/tiles/grass-sand.png" },
+  // Labelled for what the art actually shows — rocky scrubland over grass, not
+  // sand. The id keeps its original `grass-sand` spelling on purpose: it is a
+  // stored reference on every tile saved against it, and renaming it would
+  // blank their art. See types.ts's "Grass / Rocky" seed entry.
+  { id: "grass-sand", label: "Grass → Rocky", url: "/shmup-editor/tiles/grass-sand.png" },
   { id: "grass-sand-natural", label: "Grass → Sand (natural)", url: "/shmup-editor/tiles/grass-sand-natural.png" },
   { id: "grass-swamp", label: "Grass → Swamp", url: "/shmup-editor/tiles/grass-swamp.png" },
   { id: "sand-rocky", label: "Sand → Rocky", url: "/shmup-editor/tiles/sand-rocky.png" },
