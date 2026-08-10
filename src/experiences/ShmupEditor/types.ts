@@ -215,6 +215,20 @@ function placedUnit(unitDefId: string, steps: EncounterStep[], scalingPatch: Par
   return { ...createEncounterUnit(unitDefId), steps, partActions, scaling: { ...createDefaultScaling(), ...scalingPatch } };
 }
 
+/**
+ * A single inert doodad prop at a fixed spot — `slug` is `DOODAD_SPECS`'
+ * (`unitTypes.ts`) slug, resolved through the same `enemyUnitId` every
+ * other seeded Unit uses (doodads get the same deterministic id scheme, see
+ * that file). `actionId: null` is the only legal value here: a doodad has
+ * `actions: []`, nothing to reference — it's scenery, not a combatant.
+ * `scalingPatch` is for a clump of the same prop (a stand of trees, a
+ * scatter of rubble), same mechanism as an enemy's — cost is 1 for every
+ * doodad, so a clump's full `maxCount` always renders at any real Difficulty.
+ */
+function doodad(slug: string, pos: Vec2, scalingPatch: Partial<UnitScaling> = {}): EncounterUnit {
+  return placedUnit(enemyUnitId(slug), [step(pos, 0, null)], scalingPatch);
+}
+
 /** A turreted enemy's Nth Turret Part opening fire at `time` — see `unitTypes.ts`'s `enemyTurretPartId`/`enemyTurretAttackActionId`. */
 function turretFire(slug: string, index: number, time: number): PartActionPlacement {
   return { id: makePartActionPlacementId(), partId: enemyTurretPartId(slug, index), time, actionId: enemyTurretAttackActionId(slug, index) };
@@ -226,24 +240,32 @@ function encounter(name: string, units: EncounterUnit[]): EncounterDef {
 }
 
 function grassEncounters(): EncounterDef[] {
-  // Ground: a defensive line of Turrets across the tile.
-  const turretLine = placedUnit(enemyUnitId("turret"), [step({ x: 360, y: 420 }, 0, enemyAttackActionId("turret"))], {
+  // Ground: a defensive line of Turrets across the tile. "grid" with
+  // gridDepth: 0 looks like it should collapse to a single row, but its
+  // cols/rows split (ceil(sqrt(count))) only actually gives one row when
+  // count <= 2 — at 5 it's a 3x2 grid squashed flat, so two pairs of slots
+  // land on the exact same x and overlap. "curve" with no curvePoints (a
+  // straight line) evenly spaces any count with no such collapsing, so the
+  // placed instance's own position is the line's *left* end here rather
+  // than centered, with curveEnd reaching the right end.
+  const turretLine = placedUnit(enemyUnitId("turret"), [step({ x: 80, y: 420 }, 0, enemyAttackActionId("turret"))], {
     maxCount: 5,
-    shape: "grid",
-    gridWidth: TILE_UNIT * 0.78,
-    gridDepth: 0,
+    shape: "curve",
+    curveEnd: { x: TILE_UNIT * 0.78, y: 0 },
   });
 
   // Air: Attack Helicopters fly in and hold near the top of the screen,
-  // firing continuously rather than flying through and off.
-  const heliIn = step({ x: 360, y: 200 }, 2, enemyMoveActionId("heli"));
-  const heliHold = stepAfter(heliIn, { x: 360, y: 500 }, 140, enemyAttackActionId("heli"));
-  const heliDwell = step({ x: 360, y: 500 }, 9.5, enemyAttackActionId("heli"));
+  // firing continuously rather than flying through and off. Same
+  // left-end/curveEnd line arrangement as the Turret Line above, translated
+  // rigidly across every step of the hold path (scaling offsets the whole
+  // authored sequence by a fixed dx, not just the first step).
+  const heliIn = step({ x: 180, y: 200 }, 2, enemyMoveActionId("heli"));
+  const heliHold = stepAfter(heliIn, { x: 180, y: 500 }, 140, enemyAttackActionId("heli"));
+  const heliDwell = step({ x: 180, y: 500 }, 9.5, enemyAttackActionId("heli"));
   const heliLoiter = placedUnit(enemyUnitId("heli"), [heliIn, heliHold, heliDwell], {
     maxCount: 4,
-    shape: "grid",
-    gridWidth: TILE_UNIT * 0.5,
-    gridDepth: 0,
+    shape: "curve",
+    curveEnd: { x: TILE_UNIT * 0.5, y: 0 },
     spawnDelayMs: 300,
   });
 
@@ -272,11 +294,22 @@ function grassEncounters(): EncounterDef[] {
     spawnDelayMs: 250,
   });
 
+  // Scenery: the art (grass.png) is a uniform open meadow with nothing in
+  // it, so there's no single feature to build around — just a natural
+  // scatter across the field: a small grove in one corner, a lone tree
+  // opposite it, a bush and a rock outcrop, a handful of loose pebbles.
+  const grove = doodad("tree-broadleaf", { x: 110, y: 140 }, { maxCount: 3, shape: "curve", curveEnd: { x: 140, y: 80 } });
+  const loneTree = doodad("tree-round", { x: 620, y: 130 });
+  const bush = doodad("tree-bush-round", { x: 260, y: 560 });
+  const rocks = doodad("rock-cluster", { x: 520, y: 480 });
+  const pebbles = doodad("rock-pebbles", { x: 580, y: 610 }, { maxCount: 3, shape: "curve", curveEnd: { x: -100, y: -60 } });
+
   return [
     encounter("Turret Line", [turretLine]),
     encounter("Helicopter Loiter", [heliLoiter]),
     encounter("Overwatch", [overwatchTurrets, overwatchHeli]),
     encounter("Heli Flyby", [flyby]),
+    encounter("Meadow Scenery", [grove, loneTree, bush, rocks, pebbles]),
   ];
 }
 
@@ -325,35 +358,48 @@ function roadStraightEncounters(): EncounterDef[] {
   const e2 = stepAfter(e1, { x: 750, y: 550 }, 220, enemyMoveActionId("jet-fighter"));
   const escortJet = placedUnit(enemyUnitId("jet-fighter"), [e0, e1, e2]);
 
+  // Scenery: the art (grass-road-straight.png) is a paved lane roughly
+  // x∈[247,459] flanked by open grass verges on both sides — trees and
+  // rocks sit off the road itself, not on the asphalt.
+  const westTrees = doodad("tree-broadleaf", { x: 130, y: 80 }, { maxCount: 3, shape: "curve", curveEnd: { x: 0, y: 560 } });
+  const eastTree = doodad("tree-round", { x: 580, y: 260 });
+  const eastRocks = doodad("rock-boulders", { x: 600, y: 520 });
+  const westBush = doodad("tree-bush-large", { x: 150, y: 640 });
+
   return [
     encounter("Convoy", [tank, trucks]),
     encounter("Strafing Run", [jet]),
     encounter("Escort", [escortTrucks, escortJet]),
+    encounter("Roadside Scenery", [westTrees, eastTree, eastRocks, westBush]),
   ];
 }
 
 function roadCurveEncounters(): EncounterDef[] {
-  // Ground: an Armored Truck follows the road's bend (its Turret fires
-  // independently once it's rounded the first curve), a Turret (Quad)
-  // guards the inside of the bend.
-  const bendIn = step({ x: 400, y: 40 }, 0, enemyMoveActionId("armored-truck"));
-  const bendMid = stepAfter(bendIn, { x: 180, y: 340 }, 90, enemyMoveActionId("armored-truck"));
-  const bendOut = stepAfter(bendMid, { x: 520, y: 660 }, 90, enemyMoveActionId("armored-truck"));
+  // Ground: an Armored Truck follows the road's actual bend — the art
+  // (see repairSeededTags above) enters from the **south** and exits
+  // **east**, not north-to-south — bending through the middle of the tile
+  // (its Turret fires independently once it's rounded the bend). A Turret
+  // (Quad) guards the inside of the elbow, the grass wedge tucked between
+  // the curve and the tile's south-east corner.
+  const bendIn = step({ x: 350, y: 690 }, 0, enemyMoveActionId("armored-truck"));
+  const bendMid = stepAfter(bendIn, { x: 480, y: 420 }, 90, enemyMoveActionId("armored-truck"));
+  const bendOut = stepAfter(bendMid, { x: 700, y: 260 }, 90, enemyMoveActionId("armored-truck"));
   const truck = placedUnit(enemyUnitId("armored-truck"), [bendIn, bendMid, bendOut], {}, [turretFire("armored-truck", 0, 2)]);
 
-  const guardTurret = placedUnit(enemyUnitId("turret-4x"), [step({ x: 250, y: 400 }, 0, enemyAttackActionId("turret-4x"))]);
+  const guardTurret = placedUnit(enemyUnitId("turret-4x"), [step({ x: 560, y: 560 }, 0, enemyAttackActionId("turret-4x"))]);
 
   // Filler folded in rather than a separate encounter — a pair of harmless Transport Helicopters crossing high overhead.
   const flyIn = step({ x: -80, y: 180 }, 1, enemyMoveActionId("heli-transport"));
   const flyOut = stepAfter(flyIn, { x: 800, y: 180 }, 100, enemyMoveActionId("heli-transport"));
   const flyby = placedUnit(enemyUnitId("heli-transport"), [flyIn, flyOut], { maxCount: 2, shape: "grid", gridWidth: 150, gridDepth: 100 });
 
-  // Air: the same Strafing Run showcase as Road (Straight), flown along the curve's diagonal instead.
-  const s0 = step({ x: 600, y: -260 }, 0, enemyMoveActionId("jet-fighter"));
-  const s1 = stepAfter(s0, { x: 150, y: 150 }, 220, enemyMoveActionId("jet-fighter"));
-  const s2 = stepAfter(s1, { x: 550, y: 380 }, 220, enemyStrafeActionId("jet-fighter"));
-  const s3 = stepAfter(s2, { x: 120, y: 560 }, 220, enemyMoveActionId("jet-fighter"));
-  const s4 = stepAfter(s3, { x: -100, y: 250 }, 220, enemyMoveActionId("jet-fighter"));
+  // Air: the same Strafing Run showcase as Road (Straight), flown along a
+  // south-west to north-east diagonal to echo the bend's own sweep.
+  const s0 = step({ x: 650, y: -260 }, 0, enemyMoveActionId("jet-fighter"));
+  const s1 = stepAfter(s0, { x: 120, y: 200 }, 220, enemyMoveActionId("jet-fighter"));
+  const s2 = stepAfter(s1, { x: 560, y: 420 }, 220, enemyStrafeActionId("jet-fighter"));
+  const s3 = stepAfter(s2, { x: 100, y: 620 }, 220, enemyMoveActionId("jet-fighter"));
+  const s4 = stepAfter(s3, { x: -100, y: 350 }, 220, enemyMoveActionId("jet-fighter"));
   const jet = placedUnit(enemyUnitId("jet-fighter"), [s0, s1, s2, s3, s4], {
     maxCount: 2,
     shape: "curve",
@@ -361,7 +407,20 @@ function roadCurveEncounters(): EncounterDef[] {
     spawnDelayMs: 600,
   });
 
-  return [encounter("Bend Ambush", [truck, guardTurret, flyby]), encounter("Strafing Run", [jet])];
+  // Scenery: trees along the curve's outside (the big grass field to the
+  // north-west of the bend), a rock formation tucked in the inside elbow
+  // (the same south-east wedge Bend Ambush's guard Turret occupies — a
+  // different Encounter, never placed alongside it, so the reuse is just
+  // "this spot reads as the inside of the curve" twice, not a collision).
+  const nwGrove = doodad("tree-lobed", { x: 120, y: 100 }, { maxCount: 3, shape: "curve", curveEnd: { x: 60, y: 340 } });
+  const insideRocks = doodad("rock-boulder-pile", { x: 620, y: 630 });
+  const outerTree = doodad("tree-round", { x: 280, y: 560 });
+
+  return [
+    encounter("Bend Ambush", [truck, guardTurret, flyby]),
+    encounter("Strafing Run", [jet]),
+    encounter("Curve Scenery", [nwGrove, insideRocks, outerTree]),
+  ];
 }
 
 function roadTrailheadEncounters(): EncounterDef[] {
@@ -379,7 +438,23 @@ function roadTrailheadEncounters(): EncounterDef[] {
   const p1 = stepAfter(p0, { x: 650, y: 650 }, 120, enemyMoveActionId("plane-prop"));
   const reconPass = placedUnit(enemyUnitId("plane-prop"), [p0, p1]);
 
-  return [encounter("Checkpoint", [checkpoint]), encounter("Recon Pass", [reconPass])];
+  // Scenery: the art (grass-road-start.png) is a paved road at the north
+  // edge that visibly cracks and craters as it runs south, littered with
+  // rubble, fading out into open grass — a camp guarding the paved
+  // entrance, then wreckage tracing the broken pavement, then a couple of
+  // trees once the road gives way to grass.
+  const campSandbags = doodad("camp-sandbag-wall", { x: 200, y: 110 });
+  const campCrates = doodad("camp-crates", { x: 540, y: 130 });
+  const craters = doodad("urban-crater", { x: 320, y: 300 }, { maxCount: 3, shape: "curve", curveEnd: { x: 60, y: 280 } });
+  const rubble = doodad("rock-pebbles", { x: 420, y: 500 });
+  const grassTreeWest = doodad("tree-round", { x: 150, y: 650 });
+  const grassTreeEast = doodad("tree-lobed", { x: 580, y: 680 });
+
+  return [
+    encounter("Checkpoint", [checkpoint]),
+    encounter("Recon Pass", [reconPass]),
+    encounter("Roadside Wreckage", [campSandbags, campCrates, craters, rubble, grassTreeWest, grassTreeEast]),
+  ];
 }
 
 /**

@@ -1170,12 +1170,12 @@ attack together instead of a standalone Weapon.)
     Action was a bug because a turret is meant to shoot, whereas a rock doing
     nothing is the entire point. `size` is hand-tuned per prop (a manhole
     cover 12, a warehouse roof 56) because the sprites are all fitted to one
-    256px square canvas and so carry no usable scale of their own. Doodads
-    also don't get a stable id per prop (unlike the deterministic enemy ids
-    above) — `types.ts`'s hand-authored Encounters (see "Persistence" below)
-    place doodads by picking a sprite that fits the tile's art and reading
-    its `spriteId` back off `DOODAD_SPECS`/`doodadUnitId`, not by importing a
-    per-doodad constant.
+    256px square canvas and so carry no usable scale of their own. Each
+    doodad's id is the same `enemyUnitId(slug)` every other seeded Unit
+    uses — deterministic, not a separate id scheme — so `types.ts`'s
+    hand-authored Encounters (see "Persistence" below) can place one by
+    slug directly (`doodad("tree-broadleaf", pos)`) the same way they
+    reference a Turret or a Jet Fighter, no per-doodad constant needed.
 
     Because the batch is purely *additive* seed content, a library saved
     before it shipped gains it via `backfillDoodads` on load rather than a
@@ -2392,15 +2392,15 @@ Encounters aren't combined, per-tile weighting reflects only "this
 Encounter vs. that Encounter on the same tile," matching how the rest of
 the tile library already used `weight`.
 
-- **Grass**: *Turret Line* (a `grid`-scaled rank of Turrets, `maxCount: 5`,
-  a single row via `gridDepth: 0`), *Helicopter Loiter* (Attack
-  Helicopters fly in and hold near the top of the screen rather than
-  flying through and off it — the dwell is a step at the same position as
-  its predecessor, per `encounterTiming.ts`'s rule for that), *Overwatch*
-  (a lighter Turret pair plus one loitering Transport Helicopter — the
-  "mixed" option), *Heli Flyby* (a `v`-shaped formation of Transport
-  Helicopters that only ever reference their Move Action, never Attack —
-  pure bonus points, "no risk of hurting you").
+- **Grass**: *Turret Line* (5 Turrets in an evenly-spaced row), *Helicopter
+  Loiter* (Attack Helicopters fly in and hold near the top of the screen
+  rather than flying through and off it — the dwell is a step at the same
+  position as its predecessor, per `encounterTiming.ts`'s rule for that),
+  *Overwatch* (a lighter Turret pair plus one loitering Transport
+  Helicopter — the "mixed" option), *Heli Flyby* (a `v`-shaped formation of
+  Transport Helicopters that only ever reference their Move Action, never
+  Attack — pure bonus points, "no risk of hurting you"), *Meadow Scenery*
+  (doodads only, no enemies — see below).
 - **Road (Straight)**: *Convoy* (a Battle Tank leads, its Turret Part
   firing independently via a `PartActionPlacement` while the hull just
   drives — the base Unit's own steps and a Part's Action track running on
@@ -2410,18 +2410,56 @@ the tile library already used `weight`.
   **Strafe** Action for a low pass across the road, then peels off — the
   speed/maneuverability showcase Noah asked for by name), *Escort* (a
   shorter Convoy plus one Jet Fighter making a single strafing pass
-  overhead — the mixed option).
+  overhead — the mixed option), *Roadside Scenery* (doodads only).
 - **Road (Curve)**: *Bend Ambush* (an Armored Truck follows the road's
-  visual bend — three steps bending left then right, not a straight
-  line — with a Turret (Quad) guarding the inside of the curve, plus a
-  folded-in harmless helicopter flyby pair), *Strafing Run* (the same
-  showcase as Road (Straight)'s, flown along the curve's diagonal instead
-  of straight down — no separate Mixed Encounter here, Bend Ambush already
-  covers "ground plus incidental air").
+  actual bend — south in, east out, per `repairSeededTags` above, not the
+  north-to-south path this content was first drafted against before that
+  fix landed — with a Turret (Quad) guarding the inside of the elbow, plus
+  a folded-in harmless helicopter flyby pair), *Strafing Run* (the same
+  showcase as Road (Straight)'s, flown along a south-west/north-east
+  diagonal to echo the bend's own sweep — no separate Mixed Encounter here,
+  Bend Ambush already covers "ground plus incidental air"), *Curve Scenery*
+  (doodads only).
 - **Road (Trailhead)**: kept deliberately lean, since this tile is a
   level's opening/closing stretch rather than a set-piece — *Checkpoint*
-  (a light Turret pair) and *Recon Pass* (a single Prop Plane flythrough,
-  not the full loop-and-strafe).
+  (a light Turret pair), *Recon Pass* (a single Prop Plane flythrough, not
+  the full loop-and-strafe), *Roadside Wreckage* (doodads only).
+
+**Each of the four tiles also gets one doodad-only Encounter** (Noah: "add
+an encounter to each that includes doodads... look at the available
+doodads and the image of the tile and place them somewhat reasonably"),
+built from the merged doodad batch (see "A default Unit library is seeded
+automatically" above) and placed by actually looking at each tile's art
+rather than guessing: Grass's uniform open meadow gets a natural scatter
+(a small tree grove, a lone tree, a bush, a rock outcrop, loose pebbles);
+Road (Straight)'s art shows a paved lane roughly `x∈[247,459]` flanked by
+grass verges, so its trees/rocks sit off the asphalt on both sides; Road
+(Curve)'s trees line the big grass field on the bend's outside, with a
+rock formation tucked into the inside elbow; Road (Trailhead)'s art is a
+paved road that visibly cracks and craters as it runs south before fading
+into open grass, so it gets camp props (a sandbag wall, supply crates)
+guarding the paved north end, `urban-crater` doodads tracing the actual
+cracked pavement (the sprite reads as a pothole, which is exactly what the
+art shows), and a couple of trees where the road gives way to grass at the
+south end. A doodad placement's `actionId` is always `null` — a doodad's
+`UnitDef.actions` is `[]` (see above), nothing else is legal there.
+
+**Fixed a real overlap bug in Turret Line/Helicopter Loiter while back in
+this content**: `"grid"` scaling with `gridDepth: 0` looks like it should
+collapse to a single row at any count, but its `cols`/`rows` split
+(`ceil(sqrt(count))`) only actually yields one row when `count <= 2` — at
+Turret Line's `maxCount: 5` it was really a 3×2 grid squashed flat, so two
+pairs of slots landed on the exact same x and rendered as one turret
+standing on top of another; Helicopter Loiter's `maxCount: 4` had the same
+problem as a 2×2 grid, losing half its squadron to exact duplicates.
+`"curve"` with no `curvePoints` (a straight line from the placed
+instance's own position to `curveEnd`) evenly spaces any count with no
+such collapsing, so both switched to that — which also moves the placed
+instance's own position from the *center* of the line to its *left end*
+(the origin is always `curve`'s first slot), so `curveEnd` reaches the
+line's right end instead of splitting a width in both directions the way
+`gridWidth` did. Every other `grid` usage in this content stays `grid`
+because its own `maxCount` never exceeds 2, where the two shapes agree.
 
 Every step's `time` in this hand-authored content is computed from
 straight-line distance at the Unit's `speed` (`types.ts`'s `stepAfter`)
