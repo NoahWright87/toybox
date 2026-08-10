@@ -30,6 +30,12 @@ interface StepPanelProps {
  */
 export default function StepPanel({ step, unitDef, timeDerived, onChange }: StepPanelProps) {
   const actions = unitDef?.actions ?? [];
+  // Scenery has no behavior to pick, by construction (unitTypes.ts's
+  // DOODAD_SPECS seeds `actions: []`), so the row is dropped rather than shown
+  // as the red "(no Actions on this Unit yet)" warning it would otherwise
+  // render — for a doodad that state is correct and permanent, not a gap the
+  // author is being told to go fill.
+  const isDoodad = unitDef?.layer === "doodad";
 
   return (
     <div className="shmup-panel">
@@ -44,21 +50,23 @@ export default function StepPanel({ step, unitDef, timeDerived, onChange }: Step
         )}
       </div>
 
-      <label className="shmup-field shmup-field--inline">
-        <span>Action</span>
-        {actions.length > 0 ? (
-          <select className="shmup-input" value={step.actionId ?? ""} onChange={(e) => onChange({ actionId: e.target.value === "" ? null : e.target.value })}>
-            <option value="">(none — holds position)</option>
-            {actions.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="shmup-error">(no Actions on this Unit yet)</span>
-        )}
-      </label>
+      {!isDoodad && (
+        <label className="shmup-field shmup-field--inline">
+          <span>Action</span>
+          {actions.length > 0 ? (
+            <select className="shmup-input" value={step.actionId ?? ""} onChange={(e) => onChange({ actionId: e.target.value === "" ? null : e.target.value })}>
+              <option value="">(none — holds position)</option>
+              {actions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="shmup-error">(no Actions on this Unit yet)</span>
+          )}
+        </label>
+      )}
     </div>
   );
 }

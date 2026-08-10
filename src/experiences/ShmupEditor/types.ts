@@ -166,6 +166,82 @@ function makeDefaultTile(spec: Omit<TileDef, "id" | "createdAt" | "modifiedAt">)
 }
 
 /**
+ * Built-in image ids that have been renamed, old -> new.
+ *
+ * Unlike the tag/name repair below, this is applied to **every** tile,
+ * user-authored ones included, and is not gated on matching a seeded
+ * signature. Repointing a moved reference is not overwriting someone's
+ * authoring — the art file itself moved, so a tile still holding the old id
+ * would resolve to nothing and render blank. Leaving a user's tile "alone"
+ * here would break it, which is the opposite of the restraint the signature
+ * matching exists to provide.
+ */
+const RENAMED_IMAGE_IDS: Record<string, string> = {
+  // The art is rocky scrubland over grass, not sand over grass — see the
+  // "Grass / Rocky" seed entry below.
+  "grass-sand": "grass-rocky",
+};
+
+/**
+ * Corrects two seeded tiles whose edge tags contradicted their own art, in
+ * place, for libraries saved before the fix:
+ *
+ *  1. **Road (Curve)** was seeded with Road (Straight)'s edges — `grass-road`
+ *     north *and* south — but the art enters from the south and exits east.
+ *     A road claimed to continue off the top of a tile that plainly shows
+ *     grass there, so the matcher would happily butt it against another road
+ *     tile to the north and draw a road that stops dead at the seam.
+ *  2. **"Grass / Sand"** is rocky scrubland over grass — its top half is
+ *     `rocky.png`'s own texture, boulders and all — but was named and tagged
+ *     `sand`, so it sat flush against real sand tiles where the seam is
+ *     glaring. Renamed to "Grass / Rocky" and retagged `rocky`.
+ *
+ * Done as a targeted content repair rather than a `SAVE_VERSION` bump for the
+ * same reason as `repairSeededSimpleEnemies`: a bump resets the library and
+ * discards every tile the user authored themselves, and the stored *shape*
+ * never changed here — only two tags and a name that were wrong.
+ *
+ * Seeded tiles get random ids (`makeTileId`), so unlike the Unit repair there
+ * is no stable id to match on. Each tag fix therefore matches the **entire
+ * stale signature** — image id, name, and every edge — and rewrites only on an
+ * exact hit. A tile the user has already renamed, retagged, or rebuilt on the
+ * same art fails the match and is left completely alone, which is the behavior
+ * to want when the alternative is silently overwriting their authoring.
+ *
+ * The image-id rename (`RENAMED_IMAGE_IDS`) is deliberately *not* gated that
+ * way — see its own note. It runs after the tag fixes, which still match on
+ * the pre-rename id, so a library can be mid-migration in either direction and
+ * still land correctly: fully stale, or already tag-repaired by an earlier
+ * build but still holding the old image id.
+ */
+export function repairSeededTiles(tiles: TileDef[]): TileDef[] {
+  return tiles.map((tile) => repointRenamedImage(repairSeededTags(tile)));
+}
+
+function repairSeededTags(tile: TileDef): TileDef {
+  if (tile.imageId === "grass-road-curve" && tile.name === "Road (Curve)" && matchesEdges(tile, "grass-road", "grass-road", "grass", "grass")) {
+    return { ...tile, north: [edgeSlot("grass")], south: [edgeSlot("grass-road")], east: edgeSlot("grass-road"), west: edgeSlot("grass") };
+  }
+  if (tile.imageId === "grass-sand" && tile.name === "Grass / Sand" && matchesEdges(tile, "sand", "grass", null, null)) {
+    return { ...tile, name: "Grass / Rocky", north: [edgeSlot("rocky")] };
+  }
+  return tile;
+}
+
+/** Returns the tile unchanged (by identity) unless its image id was renamed, so callers can cheaply detect whether a repair actually happened. */
+function repointRenamedImage(tile: TileDef): TileDef {
+  const renamed = RENAMED_IMAGE_IDS[tile.imageId];
+  return renamed ? { ...tile, imageId: renamed } : tile;
+}
+
+/** Exact edge-signature check for `repairSeededTiles`. A `null` expectation means "hardwalled", which is what the split-tile helpers put on the axis they don't span. */
+function matchesEdges(tile: TileDef, north: string, south: string, east: string | null, west: string | null): boolean {
+  const one = (slots: EdgeSlot[], expected: string | null): boolean => slots.length === 1 && single(slots[0], expected);
+  const single = (slot: EdgeSlot, expected: string | null): boolean => (expected === null ? slot.hardwall : !slot.hardwall && slot.tag === expected);
+  return one(tile.north, north) && one(tile.south, south) && single(tile.east, east) && single(tile.west, west);
+}
+
+/**
  * The full default tile library a brand-new/reset session starts with —
  * one TileDef per image in tileImages.ts, tagged per root CLAUDE.md's
  * shmup-editor rule: biome-named tiles get edges tagged for what's
@@ -187,7 +263,12 @@ export function createDefaultTileLibrary(): TileDef[] {
 
     // Horizontal (north/south) biome transitions — east/west hardwalled.
     makeDefaultTile(horizontalSplitTile("Grass / Water Shore", "grass-water", "water", "grass")),
-    makeDefaultTile(horizontalSplitTile("Grass / Sand", "grass-sand", "sand", "grass")),
+    // This art is rocky scrubland over grass, not sand over grass — its top
+    // half is `rocky.png`'s own texture, boulders and all. It was named and
+    // tagged `sand`, which let it sit flush against a real sand tile where the
+    // seam is glaring. Image id renamed `grass-sand` -> `grass-rocky` to match
+    // (see RENAMED_IMAGE_IDS).
+    makeDefaultTile(horizontalSplitTile("Grass / Rocky", "grass-rocky", "rocky", "grass")),
     makeDefaultTile(horizontalSplitTile("Grass / Sand (Natural)", "grass-sand-natural", "sand", "grass")),
     makeDefaultTile(horizontalSplitTile("Grass / Swamp", "grass-swamp", "swamp", "grass")),
     makeDefaultTile(horizontalSplitTile("Sand / Rocky", "sand-rocky", "rocky", "sand")),
@@ -232,12 +313,16 @@ export function createDefaultTileLibrary(): TileDef[] {
       customImage: null,
       encounters: [],
     }),
+    // The curve's art enters from the **south** and exits **east** — north and
+    // west are plain grass. It was seeded as a copy of Road (Straight)'s
+    // north/south edges, which claimed a road continued off the top of a tile
+    // where the art plainly shows grass.
     makeDefaultTile({
       name: "Road (Curve)",
       footprint: 1,
-      north: [edgeSlot("grass-road")],
+      north: [edgeSlot("grass")],
       south: [edgeSlot("grass-road")],
-      east: edgeSlot("grass"),
+      east: edgeSlot("grass-road"),
       west: edgeSlot("grass"),
       isConnector: false,
       weight: 1,

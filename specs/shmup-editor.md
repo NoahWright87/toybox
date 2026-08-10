@@ -759,7 +759,7 @@ from the current specs by id and anything user-authored gets `minSpeed: 0`
 plus a neutral 90°/sec — making it a pivoter, which leaves every route it
 was already authored on flyable exactly as before.
 
-### Authoring frames: Ground vs Air (`airFrame.ts`, `EncounterEditor.tsx`, `EncounterTimeline.tsx`)
+### Authoring frames: Ground / Air / Doodads (`airFrame.ts`, `EncounterEditor.tsx`, `EncounterTimeline.tsx`)
 
 **A Unit's layer decides which reference frame it lives in, and the
 canvas can be drawn in either one.** This is the editor half of a split
@@ -793,15 +793,38 @@ inventing an editor-side one**:
   sides at once (`airFrame.ts` and `EncounterRunner.ts`'s `pinnedOriginY`),
   since the editor drawing and the game flying have to agree.
 
-A **Ground/Air toggle** sits in the timeline toolbar (a view-wide mode,
-not a property of any selection). It switches several things at once:
+A **Ground/Air/Doodads toggle** sits in the timeline toolbar (a view-wide
+mode, not a property of any selection). It switches several things at once:
 
-| | Ground mode | Air mode |
-|---|---|---|
-| Tile + ground units | fixed | slide down past a fixed camera |
-| Air unit | drifts *up* the tile as terrain passes beneath | **holds still** |
-| Camera box | climbs the tile | fixed, drawn as a solid teal frame |
-| "+ Add" roster | ground + doodad Units | air Units |
+| | Ground mode | Air mode | Doodads mode |
+|---|---|---|---|
+| Tile + ground units | fixed | slide down past a fixed camera | fixed |
+| Air unit | drifts *up* the tile as terrain passes beneath | **holds still** | drifts up, dimmed |
+| Camera box | climbs the tile | fixed, drawn as a solid teal frame | climbs the tile |
+| "+ Add" roster | ground Units | air Units | doodad Units |
+
+**A frame is two things at once — a reference frame and a roster — and
+doodad only ever matched ground on the first.** `AuthorLayer` used to be
+deliberately two-valued, folding doodad in with ground on the reasoning
+that both are scroll-locked so a third mode would have nothing to draw
+differently. The geometry half of that is still true and Doodads mode
+renders identically to Ground (`referenceShiftY` returns the same 0 for
+both, pinned by a test). The authoring half was wrong: it left every
+doodad in the ground roster, so dressing a tile meant hunting for the tank
+among the trees, and a tile's scenery couldn't be picked apart from its
+ground opposition. `AuthorLayer` is now simply `UnitLayer`, one mode per
+layer, and `authorLayerOf` is gone — a Unit's frame is just its layer.
+
+**Doodads are also missing two things the combat layers have**, because
+neither means anything for scenery:
+
+- **No Action picker.** A doodad's Unit ships `actions: []` by
+  construction, so the Step tab drops the row rather than rendering its red
+  "(no Actions on this Unit yet)" warning — for a doodad that state is
+  correct and permanent, not a gap to go fill.
+- **No Scaling tab.** Scaling is a difficulty response ("throw more of
+  these at a stronger player"); set dressing doesn't scale, so the tab is
+  withheld rather than shown offering a knob that shouldn't be turned.
 
 The frame you aren't authoring stays **visible but dimmed and
 non-interactive** (`.shmup-enc-offlayer`), and its timeline track collapses
@@ -1108,7 +1131,41 @@ attack together instead of a standalone Weapon.)
     tanks, motorcycles, trains, turrets, the battleship). Stats
     (`hp`/`contactDamage`/`scoreValue`/`speed`/`minSpeed`/`turnRateDegPerSec`/`size`) are
     made-up placeholder numbers loosely scaled to each vehicle's apparent
-    size/role, not balanced gameplay data.
+    size/role, not balanced gameplay data;
+  - a doodad set of 93 inert scenery Units — one per sprite in the doodad
+    batch (foliage, rocks, desert flora, a military camp kit and its desert
+    recolor, urban street furniture, industrial clutter, and large rooftop
+    structures; see `public/shmup-editor/doodads/README.md`) — built by
+    `DOODAD_SPECS`/`createDoodadUnit`. A doodad reuses `UnitDef` wholesale
+    rather than getting a parallel type (this file's header: a Unit "also
+    covers non-combatant doodads"), so encounter placement, scaling and
+    preview all work on it for free. What makes one inert is a specific
+    combination: `layer: "doodad"`, `speed: 0`, `actions: []` with
+    `defaultActionId: null` (which the Step tab reads as "(none — holds
+    position)"), `contactDamage: 0`, `scoreValue: 0`, and the default Part's
+    `hasHitbox: false` (which adds no *second* hitbox over the Unit's own).
+    **Not being shootable is enforced runtime-side, not by these stats**:
+    `EncounterRunner.ts`'s `isCollidableLayer` spawns the doodad layer with
+    its physics body disabled, keyed off the layer alone, so player fire
+    passes straight through scenery and homing never locks onto it. The stats
+    above are what a doodad would be if it somehow were hit, not what stops it
+    being hit. Note the null default is
+    deliberately *not* the inert `createMoveAction(false)` that
+    `repairSeededSimpleEnemies` exists to undo for turrets: a turret with no
+    Action was a bug because a turret is meant to shoot, whereas a rock doing
+    nothing is the entire point. `size` is hand-tuned per prop (a manhole
+    cover 12, a warehouse roof 56) because the sprites are all fitted to one
+    256px square canvas and so carry no usable scale of their own.
+
+    Because the batch is purely *additive* seed content, a library saved
+    before it shipped gains it via `backfillDoodads` on load rather than a
+    `SAVE_VERSION` bump — the same reasoning that makes
+    `repairSeededSimpleEnemies` a content-level repair: a bump resets the
+    library and discards every Unit the user authored. A one-shot
+    `doodadsSeeded` flag on the saved record (optional, so pre-existing saves
+    parse as not-yet-backfilled) guards it, so the batch lands exactly once
+    and a doodad the user deliberately deletes stays deleted instead of
+    reappearing on every load.
 
     **Two seeding bugs, since fixed** (`createSimpleEnemyUnit`, plus
     `repairSeededSimpleEnemies` for already-saved libraries). Noah's report:
@@ -1784,13 +1841,29 @@ dragged instead of teleporting it around the loop.
 Mirrors `tileImages.ts`'s built-in-plus-custom-upload structure exactly.
 Built-in set: a body-split-from-turret Parts-demo pair (armored truck,
 battle tank) Noah supplied directly, plus a growing "incoming" vehicle
-batch and a curated projectile set (see
-`public/shmup-editor/enemies/README.md` and
-`public/shmup-editor/projectiles/README.md` for sourcing/processing
-details) — every built-in is a single static pose, no animation frames.
-Processing is a one-time Jimp-based script per batch that chroma-key
-flood-fills real alpha transparency in, trims to content, and pads to a
-square icon. Custom upload reuses the same
+batch, a curated projectile set, and a 93-piece doodad set of top-down
+scenery props (see `public/shmup-editor/enemies/README.md`,
+`public/shmup-editor/projectiles/README.md` and
+`public/shmup-editor/doodads/README.md` for sourcing/processing details)
+— every built-in is a single static pose, no animation frames.
+Processing is a one-time Jimp-based script per batch that chroma-keys real
+alpha transparency in, trims to content, and pads to a square icon.
+
+The doodad batch (`scripts/prepare-doodads.mjs`) differs from the earlier
+scripts in two ways worth knowing before adding art like it. Its eight
+contact sheets have no cell borders to measure, so per-prop boxes are
+derived from the art by `scripts/doodadSegment.mjs` (band-splitting on runs
+of empty rows/columns, so a deliberately scattered prop like a pebble field
+or a run of bollards stays one sprite instead of shattering into a dozen)
+rather than hand-listed like `prepare-projectiles.mjs`'s `SHEET_CELLS`. And
+it keys every magenta pixel wherever it sits, not just what an edge flood
+fill can reach, because several props are meshes whose holes show the
+backdrop through them — camo netting, the fenced rooftop — which a flood
+fill leaves as magenta confetti baked inside the sprite. The key is a soft
+one that un-mixes the backdrop's contribution out of partially-covered edge
+pixels, measuring contamination as red-and-blue-in-excess-of-green rather
+than as distance from the backdrop color; a distance threshold wide enough
+to catch the real halo also swallows every neutral gray rock on the sheets. Custom upload reuses the same
 `paletteQuantize.ts`/`indexedPng.ts` pipeline as tile art, generalized in
 `imageUpload.ts` into `decodeUpload`/`canvasToIndexedPngDataUrl` helpers
 shared by both `loadTileImageFile` (cover-fit crop, opaque — fills a whole
@@ -2253,6 +2326,47 @@ are tagged and its other two are hardwalled, since a mixed/gradient edge
 has no single tag that could describe it — see that file for the exact
 per-tile breakdown). The seed is saved immediately, same pattern as
 `unitStore.ts`'s pre-existing default-Unit-library seeding (below).
+**Two seeded tiles shipped with tags that contradicted their own art**, and
+are corrected by `repairSeededTiles` (`types.ts`) on load:
+
+- **Road (Curve)** was seeded with Road (Straight)'s edges — `grass-road`
+  north *and* south — but the art enters from the south and exits **east**.
+  It claimed a road continued off the top of a tile that plainly shows grass
+  there, so the matcher would butt it against a road tile to the north and
+  draw a road that stops dead at the seam. Now `grass` north/west,
+  `grass-road` south/east.
+- **"Grass / Sand"** is rocky scrubland over grass — its top half is
+  `rocky.png`'s own texture, boulders and all — but was named and tagged
+  `sand`, so it sat flush against real sand tiles where the seam is glaring
+  (Noah spotted it in the Connection Viewer). Renamed **"Grass / Rocky"**,
+  retagged `rocky`, and the image id/file renamed `grass-sand` ->
+  `grass-rocky` to match. The genuine grass↔sand transition is the separate
+  `grass-sand-natural` tile, which was always correct.
+
+  Renaming a built-in image *id* is normally off the table — ids are stored
+  references on every tile saved against them, so a rename blanks their art.
+  It was taken here because the editor has no real users yet (Noah's call),
+  and `RENAMED_IMAGE_IDS` covers the sessions that do exist. That map is
+  applied to **every** tile, user-authored ones included, and deliberately
+  *not* gated on matching a seeded signature the way the tag fixes are:
+  repointing a moved reference is not overwriting authoring, and leaving a
+  user's tile "alone" here would break it rather than protect it. It runs
+  after the tag fixes (which still match on the pre-rename id), so a library
+  lands correctly whether it is fully stale or was already tag-repaired by an
+  earlier build and left holding the old id.
+
+The repair is a targeted content fix rather than a `SAVE_VERSION` bump, for
+the same reason as `repairSeededSimpleEnemies`: a bump resets the library and
+discards every tile the user authored. Seeded tiles get *random* ids
+(`makeTileId`), so unlike the Unit repair there is no stable id to match on —
+each fix instead matches the **entire stale signature** (image id, name, every
+edge) and rewrites only on an exact hit, so a tile the user renamed, retagged,
+or rebuilt on the same art is left completely alone. Unlike the Unit repairs,
+this one is **written back to `TILES.DAT`** when it changes something (once,
+on the first load after the fix): `games/shmup` reads that file directly with
+no idea the repair exists, so a fix living only in the editor's memory would
+leave the played level still matching on the bad tags.
+
 Purely-additive optional fields (`customImage`) don't bump
 `SAVE_VERSION` — a pre-existing save missing it is still valid and gets
 backfilled to its default (`null`) on load, rather than the whole

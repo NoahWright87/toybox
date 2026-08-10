@@ -668,6 +668,196 @@ export function repairSeededSimpleEnemies(units: UnitDef[]): UnitDef[] {
   });
 }
 
+// ── Doodads: inert scenery Units on the "doodad" layer ────────────────────
+
+/**
+ * A doodad is scenery, not an opponent: a tree, a sandbag wall, a rooftop.
+ * It reuses UnitDef wholesale (see this file's header — a Unit "also covers
+ * non-combatant doodads") rather than getting a parallel type, so the same
+ * encounter-editor placement, scaling and preview machinery works on it for
+ * free.
+ *
+ * What makes one inert is the combination below, and each part of it is
+ * load-bearing:
+ *
+ *  - `speed: 0` and `actions: []` with `defaultActionId: null` — the
+ *    encounter editor reads a null default as "(none — holds position)",
+ *    which for scenery is the correct and only sensible behavior. Note this
+ *    is deliberately *not* the inert `createMoveAction(false)` that
+ *    `repairSeededSimpleEnemies` exists to undo for turrets: a turret with
+ *    no Action was a bug because a turret is supposed to shoot, whereas a
+ *    rock doing nothing is the entire point.
+ *  - `contactDamage: 0` — touching a tree does not hurt, and the default
+ *    Part's `hasHitbox: false` adds no *second* hitbox on top of the Unit's
+ *    own. Note that not being *shootable* is enforced by the runtime rather
+ *    than by anything here: `EncounterRunner.ts`'s `isCollidableLayer` spawns
+ *    the doodad layer with its physics body disabled, keyed off the layer
+ *    alone. These stats are what a doodad would be if it somehow were hit,
+ *    not what stops it being hit.
+ *  - `scoreValue: 0` — scenery is not a kill.
+ *
+ * `size` is hand-tuned per prop rather than derived from the art, because
+ * the sprites are all fitted to one 256px square canvas (prepare-doodads.mjs)
+ * and so carry no usable scale of their own: a manhole cover and a warehouse
+ * roof arrive the same number of pixels wide.
+ */
+interface DoodadSpec {
+  slug: string;
+  name: string;
+  spriteId: string;
+  size: number;
+}
+
+const DOODAD_SPECS: DoodadSpec[] = [
+  // Foliage — trees and bushes.
+  { slug: "tree-broadleaf", name: "Tree (broadleaf)", spriteId: "tree-broadleaf", size: 22 },
+  { slug: "tree-round", name: "Tree (round canopy)", spriteId: "tree-round", size: 22 },
+  { slug: "tree-lobed", name: "Tree (lobed)", spriteId: "tree-lobed", size: 22 },
+  { slug: "tree-dense", name: "Tree (dense)", spriteId: "tree-dense", size: 22 },
+  { slug: "tree-clover", name: "Tree (clover)", spriteId: "tree-clover", size: 22 },
+  { slug: "tree-fan-palm", name: "Tree (fan palm)", spriteId: "tree-fan-palm", size: 20 },
+  { slug: "tree-canopy-wide", name: "Tree (wide canopy)", spriteId: "tree-canopy-wide", size: 24 },
+  { slug: "tree-cluster", name: "Tree (cluster)", spriteId: "tree-cluster", size: 22 },
+  { slug: "tree-bush-large", name: "Bush (large)", spriteId: "tree-bush-large", size: 18 },
+  { slug: "tree-bush-round", name: "Bush (round)", spriteId: "tree-bush-round", size: 16 },
+  { slug: "tree-fan-palm-large", name: "Tree (fan palm, large)", spriteId: "tree-fan-palm-large", size: 22 },
+  { slug: "tree-leafy", name: "Tree (leafy)", spriteId: "tree-leafy", size: 22 },
+  // Rocks and rubble.
+  { slug: "rock-small", name: "Rocks (small)", spriteId: "rock-small", size: 12 },
+  { slug: "rock-boulder-pile", name: "Boulder Pile", spriteId: "rock-boulder-pile", size: 22 },
+  { slug: "rock-twin", name: "Boulders (twin)", spriteId: "rock-twin", size: 16 },
+  { slug: "rock-cluster", name: "Rock Cluster", spriteId: "rock-cluster", size: 20 },
+  { slug: "rock-pebbles", name: "Pebbles (scattered)", spriteId: "rock-pebbles", size: 14 },
+  { slug: "rock-ridge", name: "Rock Ridge", spriteId: "rock-ridge", size: 24 },
+  { slug: "rock-field", name: "Rock Field", spriteId: "rock-field", size: 24 },
+  { slug: "rock-slab", name: "Rock Slab", spriteId: "rock-slab", size: 18 },
+  { slug: "rock-jagged", name: "Rocks (jagged)", spriteId: "rock-jagged", size: 20 },
+  { slug: "rock-boulders", name: "Boulders", spriteId: "rock-boulders", size: 18 },
+  { slug: "rock-rubble-strip", name: "Rubble Strip", spriteId: "rock-rubble-strip", size: 18 },
+  { slug: "rock-pile", name: "Rock Pile", spriteId: "rock-pile", size: 20 },
+  // Desert flora and ground cover.
+  { slug: "desert-boulder", name: "Desert Boulder", spriteId: "desert-boulder", size: 18 },
+  { slug: "desert-sandstone", name: "Sandstone Cluster", spriteId: "desert-sandstone", size: 22 },
+  { slug: "desert-pebbles", name: "Desert Pebbles", spriteId: "desert-pebbles", size: 14 },
+  { slug: "desert-shrub-small", name: "Desert Shrub (small)", spriteId: "desert-shrub-small", size: 10 },
+  { slug: "desert-bush", name: "Desert Bush", spriteId: "desert-bush", size: 20 },
+  { slug: "desert-tumbleweed", name: "Tumbleweed", spriteId: "desert-tumbleweed", size: 14 },
+  { slug: "desert-cactus", name: "Prickly Pear Cactus", spriteId: "desert-cactus", size: 18 },
+  { slug: "desert-agave", name: "Agave", spriteId: "desert-agave", size: 16 },
+  { slug: "desert-grass-tuft", name: "Dry Grass Tuft", spriteId: "desert-grass-tuft", size: 12 },
+  { slug: "desert-bones", name: "Bones", spriteId: "desert-bones", size: 14 },
+  { slug: "desert-cracked-ground", name: "Cracked Ground", spriteId: "desert-cracked-ground", size: 20 },
+  { slug: "desert-sand-patch", name: "Sand Patch", spriteId: "desert-sand-patch", size: 22 },
+  // Military camp — tents, earthworks, supplies.
+  { slug: "camp-tent-small", name: "Camp Tent (small)", spriteId: "camp-tent-small", size: 16 },
+  { slug: "camp-tent-large", name: "Camp Tent (large)", spriteId: "camp-tent-large", size: 26 },
+  { slug: "camp-sandbag-wall", name: "Sandbag Wall", spriteId: "camp-sandbag-wall", size: 22 },
+  { slug: "camp-sandbag-ring", name: "Sandbag Ring", spriteId: "camp-sandbag-ring", size: 20 },
+  { slug: "camp-foxhole", name: "Foxhole", spriteId: "camp-foxhole", size: 14 },
+  { slug: "camp-foxhole-double", name: "Foxhole (double)", spriteId: "camp-foxhole-double", size: 24 },
+  { slug: "camp-trench", name: "Trench", spriteId: "camp-trench", size: 26 },
+  { slug: "camp-netting", name: "Camo Netting", spriteId: "camp-netting", size: 24 },
+  { slug: "camp-crates", name: "Supply Crates", spriteId: "camp-crates", size: 18 },
+  { slug: "camp-barrels", name: "Fuel Barrels", spriteId: "camp-barrels", size: 18 },
+  { slug: "camp-barriers", name: "Concrete Barriers", spriteId: "camp-barriers", size: 22 },
+  { slug: "camp-sandbag-emplacement", name: "Sandbag Emplacement", spriteId: "camp-sandbag-emplacement", size: 24 },
+  // Desert camp — the same kit in sand colors.
+  { slug: "camp-sand-tent-small", name: "Desert Tent (small)", spriteId: "camp-sand-tent-small", size: 16 },
+  { slug: "camp-sand-tent-large", name: "Desert Tent (large)", spriteId: "camp-sand-tent-large", size: 26 },
+  { slug: "camp-sand-netting", name: "Desert Camo Netting", spriteId: "camp-sand-netting", size: 24 },
+  { slug: "camp-sand-sandbag-wall", name: "Desert Sandbag Wall", spriteId: "camp-sand-sandbag-wall", size: 22 },
+  { slug: "camp-sand-sandbag-ring", name: "Desert Sandbag Ring", spriteId: "camp-sand-sandbag-ring", size: 20 },
+  { slug: "camp-sand-sandbag-line", name: "Desert Sandbag Line", spriteId: "camp-sand-sandbag-line", size: 24 },
+  { slug: "camp-sand-foxhole", name: "Desert Foxhole", spriteId: "camp-sand-foxhole", size: 14 },
+  { slug: "camp-sand-foxhole-double", name: "Desert Foxhole (double)", spriteId: "camp-sand-foxhole-double", size: 24 },
+  { slug: "camp-sand-trench", name: "Desert Trench", spriteId: "camp-sand-trench", size: 26 },
+  { slug: "camp-sand-crates", name: "Desert Supply Crates", spriteId: "camp-sand-crates", size: 18 },
+  { slug: "camp-sand-barrels", name: "Desert Fuel Barrels", spriteId: "camp-sand-barrels", size: 18 },
+  { slug: "camp-sand-tarp", name: "Desert Tarp", spriteId: "camp-sand-tarp", size: 22 },
+  // Urban street furniture.
+  { slug: "urban-manhole", name: "Manhole Cover", spriteId: "urban-manhole", size: 12 },
+  { slug: "urban-utility-plate", name: "Utility Plate", spriteId: "urban-utility-plate", size: 12 },
+  { slug: "urban-storm-drain", name: "Storm Drain", spriteId: "urban-storm-drain", size: 14 },
+  { slug: "urban-guardrail", name: "Guardrail", spriteId: "urban-guardrail", size: 26 },
+  { slug: "urban-pipe-run", name: "Pipe Run", spriteId: "urban-pipe-run", size: 20 },
+  { slug: "urban-concrete-barriers", name: "Concrete Barrier Row", spriteId: "urban-concrete-barriers", size: 24 },
+  { slug: "urban-barricade", name: "Construction Barricade", spriteId: "urban-barricade", size: 20 },
+  { slug: "urban-warning-lights", name: "Warning Lights", spriteId: "urban-warning-lights", size: 14 },
+  { slug: "urban-street-lamp", name: "Street Lamp", spriteId: "urban-street-lamp", size: 20 },
+  { slug: "urban-bollards", name: "Bollards", spriteId: "urban-bollards", size: 20 },
+  { slug: "urban-crater", name: "Crater", spriteId: "urban-crater", size: 16 },
+  { slug: "urban-access-hatch", name: "Access Hatch", spriteId: "urban-access-hatch", size: 14 },
+  // Industrial yard clutter.
+  { slug: "ind-pallet", name: "Wooden Pallet", spriteId: "ind-pallet", size: 16 },
+  { slug: "ind-crates", name: "Wooden Crates", spriteId: "ind-crates", size: 18 },
+  { slug: "ind-container-small", name: "Container (small)", spriteId: "ind-container-small", size: 24 },
+  { slug: "ind-oil-barrels", name: "Oil Barrels", spriteId: "ind-oil-barrels", size: 18 },
+  { slug: "ind-cable-spool", name: "Cable Spool", spriteId: "ind-cable-spool", size: 18 },
+  { slug: "ind-hose-coil", name: "Hose Coil", spriteId: "ind-hose-coil", size: 16 },
+  { slug: "ind-generator", name: "Generator", spriteId: "ind-generator", size: 20 },
+  { slug: "ind-exhaust-fan", name: "Exhaust Fan", spriteId: "ind-exhaust-fan", size: 16 },
+  { slug: "ind-hatch", name: "Metal Hatch", spriteId: "ind-hatch", size: 16 },
+  { slug: "ind-oil-spill", name: "Oil Spill", spriteId: "ind-oil-spill", size: 20 },
+  { slug: "ind-rubble", name: "Rubble", spriteId: "ind-rubble", size: 18 },
+  { slug: "ind-tires", name: "Tire Stack", spriteId: "ind-tires", size: 18 },
+  // Rooftop structures — large, for flying over.
+  { slug: "roof-warehouse", name: "Warehouse Roof", spriteId: "roof-warehouse", size: 56 },
+  { slug: "roof-factory", name: "Factory Roof", spriteId: "roof-factory", size: 52 },
+  { slug: "roof-helipad", name: "Helipad", spriteId: "roof-helipad", size: 48 },
+  { slug: "roof-container-large", name: "Container (large)", spriteId: "roof-container-large", size: 40 },
+  { slug: "roof-container-row", name: "Container Row", spriteId: "roof-container-row", size: 36 },
+  { slug: "roof-tank", name: "Storage Tank", spriteId: "roof-tank", size: 44 },
+  { slug: "roof-tank-cluster", name: "Tank Cluster", spriteId: "roof-tank-cluster", size: 46 },
+  { slug: "roof-plant", name: "Plant Roof", spriteId: "roof-plant", size: 44 },
+  { slug: "roof-fenced-platform", name: "Fenced Platform", spriteId: "roof-fenced-platform", size: 48 },
+];
+
+function createDoodadUnit(spec: DoodadSpec, now: number): UnitDef {
+  return {
+    id: enemyUnitId(spec.slug),
+    name: spec.name,
+    spriteId: spec.spriteId,
+    customSprite: null,
+    hp: 1,
+    contactDamage: 0,
+    scoreValue: 0,
+    speed: 0,
+    minSpeed: 0,
+    turnRateDegPerSec: 0,
+    size: spec.size,
+    layer: "doodad",
+    defaultActionId: null,
+    actions: [],
+    parts: [createDefaultPart()],
+    createdAt: now,
+    modifiedAt: now,
+  };
+}
+
+/** Every seeded doodad Unit. */
+export function createDoodadUnits(now: number = Date.now()): UnitDef[] {
+  return DOODAD_SPECS.map((spec) => createDoodadUnit(spec, now));
+}
+
+/**
+ * Adds the seeded doodad Units to a library saved before that batch shipped
+ * (unitStore.ts's `loadUnits`, guarded by a one-shot flag so this runs once).
+ *
+ * A `SAVE_VERSION` bump is the wrong tool for purely *additive* seed content:
+ * it resets the library, throwing away every Unit the user authored
+ * themselves, and nothing about the stored shape changed here — the same
+ * reasoning that makes `repairSeededSimpleEnemies` a content-level repair.
+ * But an unconditional "re-add anything missing" on every load is wrong in
+ * the other direction: it would resurrect a doodad the user deliberately
+ * deleted, every single load. The caller's one-shot flag threads between the
+ * two — existing libraries gain the batch once, and deletions stick from then
+ * on.
+ */
+export function backfillDoodads(units: UnitDef[]): UnitDef[] {
+  const have = new Set<string>(units.map((u) => u.id));
+  return [...units, ...createDoodadUnits().filter((doodad) => !have.has(doodad.id))];
+}
+
 /** The full default Unit library a brand-new/reset session starts with. */
 export function createDefaultUnitLibrary(): UnitDef[] {
   const now = Date.now();
@@ -676,5 +866,6 @@ export function createDefaultUnitLibrary(): UnitDef[] {
     ...PROJECTILE_SPECS.map((spec) => createProjectileUnit(spec, now)),
     ...SIMPLE_ENEMY_SPECS.map((spec) => createSimpleEnemyUnit(spec, now)),
     ...TURRETED_ENEMY_SPECS.map((spec) => createTurretedEnemyUnit(spec, now)),
+    ...createDoodadUnits(now),
   ];
 }

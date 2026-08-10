@@ -44,6 +44,7 @@ import { LEVEL_SCROLL_SPEED, playerScreenY } from "../systems/encounters/scrollM
 import type { AuthoredContent } from "../systems/encounters/authoredTypes";
 import { SCENE_KEYS } from "./sceneData";
 import type { EpisodeLaunchData, PlaytestResultData, ResolveLaunchData } from "./sceneData";
+import { DEPTH } from "../systems/depth";
 
 // Logical roles -> sprite registry keys (specs/games/shmup/content-and-assets.spec.md).
 // Code never inlines a draw call or file path — it asks for one of these keys,
@@ -211,7 +212,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
 
     this.background = this.add
       .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, TEX.bg)
-      .setDepth(-20);
+      .setDepth(DEPTH.backdrop);
 
     // The drifting starfield belongs to the stock space backdrop; over an
     // authored tile's terrain art it would read as snow.
@@ -220,7 +221,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       const s = this.add
         .image(Phaser.Math.Between(0, GAME_WIDTH), Phaser.Math.Between(0, GAME_HEIGHT), TEX.star)
         .setAlpha(Phaser.Math.FloatBetween(0.2, 1))
-        .setDepth(-10);
+        .setDepth(DEPTH.stars);
       s.setData("speed", Phaser.Math.Between(TUNING.visuals.starMinSpeed, TUNING.visuals.starMaxSpeed));
       this.stars.add(s);
     }
@@ -277,7 +278,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
       chassisById(this.episode.chassisId)
     );
     this.player.setCollideWorldBounds(true);
-    this.player.setDepth(10);
+    this.player.setDepth(DEPTH.player);
 
     this.physics.add.overlap(this.playerBullets, this.enemies, (bulletObj, enemyObj) =>
       this.onPlayerBulletHitEnemy(bulletObj as PlayerBullet, enemyObj as Enemy)
@@ -334,7 +335,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     // Depth 50: above every gameplay sprite (player is the highest at 10) so
     // hitbox outlines aren't hidden beneath the sprites they outline, but
     // below the HUD/debug-overlay text (100+).
-    this.physics.world.createDebugGraphic().setDepth(50);
+    this.physics.world.createDebugGraphic().setDepth(DEPTH.debugPhysics);
     this.physics.world.drawDebug = false;
 
     this.scoreText = this.add
@@ -343,7 +344,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         fontSize: "18px",
         color: "#ffffff",
       })
-      .setDepth(100);
+      .setDepth(DEPTH.hud);
 
     this.goldText = this.add
       .text(16, 34, copy("play.gold", { gold: 0 }), {
@@ -351,7 +352,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         fontSize: "11px",
         color: "#ffcc00",
       })
-      .setDepth(100);
+      .setDepth(DEPTH.hud);
 
     this.add
       .text(90, 34, copy("play.level", { level: this.episode.level }), {
@@ -359,7 +360,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         fontSize: "11px",
         color: "#aa88ff",
       })
-      .setDepth(100);
+      .setDepth(DEPTH.hud);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 14, copy("play.hint"), {
@@ -368,12 +369,12 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         color: "#888888",
       })
       .setOrigin(0.5, 1)
-      .setDepth(100);
+      .setDepth(DEPTH.hud);
 
-    this.hpBar = this.add.graphics().setDepth(100);
-    this.shieldBar = this.add.graphics().setDepth(100);
-    this.hypeBar = this.add.graphics().setDepth(100);
-    this.ratingsBar = this.add.graphics().setDepth(100);
+    this.hpBar = this.add.graphics().setDepth(DEPTH.hud);
+    this.shieldBar = this.add.graphics().setDepth(DEPTH.hud);
+    this.hypeBar = this.add.graphics().setDepth(DEPTH.hud);
+    this.ratingsBar = this.add.graphics().setDepth(DEPTH.hud);
 
     // Timer: top-center, monospace to mimic a digital clock readout.
     this.timerText = this.add
@@ -383,7 +384,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         color: "#ffffff",
       })
       .setOrigin(0.5, 0)
-      .setDepth(100);
+      .setDepth(DEPTH.hud);
 
     // Tier name: top-right, same font/size as score but yellow.
     this.tierNameText = this.add
@@ -394,7 +395,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
         align: "right",
       })
       .setOrigin(1, 0)
-      .setDepth(100);
+      .setDepth(DEPTH.hud);
 
     this.debugOverlay = new DebugOverlay(
       this,
@@ -832,12 +833,25 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     }
   }
 
-  /** Everything a player shot may currently hit — built-in enemies plus every live authored hostile. Also what homing searches. */
+  /**
+   * Everything a player shot may currently hit — built-in enemies plus every
+   * live authored hostile. Also what homing searches.
+   *
+   * `hasCollision` is checked alongside `hittable` because the two mean
+   * different things and both have to hold. `hittable` is about invincibility
+   * (a temporarily shielded turret), which is a state that comes and goes;
+   * `hasCollision` is a permanent property of the spawn — false for scenery
+   * on the doodad layer and for a purely decorative Part. Those have no
+   * physics body enabled, so an overlap could never fire against them
+   * anyway; the reason to filter here too is homing, which would otherwise
+   * happily lock onto a tree or a turret's cosmetic art and chase something
+   * it can never damage.
+   */
   playerTargets(): PlayerTarget[] {
     const out: PlayerTarget[] = [];
     for (const enemy of this.enemies.getChildren() as Enemy[]) if (enemy.active) out.push(enemy);
     for (const unit of this.authoredHostiles.getChildren() as AuthoredUnit[]) {
-      if (unit.active && unit.hittable) out.push(unit);
+      if (unit.active && unit.hasCollision && unit.hittable) out.push(unit);
     }
     return out;
   }
@@ -961,7 +975,7 @@ export class PlayScene extends Phaser.Scene implements ShmupPlayScene {
     const t = this.add
       .text(x, y, text, { fontFamily: "monospace", fontSize: `${fontSize}px`, color, fontStyle: "bold" })
       .setOrigin(0.5)
-      .setDepth(150);
+      .setDepth(DEPTH.floatingText);
     this.tweens.add({
       targets: t,
       y: y - 40,

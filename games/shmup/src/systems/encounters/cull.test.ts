@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isScrollLocked, shouldCull } from "./EncounterRunner";
+import { isCollidableLayer, isScrollLocked, shouldCull } from "./EncounterRunner";
 import { TUNING } from "../../tuning";
 
 /**
@@ -71,5 +71,27 @@ describe("isScrollLocked", () => {
 
   it("treats an unknown layer as scroll-locked, the safer default", () => {
     expect(isScrollLocked("something-new")).toBe(true);
+  });
+});
+
+/**
+ * Collision participation. Doodads are scenery — they render and scroll with
+ * the terrain but must never be shootable, which is what put a `hasCollision`
+ * flag on their spawn. Before this, every authored Unit went into
+ * `collisionGroup: "enemy"` with a real `hitRadius`, so player fire hit the
+ * trees and their `hp: 1` popped them.
+ */
+describe("isCollidableLayer", () => {
+  it("keeps ground and air units in the collision set", () => {
+    expect(isCollidableLayer("ground")).toBe(true);
+    expect(isCollidableLayer("air")).toBe(true);
+  });
+
+  it("takes doodads out of it — scenery is not shootable", () => {
+    expect(isCollidableLayer("doodad")).toBe(false);
+  });
+
+  it("treats an unknown layer as collidable, matching the pre-doodad default", () => {
+    expect(isCollidableLayer("something-new")).toBe(true);
   });
 });

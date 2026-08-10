@@ -3,6 +3,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from "../config";
 import { TUNING } from "../tuning";
 import type { Polarity } from "../systems/chassis";
 import type { PlayerTarget, ShmupPlayScene } from "./types";
+import { DEPTH } from "../systems/depth";
 
 /**
  * Pooled player projectile. One bullet is either:
@@ -142,6 +143,8 @@ export class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
     this.forkConeDeg = 0;
     this.setPosition(x, y);
     this.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
+    // Explicit depth, not the default 0 — see systems/depth.ts (so a shot is never hidden behind the scenery or the unit it is flying toward).
+    this.setDepth(DEPTH.playerBullet);
     this.setActive(true);
     this.setVisible(true);
     const body = this.body as Phaser.Physics.Arcade.Body;

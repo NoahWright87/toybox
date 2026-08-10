@@ -3,7 +3,7 @@ import { addStep, updateStep } from "./encounterSteps";
 import { recomputeStepTimes } from "./encounterTiming";
 import { createEncounterUnit, type EncounterUnit } from "./encounterTypes";
 import { createBlankUnit, type UnitDef } from "./unitTypes";
-import { airPinSec, authorLayerOf, displayShiftY, isScrollLocked, pinShiftY, referenceShiftY, scrollOffsetY } from "./airFrame";
+import { airPinSec, displayShiftY, isScrollLocked, pinShiftY, referenceShiftY, scrollOffsetY } from "./airFrame";
 import { computeCameraBoundsRect } from "./hitboxPreview";
 import { LEVEL_SCROLL_SPEED, TILE_UNIT, cameraLocalBand, cameraLocalXBand, playerTileLocalY } from "../../../games/shmup/src/systems/encounters/scrollModel";
 
@@ -18,17 +18,28 @@ function parked(unitDefId: string, pos: { x: number; y: number }, time = 0): Enc
   return inst;
 }
 
-describe("authorLayerOf / isScrollLocked", () => {
-  it("puts doodad in ground's frame, because doodad is scroll-locked exactly like ground", () => {
-    expect(authorLayerOf("ground")).toBe("ground");
-    expect(authorLayerOf("doodad")).toBe("ground");
-    expect(authorLayerOf("air")).toBe("air");
-  });
-
+describe("isScrollLocked", () => {
   it("matches the runtime's own rule — air is the only layer that decouples", () => {
     expect(isScrollLocked("ground")).toBe(true);
     expect(isScrollLocked("doodad")).toBe(true);
     expect(isScrollLocked("air")).toBe(false);
+  });
+});
+
+describe("doodad is its own authoring mode, but not its own reference frame", () => {
+  // Doodad used to fold into ground as a single two-valued AuthorLayer. It is
+  // now its own mode so it can carry its own roster and dimming, which makes
+  // it worth pinning that the *geometry* did not fork with it: a tree must
+  // still draw exactly where a turret at the same position would.
+  it("shifts identically to ground mode at every scrub time", () => {
+    for (const t of [0, 1.5, 7]) {
+      expect(referenceShiftY("doodad", t)).toBe(referenceShiftY("ground", t));
+      expect(displayShiftY({ mode: "doodad", scrollLocked: true, pinSec: null, t })).toBe(displayShiftY({ mode: "ground", scrollLocked: true, pinSec: null, t }));
+    }
+  });
+
+  it("leaves scenery parked where it was authored, like any scroll-locked content", () => {
+    expect(displayShiftY({ mode: "doodad", scrollLocked: true, pinSec: null, t: 7 })).toBe(0);
   });
 });
 

@@ -863,6 +863,19 @@ query string; the game skips its menus and drops straight into the episode.
 
 ## Open questions
 
+~~**Doodads are collidable, and probably shouldn't be.**~~ — **resolved
+(Noah's call): scenery is not shootable.** `EncounterRunner.ts` gained
+`isCollidableLayer`, and the doodad layer now spawns with `hasCollision:
+false`, which leaves the Arcade body disabled so no overlap can ever fire
+against a tree. `PlayScene.playerTargets()` filters on `hasCollision` as well,
+since homing searches that list directly and would otherwise lock onto
+scenery it can never damage — that check also retires a latent bug where a
+purely *decorative* Part (art, no hitbox) was a valid homing target. The
+editor's E4 hitbox preview skips doodads to match, so it can't promise a
+collision the game doesn't perform. Destructible scenery is still open as a
+*feature* — it would want real `hp` and debris rather than the placeholder
+`hp: 1` doodads carry — but it is no longer the accidental default.
+
 ~~Exact landing directory + filename convention inside `games/shmup/src/`
 for exported tiles/enemies/spawn-nodes.~~ — **moot: nothing lands there,
 see E5 above.**
